@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multicluster-hub-cluster-controller
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      name: multicluster-hub-cluster-controller
+  template:
+    metadata:
+      labels:
+        name: multicluster-hub-cluster-controller
+    spec:
+      containers:
+        - name: multicloud-operators-cluster-controller
+          # Replace this with the built image name
+          image: hyc-cloud-private-integration-docker-local.artifactory.swg-devops.com/rh-ibm-synergy/ibm-rcm-controller:liuhao-2019-11-21
+          command:
+          - multicloud-operators-cluster-controller
+          imagePullPolicy: Always
+          env:
+            - name: WATCH_NAMESPACE
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: OPERATOR_NAME
+              value: "multicloud-operators-cluster-controller"

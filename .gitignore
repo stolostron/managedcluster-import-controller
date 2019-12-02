@@ -1,0 +1,11 @@
+# Directories
+.vscode
+bin
+build-harness
+vendor
+test/coverage
+test/out
+
+# Files
+.build-harness
+OPENSOURCE.check
