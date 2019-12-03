@@ -5,6 +5,7 @@ build-harness
 vendor
 test/coverage
 test/out
+overlays/deploy
 
 # Files
 .build-harness
