@@ -24,7 +24,6 @@ import (
 	"github.com/ghodss/yaml"
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	multicloudv1beta1 "github.ibm.com/IBMPrivateCloud/ibm-klusterlet-operator/pkg/apis/multicloud/v1beta1"
-	multicloudv1alpha1 "github.ibm.com/IBMPrivateCloud/mcm-cluster-controller/pkg/apis/multicloud/v1alpha1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -44,6 +43,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	multicloudv1alpha1 "github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis/multicloud/v1alpha1"
 )
 
 var log = logf.Log.WithName("controller_clusterdeployment")

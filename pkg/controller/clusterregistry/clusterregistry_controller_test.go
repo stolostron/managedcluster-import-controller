@@ -23,7 +23,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	mcmv1alpha1 "github.ibm.com/IBMPrivateCloud/hcm-api/pkg/apis/mcm/v1alpha1"
-	"github.ibm.com/IBMPrivateCloud/mcm-cluster-controller/pkg/clusterimport"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,6 +32,8 @@ import (
 	clusterregistryv1alpha1 "k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/clusterimport"
 )
 
 func TestInstanceDNE(t *testing.T) {

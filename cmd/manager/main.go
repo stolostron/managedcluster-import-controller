@@ -31,8 +31,6 @@ import (
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 	"github.com/spf13/pflag"
 	mcmv1alpha1 "github.ibm.com/IBMPrivateCloud/hcm-api/pkg/apis/mcm/v1alpha1"
-	"github.ibm.com/IBMPrivateCloud/mcm-cluster-controller/pkg/apis"
-	"github.ibm.com/IBMPrivateCloud/mcm-cluster-controller/pkg/controller"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -43,6 +41,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
+
+	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis"
+	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/controller"
+	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/utils"
 )
 
 // Change below variables to serve metrics on different host or port.
@@ -82,11 +84,16 @@ func main() {
 
 	printVersion()
 
-	endpointCRDFileEnvVar := os.Getenv("ENDPOINT_CRD_FILE")
-	log.Info("ENV", "ENDPOINT_CRD_FILE", endpointCRDFileEnvVar)
+	endpointCRDFilename := os.Getenv("ENDPOINT_CRD_FILE")
+	log.Info("ENV", "ENDPOINT_CRD_FILE", endpointCRDFilename)
 
-	if endpointCRDFileEnvVar == "" {
+	if endpointCRDFilename == "" {
 		log.Error(fmt.Errorf("undefine environment variable ENDPOINT_CRD_FILE"), "")
+		os.Exit(1)
+	}
+
+	if !utils.FileExist(endpointCRDFilename) {
+		log.Error(fmt.Errorf("ENDPOINT_CRD_FILE does not exist"), "")
 		os.Exit(1)
 	}
 

@@ -15,11 +15,16 @@
 package utils
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
+
+func init() {
+	os.Setenv("ENDPOINT_CRD_FILE", "../../build/resources/multicloud_v1beta1_endpoint_crd.yaml")
+}
 
 func TestUniqueStringSlice(t *testing.T) {
 	logf.SetLogger(logf.ZapLogger(true))
@@ -81,5 +86,23 @@ func TestAppendIfDNE(t *testing.T) {
 
 		assert.Equal(t, testCase.Input, input)
 		assert.Equal(t, testCase.ExpectedOutput, output)
+	}
+}
+
+func TestFileExist(t *testing.T) {
+	tests := []struct {
+		name     string
+		filename string
+		want     bool
+	}{
+		{"exist", os.Getenv("ENDPOINT_CRD_FILE"), true},
+		{"dne", "do_not_exist.txt", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := FileExist(tt.filename); got != tt.want {
+				t.Errorf("FileExist() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
