@@ -19,8 +19,6 @@ import (
 	"time"
 
 	mcmv1alpha1 "github.ibm.com/IBMPrivateCloud/hcm-api/pkg/apis/mcm/v1alpha1"
-	"github.ibm.com/IBMPrivateCloud/mcm-cluster-controller/pkg/clusterimport"
-	"github.ibm.com/IBMPrivateCloud/mcm-cluster-controller/pkg/utils"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -36,6 +34,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/clusterimport"
+	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/utils"
 )
 
 // PlatformAPIFinalizer is the constant for finalizer put on by platform-api

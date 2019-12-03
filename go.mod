@@ -1,4 +1,4 @@
-module github.ibm.com/IBMPrivateCloud/mcm-cluster-controller
+module github.com/rh-ibm-synergy/multicloud-operators-cluster-controller
 
 require (
 	cloud.google.com/go v0.47.0 // indirect

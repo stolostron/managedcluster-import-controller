@@ -15,7 +15,7 @@
 package apis
 
 import (
-	"github.ibm.com/IBMPrivateCloud/mcm-cluster-controller/pkg/apis/multicloud/v1alpha1"
+	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis/multicloud/v1alpha1"
 )
 
 func init() {
