@@ -37,18 +37,42 @@ make test
 make build
 ```
 
-- Run the controller locally.
+- Run controller for local development.
 
 ```bash
 make run
 ```
 
-- Build and push the docker image for local development.
+- Build and push container image for local development.
 
 ```bash
 export IMG=<YOUR_CUSTOMIZED_IMAGE_NAME>
 export REGISTRY=<YOUR_CUSTOMIZED_IMAGE_REGISTRY>
-make build-push-images
+make dev-images
 ```
 
-> **Note:** You need to login the docker registry before running the command above.
+> **Note:** You need to login the image registry before running the command above.
+
+- Deploy controller for local development
+
+```bash
+make dev-deploy
+```
+
+> **Note:** If you are using a private image registry you need follow the rest of the instruction to create image pull secret and patch service account to use the image pull secret
+
+- Create image pull secret
+
+```bash
+export IMAGE_PULL_SECRET=<image pull secret name>
+kubectl create secret generic $IMAGE_PULL_SECRET \
+    --from-file=.dockerconfigjson=<path/to/.docker/config.json> \
+    --type=kubernetes.io/dockerconfigjson
+```
+
+- Patch service account to use image pull secret
+
+```bash
+export IMAGE_PULL_SECRET=<image pull secret name>
+make regcred-patch-sa
+```
