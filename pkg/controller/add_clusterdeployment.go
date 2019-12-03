@@ -15,7 +15,7 @@
 package controller
 
 import (
-	"github.ibm.com/IBMPrivateCloud/mcm-cluster-controller/pkg/controller/clusterdeployment"
+	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/controller/clusterdeployment"
 )
 
 func init() {

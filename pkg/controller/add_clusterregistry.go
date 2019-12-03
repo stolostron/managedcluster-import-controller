@@ -17,7 +17,7 @@ package controller
 // import (
 //
 
-// 	"github.ibm.com/IBMPrivateCloud/mcm-cluster-controller/pkg/controller/clusterregistry"
+// 	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/controller/clusterregistry"
 // )
 
 func init() {

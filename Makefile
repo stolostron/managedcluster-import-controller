@@ -123,7 +123,8 @@ build: install-operator-sdk $(CONFIG_DOCKER_TARGET)
 # run section
 ############################################################
 
-export ENDPOINT_CRD_FILE="deploy/resources/multicloud_v1beta1_endpoint_crd.yaml"
+export ENDPOINT_CRD_FILE=$(PWD)/build/resources/multicloud_v1beta1_endpoint_crd.yaml
+
 run:
 	@operator-sdk up local --namespace="" --operator-flags="--zap-devel=true"
 

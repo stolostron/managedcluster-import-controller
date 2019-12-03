@@ -14,6 +14,20 @@
 // limitations under the License.
 package utils
 
+import (
+	"os"
+)
+
+// FileExist return true if file exist
+func FileExist(filename string) bool {
+	info, err := os.Stat(filename)
+	if os.IsNotExist(err) {
+		return false
+	}
+
+	return !info.IsDir()
+}
+
 // UniqueStringSlice takes a string[] and remove the duplicate value
 func UniqueStringSlice(stringSlice []string) []string {
 	keys := make(map[string]bool)
