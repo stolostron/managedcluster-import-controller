@@ -19,7 +19,7 @@ BUILD_LOCALLY ?= 1
 # Image URL to use all building/pushing image targets;
 # Use your own docker registry and image name for dev/test by overridding the IMG and REGISTRY environment variable.
 IMG ?= multicloud-operators-cluster-controller
-REGISTRY ?= quay.io/multicloudlab
+REGISTRY ?= quay.io/rhibmcollab
 
 # Github host to use for checking the source tree;
 # Override this variable ue with your own value if you're working on forked repo.
@@ -139,13 +139,50 @@ ifeq ($(BUILD_LOCALLY),0)
 endif
 
 build-push-images:
-	@docker tag $(REGISTRY)/$(IMG):$(VERSION) $(REGISTRY)/$(IMG)
+	docker tag $(REGISTRY)/$(IMG):$(VERSION) $(REGISTRY)/$(IMG)
 	@if [ $(BUILD_LOCALLY) -ne 1 ]; then docker push $(REGISTRY)/$(IMG):$(VERSION); docker push $(REGISTRY)/$(IMG); fi
+
+############################################################
+# deploy section
+############################################################
+
+deploy:
+	mkdir -p overlays/deploy
+	cp overlays/template/kustomization.yaml overlays/deploy
+	cd overlays/deploy
+	kustomize build overlays/deploy | kubectl apply -f -
+	rm -rf overlays/deploy
+
+############################################################
+# dev section
+############################################################
+
+dev-build: build
+
+dev-images: build dev-build-push-images
+
+dev-build-push-images:
+	docker push $(REGISTRY)/$(IMG):$(VERSION)
+
+dev-deploy: dev-images
+	mkdir -p overlays/deploy
+	cp overlays/template/kustomization.yaml overlays/deploy
+	cd overlays/deploy && kustomize edit set image quay.io/rhibmcollab/multicloud-operators-cluster-controller:latest=$(REGISTRY)/$(IMG):$(VERSION)
+	kustomize build overlays/deploy | kubectl apply -f -
+	rm -rf overlays/deploy
+
+############################################################
+# regcred section
+############################################################
+
+regcred-patch-sa:
+	kubectl patch sa multicloud-operators-cluster-controller --type='json' -p='[{"op": "add", "path": "/imagePullSecrets/1", "value": {"name": "$(IMAGE_PULL_SECRET)" } }]'
 
 ############################################################
 # clean section
 ############################################################
+
 clean:
 	rm -f build/_output/bin/$(IMG)
 
-.PHONY: all build check lint test coverage images
+.PHONY: all build check lint test coverage images deploy deploy-build
