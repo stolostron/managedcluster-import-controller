@@ -153,17 +153,11 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 		}
 	}
 
-	// requeue until EndpointConfig is created for the cluster
-	endpointConfig := &multicloudv1alpha1.EndpointConfig{}
-	if err := r.client.Get(context.TODO(), endpointConfigNamespacedName(instance), endpointConfig); err != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: 5 * time.Second}, nil
-	}
-
 	// create cluster registry cluster if does not exist
 	foundClusterRegistryCluster := &clusterregistryv1alpha1.Cluster{}
 	if err := r.client.Get(context.TODO(), clusterRegistryClusterNamespacedName(instance), foundClusterRegistryCluster); err != nil {
 		if errors.IsNotFound(err) {
-			cluster := newClusterRegistryCluster(endpointConfig)
+			cluster := newClusterRegistryCluster(instance)
 
 			if err := controllerutil.SetControllerReference(instance, cluster, r.scheme); err != nil {
 				return reconcile.Result{}, err
@@ -182,6 +176,12 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 			//cluster already imported and online, so do nothing
 			return reconcile.Result{}, nil
 		}
+	}
+
+	// requeue until EndpointConfig is created for the cluster
+	endpointConfig := &multicloudv1alpha1.EndpointConfig{}
+	if err := r.client.Get(context.TODO(), endpointConfigNamespacedName(instance), endpointConfig); err != nil {
+		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
 	}
 
 	// create bootstrap service account if does not exist
@@ -689,16 +689,15 @@ func newClusterRegistryNamespace(cr *hivev1.ClusterDeployment) *corev1.Namespace
 }
 
 // newClusterRegistryCluster returns a ClusterRegistry Cluster
-func newClusterRegistryCluster(endpointConfig *multicloudv1alpha1.EndpointConfig) *clusterregistryv1alpha1.Cluster {
+func newClusterRegistryCluster(cr *hivev1.ClusterDeployment) *clusterregistryv1alpha1.Cluster {
 	return &clusterregistryv1alpha1.Cluster{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: clusterregistryv1alpha1.SchemeGroupVersion.String(),
 			Kind:       "Cluster",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      endpointConfig.Spec.ClusterName,
-			Namespace: endpointConfig.Spec.ClusterNamespace,
-			Labels:    endpointConfig.Spec.ClusterLabels,
+			Name:      cr.Spec.ClusterName,
+			Namespace: cr.Spec.ClusterName,
 		},
 	}
 }
