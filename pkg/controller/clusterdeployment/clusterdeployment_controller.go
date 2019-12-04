@@ -120,6 +120,24 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 		return reconcile.Result{}, err
 	}
 
+	// create selector syncset if it does not exist
+	foundSelectorSyncset := &hivev1.SelectorSyncSet{}
+
+	if err := r.client.Get(context.TODO(), selectorSyncsetNamespacedName(), foundSelectorSyncset); err != nil {
+		if errors.IsNotFound(err) {
+			selectorSyncSet, err := newSelectorSyncset()
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+
+			reqLogger.Info("Creating a ClusterRegistry Namespace", "Namespace.Name", selectorSyncSet.Name)
+
+			if err := r.client.Create(context.TODO(), selectorSyncSet); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
 	// create cluster namespace if does not exist
 	foundClusterRegistryNamespace := &corev1.Namespace{}
 
@@ -214,6 +232,55 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func selectorSyncsetNamespacedName() types.NamespacedName {
+	return types.NamespacedName{
+		Name:      "multicluster-endpoint",
+		Namespace: "",
+	}
+}
+
+func newSelectorSyncset() (*hivev1.SelectorSyncSet, error) {
+	runtimeObjects := []runtime.Object{}
+
+	crd, err := generateCRD(os.Getenv("ENDPOINT_CRD_FILE"))
+	if err != nil {
+		return nil, err
+	}
+
+	runtimeObjects = append(runtimeObjects, crd)
+
+	endpointNamespace := generateEndpointNamespace()
+	runtimeObjects = append(runtimeObjects, endpointNamespace)
+
+	runtimeRawExtensions := []runtime.RawExtension{}
+
+	for _, obj := range runtimeObjects {
+		if obj != nil {
+			runtimeRawExtensions = append(runtimeRawExtensions, runtime.RawExtension{Object: obj})
+		}
+	}
+
+	namespacedName := selectorSyncsetNamespacedName()
+
+	selectorSyncSet := &hivev1.SelectorSyncSet{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: hivev1.SchemeGroupVersion.String(),
+			Kind:       "SelectorSyncSet",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      namespacedName.Name,
+			Namespace: namespacedName.Namespace,
+		},
+		Spec: hivev1.SelectorSyncSetSpec{
+			SyncSetCommonSpec: hivev1.SyncSetCommonSpec{
+				Resources: runtimeRawExtensions,
+			},
+		},
+	}
+
+	return selectorSyncSet, nil
 }
 
 func syncSetNamespacedName(cr *hivev1.ClusterDeployment) types.NamespacedName {
