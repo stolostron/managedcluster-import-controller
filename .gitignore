@@ -1,6 +1,6 @@
 # Directories
 .vscode
-bin
+/build/_output
 build-harness
 vendor
 test/coverage
