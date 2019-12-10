@@ -55,9 +55,17 @@ export GO111MODULE := on
 
 all: fmt check test coverage build images
 
+ifeq (,$(wildcard go.mod))
 ifneq ("$(realpath $(DEST))", "$(realpath $(PWD))")
     $(error Please run 'make' from $(DEST). Current directory is $(PWD))
 endif
+endif
+
+############################################################
+# install git hooks
+############################################################
+INSTALL_HOOKS := $(shell find .git/hooks -type l -exec rm {} \; && \
+                         find common/scripts/.githooks -type f -exec ln -sf ../../{} .git/hooks/ \; )
 
 include common/Makefile.common.mk
 
