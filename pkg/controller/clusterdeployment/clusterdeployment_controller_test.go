@@ -21,7 +21,6 @@ import (
 	"time"
 
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
-	multicloudv1alpha1 "github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis/multicloud/v1alpha1"
 	multicloudv1beta1 "github.ibm.com/IBMPrivateCloud/ibm-klusterlet-operator/pkg/apis/multicloud/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,6 +31,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	multicloudv1alpha1 "github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis/multicloud/v1alpha1"
+	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/clusterimport"
 )
 
 func init() {
@@ -71,6 +73,7 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 			Name:      "image-pull-secret",
 			Namespace: "test",
 		},
+		Type: corev1.SecretTypeDockerConfigJson,
 	}
 	clusterDeployment := &hivev1.ClusterDeployment{
 		ObjectMeta: metav1.ObjectMeta{
@@ -86,7 +89,9 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 			Name:      "test",
 			Namespace: "test",
 		},
-		Spec: multicloudv1beta1.EndpointSpec{},
+		Spec: multicloudv1beta1.EndpointSpec{
+			ClusterName: "test",
+		},
 	}
 	endpointConfigWithSecret := &multicloudv1alpha1.EndpointConfig{
 		ObjectMeta: metav1.ObjectMeta{
@@ -94,12 +99,34 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 			Namespace: "test",
 		},
 		Spec: multicloudv1beta1.EndpointSpec{
+			ClusterName:     "test",
 			ImagePullSecret: imagePullSecret.Name,
+		},
+	}
+	bootstrapServiceAccount := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test" + clusterimport.BootstrapServiceAccountNamePostfix,
+			Namespace: "test",
+		},
+		Secrets: []corev1.ObjectReference{
+			{
+				Name: "bootstrap-token-secret",
+			},
+		},
+	}
+	bootstrapTokenSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "bootstrap-token-secret",
+			Namespace: "test",
+		},
+		Type: corev1.SecretTypeServiceAccountToken,
+		Data: map[string][]byte{
+			"token": []byte("fake-token"),
 		},
 	}
 
 	s := scheme.Scheme
-	s.AddKnownTypes(corev1.SchemeGroupVersion, &corev1.Namespace{}, &corev1.Secret{})
+	s.AddKnownTypes(corev1.SchemeGroupVersion, &corev1.Namespace{}, &corev1.Secret{}, &corev1.ServiceAccount{})
 	s.AddKnownTypes(hivev1.SchemeGroupVersion, &hivev1.ClusterDeployment{}, &hivev1.SyncSet{})
 	s.AddKnownTypes(clusterregistryv1alpha1.SchemeGroupVersion, &clusterregistryv1alpha1.Cluster{})
 	s.AddKnownTypes(multicloudv1alpha1.SchemeGroupVersion, &multicloudv1alpha1.EndpointConfig{})
@@ -147,14 +174,20 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 			},
 			want: reconcile.Result{
 				Requeue:      true,
-				RequeueAfter: 5 * time.Second,
+				RequeueAfter: 30 * time.Second,
 			},
 			wantErr: false,
 		},
 		{
 			name: "ClusterDeployment & EndpointConfig",
 			fields: fields{
-				client: fake.NewFakeClient([]runtime.Object{clusterDeployment, endpointConfig, clusterInfoConfigMap}...),
+				client: fake.NewFakeClient([]runtime.Object{
+					clusterDeployment,
+					endpointConfig,
+					clusterInfoConfigMap,
+					bootstrapServiceAccount,
+					bootstrapTokenSecret,
+				}...),
 				scheme: s,
 			},
 			args: args{
@@ -168,7 +201,14 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 		{
 			name: "ClusterDeployment & EndpointConfig with ImagePullSecret",
 			fields: fields{
-				client: fake.NewFakeClient([]runtime.Object{imagePullSecret, clusterDeployment, endpointConfigWithSecret, clusterInfoConfigMap}...),
+				client: fake.NewFakeClient([]runtime.Object{
+					imagePullSecret,
+					clusterDeployment,
+					endpointConfigWithSecret,
+					clusterInfoConfigMap,
+					bootstrapServiceAccount,
+					bootstrapTokenSecret,
+				}...),
 				scheme: s,
 			},
 			args: args{
