@@ -16,43 +16,24 @@ package clusterdeployment
 
 import (
 	"context"
-	"fmt"
-	"io/ioutil"
-	"os"
 	"time"
 
-	"github.com/ghodss/yaml"
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
-	multicloudv1beta1 "github.ibm.com/IBMPrivateCloud/ibm-klusterlet-operator/pkg/apis/multicloud/v1beta1"
-	appsv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
-	rbacv1 "k8s.io/api/rbac/v1"
-	apiextensionv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
-	clientcmdlatest "k8s.io/client-go/tools/clientcmd/api/latest"
 	clusterregistryv1alpha1 "k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	multicloudv1alpha1 "github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis/multicloud/v1alpha1"
+	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/clusterimport"
 )
 
 var log = logf.Log.WithName("controller_clusterdeployment")
-
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
 
 // Add creates a new ClusterDeployment Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -121,596 +102,55 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 	}
 
 	// create selector syncset if it does not exist
-	foundSelectorSyncset := &hivev1.SelectorSyncSet{}
-
-	if err := r.client.Get(context.TODO(), selectorSyncsetNamespacedName(), foundSelectorSyncset); err != nil {
+	if _, err := clusterimport.GetSelectorSyncset(r.client); err != nil {
 		if errors.IsNotFound(err) {
-			selectorSyncSet, err := newSelectorSyncset()
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-
-			reqLogger.Info("Creating a ClusterRegistry Namespace", "Namespace.Name", selectorSyncSet.Name)
-
-			if err := r.client.Create(context.TODO(), selectorSyncSet); err != nil {
+			if _, err = clusterimport.CreateSelectorSyncset(r.client); err != nil {
 				return reconcile.Result{}, err
 			}
 		}
 	}
 
 	// create cluster namespace if does not exist
-	foundClusterRegistryNamespace := &corev1.Namespace{}
-
-	if err := r.client.Get(context.TODO(), clusterRegistryNamespaceNamespacedName(instance), foundClusterRegistryNamespace); err != nil {
+	if _, err := getClusterRegistryNamespace(r.client, instance); err != nil {
 		if errors.IsNotFound(err) {
-			namespace := newClusterRegistryNamespace(instance)
-
-			reqLogger.Info("Creating a ClusterRegistry Namespace", "Namespace.Name", namespace.Name)
-
-			if err := r.client.Create(context.TODO(), namespace); err != nil {
+			if _, err = createClusterRegistryNamespace(r.client, instance); err != nil {
 				return reconcile.Result{}, err
 			}
 		}
 	}
 
 	// create cluster registry cluster if does not exist
-	foundClusterRegistryCluster := &clusterregistryv1alpha1.Cluster{}
-	if err := r.client.Get(context.TODO(), clusterRegistryClusterNamespacedName(instance), foundClusterRegistryCluster); err != nil {
+	if crc, err := getClusterRegistryCluster(r.client, instance); err != nil {
 		if errors.IsNotFound(err) {
-			cluster := newClusterRegistryCluster(instance)
-
-			if err := controllerutil.SetControllerReference(instance, cluster, r.scheme); err != nil {
-				return reconcile.Result{}, err
-			}
-
-			reqLogger.Info("Creating a ClusterRegistry Cluster", "Cluster.Namespace", cluster.Namespace, "Cluster.Name", cluster.Name)
-
-			if err := r.client.Create(context.TODO(), cluster); err != nil {
+			if _, err = createClusterRegistryCluster(r.client, r.scheme, instance); err != nil {
 				return reconcile.Result{}, err
 			}
 		}
-	}
-
-	for _, condition := range foundClusterRegistryCluster.Status.Conditions {
-		if condition.Type == clusterregistryv1alpha1.ClusterOK {
-			//cluster already imported and online, so do nothing
-			return reconcile.Result{}, nil
+	} else {
+		for _, condition := range crc.Status.Conditions {
+			if condition.Type == clusterregistryv1alpha1.ClusterOK {
+				//cluster already imported and online, so do nothing
+				return reconcile.Result{}, nil
+			}
 		}
 	}
 
 	// requeue until EndpointConfig is created for the cluster
-	endpointConfig := &multicloudv1alpha1.EndpointConfig{}
-	if err := r.client.Get(context.TODO(), endpointConfigNamespacedName(instance), endpointConfig); err != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
-	}
-
-	// create bootstrap service account if does not exist
-	foundBootStrapServiceAccount := &corev1.ServiceAccount{}
-	if err := r.client.Get(context.TODO(), bootstrapServiceAccountNamespacedName(instance), foundBootStrapServiceAccount); err != nil {
-		if errors.IsNotFound(err) {
-			serviceAccount := newBootstrapServiceAccount(instance)
-
-			if err := controllerutil.SetControllerReference(instance, serviceAccount, r.scheme); err != nil {
-				return reconcile.Result{}, err
-			}
-
-			reqLogger.Info("Creating a Bootstrap ServiceAccount", "ServiceAccount.Namespace", serviceAccount.Namespace, "ServiceAccount.Name", serviceAccount.Name)
-
-			if err := r.client.Create(context.TODO(), serviceAccount); err != nil {
-				return reconcile.Result{}, err
-			}
-		}
-	}
-
-	// create or update syncset
-	syncSet, err := newSyncSet(instance, r.client)
+	endpointConfig, err := getEndpointConfig(r.client, instance)
 	if err != nil {
-		return reconcile.Result{}, err
+		if errors.IsNotFound(err) {
+			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
+		}
 	}
 
-	foundSyncSet := &hivev1.SyncSet{}
-
-	if err := r.client.Get(context.TODO(), syncSetNamespacedName(instance), foundSyncSet); err != nil {
+	// create syncset if does not exist
+	if _, err := clusterimport.GetSyncSet(r.client, endpointConfig, instance); err != nil {
 		if errors.IsNotFound(err) {
-			if err := controllerutil.SetControllerReference(instance, syncSet, r.scheme); err != nil {
+			if _, err := clusterimport.CreateSyncSet(r.client, endpointConfig, instance); err != nil {
 				return reconcile.Result{}, err
 			}
-
-			reqLogger.Info("Creating a Multicluster Endpoint SyncSet", "SyncSet.Namespace", syncSet.Namespace, "SyncSet.Name", syncSet.Name)
-
-			if err := r.client.Create(context.TODO(), syncSet); err != nil {
-				return reconcile.Result{}, err
-			}
-
-			foundSyncSet = syncSet
-		}
-	} else {
-		foundSyncSet.Spec.SyncSetCommonSpec.Resources = syncSet.Spec.SyncSetCommonSpec.Resources
-		if err := r.client.Update(context.TODO(), foundSyncSet); err != nil {
-			return reconcile.Result{}, err
 		}
 	}
 
 	return reconcile.Result{}, nil
-}
-
-func selectorSyncsetNamespacedName() types.NamespacedName {
-	return types.NamespacedName{
-		Name:      "multicluster-endpoint",
-		Namespace: "",
-	}
-}
-
-func newSelectorSyncset() (*hivev1.SelectorSyncSet, error) {
-	runtimeObjects := []runtime.Object{}
-
-	crd, err := generateCRD(os.Getenv("ENDPOINT_CRD_FILE"))
-	if err != nil {
-		return nil, err
-	}
-
-	runtimeObjects = append(runtimeObjects, crd)
-
-	endpointNamespace := generateEndpointNamespace()
-	runtimeObjects = append(runtimeObjects, endpointNamespace)
-
-	runtimeRawExtensions := []runtime.RawExtension{}
-
-	for _, obj := range runtimeObjects {
-		if obj != nil {
-			runtimeRawExtensions = append(runtimeRawExtensions, runtime.RawExtension{Object: obj})
-		}
-	}
-
-	namespacedName := selectorSyncsetNamespacedName()
-
-	selectorSyncSet := &hivev1.SelectorSyncSet{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: hivev1.SchemeGroupVersion.String(),
-			Kind:       "SelectorSyncSet",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      namespacedName.Name,
-			Namespace: namespacedName.Namespace,
-		},
-		Spec: hivev1.SelectorSyncSetSpec{
-			SyncSetCommonSpec: hivev1.SyncSetCommonSpec{
-				Resources: runtimeRawExtensions,
-			},
-		},
-	}
-
-	return selectorSyncSet, nil
-}
-
-func syncSetNamespacedName(cr *hivev1.ClusterDeployment) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      cr.Name + "-multicluster-endpoint",
-		Namespace: cr.Namespace,
-	}
-}
-
-func newSyncSet(cr *hivev1.ClusterDeployment, client client.Client) (*hivev1.SyncSet, error) {
-	runtimeRawExtensions, err := generateImportObjects(cr, client)
-	if err != nil {
-		return nil, err
-	}
-
-	syncSet := &hivev1.SyncSet{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: hivev1.SchemeGroupVersion.String(),
-			Kind:       "SyncSet",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Name + "-multicluster-endpoint",
-			Namespace: cr.Namespace,
-		},
-		Spec: hivev1.SyncSetSpec{
-			SyncSetCommonSpec: hivev1.SyncSetCommonSpec{
-				Resources: runtimeRawExtensions,
-			},
-			ClusterDeploymentRefs: []corev1.LocalObjectReference{
-				{
-					Name: cr.Name,
-				},
-			},
-		},
-	}
-
-	return syncSet, nil
-}
-
-func generateOperatorDeployment(endpointConfig *multicloudv1alpha1.EndpointConfig) *appsv1.Deployment {
-	imageName := endpointConfig.Spec.ImageRegistry +
-		"/icp-multicluster-endpoint-operator" +
-		endpointConfig.Spec.ImageNamePostfix +
-		":" + endpointConfig.Spec.Version
-
-	imagePullSecrets := []corev1.LocalObjectReference{}
-	if len(endpointConfig.Spec.ImagePullSecret) > 0 {
-		imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{Name: endpointConfig.Spec.ImagePullSecret})
-	}
-
-	return &appsv1.Deployment{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: appsv1.SchemeGroupVersion.String(),
-			Kind:       "Deployment",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ibm-multicluster-endpoint-operator",
-			Namespace: "multicluster-endpoint",
-		},
-		Spec: appsv1.DeploymentSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"name": "ibm-multicluster-endpoint-operator",
-				},
-			},
-			Template: corev1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{
-						"name": "ibm-multicluster-endpoint-operator",
-					},
-				},
-				Spec: corev1.PodSpec{
-					ServiceAccountName: "ibm-multicluster-endpoint-operator",
-					Containers: []corev1.Container{
-						{
-							Name:            "ibm-multicluster-endpoint-operator",
-							Image:           imageName,
-							ImagePullPolicy: corev1.PullAlways,
-							Env: []corev1.EnvVar{
-								{
-									Name:  "WATCH_NAMESPACE",
-									Value: "",
-								},
-								{
-									Name:  "OPERATOR_NAME",
-									Value: "ibm-multicluster-endpoint-operator",
-								},
-								{
-									Name: "POD_NAME",
-									ValueFrom: &corev1.EnvVarSource{
-										FieldRef: &corev1.ObjectFieldSelector{
-											FieldPath: "metadata.name",
-										},
-									},
-								},
-							},
-						},
-					},
-					ImagePullSecrets: imagePullSecrets,
-				},
-			},
-		},
-	}
-}
-
-func endpointConfigNamespacedName(cr *hivev1.ClusterDeployment) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      cr.Spec.ClusterName,
-		Namespace: cr.Spec.ClusterName,
-	}
-}
-
-func generateImportObjects(cr *hivev1.ClusterDeployment, client client.Client) ([]runtime.RawExtension, error) {
-	runtimeObjects := []runtime.Object{}
-
-	endpointConfig := &multicloudv1alpha1.EndpointConfig{}
-	if err := client.Get(context.TODO(), endpointConfigNamespacedName(cr), endpointConfig); err != nil {
-		return nil, err
-	}
-
-	crd, err := generateCRD(os.Getenv("ENDPOINT_CRD_FILE"))
-	if err != nil {
-		return nil, err
-	}
-
-	runtimeObjects = append(runtimeObjects, crd)
-
-	endpointNamespace := generateEndpointNamespace()
-	runtimeObjects = append(runtimeObjects, endpointNamespace)
-
-	serviceAccount := generateOperatorServiceAccount()
-	runtimeObjects = append(runtimeObjects, serviceAccount)
-
-	clusterRoleBinding := generateClusterRoleBinding()
-	runtimeObjects = append(runtimeObjects, clusterRoleBinding)
-
-	bootstrapSecret, err := generateBootstrapSecret(cr, client)
-	if err != nil {
-		return nil, err
-	}
-
-	runtimeObjects = append(runtimeObjects, bootstrapSecret)
-
-	imagePullSecret, err := generateImagePullSecret(endpointConfig, client)
-	if err != nil {
-		return nil, err
-	}
-
-	if imagePullSecret != nil {
-		runtimeObjects = append(runtimeObjects, imagePullSecret)
-	}
-
-	operatorDeployment := generateOperatorDeployment(endpointConfig)
-	runtimeObjects = append(runtimeObjects, operatorDeployment)
-
-	endpoint := generateEndpoint(endpointConfig)
-	runtimeObjects = append(runtimeObjects, endpoint)
-
-	runtimeRawExtensions := []runtime.RawExtension{}
-
-	for _, obj := range runtimeObjects {
-		if obj != nil {
-			runtimeRawExtensions = append(runtimeRawExtensions, runtime.RawExtension{Object: obj})
-		}
-	}
-
-	return runtimeRawExtensions, nil
-}
-
-func generateClusterRoleBinding() *rbacv1.ClusterRoleBinding {
-	return &rbacv1.ClusterRoleBinding{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: rbacv1.SchemeGroupVersion.String(),
-			Kind:       "ClusterRoleBinding",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "ibm-multicluster-endpoint-operator",
-		},
-		RoleRef: rbacv1.RoleRef{
-			APIGroup: rbacv1.SchemeGroupVersion.Group,
-			Kind:     "ClusterRole",
-			Name:     "cluster-admin",
-		},
-		Subjects: []rbacv1.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      "ibm-multicluster-endpoint-operator",
-				Namespace: "multicluster-endpoint",
-			},
-		},
-	}
-}
-
-func generateOperatorServiceAccount() *corev1.ServiceAccount {
-	return &corev1.ServiceAccount{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: corev1.SchemeGroupVersion.String(),
-			Kind:       "ServiceAccount",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ibm-multicluster-endpoint-operator",
-			Namespace: "multicluster-endpoint",
-		},
-	}
-}
-
-func generateEndpoint(endpointConfig *multicloudv1alpha1.EndpointConfig) *multicloudv1beta1.Endpoint {
-	return &multicloudv1beta1.Endpoint{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: multicloudv1beta1.SchemeGroupVersion.String(),
-			Kind:       "Endpoint",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "endpoint",
-			Namespace: "multicluster-endpoint",
-		},
-		Spec: endpointConfig.Spec,
-	}
-}
-
-func generateImagePullSecret(endpointConfig *multicloudv1alpha1.EndpointConfig, client client.Client) (*corev1.Secret, error) {
-	if len(endpointConfig.Spec.ImagePullSecret) == 0 {
-		return nil, nil
-	}
-
-	foundSecret := &corev1.Secret{}
-	secretNamespacedName := types.NamespacedName{
-		Name:      endpointConfig.Spec.ImagePullSecret,
-		Namespace: endpointConfig.Namespace,
-	}
-
-	if err := client.Get(context.TODO(), secretNamespacedName, foundSecret); err != nil {
-		return nil, err
-	}
-
-	//liuhao: add validation for secret Type
-	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: corev1.SchemeGroupVersion.String(),
-			Kind:       "Secret",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      foundSecret.Name,
-			Namespace: "multicluster-endpoint",
-		},
-		Data: foundSecret.Data,
-		Type: foundSecret.Type,
-	}, nil
-}
-
-func generateCRD(fileName string) (*apiextensionv1beta1.CustomResourceDefinition, error) {
-	data, err := ioutil.ReadFile(fileName)
-	if err != nil {
-		log.Error(err, "fail to CRD ReadFile", "filename", fileName)
-		return nil, err
-	}
-
-	crd := &apiextensionv1beta1.CustomResourceDefinition{}
-	if err := yaml.Unmarshal(data, crd); err != nil {
-		log.Error(err, "fail to Unmarshal CRD", "content", data)
-		return nil, err
-	}
-
-	return crd, nil
-}
-
-func generateEndpointNamespace() *corev1.Namespace {
-	return &corev1.Namespace{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: corev1.SchemeGroupVersion.String(),
-			Kind:       "Namespace",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "multicluster-endpoint",
-		},
-	}
-}
-
-func generateBootstrapSecret(cr *hivev1.ClusterDeployment, client client.Client) (*corev1.Secret, error) {
-	saNamespacedName := bootstrapServiceAccountNamespacedName(cr)
-	sa := &corev1.ServiceAccount{}
-
-	if err := client.Get(context.TODO(), saNamespacedName, sa); err != nil {
-		return nil, err
-	}
-
-	saSecret := &corev1.Secret{}
-
-	for _, secret := range sa.Secrets {
-		secretNamespacedName := types.NamespacedName{
-			Name:      secret.Name,
-			Namespace: saNamespacedName.Namespace,
-		}
-
-		if err := client.Get(context.TODO(), secretNamespacedName, saSecret); err != nil {
-			continue
-		}
-
-		if saSecret.Type == corev1.SecretTypeServiceAccountToken {
-			break
-		}
-	}
-
-	kubeAPIServer, err := getAPIServerAddress(client)
-	if err != nil {
-		return nil, err
-	}
-
-	saToken := saSecret.Data["token"]
-
-	bootstrapConfig := clientcmdapi.Config{
-		// Define a cluster stanza based on the bootstrap kubeconfig.
-		Clusters: map[string]*clientcmdapi.Cluster{"default-cluster": {
-			Server:                kubeAPIServer,
-			InsecureSkipTLSVerify: true,
-		}},
-		// Define auth based on the obtained client cert.
-		AuthInfos: map[string]*clientcmdapi.AuthInfo{"default-auth": {
-			Token: string(saToken),
-		}},
-		// Define a context that connects the auth info and cluster, and set it as the default
-		Contexts: map[string]*clientcmdapi.Context{"default-context": {
-			Cluster:   "default-cluster",
-			AuthInfo:  "default-auth",
-			Namespace: "default",
-		}},
-		CurrentContext: "default-context",
-	}
-
-	bootstrapConfigData, err := runtime.Encode(clientcmdlatest.Codec, &bootstrapConfig)
-	if err != nil {
-		return nil, err
-	}
-
-	return &corev1.Secret{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: corev1.SchemeGroupVersion.String(),
-			Kind:       "Secret",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "klusterlet-bootstrap",
-			Namespace: "multicluster-endpoint",
-		},
-		Data: map[string][]byte{
-			"kubeconfig": bootstrapConfigData,
-		},
-	}, nil
-}
-
-func getAPIServerAddress(client client.Client) (string, error) {
-	configmap := &corev1.ConfigMap{}
-	clusterInfoNamespacedName := types.NamespacedName{
-		Name:      "ibmcloud-cluster-info",
-		Namespace: "kube-public",
-	}
-
-	if err := client.Get(context.TODO(), clusterInfoNamespacedName, configmap); err != nil {
-		return "", err
-	}
-
-	apiServerHost, ok := configmap.Data["cluster_kube_apiserver_host"]
-	if !ok {
-		return "", fmt.Errorf("kube-public/ibmcloud-cluster-info does not contain cluster_kube_apiserver_host")
-	}
-
-	apiServerPort, ok := configmap.Data["cluster_kube_apiserver_port"]
-	if !ok {
-		return "https://" + apiServerHost, nil
-	}
-
-	return "https://" + apiServerHost + ":" + apiServerPort, nil
-}
-
-func bootstrapServiceAccountNamespacedName(cr *hivev1.ClusterDeployment) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      cr.Spec.ClusterName + "-bootstrap-sa",
-		Namespace: cr.Spec.ClusterName,
-	}
-}
-
-func clusterRegistryNamespaceNamespacedName(cr *hivev1.ClusterDeployment) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      cr.Spec.ClusterName,
-		Namespace: "",
-	}
-}
-
-func clusterRegistryClusterNamespacedName(cr *hivev1.ClusterDeployment) types.NamespacedName {
-	return types.NamespacedName{
-		Name:      cr.Spec.ClusterName,
-		Namespace: cr.Spec.ClusterName,
-	}
-}
-
-// newClusterRegistryNamespace returns a busybox pod with the same name/namespace as the cr
-func newClusterRegistryNamespace(cr *hivev1.ClusterDeployment) *corev1.Namespace {
-	return &corev1.Namespace{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: corev1.SchemeGroupVersion.String(),
-			Kind:       "Namespace",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name: cr.Spec.ClusterName,
-		},
-	}
-}
-
-// newClusterRegistryCluster returns a ClusterRegistry Cluster
-func newClusterRegistryCluster(cr *hivev1.ClusterDeployment) *clusterregistryv1alpha1.Cluster {
-	return &clusterregistryv1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: clusterregistryv1alpha1.SchemeGroupVersion.String(),
-			Kind:       "Cluster",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Spec.ClusterName,
-			Namespace: cr.Spec.ClusterName,
-		},
-	}
-}
-
-func newBootstrapServiceAccount(cr *hivev1.ClusterDeployment) *corev1.ServiceAccount {
-	return &corev1.ServiceAccount{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: corev1.SchemeGroupVersion.String(),
-			Kind:       "ServiceAccount",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      cr.Spec.ClusterName + "-bootstrap-sa",
-			Namespace: cr.Spec.ClusterName,
-		},
-	}
 }
