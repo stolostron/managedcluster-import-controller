@@ -2,8 +2,9 @@ module github.com/rh-ibm-synergy/multicloud-operators-cluster-controller
 
 require (
 	cloud.google.com/go v0.47.0 // indirect
+	github.com/emicklei/go-restful v2.9.5+incompatible // indirect
 	github.com/ghodss/yaml v1.0.0
-	github.com/go-openapi/spec v0.19.0
+	github.com/go-openapi/spec v0.19.2
 	github.com/gogo/protobuf v1.3.1 // indirect
 	github.com/golang/groupcache v0.0.0-20191002201903-404acd9df4cc // indirect
 	github.com/grpc-ecosystem/grpc-gateway v1.11.3 // indirect
@@ -16,8 +17,7 @@ require (
 	github.com/rogpeppe/go-internal v1.5.0 // indirect
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.4.0
-	github.ibm.com/IBMPrivateCloud/hcm-api v0.0.0-20191008093812-e3be7ed7891f
-	github.ibm.com/IBMPrivateCloud/ibm-klusterlet-operator v3.2.1+incompatible
+	github.ibm.com/IBMPrivateCloud/multicloud-operators-foundation v0.0.0-00010101000000-000000000000
 	go.opencensus.io v0.22.1 // indirect
 	go.uber.org/atomic v1.4.0 // indirect
 	go.uber.org/multierr v1.2.0 // indirect
@@ -27,7 +27,6 @@ require (
 	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e // indirect
 	golang.org/x/sys v0.0.0-20191020212454-3e7259c5e7c2 // indirect
 	golang.org/x/time v0.0.0-20190921001708-c4c64cad1fd0 // indirect
-	golang.org/x/tools v0.0.0-20191018212557-ed542cd5b28a // indirect
 	google.golang.org/api v0.11.0 // indirect
 	google.golang.org/appengine v1.6.5 // indirect
 	google.golang.org/grpc v1.24.0 // indirect
@@ -38,7 +37,8 @@ require (
 	k8s.io/apimachinery v0.0.0-20190612125636-6a5db36e93ad
 	k8s.io/client-go v11.0.0+incompatible
 	k8s.io/cluster-registry v0.0.6
-	k8s.io/kube-openapi v0.0.0-20190603182131-db7b694dc208
+	k8s.io/klog v1.0.0 // indirect
+	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d
 	sigs.k8s.io/controller-runtime v0.1.12
 	sigs.k8s.io/controller-tools v0.1.10
 )
@@ -62,5 +62,7 @@ replace (
 )
 
 replace github.com/operator-framework/operator-sdk => github.com/operator-framework/operator-sdk v0.10.0
+
+replace github.ibm.com/IBMPrivateCloud/multicloud-operators-foundation => github.com/rh-ibm-synergy/multicloud-operators-foundation v0.0.0-20191217070329-9107bbbe0f62
 
 go 1.13

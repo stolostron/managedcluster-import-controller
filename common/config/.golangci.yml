@@ -23,23 +23,48 @@ run:
     - ".*\\.gen\\.go"
 
 linters:
-  enable-all: true
-  disable:
-    - depguard
-    - dupl
-    - gochecknoglobals
-    - gochecknoinits
+  # please, do not use `enable-all`: it's deprecated and will be removed soon.
+  # inverted configuration with `enable-all` and `disable` is not scalable during updates of golangci-lint
+  disable-all: true
+  enable:
+    - deadcode
+    - errcheck
     - goconst
+    - gocritic
     - gocyclo
+    - gofmt
+    - goimports
+    - golint
     - gosec
-    - nakedret
-    - prealloc
-    - scopelint
-    - funlen
-    - bodyclose
-    - gocognit
-    - maligned
-  fast: false
+    - gosimple
+    - govet
+    - ineffassign
+    - interfacer
+    - lll
+    - misspell
+    - staticcheck
+    - structcheck
+    - stylecheck
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - varcheck
+  # don't enable:
+  # - bodyclose
+  # - depguard
+  # - dogsled
+  # - dupl
+  # - funlen
+  # - gochecknoglobals
+  # - gochecknoinits
+  # - gocognit
+  # - godox
+  # - maligned
+  # - nakedret
+  # - prealloc
+  # - scopelint
+  # - whitespace
 
 linters-settings:
   errcheck:
