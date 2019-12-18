@@ -27,5 +27,5 @@ resources:
 - ./crds/multicloud_v1alpha1_endpointconfig_crd.yaml
 - ./namespace.yaml
 - ./service_account.yaml
-- ./cluster_role_binding.yaml
+- ./role_binding.yaml
 - ./deployment.yaml
