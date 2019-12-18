@@ -12,10 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This repo is build locally for dev/test by default;
-# Override this variable in CI env.
-BUILD_LOCALLY ?= 1
-
 # Image URL to use all building/pushing image targets;
 # Use your own docker registry and image name for dev/test by overridding the IMG and REGISTRY environment variable.
 IMG ?= multicloud-operators-cluster-controller
@@ -53,13 +49,33 @@ endif
 # enable GO MOD
 export GO111MODULE := on
 
-all: fmt check test coverage build images
-
 ifeq (,$(wildcard go.mod))
 ifneq ("$(realpath $(DEST))", "$(realpath $(PWD))")
     $(error Please run 'make' from $(DEST). Current directory is $(PWD))
 endif
 endif
+
+# This repo is build locally for dev/test by default;
+# Override this variable in CI env.
+BUILD_LOCALLY ?= 1
+
+ifeq ($(BUILD_LOCALLY),0)
+    export CONFIG_GIT_TARGET = config-git
+endif
+
+ifeq ($(BUILD_LOCALLY),0)
+    export CONFIG_DOCKER_TARGET = config-docker
+endif
+
+config-git:
+	@mkdir /root/.ssh && cat /home/ssh/ssh-key > /root/.ssh/id_rsa && chmod 600 /root/.ssh/id_rsa && ssh-keyscan -H github.com >> /root/.ssh/known_hosts
+	@git config --global url.git@github.com:rh-ibm-synergy/.insteadOf https://github.com/rh-ibm-synergy/
+
+############################################################
+# all section
+############################################################
+
+all: fmt check test coverage build images
 
 ############################################################
 # install git hooks
@@ -97,13 +113,13 @@ check: lint
 # All available linters: lint-dockerfiles lint-scripts lint-yaml lint-copyright-banner lint-go lint-python lint-helm lint-markdown lint-sass lint-typescript lint-protos
 # Default value will run all linters, override these make target with your requirements:
 #    eg: lint: lint-go lint-yaml
-lint: lint-all
+lint: $(CONFIG_GIT_TARGET) lint-all
 
 ############################################################
 # test section
 ############################################################
 
-test:
+test: $(CONFIG_GIT_TARGET)
 	@go test ${TESTARGS} ./...
 
 ############################################################
@@ -124,7 +140,7 @@ install-operator-sdk:
 # build section
 ############################################################
 
-build: install-operator-sdk $(CONFIG_DOCKER_TARGET)
+build: install-operator-sdk $(CONFIG_GIT_TARGET)
 	operator-sdk build $(REGISTRY)/$(IMG):$(VERSION)
 
 ############################################################
@@ -142,11 +158,7 @@ run:
 
 images: build build-push-images
 
-ifeq ($(BUILD_LOCALLY),0)
-    export CONFIG_DOCKER_TARGET = config-docker
-endif
-
-build-push-images:
+build-push-images: $(CONFIG_DOCKER_TARGET)
 	docker tag $(REGISTRY)/$(IMG):$(VERSION) $(REGISTRY)/$(IMG)
 	@if [ $(BUILD_LOCALLY) -ne 1 ]; then docker push $(REGISTRY)/$(IMG):$(VERSION); docker push $(REGISTRY)/$(IMG); fi
 
