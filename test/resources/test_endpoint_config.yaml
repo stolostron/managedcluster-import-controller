@@ -1,0 +1,34 @@
+apiVersion: multicloud.ibm.com/v1alpha1
+kind: EndpointConfig
+metadata:
+  name: cluster-controller-test
+  namespace: cluster-controller-test
+spec:
+  applicationManager:
+    enabled: true
+  bootstrapConfig:
+    hubSecret: multicluster-endpoint/klusterlet-bootstrap
+  clusterLabels:
+    cloud: auto-detect
+    vednor: auto-detect
+  clusterName: cluster-controller-test
+  clusterNamespace: cluster-controller-test
+  connectionManager:
+    enabledGlobalView: false
+  imageRegistry: ibmcom
+  metering:
+    enabled: true
+  policyController:
+    enabled: true
+  prometheusIntegration:
+    enabled: true
+  searchCollector:
+    enabled: true
+  serviceRegistry:
+    enabled: true
+  tillerIntegration:
+    enabled: true
+  topologyCollector:
+    enabled: true
+    updateInterval: 0
+  version: 3.3.0

@@ -42,7 +42,8 @@ func bootstrapServiceAccountNsN(cluster *clusterregistryv1alpha1.Cluster) (types
 	}, nil
 }
 
-func newBootstrapServiceAccount(cluster *clusterregistryv1alpha1.Cluster) (*corev1.ServiceAccount, error) {
+// NewBootstrapServiceAccount initialize a new bootstrap serviceaccount
+func NewBootstrapServiceAccount(cluster *clusterregistryv1alpha1.Cluster) (*corev1.ServiceAccount, error) {
 	saNsN, err := bootstrapServiceAccountNsN(cluster)
 	if err != nil {
 		return nil, err
@@ -78,7 +79,7 @@ func getBootstrapServiceAccount(r *ReconcileCluster, cluster *clusterregistryv1a
 
 // createBootstrapServiceAccount create the service account use for multicluster-endpoint bootstrap
 func createBootstrapServiceAccount(r *ReconcileCluster, cluster *clusterregistryv1alpha1.Cluster) (*corev1.ServiceAccount, error) {
-	sa, err := newBootstrapServiceAccount(cluster)
+	sa, err := NewBootstrapServiceAccount(cluster)
 	if err != nil {
 		return nil, err
 	}

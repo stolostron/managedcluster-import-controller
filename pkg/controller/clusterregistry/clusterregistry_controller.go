@@ -98,7 +98,7 @@ func (r *ReconcileCluster) Reconcile(request reconcile.Request) (reconcile.Resul
 	}
 
 	// in Terminating state
-	if instance.DeletionTimestamp == nil {
+	if instance.DeletionTimestamp != nil {
 		return reconcile.Result{}, nil
 	}
 

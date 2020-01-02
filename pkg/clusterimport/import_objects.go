@@ -52,8 +52,8 @@ const EndpointOperatorImageName = "icp-multicluster-endpoint-operator"
 
 var log = logf.Log.WithName("clusterimport")
 
-// generateObjects generate all the object in the manifest use for installing multicluster-endpoint on managed cluster
-func generateImportObjects(client client.Client, endpointConfig *multicloudv1alpha1.EndpointConfig) ([]runtime.Object, error) {
+// GenerateImportObjects generate all the object in the manifest use for installing multicluster-endpoint on managed cluster
+func GenerateImportObjects(client client.Client, endpointConfig *multicloudv1alpha1.EndpointConfig) ([]runtime.Object, error) {
 	importObjects, err := generateCommonImportObjects()
 	if err != nil {
 		return nil, err
