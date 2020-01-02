@@ -31,11 +31,11 @@ const BootstrapServiceAccountNamePostfix = "-bootstrap-sa"
 
 func bootstrapServiceAccountNsN(endpointConfig *multicloudv1alpha1.EndpointConfig) (types.NamespacedName, error) {
 	if endpointConfig == nil {
-		return types.NamespacedName{}, fmt.Errorf("nil EndpontConfig")
+		return types.NamespacedName{}, fmt.Errorf("endpontConfig can not be nil")
 	}
 
 	if endpointConfig.Spec.ClusterName == "" {
-		return types.NamespacedName{}, fmt.Errorf("empty ClusterName")
+		return types.NamespacedName{}, fmt.Errorf("endpontConfig can not have empty ClusterName")
 	}
 
 	return types.NamespacedName{

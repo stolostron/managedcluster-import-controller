@@ -1,6 +1,8 @@
 # Directories
+.go
 .vscode
 /build/_output
+/cmd/manager/__debug_bin
 build-harness
 vendor
 test/coverage
