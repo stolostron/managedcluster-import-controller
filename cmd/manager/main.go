@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"runtime"
+	"time"
 
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
@@ -29,6 +30,9 @@ import (
 	"github.com/operator-framework/operator-sdk/pkg/metrics"
 	"github.com/operator-framework/operator-sdk/pkg/restmapper"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
+	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis"
+	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/controller"
+	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/utils"
 	"github.com/spf13/pflag"
 	mcmv1alpha1 "github.ibm.com/IBMPrivateCloud/multicloud-operators-foundation/pkg/apis/mcm/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
@@ -40,11 +44,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
-	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
-
-	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis"
-	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/controller"
-	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/utils"
 )
 
 // Change below variables to serve metrics on different host or port.
@@ -157,12 +156,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Setup all Controllers
-	if err := controller.AddToManager(mgr); err != nil {
-		log.Error(err, "")
-		os.Exit(1)
-	}
-
 	if err = serveCRMetrics(cfg); err != nil {
 		log.Info("Could not generate and serve custom resource metrics", "error", err.Error())
 	}
@@ -202,10 +195,49 @@ func main() {
 		}
 	}
 
-	log.Info("Starting the Cmd.")
+	log.Info("Setup manager with controllers")
+	missingGVS, err := controller.GetMissingGVS(cfg)
+	if err != nil {
+		log.Error(err, "")
+		os.Exit(1)
+	}
+
+	//Channel to stop the manager
+	stopMgrCh := make(chan struct{})
+
+	if err := controller.AddToManager(mgr, missingGVS); err != nil {
+		log.Error(err, "")
+		os.Exit(1)
+	}
+
+	nbOfMissingGVS := len(missingGVS)
+
+	//If some CRD are not yet installled then we will monitor them
+	if nbOfMissingGVS != 0 {
+		go func() {
+			change := false
+			for !change {
+				time.Sleep(time.Second * 10)
+				currentMissingGVS, err := controller.GetMissingGVS(cfg)
+				if err != nil {
+					log.Error(err, "")
+					os.Exit(1)
+				}
+				change = len(currentMissingGVS) != nbOfMissingGVS
+				if change {
+					log.Info(fmt.Sprintf("Old missing GVS: %v", missingGVS))
+					log.Info(fmt.Sprintf("New missing GVS: %v", currentMissingGVS))
+				}
+			}
+			//Close the manager
+			log.Error(fmt.Errorf("new CRD discovered %s", ""),
+				"This is an expected behavior, the operator stopped because a new CRD managed by this operator get discovered")
+			close(stopMgrCh)
+		}()
+	}
 
 	// Start the Cmd
-	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(stopMgrCh); err != nil {
 		log.Error(err, "Manager exited non-zero")
 		os.Exit(1)
 	}

@@ -15,10 +15,18 @@
 package controller
 
 import (
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	clusterregistryv1alpha1 "k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
+
 	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/controller/clusterregistry"
 )
 
 func init() {
-	// AddToManagerFuncs is a list of functions to create controllers and add them to a manager.
-	AddToManagerFuncs = append(AddToManagerFuncs, clusterregistry.Add)
+	// AddToManagerFuncs is a list of functions and manadatory GVs to create controllers and add them to a manager.
+	AddToManagerFuncs = append(AddToManagerFuncs, addToManager{
+		function: clusterregistry.Add,
+		MandatoryGroupVersions: []schema.GroupVersion{
+			clusterregistryv1alpha1.SchemeGroupVersion,
+		},
+	})
 }
