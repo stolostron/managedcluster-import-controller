@@ -29,6 +29,12 @@
 export GIT_HOST=github.com/<YOUR_GITHUB_ID>
 ```
 
+- Configure git
+
+```bash
+git config --global url.git@github.com:rh-ibm-synergy/.insteadOf https://github.com/rh-ibm-synergy/
+```
+
 - Run the `linter` and `test` before building the binary.
 
 ```bash

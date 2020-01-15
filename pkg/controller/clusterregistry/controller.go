@@ -28,6 +28,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
+
+	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/utils"
 )
 
 var log = logf.Log.WithName("controller_clusterregistry")
@@ -97,9 +99,33 @@ func (r *ReconcileCluster) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{Requeue: true, RequeueAfter: 5 * time.Second}, err
 	}
 
+	// add finalizer to cluster
+	if isClusterOnline(instance) {
+		utils.AddFinalizer(instance, ClusterFinalizer)
+	}
+
+	for _, condition := range instance.Status.Conditions {
+		if condition.Type != clusterregistryv1alpha1.ClusterOK {
+			utils.RemoveFinalizer(instance, ClusterFinalizer)
+			if err := r.client.Update(context.TODO(), instance); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
 	// in Terminating state
 	if instance.DeletionTimestamp != nil {
-		return reconcile.Result{}, nil
+		//create cluster deletion work if does not exist
+		if _, err := getDeleteWork(r, instance); err == nil || !errors.IsNotFound(err) {
+			return reconcile.Result{}, nil
+		}
+
+		if err := createDeleteWork(r, instance); err != nil {
+			return reconcile.Result{}, err
+		}
+
+		//TODO: if deletion job failed or hanged, clean up that job by fetching the work status
+
 	}
 
 	// create bootstrap service account if does not exist
