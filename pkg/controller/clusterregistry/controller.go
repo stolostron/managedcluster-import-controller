@@ -24,9 +24,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/utils"
@@ -100,7 +100,7 @@ func (r *ReconcileCluster) Reconcile(request reconcile.Request) (reconcile.Resul
 	}
 
 	// add finalizer to cluster
-	if isClusterOnline(instance) {
+	if IsClusterOnline(instance) {
 		utils.AddFinalizer(instance, ClusterFinalizer)
 	}
 

@@ -48,7 +48,8 @@ func getDeleteWork(r *ReconcileCluster, cluster *clusterregistryv1alpha1.Cluster
 	return deleteWork, nil
 }
 
-func isClusterOnline(cluster *clusterregistryv1alpha1.Cluster) bool {
+// IsClusterOnline - if cluster is online returns true otherwise returns false
+func IsClusterOnline(cluster *clusterregistryv1alpha1.Cluster) bool {
 	for _, condition := range cluster.Status.Conditions {
 		if condition.Type == clusterregistryv1alpha1.ClusterOK {
 			return true
