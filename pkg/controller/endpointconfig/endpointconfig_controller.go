@@ -16,20 +16,25 @@ package endpointconfig
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"reflect"
 
+	mcmv1alpha1 "github.ibm.com/IBMPrivateCloud/multicloud-operators-foundation/pkg/apis/mcm/v1alpha1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	clusterregistryv1alpha1 "k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
 	multicloudv1alpha1 "github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis/multicloud/v1alpha1"
+	multicloudv1beta1 "github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis/multicloud/v1beta1"
+	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/controller/clusterregistry"
 )
 
 var log = logf.Log.WithName("controller_endpointconfig")
@@ -47,7 +52,7 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileEndpointConfig{client: mgr.GetClient(), scheme: mgr.GetScheme()}
+	return &ReconcileEndpointConfig{client: mgr.GetClient(), scheme: mgr.GetScheme(), apireader: mgr.GetAPIReader()}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -61,6 +66,15 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Watch for changes to primary resource EndpointConfig
 	err = c.Watch(
 		&source.Kind{Type: &multicloudv1alpha1.EndpointConfig{}},
+		&handler.EnqueueRequestForObject{},
+	)
+	if err != nil {
+		return err
+	}
+
+	// Watch to enqueue request to resourceview update
+	err = c.Watch(
+		&source.Kind{Type: &mcmv1alpha1.ResourceView{}},
 		&handler.EnqueueRequestForObject{},
 	)
 	if err != nil {
@@ -86,8 +100,9 @@ var _ reconcile.Reconciler = &ReconcileEndpointConfig{}
 type ReconcileEndpointConfig struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
-	client client.Client
-	scheme *runtime.Scheme
+	client    client.Client
+	scheme    *runtime.Scheme
+	apireader client.Reader
 }
 
 // Reconcile reads that state of the cluster for a EndpointConfig object and makes changes based on the state read
@@ -122,7 +137,8 @@ func (r *ReconcileEndpointConfig) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, fmt.Errorf("invalid EndpointConfig")
 	}
 
-	if _, err := getClusterRegistryCluster(r.client, instance); err != nil {
+	cluster, err := getClusterRegistryCluster(r.client, instance)
+	if err != nil {
 		if errors.IsNotFound(err) {
 			// when the ClusterRegistry.Cluster reconcile request for this controller will be enqueued
 			// all maybe we use endpointconfig information to create the cluster?
@@ -130,6 +146,14 @@ func (r *ReconcileEndpointConfig) Reconcile(request reconcile.Request) (reconcil
 		}
 
 		return reconcile.Result{}, err
+	}
+
+	// Update endpoint on managed cluster
+	if clusterregistry.IsClusterOnline(cluster) && cluster.DeletionTimestamp == nil {
+		if err := updateEndpoint(r, cluster, instance); err != nil {
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{}, nil
 	}
 
 	if _, err := getImportSecret(r.client, instance); err != nil {
@@ -141,4 +165,53 @@ func (r *ReconcileEndpointConfig) Reconcile(request reconcile.Request) (reconcil
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func updateEndpoint(r *ReconcileEndpointConfig, cluster *clusterregistryv1alpha1.Cluster, endpointconfig *multicloudv1alpha1.EndpointConfig) error {
+	endpointResourceView, err := getEndpointResourceView(r.client, cluster)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			if _, err := createEndpointResourceview(r, cluster, endpointconfig); err != nil {
+				return err
+			}
+			return nil
+		}
+		return err
+	}
+
+	if !IsEndpointResourceviewCompleted(endpointResourceView) {
+		return nil
+	}
+	endpoint, err := GetEndpoint(r, cluster, endpointResourceView)
+	if err != nil {
+		return err
+	}
+
+	endpointWork, err := getEndpointUpdateWork(r, endpointconfig)
+	if !reflect.DeepEqual(endpoint.Spec, endpointconfig.Spec) {
+		if err != nil && errors.IsNotFound(err) {
+			if err := createEndpointUpdateWork(r, endpointconfig, endpoint); err != nil {
+				return err
+			}
+			return nil
+		}
+
+		updatedEndpointwork := &multicloudv1beta1.Endpoint{}
+		_ = json.Unmarshal(endpointWork.Status.Result.Raw, updatedEndpointwork)
+		if reflect.DeepEqual(updatedEndpointwork.Spec, endpoint.Spec) {
+			if err := deleteEndpointUpdateWork(r, endpointWork); err != nil {
+				return err
+			}
+		}
+
+		return nil
+	}
+
+	if endpointWork != nil {
+		if err := deleteEndpointUpdateWork(r, endpointWork); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

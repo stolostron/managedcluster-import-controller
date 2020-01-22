@@ -22,9 +22,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clusterregistryv1alpha1 "k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
-
-	//clusterregistryv1alpha1 "k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
 )
 
 func init() {
@@ -32,8 +29,6 @@ func init() {
 }
 
 func TestUniqueStringSlice(t *testing.T) {
-	logf.SetLogger(logf.ZapLogger(true))
-
 	testCases := []struct {
 		Input          []string
 		ExpectedOutput []string
