@@ -106,6 +106,9 @@ func (r *ReconcileCluster) Reconcile(request reconcile.Request) (reconcile.Resul
 
 	for _, condition := range instance.Status.Conditions {
 		if condition.Type != clusterregistryv1alpha1.ClusterOK {
+			if err := utils.DeleteEndpointConfig(r.client, instance.Name, instance.Namespace); err != nil {
+				return reconcile.Result{}, err
+			}
 			utils.RemoveFinalizer(instance, ClusterFinalizer)
 			if err := r.client.Update(context.TODO(), instance); err != nil {
 				return reconcile.Result{}, err
