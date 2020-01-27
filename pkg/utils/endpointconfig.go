@@ -40,3 +40,17 @@ func GetEndpointConfig(client client.Client, name string, namespace string) (*mu
 
 	return nc, nil
 }
+
+// DeleteEndpointConfig - Delete the endpoint config
+func DeleteEndpointConfig(client client.Client, name string, namespace string) error {
+	endpointConfig, err := GetEndpointConfig(client, name, namespace)
+	if err != nil {
+		return err
+	}
+
+	if err := client.Delete(context.TODO(), endpointConfig); err != nil {
+		return err
+	}
+
+	return nil
+}
