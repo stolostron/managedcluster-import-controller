@@ -33,6 +33,9 @@ type EndpointSpec struct {
 	// +kubebuilder:validation:Enum=3.2.1,3.2.1-rhel,latest-rhel
 	Version string `json:"version"`
 
+	// ComponentsImagesTag contains the tag of each component images
+	ComponentsImagesTag map[string]string `json:"componentsImagesTag"`
+
 	// +kubebuilder:validation:MinLength=1
 	ClusterName string `json:"clusterName"`
 
