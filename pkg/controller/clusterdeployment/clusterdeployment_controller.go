@@ -101,55 +101,71 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 		return reconcile.Result{}, err
 	}
 
+	reqLogger.V(5).Info("clusterimport.GetSelectorSyncset")
 	// create selector syncset if it does not exist
 	if _, err := clusterimport.GetSelectorSyncset(r.client); err != nil {
 		if errors.IsNotFound(err) {
+			reqLogger.V(5).Info("clusterimport.CreateSelectorSyncset")
 			if _, err = clusterimport.CreateSelectorSyncset(r.client); err != nil {
 				return reconcile.Result{}, err
 			}
 		}
+		return reconcile.Result{}, err
 	}
 
 	// create cluster namespace if does not exist
+	reqLogger.V(5).Info("getClusterRegistryNamespace")
 	if _, err := getClusterRegistryNamespace(r.client, instance); err != nil {
 		if errors.IsNotFound(err) {
+			reqLogger.V(5).Info("createClusterRegistryNamespace")
 			if _, err = createClusterRegistryNamespace(r.client, instance); err != nil {
 				return reconcile.Result{}, err
 			}
 		}
+		return reconcile.Result{}, err
 	}
 
 	// create cluster registry cluster if does not exist
-	if crc, err := getClusterRegistryCluster(r.client, instance); err != nil {
+	reqLogger.V(5).Info("getClusterRegistryCluster")
+	crc, err := getClusterRegistryCluster(r.client, instance)
+	if err != nil {
 		if errors.IsNotFound(err) {
+			reqLogger.V(5).Info("createClusterRegistryCluster")
 			if _, err = createClusterRegistryCluster(r.client, r.scheme, instance); err != nil {
 				return reconcile.Result{}, err
 			}
 		}
-	} else {
-		for _, condition := range crc.Status.Conditions {
-			if condition.Type == clusterregistryv1alpha1.ClusterOK {
-				//cluster already imported and online, so do nothing
-				return reconcile.Result{}, nil
-			}
+		return reconcile.Result{}, err
+	}
+
+	for _, condition := range crc.Status.Conditions {
+		if condition.Type == clusterregistryv1alpha1.ClusterOK {
+			//cluster already imported and online, so do nothing
+			return reconcile.Result{}, nil
 		}
 	}
 
 	// requeue until EndpointConfig is created for the cluster
+	reqLogger.V(5).Info("getEndpointConfig")
 	endpointConfig, err := getEndpointConfig(r.client, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, nil
+			reqLogger.V(5).Info("EndPointConfig Not found")
+			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 		}
+		return reconcile.Result{}, err
 	}
 
 	// create syncset if does not exist
+	reqLogger.V(5).Info("clusterimport.GetSyncSet")
 	if _, err := clusterimport.GetSyncSet(r.client, endpointConfig, instance); err != nil {
 		if errors.IsNotFound(err) {
+			reqLogger.V(5).Info("clusterimport.CreateSyncSet")
 			if _, err := clusterimport.CreateSyncSet(r.client, endpointConfig, instance); err != nil {
 				return reconcile.Result{}, err
 			}
 		}
+		return reconcile.Result{}, err
 	}
 
 	return reconcile.Result{}, nil
