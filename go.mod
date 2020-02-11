@@ -11,7 +11,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20191002201903-404acd9df4cc // indirect
 	github.com/hashicorp/golang-lru v0.5.3 // indirect
 	github.com/onsi/ginkgo v1.10.2 // indirect
-	github.com/openshift/api v3.9.1-0.20191112184635-86def77f6f90+incompatible // indirect
+	github.com/openshift/api v3.9.1-0.20191112184635-86def77f6f90+incompatible
 	github.com/openshift/hive v0.0.0-20191113203026-f5faf34a8581
 	github.com/operator-framework/operator-sdk v0.12.0
 	github.com/prometheus/client_golang v1.2.1 // indirect
