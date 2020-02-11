@@ -29,6 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	ocinfrav1 "github.com/openshift/api/config/v1"
 	multicloudv1alpha1 "github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis/multicloud/v1alpha1"
 	multicloudv1beta1 "github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis/multicloud/v1beta1"
 	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/controller/clusterregistry"
@@ -38,6 +39,7 @@ func TestReconcileEndpointConfig_Reconcile(t *testing.T) {
 	s := scheme.Scheme
 	s.AddKnownTypes(clusterregistryv1alpha1.SchemeGroupVersion, &clusterregistryv1alpha1.Cluster{})
 	s.AddKnownTypes(multicloudv1alpha1.SchemeGroupVersion, &multicloudv1alpha1.EndpointConfig{})
+	s.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{})
 
 	terminatingEndpointConfig := &multicloudv1alpha1.EndpointConfig{
 		ObjectMeta: metav1.ObjectMeta{
@@ -58,6 +60,15 @@ func TestReconcileEndpointConfig_Reconcile(t *testing.T) {
 		Spec: multicloudv1beta1.EndpointSpec{
 			ClusterName:      "not-cluster-name",
 			ClusterNamespace: "not-cluster-namespace",
+		},
+	}
+
+	infrastructConfig := &ocinfrav1.Infrastructure{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cluster",
+		},
+		Status: ocinfrav1.InfrastructureStatus{
+			APIServerURL: "https://cluster-name.com:6443",
 		},
 	}
 
@@ -192,6 +203,7 @@ func TestReconcileEndpointConfig_Reconcile(t *testing.T) {
 				client: fake.NewFakeClientWithScheme(s,
 					endpointConfig,
 					cluster,
+					infrastructConfig,
 					serviceAccount,
 					tokenSecret,
 					clusterInfoConfigMap(),

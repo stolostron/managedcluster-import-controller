@@ -19,6 +19,7 @@ import (
 	"reflect"
 	"testing"
 
+	ocinfrav1 "github.com/openshift/api/config/v1"
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -45,26 +46,12 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 		scheme *runtime.Scheme
 	}
 
-	clusterInfoConfigMap := &corev1.ConfigMap{
+	infrastructConfig := &ocinfrav1.Infrastructure{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "ibmcloud-cluster-info",
-			Namespace: "kube-public",
+			Name: "cluster",
 		},
-		Data: map[string]string{
-			"cluster_address":              "icp-console.apps.haos-new-playground.purple-chesterfield.com",
-			"cluster_ca_domain":            "icp-console.apps.haos-new-playground.purple-chesterfield.com",
-			"cluster_endpoint":             "https://icp-management-ingress.kube-system.svc:443",
-			"cluster_kube_apiserver_host":  "api.haos-new-playground.purple-chesterfield.com",
-			"cluster_kube_apiserver_port":  "6443",
-			"cluster_name":                 "mycluster",
-			"cluster_router_http_port":     "8080",
-			"cluster_router_https_port":    "443",
-			"edition":                      "Enterprise Edition",
-			"openshift_router_base_domain": "apps.haos-new-playground.purple-chesterfield.com",
-			"proxy_address":                "icp-proxy.apps.haos-new-playground.purple-chesterfield.com",
-			"proxy_ingress_http_port":      "80",
-			"proxy_ingress_https_port":     "443",
-			"version":                      "3.2.2",
+		Status: ocinfrav1.InfrastructureStatus{
+			APIServerURL: "https://api.haos-new-playground.purple-chesterfield.com:6443",
 		},
 	}
 	imagePullSecret := &corev1.Secret{
@@ -129,6 +116,7 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 	s.AddKnownTypes(hivev1.SchemeGroupVersion, &hivev1.ClusterDeployment{}, &hivev1.SyncSet{})
 	s.AddKnownTypes(clusterregistryv1alpha1.SchemeGroupVersion, &clusterregistryv1alpha1.Cluster{})
 	s.AddKnownTypes(multicloudv1alpha1.SchemeGroupVersion, &multicloudv1alpha1.EndpointConfig{})
+	s.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{})
 
 	req := reconcile.Request{
 		NamespacedName: types.NamespacedName{
@@ -190,7 +178,7 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 				client: fake.NewFakeClient([]runtime.Object{
 					clusterDeployment,
 					endpointConfig,
-					clusterInfoConfigMap,
+					infrastructConfig,
 					bootstrapServiceAccount,
 					bootstrapTokenSecret,
 				}...),
@@ -212,7 +200,7 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 					imagePullSecret,
 					clusterDeployment,
 					endpointConfigWithSecret,
-					clusterInfoConfigMap,
+					infrastructConfig,
 					bootstrapServiceAccount,
 					bootstrapTokenSecret,
 				}...),
