@@ -21,6 +21,7 @@ import (
 	"reflect"
 	"testing"
 
+	ocinfrav1 "github.com/openshift/api/config/v1"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -199,6 +200,7 @@ func Test_newImportSecret(t *testing.T) {
 	s := scheme.Scheme
 	s.AddKnownTypes(clusterregistryv1alpha1.SchemeGroupVersion, &clusterregistryv1alpha1.Cluster{})
 	s.AddKnownTypes(multicloudv1alpha1.SchemeGroupVersion, &multicloudv1alpha1.EndpointConfig{})
+	s.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{})
 
 	endpointConfig := &multicloudv1alpha1.EndpointConfig{
 		ObjectMeta: metav1.ObjectMeta{
@@ -215,6 +217,15 @@ func Test_newImportSecret(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cluster-name",
 			Namespace: "cluster-namespace",
+		},
+	}
+
+	infrastructConfig := &ocinfrav1.Infrastructure{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cluster",
+		},
+		Status: ocinfrav1.InfrastructureStatus{
+			APIServerURL: "https://cluster-name.com:6443",
 		},
 	}
 
@@ -280,6 +291,7 @@ func Test_newImportSecret(t *testing.T) {
 				client: fake.NewFakeClientWithScheme(s, []runtime.Object{
 					endpointConfig,
 					cluster,
+					infrastructConfig,
 					serviceAccount,
 					tokenSecret,
 					clusterInfoConfigMap(),
@@ -327,6 +339,14 @@ func Test_createImportSecret(t *testing.T) {
 		},
 	}
 
+	infrastructConfig := &ocinfrav1.Infrastructure{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cluster",
+		},
+		Status: ocinfrav1.InfrastructureStatus{
+			APIServerURL: "https://cluster-name.com:6443",
+		},
+	}
 	serviceAccount, err := clusterregistry.NewBootstrapServiceAccount(cluster)
 	if err != nil {
 		t.Errorf("fail to initialize bootstrap serviceaccount, error = %v", err)
@@ -344,10 +364,12 @@ func Test_createImportSecret(t *testing.T) {
 	s := scheme.Scheme
 	s.AddKnownTypes(clusterregistryv1alpha1.SchemeGroupVersion, &clusterregistryv1alpha1.Cluster{})
 	s.AddKnownTypes(multicloudv1alpha1.SchemeGroupVersion, &multicloudv1alpha1.EndpointConfig{})
+	s.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{})
 
 	fakeClient := fake.NewFakeClientWithScheme(s,
 		endpointConfig,
 		cluster,
+		infrastructConfig,
 		serviceAccount,
 		tokenSecret,
 		clusterInfoConfigMap(),

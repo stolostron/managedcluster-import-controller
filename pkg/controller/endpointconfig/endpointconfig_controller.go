@@ -148,20 +148,20 @@ func (r *ReconcileEndpointConfig) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, err
 	}
 
-	// Update endpoint on managed cluster
-	if clusterregistry.IsClusterOnline(cluster) && cluster.DeletionTimestamp == nil {
-		if err := updateEndpoint(r, cluster, instance); err != nil {
-			return reconcile.Result{}, err
-		}
-		return reconcile.Result{}, nil
-	}
-
 	if _, err := getImportSecret(r.client, instance); err != nil {
 		if errors.IsNotFound(err) {
 			if _, err = createImportSecret(r.client, r.scheme, instance); err != nil {
 				return reconcile.Result{}, err
 			}
 		}
+	}
+
+	// Update endpoint on managed cluster
+	if clusterregistry.IsClusterOnline(cluster) && cluster.DeletionTimestamp == nil {
+		if err := updateEndpoint(r, cluster, instance); err != nil {
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{}, nil
 	}
 
 	return reconcile.Result{}, nil

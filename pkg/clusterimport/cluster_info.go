@@ -16,39 +16,26 @@ package clusterimport
 
 import (
 	"context"
-	"fmt"
 
-	corev1 "k8s.io/api/core/v1"
+	ocinfrav1 "github.com/openshift/api/config/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const clusterInfoConfigMapName = "ibmcloud-cluster-info"
-const clusterInfoConfigMapNamespace = "kube-public"
+const infrastructureConfigName = "cluster"
 
-func clusterInfoConfigMapNsN() types.NamespacedName {
+func infrastructureConfigNameNsN() types.NamespacedName {
 	return types.NamespacedName{
-		Name:      clusterInfoConfigMapName,
-		Namespace: clusterInfoConfigMapNamespace,
+		Name: infrastructureConfigName,
 	}
 }
 
 func getKubeAPIServerAddress(client client.Client) (string, error) {
-	configmap := &corev1.ConfigMap{}
+	infraConfig := &ocinfrav1.Infrastructure{}
 
-	if err := client.Get(context.TODO(), clusterInfoConfigMapNsN(), configmap); err != nil {
+	if err := client.Get(context.TODO(), infrastructureConfigNameNsN(), infraConfig); err != nil {
 		return "", err
 	}
 
-	apiServerHost, ok := configmap.Data["cluster_kube_apiserver_host"]
-	if !ok {
-		return "", fmt.Errorf("kube-public/ibmcloud-cluster-info does not contain cluster_kube_apiserver_host")
-	}
-
-	apiServerPort, ok := configmap.Data["cluster_kube_apiserver_port"]
-	if !ok {
-		return "https://" + apiServerHost, nil
-	}
-
-	return "https://" + apiServerHost + ":" + apiServerPort, nil
+	return infraConfig.Status.APIServerURL, nil
 }
