@@ -31,8 +31,8 @@ import (
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
 	multicloudv1alpha1 "github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis/multicloud/v1alpha1"
-	multicloudv1beta1 "github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis/multicloud/v1beta1"
 	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/controller/clusterregistry"
+	multicloudv1beta1 "github.ibm.com/IBMPrivateCloud/ibm-klusterlet-operator/pkg/apis/multicloud/v1beta1"
 )
 
 func TestReconcileEndpointConfig_Reconcile(t *testing.T) {
