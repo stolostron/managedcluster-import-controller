@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/clusterimport"
+	"github.com/open-cluster-management/rcm-controller/pkg/clusterimport"
 )
 
 var log = logf.Log.WithName("controller_clusterdeployment")
@@ -131,7 +131,7 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.V(5).Info("createClusterRegistryCluster")
-			if _, err = createClusterRegistryCluster(r.client, r.scheme, instance); err != nil {
+			if _, err = createClusterRegistryCluster(r.client, instance); err != nil {
 				return reconcile.Result{}, err
 			}
 		}

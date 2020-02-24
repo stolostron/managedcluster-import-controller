@@ -17,7 +17,6 @@ package clusterregistry
 import (
 	"context"
 
-	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/clusterimport"
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,8 +24,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clusterregistryv1alpha1 "k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
 
-	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/utils"
-	mcmv1alpha1 "github.ibm.com/IBMPrivateCloud/multicloud-operators-foundation/pkg/apis/mcm/v1alpha1"
+	mcmv1alpha1 "github.com/open-cluster-management/multicloud-operators-foundation/pkg/apis/mcm/v1alpha1"
+	"github.com/open-cluster-management/rcm-controller/pkg/clusterimport"
+	"github.com/open-cluster-management/rcm-controller/pkg/utils"
 )
 
 // constants for delete work and finalizer

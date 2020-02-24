@@ -19,7 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	clusterregistryv1alpha1 "k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
 
-	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/controller/clusterdeployment"
+	"github.com/open-cluster-management/rcm-controller/pkg/controller/clusterdeployment"
 )
 
 func init() {

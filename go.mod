@@ -1,20 +1,17 @@
-module github.com/rh-ibm-synergy/multicloud-operators-cluster-controller
+module github.com/open-cluster-management/rcm-controller
 
 go 1.13
 
 require (
-	cloud.google.com/go v0.47.0 // indirect
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-openapi/spec v0.19.4
-	github.com/onsi/ginkgo v1.10.2 // indirect
+	github.com/open-cluster-management/endpoint-operator v0.0.0-20200224152543-8a563b4c5aa6
+	github.com/open-cluster-management/multicloud-operators-foundation v0.0.0-20200212094214-a1cac8f162b8
 	github.com/openshift/api v3.9.1-0.20191112184635-86def77f6f90+incompatible
 	github.com/openshift/hive v0.0.0-20191113203026-f5faf34a8581
 	github.com/operator-framework/operator-sdk v0.15.1
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.4.0
-	github.ibm.com/IBMPrivateCloud/ibm-klusterlet-operator v0.0.0-20200212144321-1d7346d837a7
-	github.ibm.com/IBMPrivateCloud/multicloud-operators-foundation v0.0.0-00010101000000-000000000000
-	go.uber.org/multierr v1.2.0 // indirect
 	k8s.io/api v0.0.0
 	k8s.io/apiextensions-apiserver v0.0.0
 	k8s.io/apimachinery v0.0.0
@@ -53,6 +50,4 @@ replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v12.2.0+incompatible // fix dep issue
 
 	github.com/docker/docker => github.com/moby/moby v0.7.3-0.20190826074503-38ab9da00309 // Required by Helm
-
-	github.ibm.com/IBMPrivateCloud/multicloud-operators-foundation => github.com/rh-ibm-synergy/multicloud-operators-foundation v0.0.0-20200129023941-fec237add026
 )
