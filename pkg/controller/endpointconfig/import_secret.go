@@ -28,8 +28,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	multicloudv1alpha1 "github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis/multicloud/v1alpha1"
-	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/clusterimport"
+	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
+	"github.com/open-cluster-management/rcm-controller/pkg/clusterimport"
 )
 
 const importSecretNamePostfix = "-import"

@@ -1,0 +1,45 @@
+language: go
+
+go:
+  - "1.13.x"
+
+services:
+  - docker
+
+branches:
+  only:
+    - master
+    - /^release-[0-9]+\..*$/
+
+stages:
+  - build
+  # - test-e2e
+  - publish
+
+jobs:
+  include:
+    - stage: build
+      name: "Run all checks, unit tests, build and push image"
+      before_script:
+        - git config --global url.git@github.com:open-cluster-management/.insteadOf https://github.com/open-cluster-management/
+        - make init
+        - make component/init
+      script:
+        - if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}"; fi;
+        - ./build/travis.sh   # to remove overhead and keep output clean
+
+    # - stage: test-e2e
+    #   name: "Run e23-test"
+    #   if: type = pull_request
+    #   script:
+    #     - make component/pull
+    #     - make component/test/e2e
+
+    - stage: publish
+      name: "Publish Image"
+      if: type = push AND branch =~ /^release-[0-9]+\..*$/
+      script:
+        - make init
+        - make pipeline-manifest/update PIPELINE_MANIFEST_COMPONENT_SHA256=${TRAVIS_COMMIT} PIPELINE_MANIFEST_COMPONENT_REPO=${TRAVIS_REPO_SLUG} PIPELINE_MANIFEST_BRANCH=${TRAVIS_BRANCH}
+    #   after_script:
+    #     - test "$TRAVIS_PULL_REQUEST" = "false" && test "$TRAVIS_TEST_RESULT" = "1" && ./build/slack-notification.sh || echo "Slack notification not sent"

@@ -25,9 +25,9 @@ import (
 
 func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenAPIDefinition {
 	return map[string]common.OpenAPIDefinition{
-		"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis/multicloud/v1alpha1.EndpointConfig":       schema_pkg_apis_multicloud_v1alpha1_EndpointConfig(ref),
-		"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis/multicloud/v1alpha1.EndpointConfigSpec":   schema_pkg_apis_multicloud_v1alpha1_EndpointConfigSpec(ref),
-		"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis/multicloud/v1alpha1.EndpointConfigStatus": schema_pkg_apis_multicloud_v1alpha1_EndpointConfigStatus(ref),
+		"github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1.EndpointConfig":       schema_pkg_apis_multicloud_v1alpha1_EndpointConfig(ref),
+		"github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1.EndpointConfigSpec":   schema_pkg_apis_multicloud_v1alpha1_EndpointConfigSpec(ref),
+		"github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1.EndpointConfigStatus": schema_pkg_apis_multicloud_v1alpha1_EndpointConfigStatus(ref),
 	}
 }
 
@@ -58,19 +58,19 @@ func schema_pkg_apis_multicloud_v1alpha1_EndpointConfig(ref common.ReferenceCall
 					},
 					"spec": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis/multicloud/v1alpha1.EndpointConfigSpec"),
+							Ref: ref("github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1.EndpointConfigSpec"),
 						},
 					},
 					"status": {
 						SchemaProps: spec.SchemaProps{
-							Ref: ref("github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis/multicloud/v1alpha1.EndpointConfigStatus"),
+							Ref: ref("github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1.EndpointConfigStatus"),
 						},
 					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis/multicloud/v1alpha1.EndpointConfigSpec", "github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/apis/multicloud/v1alpha1.EndpointConfigStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
+			"github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1.EndpointConfigSpec", "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1.EndpointConfigStatus", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
 	}
 }
 

@@ -20,11 +20,9 @@ import (
 
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clusterregistryv1alpha1 "k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
 func clusterRegistryNsN(clusterDeployment *hivev1.ClusterDeployment) (types.NamespacedName, error) {
@@ -74,16 +72,11 @@ func newClusterRegistryCluster(clusterDeployment *hivev1.ClusterDeployment) (*cl
 
 func createClusterRegistryCluster(
 	client client.Client,
-	scheme *runtime.Scheme,
 	clusterDeployment *hivev1.ClusterDeployment,
 ) (*clusterregistryv1alpha1.Cluster, error) {
 	cr, err := newClusterRegistryCluster(clusterDeployment)
 	if err != nil {
 		return nil, fmt.Errorf("error from call to func newclusterRegistryCluster")
-	}
-
-	if err := controllerutil.SetControllerReference(clusterDeployment, cr, scheme); err != nil {
-		return nil, err
 	}
 
 	if err := client.Create(context.TODO(), cr); err != nil {

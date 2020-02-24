@@ -29,7 +29,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	"github.com/rh-ibm-synergy/multicloud-operators-cluster-controller/pkg/utils"
+	"github.com/open-cluster-management/rcm-controller/pkg/utils"
 )
 
 var log = logf.Log.WithName("controller_clusterregistry")

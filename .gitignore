@@ -4,6 +4,7 @@
 /build/_output
 /cmd/manager/__debug_bin
 build-harness
+build-harness-extensions
 vendor
 test/coverage
 test/out
@@ -11,4 +12,5 @@ overlays/deploy
 
 # Files
 .build-harness
+.build-harness-bootstrap
 OPENSOURCE.check
