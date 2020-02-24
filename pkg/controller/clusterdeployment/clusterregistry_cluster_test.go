@@ -241,7 +241,6 @@ func Test_newClusterRegistryCluster(t *testing.T) {
 func Test_createClusterRegistryCluster(t *testing.T) {
 	type args struct {
 		client            client.Client
-		scheme            *runtime.Scheme
 		clusterDeployment *hivev1.ClusterDeployment
 	}
 	testClusterDeployment := &hivev1.ClusterDeployment{
@@ -274,7 +273,6 @@ func Test_createClusterRegistryCluster(t *testing.T) {
 			name: "nil clusterDeployment",
 			args: args{
 				client:            fclient,
-				scheme:            fscheme,
 				clusterDeployment: nil,
 			},
 			want:    nil,
@@ -284,7 +282,6 @@ func Test_createClusterRegistryCluster(t *testing.T) {
 			name: "success",
 			args: args{
 				client:            fclient,
-				scheme:            fscheme,
 				clusterDeployment: testClusterDeployment,
 			},
 			want: &clusterregistryv1alpha1.Cluster{
@@ -298,7 +295,7 @@ func Test_createClusterRegistryCluster(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := createClusterRegistryCluster(tt.args.client, tt.args.scheme, tt.args.clusterDeployment)
+			got, err := createClusterRegistryCluster(tt.args.client, tt.args.clusterDeployment)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createClusterRegistryCluster() error = %v, wantErr %v", err, tt.wantErr)
 				return

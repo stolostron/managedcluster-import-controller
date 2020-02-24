@@ -1,166 +1,97 @@
-# Copyright 2019 The Kubernetes Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
 
-# Image URL to use all building/pushing image targets;
-# Use your own docker registry and image name for dev/test by overridding the IMG and REGISTRY environment variable.
-IMG ?= multicloud-operators-cluster-controller
-REGISTRY ?= quay.io/rhibmcollab
+SHELL := /bin/bash
 
-# Github host to use for checking the source tree;
-# Override this variable ue with your own value if you're working on forked repo.
-GIT_HOST ?= github.com/rh-ibm-synergy
+.EXPORT_ALL_VARIABLES:
 
-PWD := $(shell pwd)
-BASE_DIR := $(shell basename $(PWD))
+GIT_COMMIT      = $(shell git rev-parse --short HEAD)
+GIT_REMOTE_URL  = $(shell git config --get remote.origin.url)
+GITHUB_USER    := $(shell echo $(GITHUB_USER) | sed 's/@/%40/g')
+GITHUB_TOKEN   ?=
 
-# Keep an existing GOPATH, make a private one if it is undefined
-GOPATH_DEFAULT := $(PWD)/.go
-export GOPATH ?= $(GOPATH_DEFAULT)
-GOBIN_DEFAULT := $(GOPATH)/bin
-export GOBIN ?= $(GOBIN_DEFAULT)
-TESTARGS_DEFAULT := "-v"
-export TESTARGS ?= $(TESTARGS_DEFAULT)
-DEST := $(GOPATH)/src/$(GIT_HOST)/$(BASE_DIR)
-VERSION ?= $(shell git describe --exact-match 2> /dev/null || \
-	git describe --match=$(git rev-parse --short=8 HEAD) --always --dirty --abbrev=8)
+ARCH       ?= $(shell uname -m)
+ARCH_TYPE   = $(if $(patsubst x86_64,,$(ARCH)),$(ARCH),amd64)
+BUILD_DATE  = $(shell date +%m/%d@%H:%M:%S)
+VCS_REF     = $(if $(shell git status --porcelain),$(GIT_COMMIT)-$(BUILD_DATE),$(GIT_COMMIT))
 
-LOCAL_OS := $(shell uname)
-ifeq ($(LOCAL_OS),Linux)
-    TARGET_OS ?= linux
-    XARGS_FLAGS="-r"
-else ifeq ($(LOCAL_OS),Darwin)
-    TARGET_OS ?= darwin
-    XARGS_FLAGS=
-else
-    $(error "This system's OS $(LOCAL_OS) isn't recognized/supported")
-endif
+CGO_ENABLED  = 0
+GO111MODULE := on
+GOOS         = $(shell go env GOOS)
+GOARCH       = $(ARCH_TYPE)
+GOPACKAGES   = $(shell go list ./... | grep -v /vendor | grep -v /internal | grep -v /build | grep -v /test)
 
-# enable GO MOD
-export GO111MODULE := on
+PROJECT_DIR            = $(shell 'pwd')
+BUILD_DIR              = $(PROJECT_DIR)/build
+COMPONENT_SCRIPTS_PATH = $(BUILD_DIR)
+ENDPOINT_CRD_FILE      = $(PROJECT_DIR)/build/resources/multicloud_v1beta1_endpoint_crd.yaml
 
-ifeq (,$(wildcard go.mod))
-ifneq ("$(realpath $(DEST))", "$(realpath $(PWD))")
-    $(error Please run 'make' from $(DEST). Current directory is $(PWD))
-endif
-endif
+## WARNING: OPERATOR-SDK - IMAGE_DESCRIPTION & DOCKER_BUILD_OPTS MUST NOT CONTAIN ANY SPACES
+IMAGE_DESCRIPTION ?= RCM_Controller
+DOCKER_FILE        = $(BUILD_DIR)/Dockerfile
+DOCKER_REGISTRY   ?= quay.io
+DOCKER_NAMESPACE  ?= open-cluster-management
+DOCKER_IMAGE      ?= $(COMPONENT_NAME)
+DOCKER_BUILD_TAG  ?= latest
+DOCKER_TAG        ?= $(shell whoami)
+DOCKER_BUILD_OPTS  = --build-arg "VCS_REF=$(VCS_REF)" \
+	--build-arg "VCS_URL=$(GIT_REMOTE_URL)" \
+	--build-arg "IMAGE_NAME=$(DOCKER_IMAGE)" \
+	--build-arg "IMAGE_DESCRIPTION=$(IMAGE_DESCRIPTION)" \
+	--build-arg "IMAGE_VERSION=$(SEMVERSION)" \
+	--build-arg "ARCH_TYPE=$(ARCH_TYPE)"
 
-# This repo is build locally for dev/test by default;
-# Override this variable in CI env.
-BUILD_LOCALLY ?= 1
+BEFORE_SCRIPT := $(shell build/before-make.sh)
 
-ifeq ($(BUILD_LOCALLY),0)
-    export CONFIG_GIT_TARGET = config-git
-endif
+-include $(shell curl -s -H 'Authorization: token ${GITHUB_TOKEN}' -H 'Accept: application/vnd.github.v4.raw' -L https://api.github.com/repos/open-cluster-management/build-harness-extensions/contents/templates/Makefile.build-harness-bootstrap -o .build-harness-bootstrap; echo .build-harness-bootstrap)
 
-ifeq ($(BUILD_LOCALLY),0)
-    export CONFIG_DOCKER_TARGET = config-docker
-endif
 
-config-git:
-	@mkdir /root/.ssh && cat /home/ssh/ssh-key > /root/.ssh/id_rsa && chmod 600 /root/.ssh/id_rsa && ssh-keyscan -H github.com >> /root/.ssh/known_hosts
-	@git config --global url.git@github.com:rh-ibm-synergy/.insteadOf https://github.com/rh-ibm-synergy/
+.PHONY: deps
+## Download all project dependencies
+deps: init component/init
 
-############################################################
-# all section
-############################################################
+.PHONY: check
+## Runs a set of required checks
+check: lint ossccheck
 
-all: fmt check test coverage build images
+.PHONY: test
+## Runs go unit tests
+test: component/test/unit
 
-############################################################
-# install git hooks
-############################################################
-INSTALL_HOOKS := $(shell find .git/hooks -type l -exec rm {} \; && \
-                         find common/scripts/.githooks -type f -exec ln -sf ../../{} .git/hooks/ \; )
+.PHONY: build
+## Builds controller binary inside of an image
+build: component/build
 
-include common/Makefile.common.mk
+.PHONY: clean
+## Clean build-harness and remove Go generated build and test files
+clean::
+	@rm -rf $(BUILD_DIR)/_output
+	@[ "$(BUILD_HARNESS_PATH)" == '/' ] || \
+	 [ "$(BUILD_HARNESS_PATH)" == '.' ] || \
+	   rm -rf $(BUILD_HARNESS_PATH)
 
-############################################################
-# work section
-############################################################
-
-$(GOBIN):
-	@echo "create gobin"
-	@mkdir -p $(GOBIN)
-
-work: $(GOBIN)
-
-############################################################
-# format section
-############################################################
-
-# All available format: format-go format-protos format-python
-# Default value will run all formats, override these make target with your requirements:
-#    eg: fmt: format-go format-protos
-fmt: format-go format-protos format-python
-
-############################################################
-# check section
-############################################################
-
-check: lint
-
-# All available linters: lint-dockerfiles lint-scripts lint-yaml lint-copyright-banner lint-go lint-python lint-helm lint-markdown lint-sass lint-typescript lint-protos
-# Default value will run all linters, override these make target with your requirements:
-#    eg: lint: lint-go lint-yaml
-lint: $(CONFIG_GIT_TARGET) lint-all
-
-############################################################
-# test section
-############################################################
-
-test: $(CONFIG_GIT_TARGET)
-	@go test ${TESTARGS} ./...
-
-############################################################
-# coverage section
-############################################################
-
-coverage:
-	@common/scripts/codecov.sh
-
-############################################################
-# install operator sdk section
-############################################################
-
-install-operator-sdk:
-	@operator-sdk version 2> /dev/null ; if [ $$? -ne 0 ]; then ./common/scripts/install-operator-sdk.sh; fi
-
-############################################################
-# build section
-############################################################
-
-build: install-operator-sdk $(CONFIG_GIT_TARGET)
-	operator-sdk build $(REGISTRY)/$(IMG):$(VERSION)
-
-############################################################
-# run section
-############################################################
-
-export ENDPOINT_CRD_FILE=$(PWD)/build/resources/multicloud_v1beta1_endpoint_crd.yaml
-
+.PHONY: run
+## Run the operator against the kubeconfig targeted cluster
 run:
 	@operator-sdk up local --namespace="" --operator-flags="--zap-devel=true"
 
-############################################################
-# images section
-############################################################
+.PHONY: lint
+## Runs linter against go files
+lint:
+	@echo "Running linting tool ..."
+	@GOGC=25 golangci-lint run --timeout 5m
 
-images: build build-push-images
+.PHONY: ossccheck
+ossccheck:
+	ossc --check
 
-build-push-images: $(CONFIG_DOCKER_TARGET)
-	docker tag $(REGISTRY)/$(IMG):$(VERSION) $(REGISTRY)/$(IMG)
-	@if [ $(BUILD_LOCALLY) -ne 1 ]; then docker push $(REGISTRY)/$(IMG):$(VERSION); docker push $(REGISTRY)/$(IMG); fi
+.PHONY: ossc
+ossc:
+	ossc
+
+.PHONY: helpz
+helpz:
+ifndef build-harness
+	$(eval MAKEFILE_LIST := Makefile build-harness/modules/go/Makefile)
+endif
 
 ############################################################
 # deploy section
@@ -172,37 +103,3 @@ deploy:
 	cd overlays/deploy
 	kustomize build overlays/deploy | kubectl apply -f -
 	rm -rf overlays/deploy
-
-############################################################
-# dev section
-############################################################
-
-dev-build: build
-
-dev-images: build dev-build-push-images
-
-dev-build-push-images:
-	docker push $(REGISTRY)/$(IMG):$(VERSION)
-
-dev-deploy: dev-images
-	mkdir -p overlays/deploy
-	cp overlays/template/kustomization.yaml overlays/deploy
-	cd overlays/deploy && kustomize edit set image quay.io/rhibmcollab/multicloud-operators-cluster-controller:latest=$(REGISTRY)/$(IMG):$(VERSION)
-	kustomize build overlays/deploy | kubectl apply -f -
-	rm -rf overlays/deploy
-
-############################################################
-# regcred section
-############################################################
-
-regcred-patch-sa:
-	kubectl patch sa multicloud-operators-cluster-controller --type='json' -p='[{"op": "add", "path": "/imagePullSecrets/1", "value": {"name": "$(IMAGE_PULL_SECRET)" } }]'
-
-############################################################
-# clean section
-############################################################
-
-clean:
-	rm -f build/_output/bin/$(IMG)
-
-.PHONY: all build check lint test coverage images deploy deploy-build
