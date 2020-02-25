@@ -647,7 +647,6 @@ github.com/openshift/client-go v0.0.0-20190923180330-3b6373338c9b/go.mod h1:6rzn
 github.com/openshift/generic-admission-server v1.14.0/go.mod h1:GD9KN/W4KxqRQGVMbqQHpHzb2XcQVvLCaBaSciqXvfM=
 github.com/openshift/hive v0.0.0-20191113203026-f5faf34a8581 h1:N715YExS/nYvJg77hl5oE2uPXjZS642PsJ4JDXfCFSk=
 github.com/openshift/hive v0.0.0-20191113203026-f5faf34a8581/go.mod h1:t12kMAMjO4O1dRGOb+uMy3BGNR4zaJSg8KgaOfW/QtI=
-github.com/openshift/hive v0.0.0-20200225072033-37d41b19324e h1:trimTcmtrOfHxou4GzdFfofinGko860g+cN1KokRXuU=
 github.com/openshift/origin v0.0.0-20160503220234-8f127d736703/go.mod h1:0Rox5r9C8aQn6j1oAOQ0c1uC86mYbUFObzjBRvUKHII=
 github.com/openshift/prom-label-proxy v0.1.1-0.20191016113035-b8153a7f39f1/go.mod h1:p5MuxzsYP1JPsNGwtjtcgRHHlGziCJJfztff91nNixw=
 github.com/opentracing/opentracing-go v1.1.0/go.mod h1:UkNAQd3GIcIGf0SeVgPpRdFStlNbqXla1AfSYxPUl2o=
