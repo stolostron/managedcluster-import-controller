@@ -16,6 +16,7 @@ package clusterregistry
 
 import (
 	"context"
+	"os"
 
 	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -64,12 +65,14 @@ func newDeleteJob(r *ReconcileCluster, cluster *clusterregistryv1alpha1.Cluster)
 	if err != nil {
 		return nil, err
 	}
-
+	imageTagPostfix := os.Getenv(clusterimport.ImageTagPostfixKey)
 	operatorImageName := endpointConfig.Spec.ImageRegistry +
 		"/" + clusterimport.EndpointOperatorImageName +
 		endpointConfig.Spec.ImageNamePostfix +
 		":" + endpointConfig.Spec.Version
-
+	if len(imageTagPostfix) > 0 {
+		operatorImageName = operatorImageName + "-" + imageTagPostfix
+	}
 	jobBackoff := int32(0) // 0 = no retries before the job fails
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
