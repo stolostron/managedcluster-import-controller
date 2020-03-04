@@ -50,6 +50,9 @@ const BootstrapSecretName = "klusterlet-bootstrap"
 // EndpointOperatorImageName is the name of the Endpoinmulticluster-endpoint operator image
 const EndpointOperatorImageName = "icp-multicluster-endpoint-operator"
 
+// ImageTagPostfixKey is the name of the environment variable of endpoint operator image tag's postfix
+const ImageTagPostfixKey = "IMAGE_TAG_POSTFIX"
+
 var log = logf.Log.WithName("clusterimport")
 
 // GenerateImportObjects generate all the object in the manifest use for installing multicluster-endpoint on managed cluster
@@ -245,11 +248,15 @@ func newEndpointImagePullSecret(client client.Client, endpointConfig *multicloud
 }
 
 func newOperatorDeployment(endpointConfig *multicloudv1alpha1.EndpointConfig) *appsv1.Deployment {
+	imageTagPostfix := os.Getenv(ImageTagPostfixKey)
+
 	imageName := endpointConfig.Spec.ImageRegistry +
 		"/" + EndpointOperatorImageName +
 		endpointConfig.Spec.ImageNamePostfix +
 		":" + endpointConfig.Spec.Version
-
+	if len(imageTagPostfix) > 0 {
+		imageName = imageName + "-" + imageTagPostfix
+	}
 	imagePullSecrets := []corev1.LocalObjectReference{}
 	if len(endpointConfig.Spec.ImagePullSecret) > 0 {
 		imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{Name: endpointConfig.Spec.ImagePullSecret})
@@ -299,6 +306,10 @@ func newOperatorDeployment(endpointConfig *multicloudv1alpha1.EndpointConfig) *a
 											FieldPath: "metadata.name",
 										},
 									},
+								},
+								{
+									Name:  ImageTagPostfixKey,
+									Value: imageTagPostfix,
 								},
 							},
 						},
