@@ -11,7 +11,7 @@ echo "--TAG: $DOCKER_BUILD_TAG"
 echo "--DOCKER_BUILD_OPTS: $DOCKER_BUILD_OPTS"
 operator-sdk build $DOCKER_IMAGE:$DOCKER_BUILD_TAG --image-build-args "$DOCKER_BUILD_OPTS"
 
-if [ ! -z "$1" ]; then
+if [ ! -z "$TRAVIS" ]; then
     echo "Retagging image as $1"
     docker tag $DOCKER_IMAGE:$DOCKER_BUILD_TAG $1
 fi
