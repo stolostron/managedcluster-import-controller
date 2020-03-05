@@ -42,16 +42,13 @@ const EndpointNamespace = "multicluster-endpoint"
 const EndpointName = "endpoint"
 
 // EndpointOperatorName is the name of the multicluster endpoint operator
-const EndpointOperatorName = "endpoint-operator"
+const EndpointOperatorName = "ibm-multicluster-endpoint-operator"
 
 // BootstrapSecretName is the name of the bootstrap secret
 const BootstrapSecretName = "klusterlet-bootstrap"
 
 // EndpointOperatorImageName is the name of the Endpoinmulticluster-endpoint operator image
-const EndpointOperatorImageName = "endpoint-operator"
-
-// ImageTagPostfixKey is the name of the environment variable of endpoint operator image tag's postfix
-const ImageTagPostfixKey = "IMAGE_TAG_POSTFIX"
+const EndpointOperatorImageName = "icp-multicluster-endpoint-operator"
 
 // ImageTagPostfixKey is the name of the environment variable of endpoint operator image tag's postfix
 const ImageTagPostfixKey = "IMAGE_TAG_POSTFIX"
