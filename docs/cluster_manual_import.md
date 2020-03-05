@@ -4,19 +4,19 @@
 
 ### Creating a ClusterRegistry Cluster
 
-- Example of ClusterRegistry cluster [/test/resources/test_cluster.yaml](https://github.com/open-cluster-management/rcm-controller/blob/master/test/resources/test_cluster.yaml)
+- Example of ClusterRegistry cluster test/resources/test_cluster.yaml
 - Refer to <https://github.com/kubernetes/cluster-registry/blob/master/pkg/apis/clusterregistry/v1alpha1/types.go> for API definition
 
 ### Creating a MultiCloud EndpointConfig for the cluster you are importing
 
-- Example of EndpointConfig resource refer to [/test/resources/test_endpoint_config.yaml](https://github.com/open-cluster-management/rcm-controller/blob/master/test/resources/test_endpoint_config.yaml)
-- Refer to [/pkg/apis/multicloud/v1alpha1/endpointconfig_types.go](https://github.com/open-cluster-management/rcm-controller/blob/master/pkg/apis/multicloud/v1alpha1/endpointconfig_types.go) and [endpoint-operator - /pkg/apis/multicloud/v1beta1/endpoint_types.go](https://github.com/open-cluster-management/endpoint-operator/blob/master/pkg/apis/multicloud/v1beta1/endpoint_types.go) for API definition
+- Example of EndpointConfig resource refer to test/resources/test_endpoint_config.yaml
+- Refer to apis/multicloud/v1alpha1/endpointconfig_types.go and apis/multicloud/v1beta1/endpoint_types.go for API definition
 
 ## ClusterController actions
 
 ### EndpointConfig Controller
 
-- EndpointConfig creation triggers `Reconcile()` in [/pkg/controllers/endpointconfig/endpointconfig_controller.go](https://github.com/open-cluster-management/rcm-controller/blob/master/pkg/controller/endpointconfig/endpointconfig_controller.go).
+- EndpointConfig creation triggers `Reconcile()` in `pkg/controllers/endpointconfig/endpointconfig_controller.go`.
 - Controller will use information in EndpointConfig to generate a secret named `{cluster-name}-import`.
 - The `{cluster-name}-import` secret contains the import.yaml that the user will apply on managed cluster to install multicluster-endpoint.
 
