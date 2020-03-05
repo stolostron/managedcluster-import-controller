@@ -53,6 +53,9 @@ const EndpointOperatorImageName = "endpoint-operator"
 // ImageTagPostfixKey is the name of the environment variable of endpoint operator image tag's postfix
 const ImageTagPostfixKey = "IMAGE_TAG_POSTFIX"
 
+// ImageTagPostfixKey is the name of the environment variable of endpoint operator image tag's postfix
+const ImageTagPostfixKey = "IMAGE_TAG_POSTFIX"
+
 var log = logf.Log.WithName("clusterimport")
 
 // GenerateImportObjects generate all the object in the manifest use for installing multicluster-endpoint on managed cluster
