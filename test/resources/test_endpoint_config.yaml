@@ -15,7 +15,7 @@ spec:
   clusterNamespace: cluster-controller-test
   connectionManager:
     enabledGlobalView: false
-  imageRegistry: ibmcom
+  imageRegistry: quay.io/open-cluster-management
   metering:
     enabled: true
   policyController:
@@ -31,4 +31,4 @@ spec:
   topologyCollector:
     enabled: true
     updateInterval: 0
-  version: 3.3.0
+  version: 1.0.0
