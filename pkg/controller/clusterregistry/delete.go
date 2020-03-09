@@ -69,10 +69,8 @@ func newDeleteJob(r *ReconcileCluster, cluster *clusterregistryv1alpha1.Cluster)
 	operatorImageName := endpointConfig.Spec.ImageRegistry +
 		"/" + clusterimport.EndpointOperatorImageName +
 		endpointConfig.Spec.ImageNamePostfix +
-		":" + endpointConfig.Spec.Version
-	if len(imageTagPostfix) > 0 {
-		operatorImageName = operatorImageName + "-" + imageTagPostfix
-	}
+		":" + endpointConfig.Spec.Version + imageTagPostfix
+
 	jobBackoff := int32(0) // 0 = no retries before the job fails
 	return &batchv1.Job{
 		TypeMeta: metav1.TypeMeta{
