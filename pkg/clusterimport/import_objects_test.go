@@ -49,7 +49,7 @@ func TestNewOperatorDeployment(t *testing.T) {
 				},
 				imageTagPostfix: "",
 			},
-			want: expectValues{"sample-registry/uniquePath/icp-multicluster-endpoint-operator:2.3.0", ""},
+			want: expectValues{"sample-registry/uniquePath/endpoint-operator:2.3.0", ""},
 		},
 		{
 			name: "With Postfix Set",
@@ -60,9 +60,9 @@ func TestNewOperatorDeployment(t *testing.T) {
 						Version:       "1.2.0",
 					},
 				},
-				imageTagPostfix: "Unique-Postfix",
+				imageTagPostfix: "-Unique-Postfix",
 			},
-			want: expectValues{"sample-registry-2/uniquePath-2/icp-multicluster-endpoint-operator:1.2.0-Unique-Postfix", "Unique-Postfix"},
+			want: expectValues{"sample-registry-2/uniquePath-2/endpoint-operator:1.2.0-Unique-Postfix", "-Unique-Postfix"},
 		},
 	}
 

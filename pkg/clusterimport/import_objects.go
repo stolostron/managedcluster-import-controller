@@ -253,10 +253,7 @@ func newOperatorDeployment(endpointConfig *multicloudv1alpha1.EndpointConfig) *a
 	imageName := endpointConfig.Spec.ImageRegistry +
 		"/" + EndpointOperatorImageName +
 		endpointConfig.Spec.ImageNamePostfix +
-		":" + endpointConfig.Spec.Version
-	if len(imageTagPostfix) > 0 {
-		imageName = imageName + "-" + imageTagPostfix
-	}
+		":" + endpointConfig.Spec.Version + imageTagPostfix
 	imagePullSecrets := []corev1.LocalObjectReference{}
 	if len(endpointConfig.Spec.ImagePullSecret) > 0 {
 		imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{Name: endpointConfig.Spec.ImagePullSecret})
