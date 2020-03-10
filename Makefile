@@ -1,38 +1,37 @@
 
 SHELL := /bin/bash
 
-.EXPORT_ALL_VARIABLES:
 
-GIT_COMMIT      = $(shell git rev-parse --short HEAD)
-GIT_REMOTE_URL  = $(shell git config --get remote.origin.url)
-GITHUB_USER    := $(shell echo $(GITHUB_USER) | sed 's/@/%40/g')
-GITHUB_TOKEN   ?=
+export GIT_COMMIT      = $(shell git rev-parse --short HEAD)
+export GIT_REMOTE_URL  = $(shell git config --get remote.origin.url)
+export GITHUB_USER    := $(shell echo $(GITHUB_USER) | sed 's/@/%40/g')
+export GITHUB_TOKEN   ?=
 
-ARCH       ?= $(shell uname -m)
-ARCH_TYPE   = $(if $(patsubst x86_64,,$(ARCH)),$(ARCH),amd64)
-BUILD_DATE  = $(shell date +%m/%d@%H:%M:%S)
-VCS_REF     = $(if $(shell git status --porcelain),$(GIT_COMMIT)-$(BUILD_DATE),$(GIT_COMMIT))
+export ARCH       ?= $(shell uname -m)
+export ARCH_TYPE   = $(if $(patsubst x86_64,,$(ARCH)),$(ARCH),amd64)
+export BUILD_DATE  = $(shell date +%m/%d@%H:%M:%S)
+export VCS_REF     = $(if $(shell git status --porcelain),$(GIT_COMMIT)-$(BUILD_DATE),$(GIT_COMMIT))
 
-CGO_ENABLED  = 0
-GO111MODULE := on
-GOOS         = $(shell go env GOOS)
-GOARCH       = $(ARCH_TYPE)
-GOPACKAGES   = $(shell go list ./... | grep -v /vendor | grep -v /internal | grep -v /build | grep -v /test)
+export CGO_ENABLED  = 0
+export GO111MODULE := on
+export GOOS         = $(shell go env GOOS)
+export GOARCH       = $(ARCH_TYPE)
+export GOPACKAGES   = $(shell go list ./... | grep -v /vendor | grep -v /internal | grep -v /build | grep -v /test)
 
-PROJECT_DIR            = $(shell 'pwd')
-BUILD_DIR              = $(PROJECT_DIR)/build
-COMPONENT_SCRIPTS_PATH = $(BUILD_DIR)
-ENDPOINT_CRD_FILE      = $(PROJECT_DIR)/build/resources/multicloud_v1beta1_endpoint_crd.yaml
+export PROJECT_DIR            = $(shell 'pwd')
+export BUILD_DIR              = $(PROJECT_DIR)/build
+export COMPONENT_SCRIPTS_PATH = $(BUILD_DIR)
+export ENDPOINT_CRD_FILE      = $(PROJECT_DIR)/build/resources/multicloud_v1beta1_endpoint_crd.yaml
 
 ## WARNING: OPERATOR-SDK - IMAGE_DESCRIPTION & DOCKER_BUILD_OPTS MUST NOT CONTAIN ANY SPACES
-IMAGE_DESCRIPTION ?= RCM_Controller
-DOCKER_FILE        = $(BUILD_DIR)/Dockerfile
-DOCKER_REGISTRY   ?= quay.io
-DOCKER_NAMESPACE  ?= open-cluster-management
-DOCKER_IMAGE      ?= $(COMPONENT_NAME)
-DOCKER_BUILD_TAG  ?= latest
-DOCKER_TAG        ?= $(shell whoami)
-DOCKER_BUILD_OPTS  = --build-arg "VCS_REF=$(VCS_REF)" \
+export IMAGE_DESCRIPTION ?= RCM_Controller
+export DOCKER_FILE        = $(BUILD_DIR)/Dockerfile
+export DOCKER_REGISTRY   ?= quay.io
+export DOCKER_NAMESPACE  ?= open-cluster-management
+export DOCKER_IMAGE      ?= $(COMPONENT_NAME)
+export DOCKER_BUILD_TAG  ?= latest
+export DOCKER_TAG        ?= $(shell whoami)
+export DOCKER_BUILD_OPTS  = --build-arg "VCS_REF=$(VCS_REF)" \
 	--build-arg "VCS_URL=$(GIT_REMOTE_URL)" \
 	--build-arg "IMAGE_NAME=$(DOCKER_IMAGE)" \
 	--build-arg "IMAGE_DESCRIPTION=$(IMAGE_DESCRIPTION)" \
