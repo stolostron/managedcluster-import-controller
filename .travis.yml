@@ -11,8 +11,15 @@ branches:
     - master
     - /^release-[0-9]+\..*$/
 
+addons:
+  sonarcloud:
+    organization: "open-cluster-management"
+    token:
+      secure: "GTwvxkCBtPYRBlJeucjiCVWvwIwZ3EBH3hu83q9yVSjjgbg6Ge2gFY/ocWLowyrAxynxzAChvlCvtEuEO44iuBFaKr38036q+4v6ysDQWO6AqU+NMThAhtGiJIJsJjtyxupgw+z6OUNFtQIIUlGYVPO7SZvj/Q7D7wYKTHgMxBRk/i9GYol/unZA6qThgI628KstPR5zEI5itW3qECJSzlm385K07c+XYCWb4FXc6zhlAHXvbT5mLzuW1xW2ipcxvRAP73N2ARUWhoDbUfiZsK0HaYwBN6MtLsCq+u6i5f8KcmwjNKqZxbldlOWtebQ3v2VHt67gUvdpMwPaqBoqKMauYoUpAtfvvhAmeWo4M58AwDn9FJuSdFyZfSjI7MLofrs2NKUdx/RETQWVYNXnKLI+AThgXZXTxDBdnW+g5nOYoYOUI9R7/i0gTnJekHQYdLbN2vkii2ryVrn8F7hp1wuLmrJKgD7lurbLkEsAZhxmFBoBVHtOhXzYkpC4DmNCanuDPmRmNm7ifasLDtU5C8cWRzDs/9L1HkCKbeaTTCiXD8dwJNH5n6jMAPMwYumJ5B2NucZQPLhngUGZ/Bw7aNO02zMKmx/BCBUN3hMfCSXLrmQgW6woPorcJ4sjs2fn5PrqsXeqK/yktdJjkkczDSC+aINZfmbq3UkL6gaL5Q4="
+
 stages:
   - build
+  - unit-test
   # - test-e2e
   - publish
 
@@ -28,6 +35,12 @@ jobs:
         - if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}"; fi;
         - ./build/travis.sh   # to remove overhead and keep output clean
 
+    - stage: unit-test
+      name: "Run unit tests"
+      if: type = pull_request
+      script:
+        - if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}"; fi; 
+        - make sonar/go
     # - stage: test-e2e
     #   name: "Run e23-test"
     #   if: type = pull_request
