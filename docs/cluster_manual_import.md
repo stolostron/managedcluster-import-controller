@@ -4,13 +4,15 @@
 
 ### Creating a ClusterRegistry Cluster
 
-- Example of ClusterRegistry cluster [/test/resources/test_cluster.yaml](https://github.com/open-cluster-management/rcm-controller/blob/master/test/resources/test_cluster.yaml)
+- Edit the example of ClusterRegistry cluster [/test/resources/test_cluster.yaml](https://github.com/open-cluster-management/rcm-controller/blob/master/test/resources/test_cluster.yaml)
 - Refer to <https://github.com/kubernetes/cluster-registry/blob/master/pkg/apis/clusterregistry/v1alpha1/types.go> for API definition
+- Create a ClusterRegistry cluster: `oc apply -f test_cluster.yaml`
 
 ### Creating a MultiCloud EndpointConfig for the cluster you are importing
 
-- Example of EndpointConfig resource refer to [/test/resources/test_endpoint_config.yaml](https://github.com/open-cluster-management/rcm-controller/blob/master/test/resources/test_endpoint_config.yaml)
+- Edit the example of EndpointConfig resource refer to [/test/resources/test_endpoint_config.yaml](https://github.com/open-cluster-management/rcm-controller/blob/master/test/resources/test_endpoint_config.yaml)
 - Refer to [/pkg/apis/multicloud/v1alpha1/endpointconfig_types.go](https://github.com/open-cluster-management/rcm-controller/blob/master/pkg/apis/multicloud/v1alpha1/endpointconfig_types.go) and [endpoint-operator - /pkg/apis/multicloud/v1beta1/endpoint_types.go](https://github.com/open-cluster-management/endpoint-operator/blob/master/pkg/apis/multicloud/v1beta1/endpoint_types.go) for API definition
+- Create a Multicloud EndpointConfig: `oc apply -f test_endpoint_config.yaml`
 
 ## ClusterController actions
 
