@@ -40,18 +40,7 @@ jobs:
       if: type = pull_request
       script:
         - if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}"; fi; 
-        - make
-        - make component/pull
-        - make component/test/unit
-        - echo ">>>> Install gosec" ; curl -sfL https://raw.githubusercontent.com/securego/gosec/master/install.sh | sh -s -- -b ${GOPATH}/bin
-        - echo ">>>> Run go test " ; go test -coverprofile=coverage.out -json ./... > report.json
-        - echo ">>>> View report.json" ; cat report.json
-        - echo ">>>> View coverage.out" ; cat coverage.out
-        - echo ">>>> Run gosec" ; gosec --quiet -fmt sonarqube -out gosec.json -no-fail ./...
-        - echo ">>>> View gosec.json" ; cat gosec.json
-        - unset SONARQUBE_SCANNER_PARAMS
-        - sonar-scanner --debug
-        # - make sonar/go
+        - make sonar/go
 
     # - stage: test-e2e
     #   name: "Run e23-test"
