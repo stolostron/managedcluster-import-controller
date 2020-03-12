@@ -50,4 +50,7 @@ replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v12.2.0+incompatible // fix dep issue
 
 	github.com/docker/docker => github.com/moby/moby v0.7.3-0.20190826074503-38ab9da00309 // Required by Helm
+
+	github.com/openshift/api => github.com/openshift/api v0.0.0-20191112184635-86def77f6f90 // Required until https://github.com/operator-framework/operator-lifecycle-manager/pull/1241 is resolved
+
 )
