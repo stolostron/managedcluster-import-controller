@@ -52,10 +52,9 @@ fold_start checks "Checks"
 announce make check
 fold_end checks
 
-# TODO go back and fix few tests that are broken
-# fold_start unit "Unit Tests"
-# announce make component/test/unit
-# fold_end unit
+fold_start unit "Unit Tests"
+announce make component/test/unit
+fold_end unit
 
 fold_start build "Image Build"
 announce make component/build
