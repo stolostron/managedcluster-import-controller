@@ -136,6 +136,10 @@ func Test_getClusterRegistryCluster(t *testing.T) {
 	}
 
 	cluster := &clusterregistryv1alpha1.Cluster{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Cluster",
+			APIVersion: "clusterregistry.k8s.io/v1alpha1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cluster-name",
 			Namespace: "cluster-namespace",
