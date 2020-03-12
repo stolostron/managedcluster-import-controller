@@ -141,6 +141,10 @@ func Test_getImportSecret(t *testing.T) {
 	}
 
 	testSecret := &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{
+			Kind:       "Secret",
+			APIVersion: "v1",
+		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cluster-name" + importSecretNamePostfix,
 			Namespace: "cluster-namespace",
@@ -428,8 +432,13 @@ func Test_createImportSecret(t *testing.T) {
 				t.Errorf("createImportSecret() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
+			if tt.want != nil && got != nil {
+				tt.want.ObjectMeta.ResourceVersion = got.ObjectMeta.ResourceVersion
+				tt.want.ObjectMeta.OwnerReferences[0].Controller = got.ObjectMeta.OwnerReferences[0].Controller
+				tt.want.ObjectMeta.OwnerReferences[0].BlockOwnerDeletion = got.ObjectMeta.OwnerReferences[0].BlockOwnerDeletion
+			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("createImportSecret() = %v, want %v", got, tt.want)
+				t.Errorf("createImportSecret() = %#v, want %#v", got, tt.want)
 			}
 		})
 	}
