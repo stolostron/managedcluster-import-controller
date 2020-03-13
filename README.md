@@ -4,6 +4,7 @@
 
 - [multicloud-operators-cluster-controller](#multicloud-operators-cluster-controller)
     - [What is the multicloud-operators-cluster-controller](#what-is-the-multicloud-operators-cluster-controller)
+    - [How to's](#how-tos)
     - [Community, discussion, contribution, and support](#community-discussion-contribution-and-support)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
@@ -17,6 +18,16 @@
 current functionality of `multicloud-operators-cluster-controller`
 - installing multicluster-endpoint on cluster created by hive via syncset
 - triggering the remote deletion of multicluster-endpoint on managed cluster
+
+## How to's
+
+[Auto importing of an existing cluster](docs/cluster_auto_import.md)
+[Manual importing of an existing cluster](docs/cluster_manual_import.md)
+[Auto importing of a ClusterAPI provisioned cluster](docs/clusterapi_cluster_import.md)
+[Detatching a managed cluster from Multicloud Manager](docs/detatch_managed_cluster.md)
+[Importing an Hive provisioned OpenShift cluster](docs/hive_cluster_import.md)
+[Updating Endpoint on a managed cluster](docs/remote_endpoint_update.md)
+[Selective initilization of controllers](docs/selective_controller_init.md)
 
 ## Community, discussion, contribution, and support
 
