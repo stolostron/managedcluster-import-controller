@@ -4,9 +4,14 @@
 
 ### Creating a ClusterRegistry Cluster
 
+On the Hub Cluster: 
+- Create namespace: `oc create ns cluster-controller-test`
+- oc create -n cluster-controller-test secret docker-registry quay-secret --docker-server=quay.io --docker-username=${DOCKER_USER} --docker-password=${DOCKER_PASS}
+
 - Edit the example of ClusterRegistry cluster [/test/resources/test_cluster.yaml](https://github.com/open-cluster-management/rcm-controller/blob/master/test/resources/test_cluster.yaml)
-- Refer to <https://github.com/kubernetes/cluster-registry/blob/master/pkg/apis/clusterregistry/v1alpha1/types.go> for API definition
+- Add imagePullSecret: quay-secret in test_endpoint_config.yaml
 - Create a ClusterRegistry cluster: `oc apply -f test_cluster.yaml`
+- Refer to <https://github.com/kubernetes/cluster-registry/blob/master/pkg/apis/clusterregistry/v1alpha1/types.go> for API definition
 
 ### Creating a MultiCloud EndpointConfig for the cluster you are importing
 
@@ -36,7 +41,14 @@ kubectl get secret ${cluster_name}-import -n ${cluster_namespace} -o jsonpath={.
 kubectl get secret ${cluster_name}-import -n ${cluster_namespace} -o jsonpath={.data.import\\.yaml} | base64 -d > import.yaml
 ```
 
+
+
 ## Installing multicluster-endpoint on managed cluster
 
-- Authenticate to your managed cluster
-- Apply the `import.yaml` generated in previous step with `kubectl apply -f import.yaml`
+- Login to your target cluster:
+- Apply the `import.yaml` generated in previous step with `kubectl apply -f import.yaml` --validate=false
+
+
+Validation:
+- check the pod status on the target cluster: `kubectl get pod -n multicluster-endpoint`
+- check the cluster cluster on the hub: `kubectl get cluster --all-namespaces`
