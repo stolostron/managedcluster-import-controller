@@ -19,14 +19,17 @@ import (
 	"context"
 	"fmt"
 
+	"encoding/json"
+
+	jsonpatch "github.com/evanphx/json-patch"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer/json"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/yaml"
 
 	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
 	"github.com/open-cluster-management/rcm-controller/pkg/clusterimport"
@@ -115,6 +118,50 @@ func createImportSecret(client client.Client, scheme *runtime.Scheme, endpointCo
 	return secret, nil
 }
 
+func updateImportSecret(
+	client client.Client,
+	scheme *runtime.Scheme,
+	endpointConfig *multicloudv1alpha1.EndpointConfig,
+	oldImportSecret *corev1.Secret,
+) (*corev1.Secret, error) {
+	secret, err := newImportSecret(client, scheme, endpointConfig)
+	if err != nil {
+		return nil, err
+	}
+	if !bytes.Equal(oldImportSecret.Data["import.yaml"], secret.Data["import.yaml"]) {
+		oldImportSecret.Data = secret.Data
+		if err := client.Update(context.TODO(), oldImportSecret); err != nil {
+			return nil, err
+		}
+	}
+
+	return oldImportSecret, nil
+}
+
+// getPrreProcessedJSON will return json of the given object. If the given item is a CRD, we will remove status fields.
+func getPreProcessedJSON(item runtime.Object) ([]byte, error) {
+	oldJSONObj, err := json.Marshal(item)
+	newJSONObj := oldJSONObj
+	if err != nil {
+		return nil, fmt.Errorf("error marshaling into JSON: %v", err)
+	}
+
+	//remove status of crd
+	if _, ok := item.(*apiextensionv1beta1.CustomResourceDefinition); ok {
+		patchJSON := []byte(`[{"op": "remove", "path": "/status"}]`)
+		patch, err := jsonpatch.DecodePatch(patchJSON)
+		if err != nil {
+			return nil, err
+		}
+		newJSONObj, err = patch.Apply(oldJSONObj)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return newJSONObj, nil
+}
+
 func toYAML(runtimeObjects []runtime.Object) ([]byte, error) {
 	buf := new(bytes.Buffer)
 
@@ -122,11 +169,19 @@ func toYAML(runtimeObjects []runtime.Object) ([]byte, error) {
 		if _, err := buf.WriteString("\n---\n"); err != nil {
 			return nil, err
 		}
-
-		s := json.NewYAMLSerializer(json.DefaultMetaFactory, scheme.Scheme, scheme.Scheme)
-		if err := s.Encode(item, buf); err != nil {
+		j, err := getPreProcessedJSON(item)
+		if err != nil {
 			return nil, err
 		}
+		y, err := yaml.JSONToYAML(j)
+		if err != nil {
+			return nil, fmt.Errorf("error converting JSON to YAML: %v", err)
+		}
+
+		if _, err := buf.Write(y); err != nil {
+			return nil, err
+		}
+
 	}
 
 	return buf.Bytes(), nil
