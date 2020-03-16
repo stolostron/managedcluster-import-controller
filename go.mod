@@ -5,7 +5,7 @@ go 1.13
 require (
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-openapi/spec v0.19.4
-	github.com/open-cluster-management/endpoint-operator v0.0.0-20200224152543-8a563b4c5aa6
+	github.com/open-cluster-management/endpoint-operator v0.0.0-20200313182214-4b7ac7119fff
 	github.com/open-cluster-management/multicloud-operators-foundation v0.0.0-20200212094214-a1cac8f162b8
 	github.com/openshift/api v3.9.1-0.20191112184635-86def77f6f90+incompatible
 	github.com/openshift/hive v0.0.0-20191113203026-f5faf34a8581
