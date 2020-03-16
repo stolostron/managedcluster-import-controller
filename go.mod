@@ -3,6 +3,7 @@ module github.com/open-cluster-management/rcm-controller
 go 1.13
 
 require (
+	github.com/evanphx/json-patch v4.5.0+incompatible
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-openapi/spec v0.19.4
 	github.com/open-cluster-management/endpoint-operator v0.0.0-20200313182214-4b7ac7119fff
@@ -19,6 +20,7 @@ require (
 	k8s.io/cluster-registry v0.0.6
 	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d
 	sigs.k8s.io/controller-runtime v0.4.0
+	sigs.k8s.io/yaml v1.1.0
 )
 
 // Pinned to kubernetes-1.16.2

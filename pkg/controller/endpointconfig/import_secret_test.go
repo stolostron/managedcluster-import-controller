@@ -16,6 +16,7 @@
 package endpointconfig
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"reflect"
@@ -24,6 +25,7 @@ import (
 	ocinfrav1 "github.com/openshift/api/config/v1"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
+	apiextensionv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -458,6 +460,25 @@ func Test_toYAML(t *testing.T) {
 		{
 			Name: "configmap",
 			Objects: []runtime.Object{
+				&apiextensionv1beta1.CustomResourceDefinition{
+					TypeMeta: metav1.TypeMeta{
+						APIVersion: "apiextensions.k8s.io/v1beta1",
+						Kind:       "CustomResourceDefinition",
+					},
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "endpoint.multicloud.ibm.com",
+					},
+					Spec: apiextensionv1beta1.CustomResourceDefinitionSpec{
+						Group: "multicloud.ibm.com",
+						Names: apiextensionv1beta1.CustomResourceDefinitionNames{
+							Kind:     "Endpoint",
+							ListKind: "EndpointList",
+							Plural:   "endpoints",
+							Singular: "endpoint",
+						},
+						Scope: "Namespaced",
+					},
+				},
 				&corev1.ConfigMap{
 					TypeMeta: metav1.TypeMeta{
 						APIVersion: corev1.SchemeGroupVersion.String(),
@@ -481,6 +502,21 @@ func Test_toYAML(t *testing.T) {
 			},
 			Output: []byte(`
 ---
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  creationTimestamp: null
+  name: endpoint.multicloud.ibm.com
+spec:
+  group: multicloud.ibm.com
+  names:
+    kind: Endpoint
+    listKind: EndpointList
+    plural: endpoints
+    singular: endpoint
+  scope: Namespaced
+
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -501,7 +537,9 @@ metadata:
 	for _, testCase := range testCases {
 		yaml, err := toYAML(testCase.Objects)
 		assert.NoError(t, err)
-		assert.Equal(t, testCase.Output, yaml)
+		if !bytes.Equal(testCase.Output, yaml) {
+			t.Errorf("toYAML Failed: want %v\n, get %v\n %d %d ", testCase.Output, yaml, len(testCase.Output), len(yaml))
+		}
 	}
 }
 
