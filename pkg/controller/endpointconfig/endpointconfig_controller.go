@@ -148,11 +148,16 @@ func (r *ReconcileEndpointConfig) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, err
 	}
 
-	if _, err := getImportSecret(r.client, instance); err != nil {
+	oldImportSecret, err := getImportSecret(r.client, instance)
+	if err != nil {
 		if errors.IsNotFound(err) {
 			if _, err = createImportSecret(r.client, r.scheme, instance); err != nil {
 				return reconcile.Result{}, err
 			}
+		}
+	} else {
+		if _, err = updateImportSecret(r.client, r.scheme, instance, oldImportSecret); err != nil {
+			return reconcile.Result{}, err
 		}
 	}
 

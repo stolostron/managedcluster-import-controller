@@ -16,8 +16,6 @@ spec:
   connectionManager:
     enabledGlobalView: false
   imageRegistry: quay.io/open-cluster-management
-  metering:
-    enabled: true
   policyController:
     enabled: true
   prometheusIntegration:
@@ -26,9 +24,13 @@ spec:
     enabled: true
   serviceRegistry:
     enabled: true
-  tillerIntegration:
-    enabled: true
   topologyCollector:
     enabled: true
     updateInterval: 0
+  certPolicyController:
+    enabled: true
+  cisController:
+    enabled: true
+  iamPolicyController:
+    enabled: true
   version: 1.0.0
