@@ -149,7 +149,7 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 	// requeue until EndpointConfig is created for the cluster
 	reqLogger.V(5).Info("getEndpointConfig")
 	endpointConfig, err := getEndpointConfig(r.client, instance)
-	// if clusterNamespace is not set it should be configured to instance namespace
+	// if clusterNamespace is not set it should be configured to endpointconfig namespace
 	if endpointConfig.Spec.ClusterNamespace == "" {
 		endpointConfig.Spec.ClusterNamespace = endpointConfig.Namespace
 	}
