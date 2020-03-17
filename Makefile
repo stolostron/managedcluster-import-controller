@@ -69,7 +69,7 @@ clean::
 .PHONY: run
 ## Run the operator against the kubeconfig targeted cluster
 run:
-	@operator-sdk up local --namespace="" --operator-flags="--zap-devel=true"
+	@operator-sdk run --local --namespace="" --operator-flags="--zap-devel=true"
 
 .PHONY: lint
 ## Runs linter against go files
