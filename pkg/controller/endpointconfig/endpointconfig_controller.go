@@ -18,6 +18,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"reflect"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -132,9 +133,24 @@ func (r *ReconcileEndpointConfig) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, nil
 	}
 
+	// invalid EndpointConfig and should be prevented with ValidatingAdmissionWebhook
 	if instance.Spec.ClusterNamespace != instance.Namespace {
-		// invalid EndpointConfig and should be prevented with ValidatingAdmissionWebhook
 		return reconcile.Result{}, fmt.Errorf("invalid EndpointConfig")
+	}
+
+	// preprocessing of instance.Spec these changes will not be saved into the EndpointConfig instance
+
+	// if clusterNamespace is not set it should be configured to instance namespace
+	if instance.Spec.ClusterNamespace == "" {
+		instance.Spec.ClusterNamespace = instance.Namespace
+	}
+
+	if instance.Spec.ImagePullSecret == "" {
+		instance.Spec.ImagePullSecret = os.Getenv("DEFAULT_IMAGE_PULL_SECRET")
+	}
+
+	if instance.Spec.ImageRegistry == "" {
+		instance.Spec.ImageRegistry = os.Getenv("DEFAULT_IMAGE_REGISTRY")
 	}
 
 	cluster, err := getClusterRegistryCluster(r.client, instance)
@@ -148,6 +164,7 @@ func (r *ReconcileEndpointConfig) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, err
 	}
 
+	// always update the import secret
 	oldImportSecret, err := getImportSecret(r.client, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
