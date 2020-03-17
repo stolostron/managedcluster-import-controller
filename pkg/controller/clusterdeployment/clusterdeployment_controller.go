@@ -16,6 +16,7 @@ package clusterdeployment
 
 import (
 	"context"
+	"os"
 	"time"
 
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
@@ -148,6 +149,19 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 	// requeue until EndpointConfig is created for the cluster
 	reqLogger.V(5).Info("getEndpointConfig")
 	endpointConfig, err := getEndpointConfig(r.client, instance)
+	// if clusterNamespace is not set it should be configured to instance namespace
+	if endpointConfig.Spec.ClusterNamespace == "" {
+		endpointConfig.Spec.ClusterNamespace = endpointConfig.Namespace
+	}
+
+	if endpointConfig.Spec.ImagePullSecret == "" {
+		endpointConfig.Spec.ImagePullSecret = os.Getenv("DEFAULT_IMAGE_PULL_SECRET")
+	}
+
+	if endpointConfig.Spec.ImageRegistry == "" {
+		endpointConfig.Spec.ImageRegistry = os.Getenv("DEFAULT_IMAGE_REGISTRY")
+	}
+
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.V(5).Info("EndPointConfig Not found")
