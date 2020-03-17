@@ -149,6 +149,13 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 	// requeue until EndpointConfig is created for the cluster
 	reqLogger.V(5).Info("getEndpointConfig")
 	endpointConfig, err := getEndpointConfig(r.client, instance)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			reqLogger.V(5).Info("EndPointConfig Not found")
+			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
+		}
+		return reconcile.Result{}, err
+	}
 	// if clusterNamespace is not set it should be configured to endpointconfig namespace
 	if endpointConfig.Spec.ClusterNamespace == "" {
 		endpointConfig.Spec.ClusterNamespace = endpointConfig.Namespace
@@ -160,14 +167,6 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 
 	if endpointConfig.Spec.ImageRegistry == "" {
 		endpointConfig.Spec.ImageRegistry = os.Getenv("DEFAULT_IMAGE_REGISTRY")
-	}
-
-	if err != nil {
-		if errors.IsNotFound(err) {
-			reqLogger.V(5).Info("EndPointConfig Not found")
-			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
-		}
-		return reconcile.Result{}, err
 	}
 
 	// create syncset if does not exist
