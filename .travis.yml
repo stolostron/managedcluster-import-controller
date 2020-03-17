@@ -37,7 +37,6 @@ jobs:
 
     - stage: unit-test
       name: "Run unit tests"
-      if: type = pull_request
       script:
         - if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}"; fi; 
         - make sonar/go
