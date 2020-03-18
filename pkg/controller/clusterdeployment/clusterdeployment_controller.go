@@ -118,10 +118,8 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 	reqLogger.V(5).Info("getClusterRegistryNamespace")
 	if _, err := getClusterRegistryNamespace(r.client, instance); err != nil {
 		if errors.IsNotFound(err) {
-			reqLogger.V(5).Info("createClusterRegistryNamespace")
-			if _, err = createClusterRegistryNamespace(r.client, instance); err != nil {
-				return reconcile.Result{}, err
-			}
+			reqLogger.V(5).Info("Cluster Namespace Not found")
+			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 		}
 		return reconcile.Result{}, err
 	}
@@ -131,10 +129,8 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 	crc, err := getClusterRegistryCluster(r.client, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			reqLogger.V(5).Info("createClusterRegistryCluster")
-			if _, err = createClusterRegistryCluster(r.client, instance); err != nil {
-				return reconcile.Result{}, err
-			}
+			reqLogger.V(5).Info("Cluster Not found")
+			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 		}
 		return reconcile.Result{}, err
 	}

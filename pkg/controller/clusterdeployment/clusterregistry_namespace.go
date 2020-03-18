@@ -19,7 +19,6 @@ import (
 
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -31,36 +30,11 @@ func clusterRegistryNamespaceNsN(clusterDeployment *hivev1.ClusterDeployment) ty
 	}
 }
 
-func newClusterRegistryNamespace(clusterDeployment *hivev1.ClusterDeployment) *corev1.Namespace {
-	nsNsN := clusterRegistryNamespaceNsN(clusterDeployment)
-
-	return &corev1.Namespace{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: corev1.SchemeGroupVersion.String(),
-			Kind:       "Namespace",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      nsNsN.Name,
-			Namespace: nsNsN.Namespace,
-		},
-	}
-}
-
 func getClusterRegistryNamespace(client client.Client, clusterDeployment *hivev1.ClusterDeployment) (*corev1.Namespace, error) {
 	nsNsN := clusterRegistryNamespaceNsN(clusterDeployment)
 	ns := &corev1.Namespace{}
 
 	if err := client.Get(context.TODO(), nsNsN, ns); err != nil {
-		return nil, err
-	}
-
-	return ns, nil
-}
-
-func createClusterRegistryNamespace(client client.Client, clusterDeployment *hivev1.ClusterDeployment) (*corev1.Namespace, error) {
-	ns := newClusterRegistryNamespace(clusterDeployment)
-
-	if err := client.Create(context.TODO(), ns); err != nil {
 		return nil, err
 	}
 
