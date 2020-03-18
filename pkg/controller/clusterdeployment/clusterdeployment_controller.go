@@ -22,7 +22,7 @@ import (
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
-	clusterregistryv1alpha1 "k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -31,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
 	"github.com/open-cluster-management/rcm-controller/pkg/clusterimport"
 )
 
@@ -62,7 +63,22 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to secondary resource Pods and requeue the owner ClusterDeployment
-
+	err = c.Watch(
+		&source.Kind{Type: &multicloudv1alpha1.EndpointConfig{}},
+		&handler.EnqueueRequestsFromMapFunc{ToRequests: handler.ToRequestsFunc(func(obj handler.MapObject) []reconcile.Request {
+			return []reconcile.Request{
+				{
+					NamespacedName: types.NamespacedName{
+						Name:      obj.Meta.GetName(),
+						Namespace: obj.Meta.GetNamespace(),
+					},
+				},
+			}
+		})},
+	)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -126,20 +142,13 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 
 	// create cluster registry cluster if does not exist
 	reqLogger.V(5).Info("getClusterRegistryCluster")
-	crc, err := getClusterRegistryCluster(r.client, instance)
+	_, err = getClusterRegistryCluster(r.client, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.V(5).Info("Cluster Not found")
 			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 		}
 		return reconcile.Result{}, err
-	}
-
-	for _, condition := range crc.Status.Conditions {
-		if condition.Type == clusterregistryv1alpha1.ClusterOK {
-			//cluster already imported and online, so do nothing
-			return reconcile.Result{}, nil
-		}
 	}
 
 	// requeue until EndpointConfig is created for the cluster
@@ -167,13 +176,18 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 
 	// create syncset if does not exist
 	reqLogger.V(5).Info("clusterimport.GetSyncSet")
-	if _, err := clusterimport.GetSyncSet(r.client, endpointConfig, instance); err != nil {
+	syncSet, err := clusterimport.GetSyncSet(r.client, endpointConfig, instance)
+	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.V(5).Info("clusterimport.CreateSyncSet")
 			if _, err := clusterimport.CreateSyncSet(r.client, endpointConfig, instance); err != nil {
 				return reconcile.Result{}, err
 			}
 		}
+		return reconcile.Result{}, err
+	}
+	reqLogger.V(5).Info("clusterimport.UpdateSyncSet")
+	if _, err := clusterimport.UpdateSyncSet(r.client, endpointConfig, instance, syncSet); err != nil {
 		return reconcile.Result{}, err
 	}
 
