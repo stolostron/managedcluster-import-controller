@@ -63,7 +63,3 @@ fold_end build
 fold_start push "Image Push"
 announce make component/push
 fold_end push
-
-fold_start scans "Security Scans"
-announce make security/scans
-fold_end scans
