@@ -19,7 +19,6 @@ import (
 	"fmt"
 
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	clusterregistryv1alpha1 "k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -46,40 +45,6 @@ func getClusterRegistryCluster(client client.Client, clusterDeployment *hivev1.C
 	cr := &clusterregistryv1alpha1.Cluster{}
 
 	if err := client.Get(context.TODO(), crNsN, cr); err != nil {
-		return nil, err
-	}
-
-	return cr, nil
-}
-
-func newClusterRegistryCluster(clusterDeployment *hivev1.ClusterDeployment) (*clusterregistryv1alpha1.Cluster, error) {
-	crNsN, err := clusterRegistryNsN(clusterDeployment)
-	if err != nil {
-		return nil, fmt.Errorf("error from call to func clusterRegistryNsn")
-	}
-
-	return &clusterregistryv1alpha1.Cluster{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: clusterregistryv1alpha1.SchemeGroupVersion.String(),
-			Kind:       "Cluster",
-		},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      crNsN.Name,
-			Namespace: crNsN.Namespace,
-		},
-	}, nil
-}
-
-func createClusterRegistryCluster(
-	client client.Client,
-	clusterDeployment *hivev1.ClusterDeployment,
-) (*clusterregistryv1alpha1.Cluster, error) {
-	cr, err := newClusterRegistryCluster(clusterDeployment)
-	if err != nil {
-		return nil, fmt.Errorf("error from call to func newclusterRegistryCluster")
-	}
-
-	if err := client.Create(context.TODO(), cr); err != nil {
 		return nil, err
 	}
 
