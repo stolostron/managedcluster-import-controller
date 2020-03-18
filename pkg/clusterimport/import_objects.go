@@ -120,6 +120,13 @@ func newEndpointCRD() (*apiextensionv1beta1.CustomResourceDefinition, error) {
 		log.Error(err, "fail to Unmarshal CRD", "content", data)
 		return nil, err
 	}
+	// make sure it won't generate nil in the final yaml
+	if crd.Status.Conditions == nil {
+		crd.Status.Conditions = []apiextensionv1beta1.CustomResourceDefinitionCondition{}
+	}
+	if crd.Status.StoredVersions == nil {
+		crd.Status.StoredVersions = []string{}
+	}
 
 	return crd, nil
 }
