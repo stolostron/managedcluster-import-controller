@@ -16,6 +16,8 @@ package clusterimport
 
 import (
 	"context"
+	"encoding/json"
+	"reflect"
 
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -104,4 +106,61 @@ func CreateSyncSet(
 	}
 
 	return ss, nil
+}
+
+// equalRawExtensions compares two rawExtensions and return true if they have same values
+func equalRawExtensions(a, b *runtime.RawExtension) (bool, error) {
+	aJSON, err := a.MarshalJSON()
+	if err != nil {
+		return false, err
+	}
+	bJSON, err := b.MarshalJSON()
+	if err != nil {
+		return false, err
+	}
+	var obj1, obj2 interface{}
+	err = json.Unmarshal(aJSON, &obj1)
+	if err != nil {
+		return false, err
+	}
+	err = json.Unmarshal(bJSON, &obj2)
+	if err != nil {
+		return false, err
+	}
+
+	return reflect.DeepEqual(obj1, obj2), nil
+}
+
+// UpdateSyncSet updates the syncset base on endpointConfig
+func UpdateSyncSet(
+	client client.Client,
+	endpointConfig *multicloudv1alpha1.EndpointConfig,
+	clusterDeployment *hivev1.ClusterDeployment,
+	oldSyncSet *hivev1.SyncSet,
+) (*hivev1.SyncSet, error) {
+	runtimeObjects, err := GenerateImportObjects(client, endpointConfig)
+	if err != nil {
+		return nil, err
+	}
+	isSame := len(oldSyncSet.Spec.SyncSetCommonSpec.Resources) == len(runtimeObjects)
+	runtimeRawExtensions := []runtime.RawExtension{}
+	for i, obj := range runtimeObjects {
+		rawObj := runtime.RawExtension{Object: obj}
+		runtimeRawExtensions = append(runtimeRawExtensions, rawObj)
+
+		if isSame {
+			if ok, _ := equalRawExtensions(&rawObj, &oldSyncSet.Spec.SyncSetCommonSpec.Resources[i]); !ok {
+				isSame = false
+			}
+		}
+	}
+
+	if !isSame {
+		oldSyncSet.Spec.SyncSetCommonSpec.Resources = runtimeRawExtensions
+		if err := client.Update(context.TODO(), oldSyncSet); err != nil {
+			return nil, err
+		}
+	}
+
+	return oldSyncSet, nil
 }
