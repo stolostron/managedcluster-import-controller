@@ -65,6 +65,20 @@ func newDeleteJob(r *ReconcileCluster, cluster *clusterregistryv1alpha1.Cluster)
 	if err != nil {
 		return nil, err
 	}
+
+	// set up default values for endpointconfig
+	if endpointConfig.Spec.ClusterNamespace == "" {
+		endpointConfig.Spec.ClusterNamespace = endpointConfig.Namespace
+	}
+
+	if endpointConfig.Spec.ImagePullSecret == "" {
+		endpointConfig.Spec.ImagePullSecret = os.Getenv("DEFAULT_IMAGE_PULL_SECRET")
+	}
+
+	if endpointConfig.Spec.ImageRegistry == "" {
+		endpointConfig.Spec.ImageRegistry = os.Getenv("DEFAULT_IMAGE_REGISTRY")
+	}
+
 	imageTagPostfix := os.Getenv(clusterimport.ImageTagPostfixKey)
 	operatorImageName := endpointConfig.Spec.ImageRegistry +
 		"/" + clusterimport.EndpointOperatorImageName +
