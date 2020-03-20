@@ -181,7 +181,7 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 		if errors.IsNotFound(err) {
 			reqLogger.V(5).Info("clusterimport.CreateSyncSet")
 			if _, err := clusterimport.CreateSyncSet(r.client, endpointConfig, instance); err != nil {
-				return reconcile.Result{}, err
+				return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 			}
 		}
 		return reconcile.Result{}, err
