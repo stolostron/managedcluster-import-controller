@@ -4,7 +4,7 @@ metadata:
   labels:
     cloud: auto-detect
     name: cluster-controller-test
-    vednor: auto-detect
+    vendor: auto-detect
   name: cluster-controller-test
   namespace: cluster-controller-test
 spec: {}
