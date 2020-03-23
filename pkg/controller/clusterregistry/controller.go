@@ -99,21 +99,29 @@ func (r *ReconcileCluster) Reconcile(request reconcile.Request) (reconcile.Resul
 		return reconcile.Result{Requeue: true, RequeueAfter: 5 * time.Second}, err
 	}
 
-	// add finalizer to cluster
+	// add finalizer to cluster when cluster is online
 	if IsClusterOnline(instance) {
 		utils.AddFinalizer(instance, ClusterFinalizer)
 	}
 
 	for _, condition := range instance.Status.Conditions {
 		if condition.Type != clusterregistryv1alpha1.ClusterOK {
-			if err := utils.DeleteEndpointConfig(r.client, instance.Name, instance.Namespace); err != nil {
-				return reconcile.Result{}, err
+			if instance.DeletionTimestamp != nil {
+				// Delete endpointconfig when cluster is offline and cluster is getting deleted
+				if err := utils.DeleteEndpointConfig(r.client, instance.Name, instance.Namespace); err != nil {
+					return reconcile.Result{}, err
+				}
 			}
 			utils.RemoveFinalizer(instance, ClusterFinalizer)
 			if err := r.client.Update(context.TODO(), instance); err != nil {
 				return reconcile.Result{}, err
 			}
 		}
+	}
+
+	// Update cluster instance after adding finalizer
+	if err := r.client.Update(context.TODO(), instance); err != nil {
+		return reconcile.Result{}, err
 	}
 
 	// in Terminating state
