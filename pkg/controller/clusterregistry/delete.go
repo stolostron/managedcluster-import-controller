@@ -33,7 +33,7 @@ import (
 // constants for delete work and finalizer
 const (
 	EndpointDeleteWork = "delete-multicluster-endpoint"
-	ClusterFinalizer   = "rcm-api.cluster"
+	ClusterFinalizer   = "rcm-controller.cluster"
 )
 
 func getDeleteWork(r *ReconcileCluster, cluster *clusterregistryv1alpha1.Cluster) (*mcmv1alpha1.Work, error) {
