@@ -109,7 +109,7 @@ func newEndpointCRD() (*apiextensionv1beta1.CustomResourceDefinition, error) {
 		return nil, fmt.Errorf("ENV ENDPOINT_CRD_FILE undefine")
 	}
 
-	data, err := ioutil.ReadFile(fileName)
+	data, err := ioutil.ReadFile(fileName) // #nosec G304
 	if err != nil {
 		log.Error(err, "fail to CRD ReadFile", "filename", fileName)
 		return nil, err
