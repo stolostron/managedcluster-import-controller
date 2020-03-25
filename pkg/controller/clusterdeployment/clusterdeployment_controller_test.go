@@ -18,6 +18,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
@@ -70,6 +71,31 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 			ClusterName: "test",
 		},
 	}
+	clusterNamespace := &corev1.Namespace{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: corev1.SchemeGroupVersion.String(),
+			Kind:       "Namespace",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test",
+		},
+	}
+	cluster := &clusterregistryv1alpha1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test",
+			Namespace: "test",
+		},
+	}
+	selectorSyncset := &hivev1.SelectorSyncSet{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: hivev1.SchemeGroupVersion.String(),
+			Kind:       "SelectorSyncSet",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "multicluster-endpoint",
+			Namespace: "",
+		},
+	}
 	endpointConfig := &multicloudv1alpha1.EndpointConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
@@ -113,7 +139,7 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 
 	s := scheme.Scheme
 	s.AddKnownTypes(corev1.SchemeGroupVersion, &corev1.Namespace{}, &corev1.Secret{}, &corev1.ServiceAccount{})
-	s.AddKnownTypes(hivev1.SchemeGroupVersion, &hivev1.ClusterDeployment{}, &hivev1.SyncSet{})
+	s.AddKnownTypes(hivev1.SchemeGroupVersion, &hivev1.ClusterDeployment{}, &hivev1.SyncSet{}, &hivev1.SelectorSyncSet{})
 	s.AddKnownTypes(clusterregistryv1alpha1.SchemeGroupVersion, &clusterregistryv1alpha1.Cluster{})
 	s.AddKnownTypes(multicloudv1alpha1.SchemeGroupVersion, &multicloudv1alpha1.EndpointConfig{})
 	s.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{})
@@ -159,16 +185,15 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 		{
 			name: "Only ClusterDeployment",
 			fields: fields{
-				client: fake.NewFakeClient([]runtime.Object{clusterDeployment}...),
+				client: fake.NewFakeClient([]runtime.Object{clusterDeployment, selectorSyncset}...),
 				scheme: s,
 			},
 			args: args{
 				request: req,
 			},
 			want: reconcile.Result{
-				Requeue: false,
-				//RequeueAfter: 30 * time.Second,
-				RequeueAfter: 0,
+				Requeue:      true,
+				RequeueAfter: 30 * time.Second,
 			},
 			wantErr: true,
 		},
@@ -181,6 +206,9 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 					infrastructConfig,
 					bootstrapServiceAccount,
 					bootstrapTokenSecret,
+					selectorSyncset,
+					cluster,
+					clusterNamespace,
 				}...),
 				scheme: s,
 			},
@@ -203,6 +231,9 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 					infrastructConfig,
 					bootstrapServiceAccount,
 					bootstrapTokenSecret,
+					selectorSyncset,
+					cluster,
+					clusterNamespace,
 				}...),
 				scheme: s,
 			},
