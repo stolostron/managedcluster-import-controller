@@ -142,7 +142,7 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 
 	// create cluster registry cluster if does not exist
 	reqLogger.V(5).Info("getClusterRegistryCluster")
-	_, err = getClusterRegistryCluster(r.client, instance)
+	cluster, err := getClusterRegistryCluster(r.client, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.V(5).Info("Cluster Not found")
@@ -180,7 +180,7 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.V(5).Info("clusterimport.CreateSyncSet")
-			if _, err := clusterimport.CreateSyncSet(r.client, endpointConfig, instance); err != nil {
+			if _, err := clusterimport.CreateSyncSet(r.client, r.scheme, cluster, endpointConfig, instance); err != nil {
 				return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 			}
 		}

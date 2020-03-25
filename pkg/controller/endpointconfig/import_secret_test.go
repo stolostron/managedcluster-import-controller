@@ -312,7 +312,7 @@ func Test_newImportSecret(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := newImportSecret(tt.args.client, tt.args.scheme, tt.args.endpointConfig)
+			got, err := newImportSecret(tt.args.client, tt.args.endpointConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("newImportSecret() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -381,14 +381,21 @@ func Test_createImportSecret(t *testing.T) {
 		clusterInfoConfigMap(),
 	)
 
-	importSecret, err := newImportSecret(fakeClient, s, endpointConfig)
+	importSecret, err := newImportSecret(fakeClient, endpointConfig)
 	if err != nil {
 		t.Errorf("fail to initialize import secret, error = %v", err)
 	}
+	importSecret.ObjectMeta.OwnerReferences = []metav1.OwnerReference{{
+		APIVersion: "clusterregistry.k8s.io/v1alpha1",
+		Kind:       "Cluster",
+		Name:       "cluster-name",
+		UID:        "",
+	}}
 
 	type args struct {
 		client         client.Client
 		scheme         *runtime.Scheme
+		cluster        *clusterregistryv1alpha1.Cluster
 		endpointConfig *multicloudv1alpha1.EndpointConfig
 	}
 
@@ -403,6 +410,7 @@ func Test_createImportSecret(t *testing.T) {
 			args: args{
 				client:         fakeClient,
 				scheme:         s,
+				cluster:        cluster,
 				endpointConfig: endpointConfig,
 			},
 			want:    importSecret,
@@ -420,6 +428,7 @@ func Test_createImportSecret(t *testing.T) {
 					importSecret,
 				),
 				scheme:         s,
+				cluster:        cluster,
 				endpointConfig: endpointConfig,
 			},
 			want:    nil,
@@ -429,7 +438,7 @@ func Test_createImportSecret(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := createImportSecret(tt.args.client, tt.args.scheme, tt.args.endpointConfig)
+			got, err := createImportSecret(tt.args.client, tt.args.scheme, tt.args.cluster, tt.args.endpointConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createImportSecret() error = %v, wantErr %v", err, tt.wantErr)
 				return
