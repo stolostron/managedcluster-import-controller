@@ -27,6 +27,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	clusterregistryv1alpha1 "k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
@@ -71,7 +72,7 @@ func getImportSecret(client client.Client, endpointConfig *multicloudv1alpha1.En
 	return secret, nil
 }
 
-func newImportSecret(client client.Client, scheme *runtime.Scheme, endpointConfig *multicloudv1alpha1.EndpointConfig) (*corev1.Secret, error) {
+func newImportSecret(client client.Client, endpointConfig *multicloudv1alpha1.EndpointConfig) (*corev1.Secret, error) {
 	runtimeObjects, err := clusterimport.GenerateImportObjects(client, endpointConfig)
 	if err != nil {
 		return nil, err
@@ -98,16 +99,20 @@ func newImportSecret(client client.Client, scheme *runtime.Scheme, endpointConfi
 		},
 	}
 
-	if err := controllerutil.SetControllerReference(endpointConfig, secret, scheme); err != nil {
-		return nil, err
-	}
-
 	return secret, nil
 }
 
-func createImportSecret(client client.Client, scheme *runtime.Scheme, endpointConfig *multicloudv1alpha1.EndpointConfig) (*corev1.Secret, error) {
-	secret, err := newImportSecret(client, scheme, endpointConfig)
+func createImportSecret(
+	client client.Client,
+	scheme *runtime.Scheme,
+	cluster *clusterregistryv1alpha1.Cluster,
+	endpointConfig *multicloudv1alpha1.EndpointConfig,
+) (*corev1.Secret, error) {
+	secret, err := newImportSecret(client, endpointConfig)
 	if err != nil {
+		return nil, err
+	}
+	if err := controllerutil.SetControllerReference(cluster, secret, scheme); err != nil {
 		return nil, err
 	}
 
@@ -120,11 +125,10 @@ func createImportSecret(client client.Client, scheme *runtime.Scheme, endpointCo
 
 func updateImportSecret(
 	client client.Client,
-	scheme *runtime.Scheme,
 	endpointConfig *multicloudv1alpha1.EndpointConfig,
 	oldImportSecret *corev1.Secret,
 ) (*corev1.Secret, error) {
-	secret, err := newImportSecret(client, scheme, endpointConfig)
+	secret, err := newImportSecret(client, endpointConfig)
 	if err != nil {
 		return nil, err
 	}

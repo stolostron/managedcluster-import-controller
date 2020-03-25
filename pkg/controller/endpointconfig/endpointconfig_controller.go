@@ -20,12 +20,15 @@ import (
 	"fmt"
 	"os"
 	"reflect"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	clusterregistryv1alpha1 "k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -158,7 +161,7 @@ func (r *ReconcileEndpointConfig) Reconcile(request reconcile.Request) (reconcil
 		if errors.IsNotFound(err) {
 			// when the ClusterRegistry.Cluster reconcile request for this controller will be enqueued
 			// all maybe we use endpointconfig information to create the cluster?
-			return reconcile.Result{}, nil
+			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 		}
 
 		return reconcile.Result{}, err
@@ -168,12 +171,23 @@ func (r *ReconcileEndpointConfig) Reconcile(request reconcile.Request) (reconcil
 	oldImportSecret, err := getImportSecret(r.client, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			if _, err = createImportSecret(r.client, r.scheme, instance); err != nil {
+			if _, err = createImportSecret(r.client, r.scheme, cluster, instance); err != nil {
 				return reconcile.Result{}, err
 			}
 		}
 	} else {
-		if _, err = updateImportSecret(r.client, r.scheme, instance, oldImportSecret); err != nil {
+		if _, err = updateImportSecret(r.client, instance, oldImportSecret); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+	// add controller reference if doesn't have one
+	if controllerRef := metav1.GetControllerOf(instance); controllerRef == nil {
+		reqLogger.V(5).Info("Setting controller reference")
+		if err := controllerutil.SetControllerReference(cluster, instance, r.scheme); err != nil {
+			return reconcile.Result{}, err
+		}
+		reqLogger.V(5).Info("Updating endpointconfig to add controller reference")
+		if err := r.client.Update(context.TODO(), instance); err != nil {
 			return reconcile.Result{}, err
 		}
 	}

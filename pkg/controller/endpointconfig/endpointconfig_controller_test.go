@@ -180,9 +180,10 @@ func TestReconcileEndpointConfig_Reconcile(t *testing.T) {
 				request: req,
 			},
 			want: reconcile.Result{
-				Requeue: false,
+				Requeue:      true,
+				RequeueAfter: 30 * time.Second,
 			},
-			wantErr: false,
+			wantErr: true,
 		},
 		{
 			name: "missing resource to generate secret",
