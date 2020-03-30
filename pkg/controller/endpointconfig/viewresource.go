@@ -17,6 +17,7 @@ package endpointconfig
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -46,11 +47,11 @@ func getEndpointResourceView(client client.Client, cluster *clusterregistryv1alp
 	return resourceview, nil
 }
 
-//IsEndpointResourceviewCompleted - check if the resourceview completed
-func IsEndpointResourceviewCompleted(resourceview *mcmv1alpha1.ResourceView) bool {
+//isEndpointResourceviewProcessing - check if the resourceview completed
+func isEndpointResourceviewProcessing(resourceview *mcmv1alpha1.ResourceView) bool {
 	if len(resourceview.Status.Conditions) > 0 {
 		for _, condition := range resourceview.Status.Conditions {
-			if condition.Type == mcmv1alpha1.WorkCompleted {
+			if condition.Type == mcmv1alpha1.WorkProcessing {
 				return true
 			}
 		}
@@ -79,13 +80,13 @@ func createEndpointResourceview(
 					"name": cluster.Name,
 				},
 			},
-			SummaryOnly: false,
-			Mode:        "",
-			//UpdateIntervalSeconds: 10,
+			SummaryOnly:           false,
+			Mode:                  mcmv1alpha1.PeriodicResourceUpdate,
+			UpdateIntervalSeconds: 60,
 			Scope: mcmv1alpha1.ViewFilter{
 				Resource:     "endpoint.multicloud.ibm.com",
 				ResourceName: "endpoint",
-				NameSpace:    "multicluster-endpoint",
+				NameSpace:    EndpointNamespace,
 			},
 		},
 	}
@@ -99,11 +100,12 @@ func createEndpointResourceview(
 		return nil, err
 	}
 
+	time.Sleep(3 * time.Second)
 	return resourceView, nil
 }
 
-// GetEndpoint - Fetch the endpoint from managed cluster
-func GetEndpoint(
+// getEndpointFromResourceView - Fetch the endpoint from managed cluster
+func getEndpointFromResourceView(
 	r *ReconcileEndpointConfig,
 	cluster *clusterregistryv1alpha1.Cluster,
 	resourceView *mcmv1alpha1.ResourceView) (*multicloudv1beta1.Endpoint, error) {
