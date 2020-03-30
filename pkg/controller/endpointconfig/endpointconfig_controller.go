@@ -16,7 +16,6 @@ package endpointconfig
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"reflect"
@@ -76,18 +75,18 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// Watch to enqueue request to resourceview update
 	err = c.Watch(
-		&source.Kind{Type: &mcmv1alpha1.ResourceView{}},
-		&handler.EnqueueRequestForObject{},
+		&source.Kind{Type: &clusterregistryv1alpha1.Cluster{}},
+		&handler.EnqueueRequestsFromMapFunc{ToRequests: &clusterReconcileMapper{}},
 	)
 	if err != nil {
 		return err
 	}
 
+	// Watch to enqueue request to resourceview update
 	err = c.Watch(
-		&source.Kind{Type: &clusterregistryv1alpha1.Cluster{}},
-		&handler.EnqueueRequestsFromMapFunc{ToRequests: &clusterReconcileMapper{}},
+		&source.Kind{Type: &mcmv1alpha1.ResourceView{}},
+		&handler.EnqueueRequestForObject{},
 	)
 	if err != nil {
 		return err
@@ -192,62 +191,75 @@ func (r *ReconcileEndpointConfig) Reconcile(request reconcile.Request) (reconcil
 		}
 	}
 
+	endpointWork, _ := getEndpointUpdateWork(r, instance)
+	if endpointWork != nil {
+		if endpointWork.Status.Type == mcmv1alpha1.WorkFailed || endpointWork.Status.Type == mcmv1alpha1.WorkCompleted {
+			if err := deleteEndpointUpdateWork(r, endpointWork); err != nil {
+				return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
+			}
+		}
+		return reconcile.Result{}, nil
+	}
+
 	// Update endpoint on managed cluster
 	if clusterregistry.IsClusterOnline(cluster) && cluster.DeletionTimestamp == nil {
-		if err := updateEndpoint(r, cluster, instance); err != nil {
-			return reconcile.Result{}, err
+		endpointResourceView, err := getEndpointResourceView(r.client, cluster)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				reqLogger.V(5).Info("Creating resourceview to fetch endpoint for cluster ")
+				if _, err := createEndpointResourceview(r, cluster, instance); err != nil {
+					return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
+				}
+				return reconcile.Result{}, nil
+			}
+			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 		}
+
+		if !isEndpointResourceviewProcessing(endpointResourceView) {
+			return reconcile.Result{}, nil
+		}
+
+		endpoint, err := getEndpointFromResourceView(r, cluster, endpointResourceView)
+		if err != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
+		}
+
+		if err := compareAndUpdateEndpoint(r, instance, endpoint); err != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
+		}
+
 		return reconcile.Result{}, nil
 	}
 
 	return reconcile.Result{}, nil
 }
 
-func updateEndpoint(r *ReconcileEndpointConfig, cluster *clusterregistryv1alpha1.Cluster, endpointconfig *multicloudv1alpha1.EndpointConfig) error {
-	endpointResourceView, err := getEndpointResourceView(r.client, cluster)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			if _, err := createEndpointResourceview(r, cluster, endpointconfig); err != nil {
-				return err
+func compareAndUpdateEndpoint(r *ReconcileEndpointConfig, endpointc *multicloudv1alpha1.EndpointConfig, endpoint *multicloudv1beta1.Endpoint) error {
+	//Bootstrapconfig and cluster labels should not get updated
+	endpointc.Spec.ClusterLabels = endpoint.Spec.ClusterLabels
+	endpointc.Spec.BootStrapConfig = endpoint.Spec.BootStrapConfig
+	endpointc.Spec.ClusterName = endpoint.Spec.ClusterName
+	endpointc.Spec.ClusterNamespace = endpoint.Spec.ClusterNamespace
+
+	// Create work if endpoinfconfig is not same as endpoint
+	if !reflect.DeepEqual(endpoint.Spec, endpointc.Spec) {
+		work, err := getEndpointUpdateWork(r, endpointc)
+		if err == nil && work != nil {
+			if work.Status.Type == mcmv1alpha1.WorkCompleted || work.Status.Type == mcmv1alpha1.WorkFailed {
+				if err := deleteEndpointUpdateWork(r, work); err != nil {
+					return err
+				}
+				return nil
 			}
-			return nil
 		}
-		return err
-	}
 
-	if !IsEndpointResourceviewCompleted(endpointResourceView) {
-		return nil
-	}
-	endpoint, err := GetEndpoint(r, cluster, endpointResourceView)
-	if err != nil {
-		return err
-	}
-
-	endpointWork, err := getEndpointUpdateWork(r, endpointconfig)
-	if !reflect.DeepEqual(endpoint.Spec, endpointconfig.Spec) {
 		if err != nil && errors.IsNotFound(err) {
-			if err := createEndpointUpdateWork(r, endpointconfig, endpoint); err != nil {
+			if err := createEndpointUpdateWork(r, endpointc, endpoint); err != nil {
 				return err
 			}
 			return nil
 		}
-
-		updatedEndpointwork := &multicloudv1beta1.Endpoint{}
-		_ = json.Unmarshal(endpointWork.Status.Result.Raw, updatedEndpointwork)
-		if reflect.DeepEqual(updatedEndpointwork.Spec, endpoint.Spec) {
-			if err := deleteEndpointUpdateWork(r, endpointWork); err != nil {
-				return err
-			}
-		}
-
 		return nil
 	}
-
-	if endpointWork != nil {
-		if err := deleteEndpointUpdateWork(r, endpointWork); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }

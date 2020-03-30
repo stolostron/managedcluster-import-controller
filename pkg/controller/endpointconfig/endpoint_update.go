@@ -17,6 +17,7 @@ package endpointconfig
 
 import (
 	"context"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,8 +30,11 @@ import (
 	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
 )
 
-// EndpointUpdateWork ...
-const EndpointUpdateWork = "update-multicluster-endpoint"
+// constants for update endpoint on managed cluster
+const (
+	EndpointUpdateWork = "update-multicluster-endpoint"
+	EndpointNamespace  = "multicluster-endpoint"
+)
 
 // getEndpointUpdateWork - fetch the endpoint update work
 func getEndpointUpdateWork(r *ReconcileEndpointConfig, endpointc *multicloudv1alpha1.EndpointConfig) (*mcmv1alpha1.Work, error) {
@@ -63,7 +67,7 @@ func createEndpointUpdateWork(r *ReconcileEndpointConfig, endpointc *multicloudv
 			KubeWork: &mcmv1alpha1.KubeWorkSpec{
 				Resource:  "endpoints.multicloud.ibm.com",
 				Name:      EndpointUpdateWork,
-				Namespace: "multicluster-endpoint",
+				Namespace: EndpointNamespace,
 				ObjectTemplate: runtime.RawExtension{
 					Object: endpoint,
 				},
@@ -78,6 +82,7 @@ func createEndpointUpdateWork(r *ReconcileEndpointConfig, endpointc *multicloudv
 	if err := r.client.Create(context.TODO(), work); err != nil {
 		return err
 	}
+	time.Sleep(3 * time.Second)
 
 	return nil
 }
@@ -87,5 +92,6 @@ func deleteEndpointUpdateWork(r *ReconcileEndpointConfig, work *mcmv1alpha1.Work
 	if err := r.client.Delete(context.TODO(), work); err != nil {
 		return err
 	}
+
 	return nil
 }
