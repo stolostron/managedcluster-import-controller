@@ -25,12 +25,57 @@ import (
 )
 
 const selectorSyncsetName = "multicluster-endpoint"
+const selectorSyncsetLabelName = "cluster-managed"
+const selectorSyncsetLabelValue = "true"
 
 func selectorSyncsetNsN() types.NamespacedName {
 	return types.NamespacedName{
 		Name:      selectorSyncsetName,
 		Namespace: "",
 	}
+}
+
+// HasClusterManagedLabels checks whether a clusterdeployment contains labels used by the selectorSyncset
+func HasClusterManagedLabels(clusterDeployment *hivev1.ClusterDeployment) bool {
+	if clusterDeployment.ObjectMeta.Labels == nil {
+		return false
+	}
+	if val, ok := clusterDeployment.ObjectMeta.Labels[selectorSyncsetLabelName]; ok && val == selectorSyncsetLabelValue {
+		return true
+	}
+	return false
+}
+
+// AddClusterManagedLabels adds labels and returns a clusterDeployment with new labels
+func AddClusterManagedLabels(clusterDeployment *hivev1.ClusterDeployment) *hivev1.ClusterDeployment {
+	// shallow copy
+	res := *clusterDeployment
+	// ready to clone labels
+	res.ObjectMeta.Labels = make(map[string]string)
+	for k, v := range clusterDeployment.ObjectMeta.Labels {
+		res.ObjectMeta.Labels[k] = v
+	}
+
+	res.ObjectMeta.Labels[selectorSyncsetLabelName] = selectorSyncsetLabelValue
+	return &res
+}
+
+// RemoveClusterManagedLabels removes labels and returns a clusterDeployment with new labels
+func RemoveClusterManagedLabels(clusterDeployment *hivev1.ClusterDeployment) *hivev1.ClusterDeployment {
+	if clusterDeployment.ObjectMeta.Labels == nil {
+		return clusterDeployment
+	}
+
+	// shallow copy
+	res := *clusterDeployment
+	// ready to clone labels
+	res.ObjectMeta.Labels = make(map[string]string)
+	for k, v := range clusterDeployment.ObjectMeta.Labels {
+		if k != selectorSyncsetLabelName {
+			res.ObjectMeta.Labels[k] = v
+		}
+	}
+	return &res
 }
 
 // newSelectorSyncset generate the SelectorSyncset for installing multicluster-endpoint
@@ -47,7 +92,7 @@ func newSelectorSyncset() (*hivev1.SelectorSyncSet, error) {
 		runtimeRawExtensions = append(runtimeRawExtensions, runtime.RawExtension{Object: obj})
 	}
 
-	return &hivev1.SelectorSyncSet{
+	sss := &hivev1.SelectorSyncSet{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: hivev1.SchemeGroupVersion.String(),
 			Kind:       "SelectorSyncSet",
@@ -61,7 +106,13 @@ func newSelectorSyncset() (*hivev1.SelectorSyncSet, error) {
 				Resources: runtimeRawExtensions,
 			},
 		},
-	}, nil
+	}
+	metav1.AddLabelToSelector(
+		&sss.Spec.ClusterDeploymentSelector,
+		selectorSyncsetLabelName,
+		selectorSyncsetLabelValue,
+	)
+	return sss, nil
 }
 
 // GetSelectorSyncset get the selector syncset use for installing multicluster-endpoint
