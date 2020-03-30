@@ -145,10 +145,37 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 	cluster, err := getClusterRegistryCluster(r.client, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
+			// remove labels for selectorsyncset
+			if clusterimport.HasClusterManagedLabels(instance) {
+				newInstance := clusterimport.RemoveClusterManagedLabels(instance)
+				err := r.client.Patch(context.TODO(), newInstance, client.MergeFrom(instance))
+				if err != nil {
+					reqLogger.Error(err, "Failed to add labels")
+				}
+			}
 			reqLogger.V(5).Info("Cluster Not found")
 			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 		}
 		return reconcile.Result{}, err
+	}
+	needUpdates := false
+	newInstance := instance
+	// remove labels for selectorsyncset if cluster detached
+	if cluster.DeletionTimestamp != nil && clusterimport.HasClusterManagedLabels(instance) {
+		newInstance = clusterimport.RemoveClusterManagedLabels(instance)
+		needUpdates = true
+	}
+	// add labels for selectorsyncset if cluster ready to get imported
+	if cluster.DeletionTimestamp == nil && !clusterimport.HasClusterManagedLabels(instance) {
+		newInstance = clusterimport.AddClusterManagedLabels(instance)
+		needUpdates = true
+	}
+	if needUpdates {
+		reqLogger.V(5).Info("Update clusterdeployment for labels")
+		if err := r.client.Patch(context.TODO(), newInstance, client.MergeFrom(instance)); err != nil {
+			reqLogger.V(5).Info("Failed to update labels")
+			return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, err
+		}
 	}
 
 	// requeue until EndpointConfig is created for the cluster
