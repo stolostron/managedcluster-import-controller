@@ -23,6 +23,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func init() {
+	os.Setenv("ENDPOINT_CRD_FILE", "../../build/resources/multicloud_v1beta1_endpoint_crd.yaml")
+}
+
 func TestNewOperatorDeployment(t *testing.T) {
 	type args struct {
 		endpointConfig  *multicloudv1alpha1.EndpointConfig
@@ -78,5 +82,13 @@ func TestNewOperatorDeployment(t *testing.T) {
 			assert.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[3].Name, ImageTagPostfixKey)
 			assert.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[3].Value, tt.want.imageTagPostfixEnv, "tag postfix should be passed to env")
 		})
+	}
+}
+
+func TestGenerateEndpointCRD(t *testing.T) {
+	_, err := GenerateEndpointCRD()
+	if err != nil {
+		t.Errorf("Cannot generate endpoint crd: %v", err)
+		return
 	}
 }

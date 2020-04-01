@@ -55,6 +55,17 @@ const ImageTagPostfixKey = "IMAGE_TAG_POSTFIX"
 
 var log = logf.Log.WithName("clusterimport")
 
+// GenerateEndpointCRD returns an array of runtime.Object, which contains only the endpoint crd
+func GenerateEndpointCRD() ([]runtime.Object, error) {
+	crd, err := newEndpointCRD()
+	if err != nil {
+		return nil, err
+	}
+	return []runtime.Object{
+		crd,
+	}, nil
+}
+
 // GenerateImportObjects generate all the object in the manifest use for installing multicluster-endpoint on managed cluster
 func GenerateImportObjects(client client.Client, endpointConfig *multicloudv1alpha1.EndpointConfig) ([]runtime.Object, error) {
 	importObjects, err := generateCommonImportObjects()
