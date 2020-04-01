@@ -73,6 +73,15 @@ func getImportSecret(client client.Client, endpointConfig *multicloudv1alpha1.En
 }
 
 func newImportSecret(client client.Client, endpointConfig *multicloudv1alpha1.EndpointConfig) (*corev1.Secret, error) {
+	// get endpoint crd yaml
+	endpointCRD, err := clusterimport.GenerateEndpointCRD()
+	if err != nil {
+		return nil, err
+	}
+	endpointCRDYAML, err := toYAML(endpointCRD)
+	if err != nil {
+		return nil, err
+	}
 	runtimeObjects, err := clusterimport.GenerateImportObjects(client, endpointConfig)
 	if err != nil {
 		return nil, err
@@ -95,7 +104,8 @@ func newImportSecret(client client.Client, endpointConfig *multicloudv1alpha1.En
 			Namespace: sNsN.Namespace,
 		},
 		Data: map[string][]byte{
-			"import.yaml": importYAML,
+			"import.yaml":       importYAML,
+			"endpoint-crd.yaml": endpointCRDYAML,
 		},
 	}
 
