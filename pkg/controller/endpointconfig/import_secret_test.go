@@ -322,6 +322,21 @@ func Test_newImportSecret(t *testing.T) {
 				t.Errorf("newImportSecret() = %v, want %v", got, tt.wantNil)
 				return
 			}
+			if got != nil {
+				if got.Data == nil {
+					t.Errorf("import secret data should not be empty")
+					return
+				}
+				if len(got.Data["import.yaml"]) == 0 {
+					t.Errorf("import.yaml should not be empty")
+					return
+				}
+				if len(got.Data["endpoint-crd.yaml"]) == 0 {
+					t.Errorf("endpoint-crd.yaml should not be empty")
+					return
+				}
+
+			}
 		})
 	}
 }
