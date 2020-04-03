@@ -1,0 +1,10 @@
+apiVersion: config.openshift.io/v1
+kind: Infrastructure
+metadata:
+  name: cluster
+spec:
+  cloudConfig:
+    name: ""
+status:
+  apiServerInternalURI: https://127.0.0.1:6443
+  apiServerURL: https://127.0.0.1:6443
