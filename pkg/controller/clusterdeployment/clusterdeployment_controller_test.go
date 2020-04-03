@@ -216,7 +216,8 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 				request: req,
 			},
 			want: reconcile.Result{
-				Requeue: false,
+				Requeue:      true,
+				RequeueAfter: 10 * time.Second,
 			},
 			wantErr: true,
 			// wantErr: false,
@@ -241,7 +242,8 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 				request: req,
 			},
 			want: reconcile.Result{
-				Requeue: false,
+				Requeue:      true,
+				RequeueAfter: 10 * time.Second,
 			},
 			wantErr: true,
 		},

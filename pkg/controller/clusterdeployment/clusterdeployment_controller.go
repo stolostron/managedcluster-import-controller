@@ -124,10 +124,10 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 		if errors.IsNotFound(err) {
 			reqLogger.V(5).Info("clusterimport.CreateSelectorSyncset")
 			if _, err = clusterimport.CreateSelectorSyncset(r.client); err != nil {
-				return reconcile.Result{}, err
+				return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, err
 			}
 		}
-		return reconcile.Result{}, err
+		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, err
 	}
 
 	// create cluster namespace if does not exist
@@ -137,7 +137,7 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 			reqLogger.V(5).Info("Cluster Namespace Not found")
 			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 		}
-		return reconcile.Result{}, err
+		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, err
 	}
 
 	// create cluster registry cluster if does not exist
@@ -156,8 +156,9 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 			reqLogger.V(5).Info("Cluster Not found")
 			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 		}
-		return reconcile.Result{}, err
+		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, err
 	}
+
 	needUpdates := false
 	newInstance := instance
 	// remove labels for selectorsyncset if cluster detached
@@ -186,8 +187,9 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 			reqLogger.V(5).Info("EndPointConfig Not found")
 			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 		}
-		return reconcile.Result{}, err
+		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, err
 	}
+
 	// if clusterNamespace is not set it should be configured to endpointconfig namespace
 	if endpointConfig.Spec.ClusterNamespace == "" {
 		endpointConfig.Spec.ClusterNamespace = endpointConfig.Namespace
@@ -211,11 +213,12 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 				return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 			}
 		}
-		return reconcile.Result{}, err
+		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, err
 	}
+
 	reqLogger.V(5).Info("clusterimport.UpdateSyncSet")
 	if _, err := clusterimport.UpdateSyncSet(r.client, endpointConfig, instance, syncSet); err != nil {
-		return reconcile.Result{}, err
+		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, err
 	}
 
 	return reconcile.Result{}, nil

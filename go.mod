@@ -6,6 +6,8 @@ require (
 	github.com/evanphx/json-patch v4.5.0+incompatible
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-openapi/spec v0.19.4
+	github.com/onsi/ginkgo v1.10.1
+	github.com/onsi/gomega v1.7.0
 	github.com/open-cluster-management/endpoint-operator v0.0.0-20200402132853-076294cfc8fc
 	github.com/open-cluster-management/multicloud-operators-foundation v0.0.0-20200212094214-a1cac8f162b8
 	github.com/openshift/api v3.9.1-0.20191112184635-86def77f6f90+incompatible
@@ -18,6 +20,7 @@ require (
 	k8s.io/apimachinery v0.0.0
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/cluster-registry v0.0.6
+	k8s.io/klog v1.0.0
 	k8s.io/kube-openapi v0.0.0-20190918143330-0270cf2f1c1d
 	sigs.k8s.io/controller-runtime v0.4.0
 	sigs.k8s.io/yaml v1.1.0

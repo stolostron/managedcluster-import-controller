@@ -6,12 +6,29 @@ metadata:
 spec:
   clusterName: mycluster
   clusterNamespace: mycluster
-  clusterLabels:
-    cloud: "auto-detect"
-    vednor: "auto-detect"
-
   bootstrapConfig:
     hubSecret: multicluster-endpoint/klusterlet-bootstrap
-
-  imageRegistry: hyc-cloud-private-edge-docker-local.artifactory.swg-devops.com/ibmcom-amd64
-  imagePullSecret: hao-artifactory
+  applicationManager:
+    enabled: true
+  clusterLabels:
+    cloud: auto-detect
+    vendor: auto-detect
+  connectionManager:
+    enabledGlobalView: false
+  imageRegistry: quay.io/open-cluster-management
+  imagePullSecret: multiclusterhub-operator-pull-secret
+  policyController:
+    enabled: true
+  prometheusIntegration:
+    enabled: true
+  searchCollector:
+    enabled: true
+  serviceRegistry:
+    enabled: true
+  certPolicyController:
+    enabled: true
+  cisController:
+    enabled: true
+  iamPolicyController:
+    enabled: true
+  version: 1.0.0
