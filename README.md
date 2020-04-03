@@ -22,12 +22,20 @@ current functionality of `multicloud-operators-cluster-controller`
 ## How to's
 
 [Auto importing of an existing cluster](docs/cluster_auto_import.md)
+
 [Manual importing of an existing cluster](docs/cluster_manual_import.md)
+
 [Auto importing of a ClusterAPI provisioned cluster](docs/clusterapi_cluster_import.md)
+
 [Detatching a managed cluster from Multicloud Manager](docs/detatch_managed_cluster.md)
+
 [Importing an Hive provisioned OpenShift cluster](docs/hive_cluster_import.md)
+
 [Updating Endpoint on a managed cluster](docs/remote_endpoint_update.md)
+
 [Selective initilization of controllers](docs/selective_controller_init.md)
+
+[Run functional test](docs/functional_test.md)
 
 ## Community, discussion, contribution, and support
 

@@ -5,7 +5,7 @@ metadata:
 subjects:
 - kind: ServiceAccount
   name: rcm-controller
-  namespace: multicloud-system
+  namespace: open-cluster-management
 roleRef:
   kind: ClusterRole
   name: cluster-admin

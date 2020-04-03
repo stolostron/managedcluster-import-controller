@@ -101,3 +101,39 @@ deploy:
 	cd overlays/deploy
 	kustomize build overlays/deploy | kubectl apply -f -
 	rm -rf overlays/deploy
+
+.PHONY: kind-create-cluster
+kind-create-cluster:
+	kind create cluster --name kind-rcm-controller
+
+.PHONY: kind-delete-cluster
+kind-delete-cluster:
+	kind delete cluster --name kind-rcm-controller
+
+.PHONY: install-fake-crds
+install-fake-crds:
+	@echo installing crds
+	kubectl apply -f test/cluster-registry-crd.yaml 
+	kubectl apply -f test/fake_resourceview_crd.yaml
+	kubectl apply -f test/hive_v1_clusterdeployment_crd.yaml
+	kubectl apply -f test/hive_v1_selectorsyncset.yaml  
+	kubectl apply -f test/hive_v1_syncset.yaml 
+	kubectl apply -f test/infrastructure_crd.yaml 
+	@sleep 10 
+
+.PHONY: kind-cluster-setup
+kind-cluster-setup: install-fake-crds
+	@echo installing fake infrastructure resource
+	kubectl apply -f test/fake_infrastructure_cr.yaml
+
+
+.PHONY: kind-install-rcm-controller
+kind-install-rcm-controller:
+	@echo installing rcm-controller
+	kubectl apply -k deploy
+	@echo creating default imagePullSecret
+	@kubectl create secret -n open-cluster-management docker-registry multiclusterhub-operator-pull-secret --docker-server=quay.io --docker-username=${DOCKER_USER} --docker-password=${DOCKER_PASS}
+
+.PHONY: functional-test
+functional-test:
+	FUNCTIONAL_TEST=true ginkgo --progress --slowSpecThreshold=10 test/rcm-controller-test
