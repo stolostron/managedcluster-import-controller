@@ -1,3 +1,5 @@
+// +build functional
+
 package rcm_controller_test
 
 import (
@@ -50,9 +52,6 @@ func isOwner(owner *unstructured.Unstructured, obj interface{}) bool {
 }
 
 var _ = Describe("Clusterregistry", func() {
-	BeforeEach(func() {
-		skipIfNotSet()
-	})
 	AfterEach(func() {
 		By("Delete endpointconfig if exist")
 		deleteIfExists(clientHubDynamic, gvrEndpointconfig, testNamespace, testNamespace)
