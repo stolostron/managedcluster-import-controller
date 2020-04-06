@@ -104,11 +104,11 @@ deploy:
 
 .PHONY: kind-create-cluster
 kind-create-cluster:
-	kind create cluster --name kind-rcm-controller
+	kind create cluster --name functional-test
 
 .PHONY: kind-delete-cluster
 kind-delete-cluster:
-	kind delete cluster --name kind-rcm-controller
+	kind delete cluster --name functional-test
 
 .PHONY: install-fake-crds
 install-fake-crds:
@@ -130,10 +130,10 @@ kind-cluster-setup: install-fake-crds
 .PHONY: kind-install-rcm-controller
 kind-install-rcm-controller:
 	@echo installing rcm-controller
-	kubectl apply -k deploy
+	kubectl apply -k overlays/test
 	@echo creating default imagePullSecret
 	@kubectl create secret -n open-cluster-management docker-registry multiclusterhub-operator-pull-secret --docker-server=quay.io --docker-username=${DOCKER_USER} --docker-password=${DOCKER_PASS}
 
 .PHONY: functional-test
 functional-test:
-	FUNCTIONAL_TEST=true ginkgo --progress --slowSpecThreshold=10 test/rcm-controller-test
+	ginkgo -tags functional -v --slowSpecThreshold=10 test/rcm-controller-test

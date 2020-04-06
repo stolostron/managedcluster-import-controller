@@ -20,7 +20,7 @@ addons:
 stages:
   - build
   - unit-test
-  - test-functional
+  - functional-test
   - release-ff
   - publish
 
@@ -43,9 +43,8 @@ jobs:
         - if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}"; fi; 
         - make sonar/go
 
-    - stage: test-functional
+    - stage: functional-test
       name: "Run functional-test"
-      if: type = pull_request
       script:
         - if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}"; fi; 
         - make component/pull

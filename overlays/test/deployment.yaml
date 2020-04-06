@@ -1,0 +1,9 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rcm-controller
+spec:
+  template:
+    spec:
+      imagePullSecrets:
+      - name: multiclusterhub-operator-pull-secret

@@ -1,7 +1,9 @@
 #!/bin/bash
+set -e
 
 CURR_FOLDER_PATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 KIND_KUBECONFIG="${CURR_FOLDER_PATH}/../kind_kubeconfig.yaml"
+export KUBECONFIG=${KIND_KUBECONFIG}
 export DOCKER_IMAGE_AND_TAG=${1}
 
 if ! which kubectl > /dev/null; then
@@ -23,11 +25,10 @@ fi
 
 
 echo "creating cluster"
-make kind-create-cluster || exit 1
+make kind-create-cluster 
 
 # setup kubeconfig
-kind get kubeconfig --name kind-rcm-controller > ${KIND_KUBECONFIG}
-export KUBECONFIG=${KIND_KUBECONFIG}
+kind get kubeconfig --name functional-test > ${KIND_KUBECONFIG}
 
 echo "install cluster"
 # setup cluster
