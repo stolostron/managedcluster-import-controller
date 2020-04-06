@@ -1,3 +1,5 @@
+// +build functional
+
 package rcm_controller_test
 
 import (
@@ -31,7 +33,6 @@ var _ = Describe("Clusterdeployment", func() {
 		labelValue          string
 	)
 	BeforeEach(func() {
-		skipIfNotSet()
 		selectorsyncsetName = "multicluster-endpoint"
 		labelKey = "cluster-managed"
 		labelValue = "true"

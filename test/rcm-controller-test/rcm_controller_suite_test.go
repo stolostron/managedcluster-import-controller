@@ -1,3 +1,5 @@
+// +build functional
+
 package rcm_controller_test
 
 import (
@@ -6,7 +8,6 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
@@ -214,16 +215,6 @@ func getWithTimeout(
 	return nil
 
 }
-func isFunctionalTest() bool {
-	return strings.EqualFold(os.Getenv("FUNCTIONAL_TEST"), "true")
-}
-
-// skipIfNotSet skips tests if not setting env var FUNCTIONAL_TEST=true
-func skipIfNotSet() {
-	if !isFunctionalTest() {
-		Skip("FUNCTIONAL_TEST != true. Skipping tests")
-	}
-}
 
 // getSecretWithTimeout keeps polling to get secret for timeout seconds
 func getSecretWithTimeout(
@@ -260,11 +251,6 @@ func init() {
 }
 
 var _ = BeforeSuite(func() {
-	if !isFunctionalTest() {
-		klog.Info("Skipping functional tests")
-		return
-	}
-
 	By("Setup Hub client")
 	gvrClusterregistry = schema.GroupVersionResource{Group: "clusterregistry.k8s.io", Version: "v1alpha1", Resource: "clusters"}
 	gvrEndpointconfig = schema.GroupVersionResource{Group: "multicloud.ibm.com", Version: "v1alpha1", Resource: "endpointconfigs"}

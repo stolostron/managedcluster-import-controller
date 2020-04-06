@@ -14,8 +14,6 @@ spec:
         name: rcm-controller
     spec:
       serviceAccountName: rcm-controller
-      imagePullSecrets:
-      - name: multiclusterhub-operator-pull-secret
       containers:
         - name: rcm-controller
           image: quay.io/open-cluster-management/rcm-controller:latest

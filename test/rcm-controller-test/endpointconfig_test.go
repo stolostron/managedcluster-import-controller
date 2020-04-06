@@ -1,3 +1,5 @@
+// +build functional
+
 package rcm_controller_test
 
 import (
@@ -20,7 +22,6 @@ var _ = Describe("Endpointconfig", func() {
 	)
 
 	BeforeEach(func() {
-		skipIfNotSet()
 		patchString = fmt.Sprintf(
 			"[{\"op\":\"%s\",\"path\":\"%s\",\"value\":%t}]",
 			"replace", "/spec/applicationManager/enabled", false,
