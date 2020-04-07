@@ -58,6 +58,9 @@ test: component/test/unit
 ## Builds controller binary inside of an image
 build: component/build
 
+copyright-check:
+	./build/copyright-check.sh $(TRAVIS_BRANCH)
+
 .PHONY: clean
 ## Clean build-harness and remove Go generated build and test files
 clean::
