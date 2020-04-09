@@ -33,7 +33,6 @@ jobs:
     - stage: build
       name: "Run all checks, unit tests, build and push image"
       script:
-        - make copyright-check TRAVIS_BRANCH=${TRAVIS_BRANCH}
         - if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}"; fi;
         - ./build/travis.sh   # to remove overhead and keep output clean
         - make security/scans
