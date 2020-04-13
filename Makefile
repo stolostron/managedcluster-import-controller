@@ -48,7 +48,7 @@ deps: init component/init
 
 .PHONY: check
 ## Runs a set of required checks
-check: lint ossccheck
+check: lint ossccheck copyright-check
 
 .PHONY: test
 ## Runs go unit tests
@@ -57,6 +57,10 @@ test: component/test/unit
 .PHONY: build
 ## Builds controller binary inside of an image
 build: component/build
+
+.PHONY: copyright-check
+copyright-check:
+	./build/copyright-check.sh $(TRAVIS_BRANCH)
 
 .PHONY: clean
 ## Clean build-harness and remove Go generated build and test files
