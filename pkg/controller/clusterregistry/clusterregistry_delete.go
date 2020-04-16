@@ -74,11 +74,7 @@ func newDeleteJob(r *ReconcileCluster, cluster *clusterregistryv1alpha1.Cluster)
 		endpointConfig.Spec.ImageRegistry = os.Getenv("DEFAULT_IMAGE_REGISTRY")
 	}
 
-	imageTagPostfix := os.Getenv(clusterimport.ImageTagPostfixKey)
-	operatorImageName := endpointConfig.Spec.ImageRegistry +
-		"/" + clusterimport.EndpointOperatorImageName +
-		endpointConfig.Spec.ImageNamePostfix +
-		":" + endpointConfig.Spec.Version + imageTagPostfix
+	operatorImageName, _, _ := clusterimport.GetEndpointOperatorImage(endpointConfig)
 
 	jobBackoff := int32(0) // 0 = no retries before the job fails
 	return &batchv1.Job{

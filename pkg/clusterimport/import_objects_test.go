@@ -30,6 +30,7 @@ func TestNewOperatorDeployment(t *testing.T) {
 	type expectValues struct {
 		imageName          string
 		imageTagPostfixEnv string
+		useSHA             string
 	}
 
 	tests := []struct {
@@ -48,7 +49,7 @@ func TestNewOperatorDeployment(t *testing.T) {
 				},
 				imageTagPostfix: "",
 			},
-			want: expectValues{"sample-registry/uniquePath/endpoint-operator:2.3.0", ""},
+			want: expectValues{"sample-registry/uniquePath/endpoint-operator:2.3.0", "", "false"},
 		},
 		{
 			name: "With Postfix Set",
@@ -61,7 +62,7 @@ func TestNewOperatorDeployment(t *testing.T) {
 				},
 				imageTagPostfix: "-Unique-Postfix",
 			},
-			want: expectValues{"sample-registry-2/uniquePath-2/endpoint-operator:1.2.0-Unique-Postfix", "-Unique-Postfix"},
+			want: expectValues{"sample-registry-2/uniquePath-2/endpoint-operator:1.2.0-Unique-Postfix", "-Unique-Postfix", "false"},
 		},
 	}
 
@@ -76,6 +77,8 @@ func TestNewOperatorDeployment(t *testing.T) {
 			assert.Equal(t, deployment.Spec.Template.Spec.Containers[0].Image, tt.want.imageName, "image name should match")
 			assert.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[3].Name, ImageTagPostfixKey)
 			assert.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[3].Value, tt.want.imageTagPostfixEnv, "tag postfix should be passed to env")
+			assert.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[4].Name, "USE_SHA_MANIFEST")
+			assert.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[4].Value, tt.want.useSHA, "tag postfix should be passed to env")
 		})
 	}
 }
@@ -86,4 +89,96 @@ func TestGenerateEndpointCRD(t *testing.T) {
 		t.Errorf("Cannot generate endpoint crd: %v", err)
 		return
 	}
+}
+
+func TestGetEndpointOperatorImage(t *testing.T) {
+	type args struct {
+		endpointConfig      *multicloudv1alpha1.EndpointConfig
+		imageTagPostfix     string
+		endpointOperatorSHA string
+	}
+	type expectValues struct {
+		image           string
+		imageTagPostfix string
+		useSHA          bool
+	}
+	tests := []struct {
+		name string
+		args args
+		want expectValues
+	}{
+		{
+			name: "SHA Only",
+			args: args{
+				endpointConfig: &multicloudv1alpha1.EndpointConfig{
+					Spec: multicloudv1beta1.EndpointSpec{
+						ImageRegistry: "sample-registry/uniquePath",
+						Version:       "2.3.0",
+					},
+				},
+				imageTagPostfix:     "",
+				endpointOperatorSHA: "abcdefghijklmn",
+			},
+			want: expectValues{"sample-registry/uniquePath/endpoint-operator@abcdefghijklmn", "", true},
+		},
+		{
+			name: "Empty Postfix",
+			args: args{
+				endpointConfig: &multicloudv1alpha1.EndpointConfig{
+					Spec: multicloudv1beta1.EndpointSpec{
+						ImageRegistry: "sample-registry/uniquePath",
+						Version:       "2.3.0",
+					},
+				},
+				imageTagPostfix:     "",
+				endpointOperatorSHA: "",
+			},
+			want: expectValues{"sample-registry/uniquePath/endpoint-operator:2.3.0", "", false},
+		},
+		{
+			name: "Postfix set",
+			args: args{
+				endpointConfig: &multicloudv1alpha1.EndpointConfig{
+					Spec: multicloudv1beta1.EndpointSpec{
+						ImageRegistry: "sample-registry/uniquePath",
+						Version:       "2.3.0",
+					},
+				},
+				imageTagPostfix:     "-postfix",
+				endpointOperatorSHA: "",
+			},
+			want: expectValues{"sample-registry/uniquePath/endpoint-operator:2.3.0-postfix", "-postfix", false},
+		},
+		{
+			name: "SHA and Postfix both set",
+			args: args{
+				endpointConfig: &multicloudv1alpha1.EndpointConfig{
+					Spec: multicloudv1beta1.EndpointSpec{
+						ImageRegistry: "sample-registry/uniquePath",
+						Version:       "2.3.0",
+					},
+				},
+				imageTagPostfix:     "-postfix",
+				endpointOperatorSHA: "fdklfjasdklfj",
+			},
+			want: expectValues{"sample-registry/uniquePath/endpoint-operator@fdklfjasdklfj", "-postfix", true},
+		},
+	}
+	for _, tt := range tests {
+
+		t.Run(tt.name, func(t *testing.T) {
+			if err := os.Setenv(ImageTagPostfixKey, tt.args.imageTagPostfix); err != nil {
+				t.Errorf("Cannot set env %s", ImageTagPostfixKey)
+			}
+
+			if err := os.Setenv(EndpointOperatorSHAKey, tt.args.endpointOperatorSHA); err != nil {
+				t.Errorf("Cannot set env %s", EndpointOperatorSHAKey)
+			}
+			image, postfix, useSHA := GetEndpointOperatorImage(tt.args.endpointConfig)
+			assert.Equal(t, image, tt.want.image, "image name should match")
+			assert.Equal(t, postfix, tt.want.imageTagPostfix, "postfix should match")
+			assert.Equal(t, useSHA, tt.want.useSHA, "postfix should match")
+		})
+	}
+
 }
