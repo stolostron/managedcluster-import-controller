@@ -48,6 +48,9 @@ const EndpointOperatorImageName = "endpoint-operator"
 // ImageTagPostfixKey is the name of the environment variable of endpoint operator image tag's postfix
 const ImageTagPostfixKey = "IMAGE_TAG_POSTFIX"
 
+// EndpointOperatorSHAKey is the name of the environment variable of endpoint operator image's sha
+const EndpointOperatorSHAKey = "ENDPOINT_OPERATOR_SHA"
+
 var log = logf.Log.WithName("clusterimport")
 
 // GenerateEndpointCRD returns an array of runtime.Object, which contains only the endpoint crd
@@ -260,16 +263,34 @@ func newEndpointImagePullSecret(client client.Client, endpointConfig *multicloud
 	}, nil
 }
 
-func newOperatorDeployment(endpointConfig *multicloudv1alpha1.EndpointConfig) *appsv1.Deployment {
-	imageTagPostfix := os.Getenv(ImageTagPostfixKey)
-
+// GetEndpointOperatorImage returns endpoint-operator image, imageTagPostfix, and a boolean indicates use SHA or not.
+// If `ENDPOINT_OPERATOR_SHA` env var is set, will return true for the boolean of useSHA.
+func GetEndpointOperatorImage(endpointConfig *multicloudv1alpha1.EndpointConfig) (string, string, bool) {
 	imageName := endpointConfig.Spec.ImageRegistry +
 		"/" + EndpointOperatorImageName +
-		endpointConfig.Spec.ImageNamePostfix +
-		":" + endpointConfig.Spec.Version + imageTagPostfix
+		endpointConfig.Spec.ImageNamePostfix
+	imageTagPostfix := os.Getenv(ImageTagPostfixKey)
+	endpointOperatorSHA := os.Getenv(EndpointOperatorSHAKey)
+	if endpointOperatorSHA != "" {
+		imageName = imageName +
+			"@" + endpointOperatorSHA
+		return imageName, imageTagPostfix, true
+	}
+	imageName = imageName + ":" + endpointConfig.Spec.Version + imageTagPostfix
+
+	return imageName, imageTagPostfix, false
+}
+
+func newOperatorDeployment(endpointConfig *multicloudv1alpha1.EndpointConfig) *appsv1.Deployment {
+	imageName, imageTagPostfix, useSHA := GetEndpointOperatorImage(endpointConfig)
 	imagePullSecrets := []corev1.LocalObjectReference{}
 	if len(endpointConfig.Spec.ImagePullSecret) > 0 {
 		imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{Name: endpointConfig.Spec.ImagePullSecret})
+	}
+
+	useSHAManifestEnv := "false"
+	if useSHA {
+		useSHAManifestEnv = "true"
 	}
 
 	return &appsv1.Deployment{
@@ -320,6 +341,10 @@ func newOperatorDeployment(endpointConfig *multicloudv1alpha1.EndpointConfig) *a
 								{
 									Name:  ImageTagPostfixKey,
 									Value: imageTagPostfix,
+								},
+								{
+									Name:  "USE_SHA_MANIFEST",
+									Value: useSHAManifestEnv,
 								},
 							},
 						},
