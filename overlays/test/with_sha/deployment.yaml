@@ -1,0 +1,16 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rcm-controller
+spec:
+  template:
+    spec:
+      imagePullSecrets:
+      - name: multiclusterhub-operator-pull-secret
+      containers:
+      - name: rcm-controller
+        env:
+        - name: ENDPOINT_OPERATOR_SHA
+          value: "sha256:somerandomsha"
+        - name: IMAGE_TAG_POSTFIX
+          value: "-postfix"
