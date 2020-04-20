@@ -171,6 +171,8 @@ var _ = Describe("Endpointconfig", func() {
 		Expect(err).To(BeNil())
 		endpointOperatorSHA := getEnv(dep, "", "ENDPOINT_OPERATOR_SHA")
 		imageTagPostfix := getEnv(dep, "", "IMAGE_TAG_POSTFIX")
+		klog.V(1).Info("ENDPOINT_OPERATOR_SHA: " + endpointOperatorSHA)
+		klog.V(1).Info("IMAGE_TAG_POSTFIX: " + imageTagPostfix)
 
 		// checks of using SHA
 		useSHAImageSecretCheck := "image: .*@" + endpointOperatorSHA

@@ -130,14 +130,6 @@ kind-cluster-setup: install-fake-crds
 	@echo installing fake infrastructure resource
 	kubectl apply -f test/fake_infrastructure_cr.yaml
 
-
-.PHONY: kind-install-rcm-controller
-kind-install-rcm-controller:
-	@echo installing rcm-controller
-	kubectl apply -k overlays/test
-	@echo creating default imagePullSecret
-	@kubectl create secret -n open-cluster-management docker-registry multiclusterhub-operator-pull-secret --docker-server=quay.io --docker-username=${DOCKER_USER} --docker-password=${DOCKER_PASS}
-
 .PHONY: functional-test
 functional-test:
 	ginkgo -tags functional -v --slowSpecThreshold=10 test/rcm-controller-test

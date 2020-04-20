@@ -44,18 +44,28 @@ echo "install cluster"
 # setup cluster
 make kind-cluster-setup
 
-# install rcm-controller
-echo "install rcm-controller"
-make kind-install-rcm-controller
+for dir in overlays/test/* ; do
+  echo ">>>>>>>>>>>>>>>Executing test: $dir"
+  
+  # install rcm-controller
+  echo "install rcm-controller"
+  kubectl apply -k "$dir"
+  echo "install imagePullSecret"
+  kubectl create secret -n open-cluster-management docker-registry multiclusterhub-operator-pull-secret --docker-server=quay.io --docker-username=${DOCKER_USER} --docker-password=${DOCKER_PASS}
+  
+  # patch image
+  echo "patch image"
+  kubectl patch deployment rcm-controller -n open-cluster-management -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"rcm-controller\",\"image\":\"${DOCKER_IMAGE_AND_TAG}\"}]}}}}"
+  kubectl rollout status -n open-cluster-management deployment rcm-controller --timeout=90s
+  sleep 10
+  
+  echo "run functional test..."
+  make functional-test
+  
+  echo "remove deployment"
+  kubectl delete -k "$dir"
 
-# patch image
-echo "patch image"
-kubectl patch deployment rcm-controller -n open-cluster-management -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"rcm-controller\",\"image\":\"${DOCKER_IMAGE_AND_TAG}\"}]}}}}"
-kubectl rollout status -n open-cluster-management deployment rcm-controller --timeout=90s
-sleep 10
-
-echo "running functional test..."
-make functional-test
+done;
 
 echo "delete cluster"
 make kind-delete-cluster 
