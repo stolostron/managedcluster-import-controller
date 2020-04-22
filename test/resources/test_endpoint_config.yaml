@@ -10,7 +10,7 @@ spec:
     hubSecret: multicluster-endpoint/klusterlet-bootstrap
   clusterLabels:
     cloud: auto-detect
-    vednor: auto-detect
+    vendor: auto-detect
   clusterName: cluster-controller-test
   clusterNamespace: cluster-controller-test
   connectionManager:
@@ -18,15 +18,10 @@ spec:
   imageRegistry: quay.io/open-cluster-management
   policyController:
     enabled: true
-  prometheusIntegration:
-    enabled: true
   searchCollector:
     enabled: true
   serviceRegistry:
     enabled: true
-  topologyCollector:
-    enabled: true
-    updateInterval: 0
   certPolicyController:
     enabled: true
   cisController:
