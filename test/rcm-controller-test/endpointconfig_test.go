@@ -165,21 +165,21 @@ var _ = Describe("Endpointconfig", func() {
 
 	})
 
-	It("Should use SHA if ENDPOINT_OPERATOR_SHA is set, and use tag when ENDPOINT_OPERATOR_SHA is empty", func() {
+	It("Should use SHA if ENDPOINT_OPERATOR_IMAGE is set, and use tag when ENDPOINT_OPERATOR_SHA is empty", func() {
 		By("Checking current rcm-controller deployment")
 		dep, err := getRcmController(clientHub)
 		Expect(err).To(BeNil())
-		endpointOperatorSHA := getEnv(dep, "", "ENDPOINT_OPERATOR_SHA")
+		endpointOperatorImage := getEnv(dep, "", "ENDPOINT_OPERATOR_IMAGE")
 		imageTagPostfix := getEnv(dep, "", "IMAGE_TAG_POSTFIX")
-		klog.V(1).Info("ENDPOINT_OPERATOR_SHA: " + endpointOperatorSHA)
+		klog.V(1).Info("ENDPOINT_OPERATOR_IMAGE: " + endpointOperatorImage)
 		klog.V(1).Info("IMAGE_TAG_POSTFIX: " + imageTagPostfix)
 
 		// checks of using SHA
-		useSHAImageSecretCheck := "image: .*@" + endpointOperatorSHA
+		useSHAImageSecretCheck := "image: " + endpointOperatorImage
 		useSHAEnvSecretCheck := "USE_SHA_MANIFEST[\\n\\r\\s]+value: \"true\""
-		useSHAImageSyncsetCheck := "\"image\":\".*@" + endpointOperatorSHA + "\""
+		useSHAImageSyncsetCheck := "\"image\":\"" + endpointOperatorImage + "\""
 		useSHAEnvSyncsetCheck := "{\"name\":\"USE_SHA_MANIFEST\",\"value\":\"true\"}"
-		if endpointOperatorSHA == "" {
+		if imageTagPostfix != "" {
 			klog.V(1).Info("ENDPOINT_OPERATOR_SHA is empty")
 			// checks of not using SHA
 			useSHAImageSecretCheck = "image: [^:]*:.*" + imageTagPostfix
