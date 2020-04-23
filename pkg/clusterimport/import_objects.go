@@ -48,8 +48,8 @@ const EndpointOperatorImageName = "endpoint-operator"
 // ImageTagPostfixKey is the name of the environment variable of endpoint operator image tag's postfix
 const ImageTagPostfixKey = "IMAGE_TAG_POSTFIX"
 
-// EndpointOperatorSHAKey is the name of the environment variable of endpoint operator image's sha
-const EndpointOperatorSHAKey = "ENDPOINT_OPERATOR_SHA"
+// EndpointOperatorImageKey is the path of the endpoint operator image
+const EndpointOperatorImageKey = "ENDPOINT_OPERATOR_IMAGE"
 
 var log = logf.Log.WithName("clusterimport")
 
@@ -264,21 +264,26 @@ func newEndpointImagePullSecret(client client.Client, endpointConfig *multicloud
 }
 
 // GetEndpointOperatorImage returns endpoint-operator image, imageTagPostfix, and a boolean indicates use SHA or not.
-// If `ENDPOINT_OPERATOR_SHA` env var is set, will return true for the boolean of useSHA.
-func GetEndpointOperatorImage(endpointConfig *multicloudv1alpha1.EndpointConfig) (string, string, bool) {
-	imageName := endpointConfig.Spec.ImageRegistry +
+// If `IMAGE_TAG_POSTFIX` env var is set, will return false for the boolean of useSHA.
+func GetEndpointOperatorImage(endpointConfig *multicloudv1alpha1.EndpointConfig) (imageName string, imageTagPostfix string, useSHA bool) {
+	imageTagPostfix = os.Getenv(ImageTagPostfixKey)
+	imageName = endpointConfig.Spec.ImageRegistry +
 		"/" + EndpointOperatorImageName +
-		endpointConfig.Spec.ImageNamePostfix
-	imageTagPostfix := os.Getenv(ImageTagPostfixKey)
-	endpointOperatorSHA := os.Getenv(EndpointOperatorSHAKey)
-	if endpointOperatorSHA != "" {
-		imageName = imageName +
-			"@" + endpointOperatorSHA
-		return imageName, imageTagPostfix, true
-	}
-	imageName = imageName + ":" + endpointConfig.Spec.Version + imageTagPostfix
+		endpointConfig.Spec.ImageNamePostfix +
+		":" + endpointConfig.Spec.Version
 
-	return imageName, imageTagPostfix, false
+	if imageTagPostfix != "" {
+		imageName += imageTagPostfix
+		return imageName, imageTagPostfix, false
+	}
+
+	endpointOperatorImage := os.Getenv(EndpointOperatorImageKey)
+
+	if endpointOperatorImage != "" {
+		imageName = endpointOperatorImage
+	}
+
+	return imageName, "", true
 }
 
 func newOperatorDeployment(endpointConfig *multicloudv1alpha1.EndpointConfig) *appsv1.Deployment {

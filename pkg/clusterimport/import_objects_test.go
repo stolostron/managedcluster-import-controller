@@ -49,7 +49,7 @@ func TestNewOperatorDeployment(t *testing.T) {
 				},
 				imageTagPostfix: "",
 			},
-			want: expectValues{"sample-registry/uniquePath/endpoint-operator:2.3.0", "", "false"},
+			want: expectValues{"sample-registry/uniquePath/endpoint-operator:2.3.0", "", "true"},
 		},
 		{
 			name: "With Postfix Set",
@@ -93,9 +93,9 @@ func TestGenerateEndpointCRD(t *testing.T) {
 
 func TestGetEndpointOperatorImage(t *testing.T) {
 	type args struct {
-		endpointConfig      *multicloudv1alpha1.EndpointConfig
-		imageTagPostfix     string
-		endpointOperatorSHA string
+		endpointConfig        *multicloudv1alpha1.EndpointConfig
+		imageTagPostfix       string
+		endpointOperatorImage string
 	}
 	type expectValues struct {
 		image           string
@@ -116,8 +116,8 @@ func TestGetEndpointOperatorImage(t *testing.T) {
 						Version:       "2.3.0",
 					},
 				},
-				imageTagPostfix:     "",
-				endpointOperatorSHA: "abcdefghijklmn",
+				imageTagPostfix:       "",
+				endpointOperatorImage: "sample-registry/uniquePath/endpoint-operator@abcdefghijklmn",
 			},
 			want: expectValues{"sample-registry/uniquePath/endpoint-operator@abcdefghijklmn", "", true},
 		},
@@ -130,10 +130,10 @@ func TestGetEndpointOperatorImage(t *testing.T) {
 						Version:       "2.3.0",
 					},
 				},
-				imageTagPostfix:     "",
-				endpointOperatorSHA: "",
+				imageTagPostfix:       "",
+				endpointOperatorImage: "",
 			},
-			want: expectValues{"sample-registry/uniquePath/endpoint-operator:2.3.0", "", false},
+			want: expectValues{"sample-registry/uniquePath/endpoint-operator:2.3.0", "", true},
 		},
 		{
 			name: "Postfix set",
@@ -144,8 +144,8 @@ func TestGetEndpointOperatorImage(t *testing.T) {
 						Version:       "2.3.0",
 					},
 				},
-				imageTagPostfix:     "-postfix",
-				endpointOperatorSHA: "",
+				imageTagPostfix:       "-postfix",
+				endpointOperatorImage: "",
 			},
 			want: expectValues{"sample-registry/uniquePath/endpoint-operator:2.3.0-postfix", "-postfix", false},
 		},
@@ -158,10 +158,10 @@ func TestGetEndpointOperatorImage(t *testing.T) {
 						Version:       "2.3.0",
 					},
 				},
-				imageTagPostfix:     "-postfix",
-				endpointOperatorSHA: "fdklfjasdklfj",
+				imageTagPostfix:       "-postfix",
+				endpointOperatorImage: "sample-registry/uniquePath/endpoint-operator@fdklfjasdklfj",
 			},
-			want: expectValues{"sample-registry/uniquePath/endpoint-operator@fdklfjasdklfj", "-postfix", true},
+			want: expectValues{"sample-registry/uniquePath/endpoint-operator:2.3.0-postfix", "-postfix", false},
 		},
 	}
 	for _, tt := range tests {
@@ -171,8 +171,8 @@ func TestGetEndpointOperatorImage(t *testing.T) {
 				t.Errorf("Cannot set env %s", ImageTagPostfixKey)
 			}
 
-			if err := os.Setenv(EndpointOperatorSHAKey, tt.args.endpointOperatorSHA); err != nil {
-				t.Errorf("Cannot set env %s", EndpointOperatorSHAKey)
+			if err := os.Setenv(EndpointOperatorImageKey, tt.args.endpointOperatorImage); err != nil {
+				t.Errorf("Cannot set env %s", EndpointOperatorImageKey)
 			}
 			image, postfix, useSHA := GetEndpointOperatorImage(tt.args.endpointConfig)
 			assert.Equal(t, image, tt.want.image, "image name should match")

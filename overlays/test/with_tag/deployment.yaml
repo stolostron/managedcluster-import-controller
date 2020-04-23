@@ -10,7 +10,7 @@ spec:
       containers:
       - name: rcm-controller
         env:
-        - name: ENDPOINT_OPERATOR_SHA
-          value: ""
+        - name: ENDPOINT_OPERATOR_IMAGE
+          value: "somerepo/endpoint-operator@sha256:somerandomsha"
         - name: IMAGE_TAG_POSTFIX
           value: "-postfix"
