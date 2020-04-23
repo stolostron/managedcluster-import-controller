@@ -267,6 +267,12 @@ func newEndpointImagePullSecret(client client.Client, endpointConfig *multicloud
 // If `IMAGE_TAG_POSTFIX` env var is set, will return false for the boolean of useSHA.
 func GetEndpointOperatorImage(endpointConfig *multicloudv1alpha1.EndpointConfig) (imageName string, imageTagPostfix string, useSHA bool) {
 	imageTagPostfix = os.Getenv(ImageTagPostfixKey)
+	endpointOperatorImage := os.Getenv(EndpointOperatorImageKey)
+	useSHA = imageTagPostfix == ""
+	if endpointConfig.Spec.ImageRegistry == "" {
+		return endpointOperatorImage, imageTagPostfix, useSHA
+	}
+
 	imageName = endpointConfig.Spec.ImageRegistry +
 		"/" + EndpointOperatorImageName +
 		endpointConfig.Spec.ImageNamePostfix +
@@ -274,16 +280,14 @@ func GetEndpointOperatorImage(endpointConfig *multicloudv1alpha1.EndpointConfig)
 
 	if imageTagPostfix != "" {
 		imageName += imageTagPostfix
-		return imageName, imageTagPostfix, false
+		return imageName, imageTagPostfix, useSHA
 	}
-
-	endpointOperatorImage := os.Getenv(EndpointOperatorImageKey)
 
 	if endpointOperatorImage != "" {
 		imageName = endpointOperatorImage
 	}
 
-	return imageName, "", true
+	return imageName, "", useSHA
 }
 
 func newOperatorDeployment(endpointConfig *multicloudv1alpha1.EndpointConfig) *appsv1.Deployment {
