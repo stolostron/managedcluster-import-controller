@@ -1,3 +1,20 @@
+FROM openshift/origin-release:golang-1.13 as builder
+
+ARG REMOTE_SOURCE
+ARG REMOTE_SOURCE_DIR
+ARG GITHUB_TOKEN
+
+ENV USE_VENDORIZED_BUILD_HARNESS=true
+ENV COMPONENT_NAME=rcm-controller
+ENV COMPONENT_VERSION=1.0
+ENV COMPONENT_TAG_EXTENSION=" "
+#RUN yum install -y tar gzip make which
+
+COPY $REMOTE_SOURCE $REMOTE_SOURCE_DIR/app/
+WORKDIR $REMOTE_SOURCE_DIR/app
+RUN git config --global url."https://${GITHUB_TOKEN}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
+RUN GOFLAGS="" go build ./cmd/manager
+
 FROM registry.access.redhat.com/ubi8/ubi-minimal:8.1-398
 
 ARG VCS_REF
@@ -5,6 +22,7 @@ ARG VCS_URL
 ARG IMAGE_NAME
 ARG IMAGE_DESCRIPTION
 ARG ARCH_TYPE
+ARG REMOTE_SOURCE_DIR
 
 ENV OPERATOR=/usr/local/bin/rcm-controller \
     USER_UID=1001 \
@@ -12,12 +30,22 @@ ENV OPERATOR=/usr/local/bin/rcm-controller \
     ENDPOINT_CRD_FILE=/usr/local/resources/multicloud_v1beta1_endpoint_crd.yaml
 
 # install operator binary
-COPY build/_output/bin/rcm-controller ${OPERATOR}
-
-COPY build/bin /usr/local/bin
-COPY build/resources /usr/local/resources
+COPY --from=builder $REMOTE_SOURCE_DIR/app/manager ${OPERATOR}
+COPY --from=builder $REMOTE_SOURCE_DIR/app/build/bin /usr/local/bin
+COPY --from=builder $REMOTE_SOURCE_DIR/app/build/resources /usr/local/resources
 RUN  /usr/local/bin/user_setup
 
 ENTRYPOINT ["/usr/local/bin/entrypoint"]
 
 USER ${USER_UID}
+
+LABEL com.redhat.component="rcm-controller-container" \
+      name="rhacm1-tech-preview/rcm-controller-rhel8" \
+      version="${CI_CONTAINER_VERSION}" \
+      release="${CI_CONTAINER_RELEASE}" \
+      summary="rcm-controller" \
+      io.openshift.expose-services="" \
+      io.openshift.tags="data,images" \
+      io.k8s.display-name="rcm-controller" \
+      maintainer="['eisraeli@redhat.com', 'jbieren@redhat.com']" \
+      description="rcm-controller"
