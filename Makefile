@@ -35,7 +35,7 @@ export DOCKER_BUILD_OPTS  = --build-arg "VCS_REF=$(VCS_REF)" \
 	--build-arg "VCS_URL=$(GIT_REMOTE_URL)" \
 	--build-arg "IMAGE_NAME=$(DOCKER_IMAGE)" \
 	--build-arg "IMAGE_DESCRIPTION=$(IMAGE_DESCRIPTION)" \
-	--build-arg "ARCH_TYPE=$(ARCH_TYPE)"
+	--build-arg "ARCH_TYPE=$(ARCH_TYPE)" 
 
 BEFORE_SCRIPT := $(shell build/before-make.sh)
 
@@ -56,7 +56,13 @@ test: component/test/unit
 
 .PHONY: build
 ## Builds controller binary inside of an image
-build: component/build
+build:
+	docker build . \
+	--build-arg "REMOTE_SOURCE=." \
+	--build-arg "REMOTE_SOURCE_DIR=/remote-source" \
+	--build-arg "GITHUB_TOKEN=$(GITHUB_TOKEN)" \
+	-t $(DOCKER_IMAGE):$(DOCKER_BUILD_TAG) \
+	-f build/Dockerfile
 
 .PHONY: copyright-check
 copyright-check:
