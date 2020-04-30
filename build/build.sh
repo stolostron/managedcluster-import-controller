@@ -11,7 +11,6 @@
 # PARAMETERS
 # $1 - Final image name and tag to be produced
 
-
 make build
 if [ ! -z "$TRAVIS" ]; then
     echo "Retagging image as $1"

@@ -23,6 +23,9 @@ export BUILD_DIR              = $(PROJECT_DIR)/build
 export COMPONENT_SCRIPTS_PATH = $(BUILD_DIR)
 export ENDPOINT_CRD_FILE      = $(PROJECT_DIR)/build/resources/multicloud_v1beta1_endpoint_crd.yaml
 
+export COMPONENT_NAME ?= $(shell cat ./COMPONENT_NAME 2> /dev/null)
+export COMPONENT_VERSION ?= $(shell cat ./COMPONENT_VERSION 2> /dev/null)
+
 ## WARNING: OPERATOR-SDK - IMAGE_DESCRIPTION & DOCKER_BUILD_OPTS MUST NOT CONTAIN ANY SPACES
 export IMAGE_DESCRIPTION ?= RCM_Controller
 export DOCKER_FILE        = $(BUILD_DIR)/Dockerfile
@@ -39,8 +42,20 @@ export DOCKER_BUILD_OPTS  = --build-arg "VCS_REF=$(VCS_REF)" \
 
 BEFORE_SCRIPT := $(shell build/before-make.sh)
 
--include $(shell curl -s -H 'Authorization: token ${GITHUB_TOKEN}' -H 'Accept: application/vnd.github.v4.raw' -L https://api.github.com/repos/open-cluster-management/build-harness-extensions/contents/templates/Makefile.build-harness-bootstrap -o .build-harness-bootstrap; echo .build-harness-bootstrap)
+USE_VENDORIZED_BUILD_HARNESS ?=
 
+ifndef USE_VENDORIZED_BUILD_HARNESS
+-include $(shell curl -s -H 'Authorization: token ${GITHUB_TOKEN}' -H 'Accept: application/vnd.github.v4.raw' -L https://api.github.com/repos/open-cluster-management/build-harness-extensions/contents/templates/Makefile.build-harness-bootstrap -o .build-harness-bootstrap; echo .build-harness-bootstrap)
+else
+-include vbh/.build-harness-vendorized
+endif
+
+# Only use git commands if it exists
+ifdef GIT
+GIT_COMMIT      = $(shell git rev-parse --short HEAD)
+GIT_REMOTE_URL  = $(shell git config --get remote.origin.url)
+VCS_REF     = $(if $(shell git status --porcelain),$(GIT_COMMIT)-$(BUILD_DATE),$(GIT_COMMIT))
+endif
 
 .PHONY: deps
 ## Download all project dependencies

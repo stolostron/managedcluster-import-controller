@@ -14,3 +14,8 @@ overlays/deploy
 .build-harness
 .build-harness-bootstrap
 OPENSOURCE.check
+
+# override build harness vendoring
+!vbh/.build-harness-vendorized
+!vbh/build-harness
+!vbh/build-harness-extensions
