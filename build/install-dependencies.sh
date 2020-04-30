@@ -15,7 +15,7 @@ export GO111MODULE=off
 if ! which patter > /dev/null; then      echo "Installing patter ..."; go get -u github.com/apg/patter; fi
 if ! which gocovmerge > /dev/null; then  echo "Installing gocovmerge..."; go get -u github.com/wadey/gocovmerge; fi
 if ! which golangci-lint > /dev/null; then
-    curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.23.6
+   curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.23.6
 fi
 if ! which ossc > /dev/null; then
 	# do a get in a tmp dir to avoid local go.mod update
