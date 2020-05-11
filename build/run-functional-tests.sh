@@ -16,6 +16,8 @@ KIND_KUBECONFIG="${CURR_FOLDER_PATH}/../kind_kubeconfig.yaml"
 export KUBECONFIG=${KIND_KUBECONFIG}
 export DOCKER_IMAGE_AND_TAG=${1}
 
+export FUNCT_TEST_TMPDIR="${CURR_FOLDER_PATH}/../test/functional_test_tmp"
+
 if ! which kubectl > /dev/null; then
     echo "installing kubectl"
     curl -LO https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
@@ -32,13 +34,36 @@ if ! which ginkgo > /dev/null; then
     go get github.com/onsi/ginkgo/ginkgo
     go get github.com/onsi/gomega/...
 fi
+if ! which gocovmerge > /dev/null; then
+  echo "Installing gocovmerge..."
+  go get -u github.com/wadey/gocovmerge
+fi
 
+echo "setting up test folder"
+[ -d "$FUNCT_TEST_TMPDIR" ] && rm -r "$FUNCT_TEST_TMPDIR"
+mkdir -p "$FUNCT_TEST_TMPDIR"
+mkdir -p "$FUNCT_TEST_TMPDIR/output"
+mkdir -p "$FUNCT_TEST_TMPDIR/kind-config"
+
+echo "generating kind configfile"
+cat << EOF > "${FUNCT_TEST_TMPDIR}/kind-config/kind-config.yaml"
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  extraMounts:
+  - hostPath: "${FUNCT_TEST_TMPDIR}/output"
+    containerPath: /tmp/coverage
+EOF
 
 echo "creating cluster"
-make kind-create-cluster 
+kind create cluster --name functional-test --config "${FUNCT_TEST_TMPDIR}/kind-config/kind-config.yaml"
 
 # setup kubeconfig
 kind get kubeconfig --name functional-test > ${KIND_KUBECONFIG}
+
+# load image if possible
+kind load docker-image ${DOCKER_IMAGE_AND_TAG} --name=functional-test -v 99 || echo "failed to load image locally, will use imagePullSecret"
 
 echo "install cluster"
 # setup cluster
@@ -68,5 +93,24 @@ for dir in overlays/test/* ; do
 done;
 
 echo "delete cluster"
-make kind-delete-cluster 
+kind delete cluster --name functional-test
 
+if [ `find $FUNCT_TEST_TMPDIR/output -prune -empty 2>/dev/null` ]; then
+  echo "no coverage files found. skipping"
+else
+  echo "merging coverage files"
+  # report coverage if has any coverage files
+  rm -rf "${CURR_FOLDER_PATH}/../test/coverage-functional"
+  mkdir -p "${CURR_FOLDER_PATH}/../test/coverage-functional"
+  
+  cp "$FUNCT_TEST_TMPDIR/output/"* "${CURR_FOLDER_PATH}/../test/coverage-functional/"
+  ls -l "${CURR_FOLDER_PATH}/../test/coverage-functional/"
+  
+  gocovmerge "${CURR_FOLDER_PATH}/../test/coverage-functional/"* >> "${CURR_FOLDER_PATH}/../test/coverage-functional/cover-functional.out"
+  COVERAGE=$(go tool cover -func="${CURR_FOLDER_PATH}/../test/coverage-functional/cover-functional.out" | grep "total:" | awk '{ print $3 }' | sed 's/[][()><%]/ /g')
+  echo "-------------------------------------------------------------------------"
+  echo "TOTAL COVERAGE IS ${COVERAGE}%"
+  echo "-------------------------------------------------------------------------"
+  
+  go tool cover -html "${CURR_FOLDER_PATH}/../test/coverage-functional/cover-functional.out" -o ${PROJECT_DIR}/test/coverage-functional/cover-functional.html
+fi

@@ -11,8 +11,8 @@
 # PARAMETERS
 # $1 - Final image name and tag to be produced
 export DOCKER_IMAGE_AND_TAG=${1}
-
-make build
+export DOCKER_BUILD_TAG=test-coverage
+make build-coverage
 
 if [ ! -z "$DOCKER_IMAGE_AND_TAG" ]; then
     echo "Retagging image as $DOCKER_IMAGE_AND_TAG"

@@ -5,12 +5,24 @@ metadata:
 spec:
   template:
     spec:
+      securityContext:
+        fsGroup: 2000
       imagePullSecrets:
       - name: multiclusterhub-operator-pull-secret
       containers:
       - name: rcm-controller
+        volumeMounts:
+          - mountPath: /tmp/coverage
+            name: coverage-dir 
         env:
         - name: ENDPOINT_OPERATOR_IMAGE
           value: "somerepo/endpoint-operator@sha256:somerandomsha"
         - name: IMAGE_TAG_POSTFIX
           value: "-postfix"
+      volumes:
+        - name: coverage-dir
+          hostPath:
+            # directory location on host
+            path: /tmp/coverage
+            # this field is optional
+            type: Directory
