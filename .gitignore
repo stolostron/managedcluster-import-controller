@@ -19,3 +19,9 @@ OPENSOURCE.check
 !vbh/.build-harness-vendorized
 !vbh/build-harness
 !vbh/build-harness-extensions
+
+# test outputs
+test/functional_test_tmp
+test/coverage-functional
+kind_kubeconfig.yaml
+
