@@ -19,8 +19,6 @@ spec:
       containers:
         - name: rcm-controller
           image: quay.io/open-cluster-management/rcm-controller:latest
-          command:
-          - rcm-controller
           imagePullPolicy: IfNotPresent
           env:
             - name: WATCH_NAMESPACE
