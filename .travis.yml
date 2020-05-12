@@ -36,7 +36,14 @@ jobs:
         - if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}"; fi;
         - ./build/travis.sh   # to remove overhead and keep output clean
         - make security/scans
-
+    - stage: build
+      name: "build and push coverage image"
+      if: type = pull_request
+      script:
+        - export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}-coverage"
+        - export COMPONENT_BUILD_COMMAND=${TRAVIS_BUILD_DIR}/build/build-coverage.sh 
+        - ./build/travis.sh
+    
     - stage: unit-test
       name: "Run unit tests"
       script:
@@ -49,6 +56,15 @@ jobs:
         - if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}"; fi; 
         - make component/pull
         - make component/test/functional
+    
+    - stage: functional-test
+      name: "Run functional-test for coverage"
+      if: type = pull_request
+      script:
+        - export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}-coverage"
+        - make component/pull
+        - make component/test/functional
+
     - stage: release-ff
       name: "Push commits to current release branch"
       if: type = push AND branch =~ /^master$/

@@ -38,7 +38,10 @@ export DOCKER_BUILD_OPTS  = --build-arg "VCS_REF=$(VCS_REF)" \
 	--build-arg "VCS_URL=$(GIT_REMOTE_URL)" \
 	--build-arg "IMAGE_NAME=$(DOCKER_IMAGE)" \
 	--build-arg "IMAGE_DESCRIPTION=$(IMAGE_DESCRIPTION)" \
-	--build-arg "ARCH_TYPE=$(ARCH_TYPE)" 
+	--build-arg "ARCH_TYPE=$(ARCH_TYPE)" \
+	--build-arg "REMOTE_SOURCE=." \
+	--build-arg "REMOTE_SOURCE_DIR=/remote-source" \
+	--build-arg "GITHUB_TOKEN=$(GITHUB_TOKEN)" \
 
 BEFORE_SCRIPT := $(shell build/before-make.sh)
 
@@ -72,12 +75,15 @@ test: component/test/unit
 .PHONY: build
 ## Builds controller binary inside of an image
 build:
-	docker build . \
-	--build-arg "REMOTE_SOURCE=." \
-	--build-arg "REMOTE_SOURCE_DIR=/remote-source" \
-	--build-arg "GITHUB_TOKEN=$(GITHUB_TOKEN)" \
+	docker build . $(DOCKER_BUILD_OPTS) \
 	-t $(DOCKER_IMAGE):$(DOCKER_BUILD_TAG) \
 	-f build/Dockerfile
+
+.PHONY: build-coverage
+build-coverage:
+	docker build . $(DOCKER_BUILD_OPTS) \
+	-t $(DOCKER_IMAGE):$(DOCKER_BUILD_TAG) \
+	-f build/Dockerfile-coverage
 
 .PHONY: copyright-check
 copyright-check:
@@ -127,14 +133,6 @@ deploy:
 	kustomize build overlays/deploy | kubectl apply -f -
 	rm -rf overlays/deploy
 
-.PHONY: kind-create-cluster
-kind-create-cluster:
-	kind create cluster --name functional-test
-
-.PHONY: kind-delete-cluster
-kind-delete-cluster:
-	kind delete cluster --name functional-test
-
 .PHONY: install-fake-crds
 install-fake-crds:
 	@echo installing crds
@@ -154,3 +152,8 @@ kind-cluster-setup: install-fake-crds
 .PHONY: functional-test
 functional-test:
 	ginkgo -tags functional -v --slowSpecThreshold=10 test/rcm-controller-test
+
+.PHONY: functional-test-full
+functional-test-full:
+	$(SELF) component/build COMPONENT_TAG_EXTENSION=-coverage COMPONENT_BUILD_COMMAND=$(PWD)/build/build-coverage.sh 
+	$(SELF) component/test/functional COMPONENT_TAG_EXTENSION=-coverage
