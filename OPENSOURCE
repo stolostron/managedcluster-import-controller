@@ -489,3 +489,5 @@ sigs.k8s.io/testing_frameworks,v0.1.2
 sigs.k8s.io/yaml,v1.1.0
 vbom.ml/util,db5cfe13f5cchttps://hub.docker.com/_/openshift/origin-release,golang-1.13
 https://hub.docker.com/_/registry.access.redhat.com/ubi8/ubi-minimal,8.1-398
+https://hub.docker.com/_/openshift/origin-release,golang-1.13
+https://hub.docker.com/_/registry.access.redhat.com/ubi8/ubi-minimal,8.1-398
