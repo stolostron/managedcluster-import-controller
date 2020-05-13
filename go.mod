@@ -8,7 +8,7 @@ require (
 	github.com/go-openapi/spec v0.19.4
 	github.com/onsi/ginkgo v1.10.1
 	github.com/onsi/gomega v1.7.0
-	github.com/open-cluster-management/endpoint-operator v0.0.0-20200423215617-8a1b5e9c26cf
+	github.com/open-cluster-management/endpoint-operator v1.0.0-2020-05-08-20-30-09.0.20200512004604-cd2721e73a24
 	github.com/open-cluster-management/multicloud-operators-foundation v0.0.0-20200212094214-a1cac8f162b8
 	github.com/openshift/api v3.9.1-0.20191112184635-86def77f6f90+incompatible
 	github.com/openshift/hive v0.0.0-20191113203026-f5faf34a8581
