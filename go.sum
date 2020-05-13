@@ -592,8 +592,8 @@ github.com/onsi/gomega v1.4.3/go.mod h1:ex+gbHU/CVuBBDIJjb2X0qEXbFg53c61hWP/1Cpa
 github.com/onsi/gomega v1.5.0/go.mod h1:ex+gbHU/CVuBBDIJjb2X0qEXbFg53c61hWP/1CpauHY=
 github.com/onsi/gomega v1.7.0 h1:XPnZz8VVBHjVsy1vzJmRwIcSwiUO+JFfrv/xGiigmME=
 github.com/onsi/gomega v1.7.0/go.mod h1:ex+gbHU/CVuBBDIJjb2X0qEXbFg53c61hWP/1CpauHY=
-github.com/open-cluster-management/endpoint-operator v0.0.0-20200423215617-8a1b5e9c26cf h1:JlOxc6+x+rbUw0yGJspFunGY73sQl+prN7oHa2J2jS4=
-github.com/open-cluster-management/endpoint-operator v0.0.0-20200423215617-8a1b5e9c26cf/go.mod h1:vYYITBJj6khftwnklrdklrlU2aOCREMlDUph8dE3wUE=
+github.com/open-cluster-management/endpoint-operator v1.0.0-2020-05-08-20-30-09.0.20200512004604-cd2721e73a24 h1:A4sA9wKHjAJ5wxar77ahrRl7SbLhZajmhwpKUMDcjG4=
+github.com/open-cluster-management/endpoint-operator v1.0.0-2020-05-08-20-30-09.0.20200512004604-cd2721e73a24/go.mod h1:vYYITBJj6khftwnklrdklrlU2aOCREMlDUph8dE3wUE=
 github.com/open-cluster-management/multicloud-operators-foundation v0.0.0-20200212094214-a1cac8f162b8 h1:lMXAR96O2IvK7qmpev5Llz/Nw0cQDwniyfkqIv2KckU=
 github.com/open-cluster-management/multicloud-operators-foundation v0.0.0-20200212094214-a1cac8f162b8/go.mod h1:PzAC8GI6WdlIKflk8wwge5KvxqGvtrTS6Ci5WD2INvU=
 github.com/opencontainers/go-digest v1.0.0-rc1 h1:WzifXhOVOEOuFYOJAW6aQqW0TooG2iki3E3Ii+WN7gQ=

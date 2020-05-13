@@ -23,8 +23,6 @@ spec:
     enabled: true
   searchCollector:
     enabled: true
-  serviceRegistry:
-    enabled: true
   certPolicyController:
     enabled: true
   cisController:

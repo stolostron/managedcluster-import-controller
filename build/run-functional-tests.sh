@@ -9,14 +9,25 @@
 ###############################################################################
 
 set -e
-
+#set -x
 
 CURR_FOLDER_PATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 KIND_KUBECONFIG="${CURR_FOLDER_PATH}/../kind_kubeconfig.yaml"
 export KUBECONFIG=${KIND_KUBECONFIG}
 export DOCKER_IMAGE_AND_TAG=${1}
 
+
+if [ -z $DOCKER_USER ]; then
+   echo "DOCKER_USER is not defined!"
+   exit 1
+fi
+if [ -z $DOCKER_PASS ]; then
+   echo "DOCKER_PASS is not defined!"
+   exit 1
+fi
+
 export FUNCT_TEST_TMPDIR="${CURR_FOLDER_PATH}/../test/functional_test_tmp"
+
 
 if ! which kubectl > /dev/null; then
     echo "installing kubectl"
@@ -71,22 +82,22 @@ make kind-cluster-setup
 
 for dir in overlays/test/* ; do
   echo ">>>>>>>>>>>>>>>Executing test: $dir"
-  
+
   # install rcm-controller
   echo "install rcm-controller"
   kubectl apply -k "$dir"
   echo "install imagePullSecret"
   kubectl create secret -n open-cluster-management docker-registry multiclusterhub-operator-pull-secret --docker-server=quay.io --docker-username=${DOCKER_USER} --docker-password=${DOCKER_PASS}
-  
+
   # patch image
   echo "patch image"
   kubectl patch deployment rcm-controller -n open-cluster-management -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"rcm-controller\",\"image\":\"${DOCKER_IMAGE_AND_TAG}\"}]}}}}"
   kubectl rollout status -n open-cluster-management deployment rcm-controller --timeout=90s
   sleep 10
-  
+
   echo "run functional test..."
   make functional-test
-  
+
   echo "remove deployment"
   kubectl delete -k "$dir"
 
@@ -102,15 +113,15 @@ else
   # report coverage if has any coverage files
   rm -rf "${CURR_FOLDER_PATH}/../test/coverage-functional"
   mkdir -p "${CURR_FOLDER_PATH}/../test/coverage-functional"
-  
+
   cp "$FUNCT_TEST_TMPDIR/output/"* "${CURR_FOLDER_PATH}/../test/coverage-functional/"
   ls -l "${CURR_FOLDER_PATH}/../test/coverage-functional/"
-  
+
   gocovmerge "${CURR_FOLDER_PATH}/../test/coverage-functional/"* >> "${CURR_FOLDER_PATH}/../test/coverage-functional/cover-functional.out"
   COVERAGE=$(go tool cover -func="${CURR_FOLDER_PATH}/../test/coverage-functional/cover-functional.out" | grep "total:" | awk '{ print $3 }' | sed 's/[][()><%]/ /g')
   echo "-------------------------------------------------------------------------"
   echo "TOTAL COVERAGE IS ${COVERAGE}%"
   echo "-------------------------------------------------------------------------"
-  
+
   go tool cover -html "${CURR_FOLDER_PATH}/../test/coverage-functional/cover-functional.out" -o ${PROJECT_DIR}/test/coverage-functional/cover-functional.html
 fi
