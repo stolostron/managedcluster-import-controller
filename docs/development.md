@@ -4,6 +4,8 @@
 
 - git
 - go version v1.12+
+
+<!-- OLD IBM stuff
 - Linting Tools
 
     | linting tool | version |
@@ -20,6 +22,7 @@
     | [tslint](https://github.com/palantir/tslint#installation--usage) | [v5.18.0](https://github.com/palantir/tslint/releases/tag/5.18.0)
     | [prototool](https://github.com/uber/prototool/blob/dev/docs/install.md) | `7df3b95` |
     | [goimports](https://godoc.org/golang.org/x/tools/cmd/goimports) | `3792095` |
+-->
 
 ## Developer quick start
 
@@ -29,16 +32,35 @@
 export GIT_HOST=github.com/<YOUR_GITHUB_ID>
 ```
 
-- Configure git
-
+- Setup Git personal access token
 ```bash
-git config --global url.git@github.com:rh-ibm-synergy/.insteadOf https://github.com/rh-ibm-synergy/
+export GITHUB_TOKEN=
+export GITHUB_USER=
 ```
 
-- Run the `linter` and `test` before building the binary.
+- Configure git to pull go modules
 
 ```bash
-make check
+git config --global url.git@github.com:open-cluster-management/.insteadOf https://github.com/open-cluster-management/
+```
+
+- Configure Go
+```
+export GOPRIVATE=github.com
+```
+
+- Build dependencies
+```bash
+make deps
+```
+*NOTE:* You may need to run this twice if it fails the first time
+
+- Build
+
+
+- Run the `test` before building the binary.
+
+```bash
 make test
 make build
 ```
