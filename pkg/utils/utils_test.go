@@ -20,7 +20,7 @@ import (
 )
 
 func init() {
-	os.Setenv("ENDPOINT_CRD_FILE", "../../build/resources/multicloud_v1beta1_endpoint_crd.yaml")
+	os.Setenv("KLUSTERLET_CRD_FILE", "../../build/resources/agent.open-cluster-management.io_v1beta1_klusterlet_crd.yaml")
 }
 
 func TestUniqueStringSlice(t *testing.T) {
@@ -90,7 +90,7 @@ func TestFileExist(t *testing.T) {
 		filename string
 		want     bool
 	}{
-		{"exist", os.Getenv("ENDPOINT_CRD_FILE"), true},
+		{"exist", os.Getenv("KLUSTERLET_CRD_FILE"), true},
 		{"dne", "do_not_exist.txt", false},
 	}
 	for _, tt := range tests {

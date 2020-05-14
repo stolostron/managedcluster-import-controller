@@ -38,7 +38,7 @@ var (
 	clientHub            kubernetes.Interface
 	clientHubDynamic     dynamic.Interface
 	gvrClusterregistry   schema.GroupVersionResource
-	gvrEndpointconfig    schema.GroupVersionResource
+	gvrKlusterletconfig  schema.GroupVersionResource
 	gvrClusterdeployment schema.GroupVersionResource
 	gvrSyncset           schema.GroupVersionResource
 	gvrSelectorsyncset   schema.GroupVersionResource
@@ -125,9 +125,9 @@ func newClusterdeployment(name string) *unstructured.Unstructured {
 	}
 }
 
-func newEndpointconfig(name, registry, imagePullSecret string) *unstructured.Unstructured {
+func newKlusterletConfig(name, registry, imagePullSecret string) *unstructured.Unstructured {
 	res := unstructured.Unstructured{}
-	r, err := os.Open("../../deploy/crds/multicloud_v1alpha1_endpointconfig_cr.yaml")
+	r, err := os.Open("../../deploy/crds/agent.open-cluster-management.io_v1beta1_klusterletconfig_cr.yaml")
 	Expect(err).To(BeNil())
 	err = yaml.NewYAMLOrJSONDecoder(r, 1024).Decode(&res)
 	Expect(err).To(BeNil())
@@ -261,7 +261,7 @@ func init() {
 var _ = BeforeSuite(func() {
 	By("Setup Hub client")
 	gvrClusterregistry = schema.GroupVersionResource{Group: "clusterregistry.k8s.io", Version: "v1alpha1", Resource: "clusters"}
-	gvrEndpointconfig = schema.GroupVersionResource{Group: "multicloud.ibm.com", Version: "v1alpha1", Resource: "endpointconfigs"}
+	gvrKlusterletconfig = schema.GroupVersionResource{Group: "agent.open-cluster-management.io", Version: "v1beta1", Resource: "klusterletconfigs"}
 	gvrClusterdeployment = schema.GroupVersionResource{Group: "hive.openshift.io", Version: "v1", Resource: "clusterdeployments"}
 	gvrSyncset = schema.GroupVersionResource{Group: "hive.openshift.io", Version: "v1", Resource: "syncsets"}
 	gvrSelectorsyncset = schema.GroupVersionResource{Group: "hive.openshift.io", Version: "v1", Resource: "selectorsyncsets"}

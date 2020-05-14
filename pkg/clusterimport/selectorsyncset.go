@@ -19,7 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const selectorSyncsetName = "multicluster-endpoint"
+const selectorSyncsetName = "klusterlet"
 const selectorSyncsetLabelName = "cluster-managed"
 const selectorSyncsetLabelValue = "true"
 
@@ -73,7 +73,7 @@ func RemoveClusterManagedLabels(clusterDeployment *hivev1.ClusterDeployment) *hi
 	return &res
 }
 
-// newSelectorSyncset generate the SelectorSyncset for installing multicluster-endpoint
+// newSelectorSyncset generate the SelectorSyncset for installing klusterlet
 func newSelectorSyncset() (*hivev1.SelectorSyncSet, error) {
 	runtimeObjects, err := generateCommonImportObjects()
 	if err != nil {
@@ -110,7 +110,7 @@ func newSelectorSyncset() (*hivev1.SelectorSyncSet, error) {
 	return sss, nil
 }
 
-// GetSelectorSyncset get the selector syncset use for installing multicluster-endpoint
+// GetSelectorSyncset get the selector syncset use for installing klusterlet
 func GetSelectorSyncset(client client.Client) (*hivev1.SelectorSyncSet, error) {
 	sss := &hivev1.SelectorSyncSet{}
 
@@ -121,7 +121,7 @@ func GetSelectorSyncset(client client.Client) (*hivev1.SelectorSyncSet, error) {
 	return sss, nil
 }
 
-// CreateSelectorSyncset create the selector syncset use for installing multicluster-endpoint
+// CreateSelectorSyncset create the selector syncset use for installing klusterlet
 func CreateSelectorSyncset(client client.Client) (*hivev1.SelectorSyncSet, error) {
 	sss, err := newSelectorSyncset()
 	if err != nil {

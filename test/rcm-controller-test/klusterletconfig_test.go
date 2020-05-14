@@ -54,9 +54,9 @@ func getEnv(d *appsv1.Deployment, contanerName, name string) string {
 	return ""
 }
 
-var _ = Describe("Endpointconfig", func() {
+var _ = Describe("KlusterletConfig", func() {
 	var (
-		patchString      string // string of endpointconfig patch
+		patchString      string // string of klusterletconfig patch
 		importYamlBefore string // regex for matching import.yaml in the import secret before updates
 		importYamlAfter  string // regex for matching mport.yaml in the import secret  after updates
 		syncsetBefore    string // regex for matching syncset (json format)
@@ -74,8 +74,8 @@ var _ = Describe("Endpointconfig", func() {
 		syncsetAfter = "\"applicationManager\":{\"enabled\":false}"
 	})
 	AfterEach(func() {
-		By("Delete endpointconfig if exist")
-		deleteIfExists(clientHubDynamic, gvrEndpointconfig, testNamespace, testNamespace)
+		By("Delete klusterletconfig if exist")
+		deleteIfExists(clientHubDynamic, gvrKlusterletconfig, testNamespace, testNamespace)
 
 		By("Delete cluster if exist")
 		deleteIfExists(clientHubDynamic, gvrClusterregistry, testNamespace, testNamespace)
@@ -86,7 +86,7 @@ var _ = Describe("Endpointconfig", func() {
 		By("Delete other resources")
 		deleteIfExists(clientHubDynamic, gvrServiceaccount, testNamespace+"-bootstrap-sa", testNamespace)
 		deleteIfExists(clientHubDynamic, gvrSecret, testNamespace+"-import", testNamespace)
-		deleteIfExists(clientHubDynamic, gvrSyncset, testNamespace+"-multicluster-endpoint", testNamespace)
+		deleteIfExists(clientHubDynamic, gvrSyncset, testNamespace+"-klusterlet", testNamespace)
 	})
 
 	It("Should update import secret", func() {
@@ -95,10 +95,10 @@ var _ = Describe("Endpointconfig", func() {
 		createNewUnstructured(clientHubDynamic, gvrClusterregistry,
 			cluster, testNamespace, testNamespace)
 
-		By("Creating endpointconfig with empty registry and imagePullSecret")
-		endpointconfig := newEndpointconfig(testNamespace, "", "")
-		createNewUnstructured(clientHubDynamic, gvrEndpointconfig,
-			endpointconfig, testNamespace, testNamespace)
+		By("Creating klusterletconfig with empty registry and imagePullSecret")
+		klusterletconfig := newKlusterletConfig(testNamespace, "", "")
+		createNewUnstructured(clientHubDynamic, gvrKlusterletconfig,
+			klusterletconfig, testNamespace, testNamespace)
 
 		By("Checking import secret")
 		importSecret := getSecretWithTimeout(clientHub, testNamespace+"-import", testNamespace, 15)
@@ -106,8 +106,8 @@ var _ = Describe("Endpointconfig", func() {
 		importYaml := string(importSecret.Data["import.yaml"])
 		Expect(importYaml).To(MatchRegexp(importYamlBefore))
 
-		By("Update endpiontconfig")
-		ns := clientHubDynamic.Resource(gvrEndpointconfig).Namespace(testNamespace)
+		By("Update klusterletconfig")
+		ns := clientHubDynamic.Resource(gvrKlusterletconfig).Namespace(testNamespace)
 		_, err := ns.Patch(testNamespace, types.JSONPatchType, []byte(patchString), metav1.PatchOptions{})
 		Expect(err).To(BeNil())
 
@@ -128,10 +128,10 @@ var _ = Describe("Endpointconfig", func() {
 		createNewUnstructured(clientHubDynamic, gvrClusterregistry,
 			cluster, testNamespace, testNamespace)
 
-		By("Creating endpointconfig with empty registry and imagePullSecret")
-		endpointconfig := newEndpointconfig(testNamespace, "", "")
-		createNewUnstructured(clientHubDynamic, gvrEndpointconfig,
-			endpointconfig, testNamespace, testNamespace)
+		By("Creating klusterletconfig with empty registry and imagePullSecret")
+		klusterletconfig := newKlusterletConfig(testNamespace, "", "")
+		createNewUnstructured(clientHubDynamic, gvrKlusterletconfig,
+			klusterletconfig, testNamespace, testNamespace)
 
 		By("Creating clusterdeployment")
 		clusterdeployment := newClusterdeployment(testNamespace)
@@ -139,19 +139,19 @@ var _ = Describe("Endpointconfig", func() {
 			clusterdeployment, testNamespace, testNamespace)
 
 		By("Checking syncset")
-		syncset := getWithTimeout(clientHubDynamic, gvrSyncset, testNamespace+"-multicluster-endpoint", testNamespace, true, 15)
+		syncset := getWithTimeout(clientHubDynamic, gvrSyncset, testNamespace+"-klusterlet", testNamespace, true, 15)
 		resources, err := syncset.MarshalJSON()
 		Expect(err).To(BeNil())
 		Expect(string(resources)).To(MatchRegexp(syncsetBefore))
 
-		By("Update endpiontconfig")
-		ns := clientHubDynamic.Resource(gvrEndpointconfig).Namespace(testNamespace)
+		By("Update klusterletconfig")
+		ns := clientHubDynamic.Resource(gvrKlusterletconfig).Namespace(testNamespace)
 		_, err = ns.Patch(testNamespace, types.JSONPatchType, []byte(patchString), metav1.PatchOptions{})
 		Expect(err).To(BeNil())
 
 		By("Verifying import secret updates")
 		Eventually(func() string {
-			syncset := getWithTimeout(clientHubDynamic, gvrSyncset, testNamespace+"-multicluster-endpoint", testNamespace, true, 15)
+			syncset := getWithTimeout(clientHubDynamic, gvrSyncset, testNamespace+"-klusterlet", testNamespace, true, 15)
 			if syncset == nil {
 				return ""
 			}
@@ -165,29 +165,29 @@ var _ = Describe("Endpointconfig", func() {
 
 	})
 
-	It("Should use SHA if ENDPOINT_OPERATOR_IMAGE is set, and use tag when ENDPOINT_OPERATOR_SHA is empty", func() {
+	It("Should use SHA if KLUSTERLET_OPERATOR_IMAGE is set, and use tag when KLUSTERLET_OPERATOR_SHA is empty", func() {
 		By("Checking current rcm-controller deployment")
 		dep, err := getRcmController(clientHub)
 		Expect(err).To(BeNil())
-		endpointOperatorImage := getEnv(dep, "", "ENDPOINT_OPERATOR_IMAGE")
+		klusterletOperatorImage := getEnv(dep, "", "KLUSTERLET_OPERATOR_IMAGE")
 		imageTagPostfix := getEnv(dep, "", "IMAGE_TAG_POSTFIX")
-		klog.V(1).Info("ENDPOINT_OPERATOR_IMAGE: " + endpointOperatorImage)
+		klog.V(1).Info("KLUSTERLET_OPERATOR_IMAGE: " + klusterletOperatorImage)
 		klog.V(1).Info("IMAGE_TAG_POSTFIX: " + imageTagPostfix)
 
 		// checks of using SHA
-		useSHAImageSecretCheck := "image: " + endpointOperatorImage
+		useSHAImageSecretCheck := "image: " + klusterletOperatorImage
 		useSHAEnvSecretCheck := "USE_SHA_MANIFEST[\\n\\r\\s]+value: \"true\""
-		useSHAImageSyncsetCheck := "\"image\":\"" + endpointOperatorImage + "\""
+		useSHAImageSyncsetCheck := "\"image\":\"" + klusterletOperatorImage + "\""
 		useSHAEnvSyncsetCheck := "{\"name\":\"USE_SHA_MANIFEST\",\"value\":\"true\"}"
 		if imageTagPostfix != "" {
-			klog.V(1).Info("ENDPOINT_OPERATOR_SHA is empty")
+			klog.V(1).Info("KLUSTERLET_OPERATOR_SHA is empty")
 			// checks of not using SHA
 			useSHAImageSecretCheck = "image: [^:]*:.*" + imageTagPostfix
 			useSHAEnvSecretCheck = "USE_SHA_MANIFEST[\\n\\r\\s]+value: \"false\""
 			useSHAImageSyncsetCheck = "\"image\":\"[^:]*:.*" + imageTagPostfix + "\""
 			useSHAEnvSyncsetCheck = "{\"name\":\"USE_SHA_MANIFEST\",\"value\":\"false\"}"
 		} else {
-			klog.V(1).Info("ENDPOINT_OPERATOR_SHA is not empty")
+			klog.V(1).Info("KLUSTERLET_OPERATOR_SHA is not empty")
 		}
 
 		By("Creating clusterregistry")
@@ -195,10 +195,10 @@ var _ = Describe("Endpointconfig", func() {
 		createNewUnstructured(clientHubDynamic, gvrClusterregistry,
 			cluster, testNamespace, testNamespace)
 
-		By("Creating endpointconfig with empty registry and imagePullSecret")
-		endpointconfig := newEndpointconfig(testNamespace, "", "")
-		createNewUnstructured(clientHubDynamic, gvrEndpointconfig,
-			endpointconfig, testNamespace, testNamespace)
+		By("Creating klusterletconfig with empty registry and imagePullSecret")
+		klusterletconfig := newKlusterletConfig(testNamespace, "", "")
+		createNewUnstructured(clientHubDynamic, gvrKlusterletconfig,
+			klusterletconfig, testNamespace, testNamespace)
 
 		By("Creating clusterdeployment")
 		clusterdeployment := newClusterdeployment(testNamespace)
@@ -213,7 +213,7 @@ var _ = Describe("Endpointconfig", func() {
 		Expect(importYaml).To(MatchRegexp(useSHAEnvSecretCheck))
 
 		By("Validating syncset")
-		syncset := getWithTimeout(clientHubDynamic, gvrSyncset, testNamespace+"-multicluster-endpoint", testNamespace, true, 15)
+		syncset := getWithTimeout(clientHubDynamic, gvrSyncset, testNamespace+"-klusterlet", testNamespace, true, 15)
 		resources, err := syncset.MarshalJSON()
 		Expect(err).To(BeNil())
 		Expect(string(resources)).To(MatchRegexp(useSHAImageSyncsetCheck))

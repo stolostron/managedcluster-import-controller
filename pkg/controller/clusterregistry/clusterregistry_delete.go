@@ -27,13 +27,13 @@ import (
 
 // constants for delete work and finalizer
 const (
-	EndpointDeleteWork = "delete-multicluster-endpoint"
-	ClusterFinalizer   = "rcm-controller.cluster"
+	KlusterletDeleteWork = "delete-klusterlet"
+	ClusterFinalizer     = "rcm-controller.cluster"
 )
 
 func getDeleteWork(r *ReconcileCluster, cluster *clusterregistryv1alpha1.Cluster) (*mcmv1alpha1.Work, error) {
 	clusterNamespace := types.NamespacedName{
-		Name:      EndpointDeleteWork,
+		Name:      KlusterletDeleteWork,
 		Namespace: cluster.Namespace,
 	}
 	deleteWork := &mcmv1alpha1.Work{}
@@ -56,25 +56,25 @@ func IsClusterOnline(cluster *clusterregistryv1alpha1.Cluster) bool {
 }
 
 func newDeleteJob(r *ReconcileCluster, cluster *clusterregistryv1alpha1.Cluster) (*batchv1.Job, error) {
-	endpointConfig, err := utils.GetEndpointConfig(r.client, cluster.Name, cluster.Namespace)
+	klusterletConfig, err := utils.GetKlusterletConfig(r.client, cluster.Name, cluster.Namespace)
 	if err != nil {
 		return nil, err
 	}
 
-	// set up default values for endpointconfig
-	if endpointConfig.Spec.ClusterNamespace == "" {
-		endpointConfig.Spec.ClusterNamespace = endpointConfig.Namespace
+	// set up default values for klusterletConfig
+	if klusterletConfig.Spec.ClusterNamespace == "" {
+		klusterletConfig.Spec.ClusterNamespace = klusterletConfig.Namespace
 	}
 
-	if endpointConfig.Spec.ImagePullSecret == "" {
-		endpointConfig.Spec.ImagePullSecret = os.Getenv("DEFAULT_IMAGE_PULL_SECRET")
+	if klusterletConfig.Spec.ImagePullSecret == "" {
+		klusterletConfig.Spec.ImagePullSecret = os.Getenv("DEFAULT_IMAGE_PULL_SECRET")
 	}
 
-	if endpointConfig.Spec.ImageRegistry == "" {
-		endpointConfig.Spec.ImageRegistry = os.Getenv("DEFAULT_IMAGE_REGISTRY")
+	if klusterletConfig.Spec.ImageRegistry == "" {
+		klusterletConfig.Spec.ImageRegistry = os.Getenv("DEFAULT_IMAGE_REGISTRY")
 	}
 
-	operatorImageName, _, _ := clusterimport.GetEndpointOperatorImage(endpointConfig)
+	operatorImageName, _, _ := clusterimport.GetKlusterletOperatorImage(klusterletConfig)
 
 	jobBackoff := int32(0) // 0 = no retries before the job fails
 	return &batchv1.Job{
@@ -83,14 +83,14 @@ func newDeleteJob(r *ReconcileCluster, cluster *clusterregistryv1alpha1.Cluster)
 			Kind:       "Job",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      EndpointDeleteWork,
-			Namespace: clusterimport.EndpointNamespace,
+			Name:      KlusterletDeleteWork,
+			Namespace: clusterimport.KlusterletNamespace,
 		},
 		Spec: batchv1.JobSpec{
 			BackoffLimit: &jobBackoff,
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					ServiceAccountName: clusterimport.EndpointOperatorName,
+					ServiceAccountName: clusterimport.KlusterletOperatorName,
 					RestartPolicy:      corev1.RestartPolicyNever,
 					Containers: []corev1.Container{
 						{
@@ -101,7 +101,7 @@ func newDeleteJob(r *ReconcileCluster, cluster *clusterregistryv1alpha1.Cluster)
 					},
 					ImagePullSecrets: []corev1.LocalObjectReference{
 						{
-							Name: endpointConfig.Spec.ImagePullSecret,
+							Name: klusterletConfig.Spec.ImagePullSecret,
 						},
 					},
 				},
@@ -122,7 +122,7 @@ func createDeleteWork(r *ReconcileCluster, cluster *clusterregistryv1alpha1.Clus
 			Kind:       "Work",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      EndpointDeleteWork,
+			Name:      KlusterletDeleteWork,
 			Namespace: cluster.Namespace,
 			OwnerReferences: []metav1.OwnerReference{
 				{
@@ -141,8 +141,8 @@ func createDeleteWork(r *ReconcileCluster, cluster *clusterregistryv1alpha1.Clus
 			Type:       mcmv1alpha1.ActionWorkType,
 			KubeWork: &mcmv1alpha1.KubeWorkSpec{
 				Resource:  "job",
-				Name:      EndpointDeleteWork,
-				Namespace: clusterimport.EndpointNamespace,
+				Name:      KlusterletDeleteWork,
+				Namespace: clusterimport.KlusterletNamespace,
 				ObjectTemplate: runtime.RawExtension{
 					Object: job,
 				},

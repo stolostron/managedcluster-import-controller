@@ -6,7 +6,7 @@
 //
 // Copyright (c) 2020 Red Hat, Inc.
 
-package endpointconfig
+package klusterletconfig
 
 import (
 	"reflect"
@@ -22,13 +22,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	multicloudv1beta1 "github.com/open-cluster-management/endpoint-operator/pkg/apis/multicloud/v1beta1"
-	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
+	klusterletv1beta1 "github.com/open-cluster-management/endpoint-operator/pkg/apis/agent/v1beta1"
+	klusterletcfgv1beta1 "github.com/open-cluster-management/rcm-controller/pkg/apis/agent/v1beta1"
 )
 
 func Test_clusterRegistryNsN(t *testing.T) {
 	type args struct {
-		endpointConfig *multicloudv1alpha1.EndpointConfig
+		klusterletConfig *klusterletcfgv1beta1.KlusterletConfig
 	}
 
 	tests := []struct {
@@ -38,15 +38,15 @@ func Test_clusterRegistryNsN(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:    "nil EndpointConfig",
+			name:    "nil KlusterletConfig",
 			args:    args{},
 			want:    types.NamespacedName{},
 			wantErr: true,
 		},
 		{
-			name: "empty EndpointConfig.Spec.ClusterName",
+			name: "empty KlusterletConfig.Spec.ClusterName",
 			args: args{
-				endpointConfig: &multicloudv1alpha1.EndpointConfig{
+				klusterletConfig: &klusterletcfgv1beta1.KlusterletConfig{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
 						Namespace: "test",
@@ -57,14 +57,14 @@ func Test_clusterRegistryNsN(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "empty EndpointConfig.Spec.ClusterNamespace",
+			name: "empty KlusterletConfig.Spec.ClusterNamespace",
 			args: args{
-				endpointConfig: &multicloudv1alpha1.EndpointConfig{
+				klusterletConfig: &klusterletcfgv1beta1.KlusterletConfig{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
 						Namespace: "test",
 					},
-					Spec: multicloudv1beta1.EndpointSpec{
+					Spec: klusterletv1beta1.KlusterletSpec{
 						ClusterName: "cluster-name",
 					},
 				},
@@ -75,12 +75,12 @@ func Test_clusterRegistryNsN(t *testing.T) {
 		{
 			name: "no error",
 			args: args{
-				endpointConfig: &multicloudv1alpha1.EndpointConfig{
+				klusterletConfig: &klusterletcfgv1beta1.KlusterletConfig{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
 						Namespace: "test",
 					},
-					Spec: multicloudv1beta1.EndpointSpec{
+					Spec: klusterletv1beta1.KlusterletSpec{
 						ClusterName:      "cluster-name",
 						ClusterNamespace: "cluster-namespace",
 					},
@@ -96,7 +96,7 @@ func Test_clusterRegistryNsN(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := clusterRegistryNsN(tt.args.endpointConfig)
+			got, err := clusterRegistryNsN(tt.args.klusterletConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("clusterRegistryNsN() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -111,19 +111,19 @@ func Test_clusterRegistryNsN(t *testing.T) {
 func Test_getClusterRegistryCluster(t *testing.T) {
 	s := scheme.Scheme
 	s.AddKnownTypes(clusterregistryv1alpha1.SchemeGroupVersion, &clusterregistryv1alpha1.Cluster{})
-	s.AddKnownTypes(multicloudv1alpha1.SchemeGroupVersion, &multicloudv1alpha1.EndpointConfig{})
+	s.AddKnownTypes(klusterletcfgv1beta1.SchemeGroupVersion, &klusterletcfgv1beta1.KlusterletConfig{})
 
 	type args struct {
-		client         client.Client
-		endpointConfig *multicloudv1alpha1.EndpointConfig
+		client           client.Client
+		klusterletConfig *klusterletcfgv1beta1.KlusterletConfig
 	}
 
-	endpointConfig := &multicloudv1alpha1.EndpointConfig{
+	klusterletConfig := &klusterletcfgv1beta1.KlusterletConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "test",
 		},
-		Spec: multicloudv1beta1.EndpointSpec{
+		Spec: klusterletv1beta1.KlusterletSpec{
 			ClusterName:      "cluster-name",
 			ClusterNamespace: "cluster-namespace",
 		},
@@ -146,10 +146,10 @@ func Test_getClusterRegistryCluster(t *testing.T) {
 		want    *clusterregistryv1alpha1.Cluster
 		wantErr bool
 	}{
-		{name: "nil EndpointConfig",
+		{name: "nil KlusterletConfig",
 			args: args{
-				client:         fake.NewFakeClient([]runtime.Object{}...),
-				endpointConfig: nil,
+				client:           fake.NewFakeClient([]runtime.Object{}...),
+				klusterletConfig: nil,
 			},
 			want:    nil,
 			wantErr: true,
@@ -157,8 +157,8 @@ func Test_getClusterRegistryCluster(t *testing.T) {
 		{
 			name: "cluster does not exist",
 			args: args{
-				client:         fake.NewFakeClient([]runtime.Object{}...),
-				endpointConfig: endpointConfig,
+				client:           fake.NewFakeClient([]runtime.Object{}...),
+				klusterletConfig: klusterletConfig,
 			},
 			want:    nil,
 			wantErr: true,
@@ -166,8 +166,8 @@ func Test_getClusterRegistryCluster(t *testing.T) {
 		{
 			name: "cluster exist",
 			args: args{
-				client:         fake.NewFakeClientWithScheme(s, []runtime.Object{cluster}...),
-				endpointConfig: endpointConfig,
+				client:           fake.NewFakeClientWithScheme(s, []runtime.Object{cluster}...),
+				klusterletConfig: klusterletConfig,
 			},
 			want:    cluster,
 			wantErr: false,
@@ -176,7 +176,7 @@ func Test_getClusterRegistryCluster(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := getClusterRegistryCluster(tt.args.client, tt.args.endpointConfig)
+			got, err := getClusterRegistryCluster(tt.args.client, tt.args.klusterletConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getClusterRegistryCluster() error = %v, wantErr %v", err, tt.wantErr)
 				return

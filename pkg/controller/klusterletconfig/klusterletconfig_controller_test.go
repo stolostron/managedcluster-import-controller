@@ -6,7 +6,7 @@
 //
 // Copyright (c) 2020 Red Hat, Inc.
 
-package endpointconfig
+package klusterletconfig
 
 import (
 	"reflect"
@@ -25,34 +25,34 @@ import (
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
 
-	multicloudv1beta1 "github.com/open-cluster-management/endpoint-operator/pkg/apis/multicloud/v1beta1"
-	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
+	klusterletv1beta1 "github.com/open-cluster-management/endpoint-operator/pkg/apis/agent/v1beta1"
+	klusterletcfgv1beta1 "github.com/open-cluster-management/rcm-controller/pkg/apis/agent/v1beta1"
 	"github.com/open-cluster-management/rcm-controller/pkg/controller/clusterregistry"
 )
 
-func TestReconcileEndpointConfig_Reconcile(t *testing.T) {
+func TestReconcileKlusterletConfig_Reconcile(t *testing.T) {
 	s := scheme.Scheme
 	s.AddKnownTypes(clusterregistryv1alpha1.SchemeGroupVersion, &clusterregistryv1alpha1.Cluster{})
-	s.AddKnownTypes(multicloudv1alpha1.SchemeGroupVersion, &multicloudv1alpha1.EndpointConfig{})
+	s.AddKnownTypes(klusterletcfgv1beta1.SchemeGroupVersion, &klusterletcfgv1beta1.KlusterletConfig{})
 	s.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{})
 
-	terminatingEndpointConfig := &multicloudv1alpha1.EndpointConfig{
+	terminatingKlusterletConfig := &klusterletcfgv1beta1.KlusterletConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:              "cluster-name",
 			Namespace:         "cluster-namespace",
 			DeletionTimestamp: &metav1.Time{time.Now()},
 		},
-		Spec: multicloudv1beta1.EndpointSpec{
+		Spec: klusterletv1beta1.KlusterletSpec{
 			ClusterName:      "not-cluster-name",
 			ClusterNamespace: "not-cluster-namespace",
 		},
 	}
-	invalidEndpointConfig := &multicloudv1alpha1.EndpointConfig{
+	invalidKlusterletConfig := &klusterletcfgv1beta1.KlusterletConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cluster-name",
 			Namespace: "cluster-namespace",
 		},
-		Spec: multicloudv1beta1.EndpointSpec{
+		Spec: klusterletv1beta1.KlusterletSpec{
 			ClusterName:      "not-cluster-name",
 			ClusterNamespace: "not-cluster-namespace",
 		},
@@ -67,12 +67,12 @@ func TestReconcileEndpointConfig_Reconcile(t *testing.T) {
 		},
 	}
 
-	endpointConfig := &multicloudv1alpha1.EndpointConfig{
+	klusterletConfig := &klusterletcfgv1beta1.KlusterletConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cluster-name",
 			Namespace: "cluster-namespace",
 		},
-		Spec: multicloudv1beta1.EndpointSpec{
+		Spec: klusterletv1beta1.KlusterletSpec{
 			ClusterName:      "cluster-name",
 			ClusterNamespace: "cluster-namespace",
 		},
@@ -123,7 +123,7 @@ func TestReconcileEndpointConfig_Reconcile(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "endpointConfig do not exist",
+			name: "klusterletConfig do not exist",
 			fields: fields{
 				client: fake.NewFakeClient(),
 				scheme: s,
@@ -137,9 +137,9 @@ func TestReconcileEndpointConfig_Reconcile(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "terminating endpointConfig",
+			name: "terminating klusterletConfig",
 			fields: fields{
-				client: fake.NewFakeClientWithScheme(s, terminatingEndpointConfig),
+				client: fake.NewFakeClientWithScheme(s, terminatingKlusterletConfig),
 				scheme: s,
 			},
 			args: args{
@@ -151,9 +151,9 @@ func TestReconcileEndpointConfig_Reconcile(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "invalid endpointConfig",
+			name: "invalid klusterletConfig",
 			fields: fields{
-				client: fake.NewFakeClientWithScheme(s, invalidEndpointConfig),
+				client: fake.NewFakeClientWithScheme(s, invalidKlusterletConfig),
 				scheme: s,
 			},
 			args: args{
@@ -167,7 +167,7 @@ func TestReconcileEndpointConfig_Reconcile(t *testing.T) {
 		{
 			name: "cluster does not exist",
 			fields: fields{
-				client: fake.NewFakeClientWithScheme(s, endpointConfig),
+				client: fake.NewFakeClientWithScheme(s, klusterletConfig),
 				scheme: s,
 			},
 			args: args{
@@ -182,7 +182,7 @@ func TestReconcileEndpointConfig_Reconcile(t *testing.T) {
 		{
 			name: "missing resource to generate secret",
 			fields: fields{
-				client: fake.NewFakeClientWithScheme(s, endpointConfig, cluster),
+				client: fake.NewFakeClientWithScheme(s, klusterletConfig, cluster),
 				scheme: s,
 			},
 			args: args{
@@ -197,7 +197,7 @@ func TestReconcileEndpointConfig_Reconcile(t *testing.T) {
 			name: "success",
 			fields: fields{
 				client: fake.NewFakeClientWithScheme(s,
-					endpointConfig,
+					klusterletConfig,
 					cluster,
 					infrastructConfig,
 					serviceAccount,
@@ -218,7 +218,7 @@ func TestReconcileEndpointConfig_Reconcile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := &ReconcileEndpointConfig{
+			r := &ReconcileKlusterletConfig{
 				client: tt.fields.client,
 				scheme: tt.fields.scheme,
 			}
@@ -226,12 +226,12 @@ func TestReconcileEndpointConfig_Reconcile(t *testing.T) {
 			got, err := r.Reconcile(tt.args.request)
 
 			if (err != nil) != tt.wantErr {
-				t.Errorf("ReconcileEndpointConfig.Reconcile() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("ReconcileKlusterletConfig.Reconcile() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("ReconcileEndpointConfig.Reconcile() = %v, want %v", got, tt.want)
+				t.Errorf("ReconcileKlusterletConfig.Reconcile() = %v, want %v", got, tt.want)
 			}
 		})
 	}

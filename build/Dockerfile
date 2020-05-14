@@ -28,7 +28,7 @@ ARG REMOTE_SOURCE_DIR
 ENV OPERATOR=/usr/local/bin/rcm-controller \
     USER_UID=1001 \
     USER_NAME=rcm-controller \
-    ENDPOINT_CRD_FILE=/usr/local/resources/multicloud_v1beta1_endpoint_crd.yaml
+    KLUSTERLET_CRD_FILE=/usr/local/resources/agent.open-cluster-management.io_v1beta1_klusterlet_crd.yaml
 
 # install operator binary
 COPY --from=builder $REMOTE_SOURCE_DIR/app/manager ${OPERATOR}

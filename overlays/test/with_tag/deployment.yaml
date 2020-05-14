@@ -15,7 +15,7 @@ spec:
           - mountPath: /tmp/coverage
             name: coverage-dir 
         env:
-        - name: ENDPOINT_OPERATOR_IMAGE
+        - name: KLUSTERLET_OPERATOR_IMAGE
           value: "somerepo/endpoint-operator@sha256:somerandomsha"
         - name: IMAGE_TAG_POSTFIX
           value: "-postfix"

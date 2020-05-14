@@ -1,25 +1,22 @@
-apiVersion: multicloud.ibm.com/v1alpha1
-kind: EndpointConfig
+apiVersion: agent.open-cluster-management.io/v1beta1
+kind: KlusterletConfig
 metadata:
-  name: mycluster
-  namespace: mycluster
+  name: cluster-controller-test
+  namespace: cluster-controller-test
 spec:
-  clusterName: mycluster
-  clusterNamespace: mycluster
-  bootstrapConfig:
-    hubSecret: multicluster-endpoint/klusterlet-bootstrap
   applicationManager:
     enabled: true
+  bootstrapConfig:
+    hubSecret: multicluster-endpoint/klusterlet-bootstrap
   clusterLabels:
     cloud: auto-detect
     vendor: auto-detect
+  clusterName: cluster-controller-test
+  clusterNamespace: cluster-controller-test
   connectionManager:
     enabledGlobalView: false
   imageRegistry: quay.io/open-cluster-management
-  imagePullSecret: multiclusterhub-operator-pull-secret
   policyController:
-    enabled: true
-  prometheusIntegration:
     enabled: true
   searchCollector:
     enabled: true

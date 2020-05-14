@@ -26,36 +26,36 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	multicloudv1beta1 "github.com/open-cluster-management/endpoint-operator/pkg/apis/multicloud/v1beta1"
-	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
+	klusterletv1beta1 "github.com/open-cluster-management/endpoint-operator/pkg/apis/agent/v1beta1"
+	klusterletcfgv1beta1 "github.com/open-cluster-management/rcm-controller/pkg/apis/agent/v1beta1"
 )
 
-// EndpointNamespace is the namespace that multicluster-endpoint operator and its components will be deployed in
-const EndpointNamespace = "multicluster-endpoint"
+// KlusterletNamespace is the namespace that klusterlet operator and its components will be deployed in
+const KlusterletNamespace = "klusterlet"
 
-// EndpointName is the name of the endpoint.multicloud.ibm.com resource
-const EndpointName = "endpoint"
+// KlusterletName is the name of the klusterlet.agent.open-cluster-management.io resource
+const KlusterletName = "klusterlet"
 
-// EndpointOperatorName is the name of the multicluster endpoint operator
-const EndpointOperatorName = "endpoint-operator"
+// KlusterletOperatorName is the name of the klusterlet operator
+const KlusterletOperatorName = "klusterlet-operator"
 
 // BootstrapSecretName is the name of the bootstrap secret
 const BootstrapSecretName = "klusterlet-bootstrap"
 
-// EndpointOperatorImageName is the name of the Endpoinmulticluster-endpoint operator image
-const EndpointOperatorImageName = "endpoint-operator"
+// KlusterletOperatorImageName is the name of the klusterlet operator image
+const KlusterletOperatorImageName = "klusterlet-operator"
 
-// ImageTagPostfixKey is the name of the environment variable of endpoint operator image tag's postfix
+// ImageTagPostfixKey is the name of the environment variable of klusterlet operator image tag's postfix
 const ImageTagPostfixKey = "IMAGE_TAG_POSTFIX"
 
-// EndpointOperatorImageKey is the path of the endpoint operator image
-const EndpointOperatorImageKey = "ENDPOINT_OPERATOR_IMAGE"
+// KlusterletOperatorImageKey is the path of the klusterlet operator image
+const KlusterletOperatorImageKey = "KLUSTERLET_OPERATOR_IMAGE"
 
 var log = logf.Log.WithName("clusterimport")
 
-// GenerateEndpointCRD returns an array of runtime.Object, which contains only the endpoint crd
-func GenerateEndpointCRD() ([]runtime.Object, error) {
-	crd, err := newEndpointCRD()
+// GenerateKlusterletCRD returns an array of runtime.Object, which contains only the klusterlet crd
+func GenerateKlusterletCRD() ([]runtime.Object, error) {
+	crd, err := newKlusterletCRD()
 	if err != nil {
 		return nil, err
 	}
@@ -64,14 +64,14 @@ func GenerateEndpointCRD() ([]runtime.Object, error) {
 	}, nil
 }
 
-// GenerateImportObjects generate all the object in the manifest use for installing multicluster-endpoint on managed cluster
-func GenerateImportObjects(client client.Client, endpointConfig *multicloudv1alpha1.EndpointConfig) ([]runtime.Object, error) {
+// GenerateImportObjects generate all the object in the manifest use for installing klusterlet on managed cluster
+func GenerateImportObjects(client client.Client, klusterletConfig *klusterletcfgv1beta1.KlusterletConfig) ([]runtime.Object, error) {
 	importObjects, err := generateCommonImportObjects()
 	if err != nil {
 		return nil, err
 	}
 
-	bootstrapSecret, err := newBootstrapSecret(client, endpointConfig)
+	bootstrapSecret, err := newBootstrapSecret(client, klusterletConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func GenerateImportObjects(client client.Client, endpointConfig *multicloudv1alp
 		return nil, fmt.Errorf("bootstrapSecret is nil")
 	}
 
-	imagePullSecret, err := newEndpointImagePullSecret(client, endpointConfig)
+	imagePullSecret, err := newKlusterletImagePullSecret(client, klusterletConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -92,30 +92,30 @@ func GenerateImportObjects(client client.Client, endpointConfig *multicloudv1alp
 	return append(
 		importObjects,
 		bootstrapSecret,
-		newOperatorDeployment(endpointConfig),
-		newEndpointResource(endpointConfig),
+		newOperatorDeployment(klusterletConfig),
+		newKlusterletResource(klusterletConfig),
 	), nil
 }
 
 // generateCommonObjects generates the objects in the manifest stays constant used in the SelectorSyncSet
 func generateCommonImportObjects() ([]runtime.Object, error) {
-	crd, err := newEndpointCRD()
+	crd, err := newKlusterletCRD()
 	if err != nil {
 		return nil, err
 	}
 
 	return []runtime.Object{
 		crd,
-		newEndpointNamespace(),
+		newKlusterletNamespace(),
 		newOperatorServiceAccount(),
 		newOperatorClusterRoleBinding(),
 	}, nil
 }
 
-func newEndpointCRD() (*apiextensionv1beta1.CustomResourceDefinition, error) {
-	fileName := os.Getenv("ENDPOINT_CRD_FILE")
+func newKlusterletCRD() (*apiextensionv1beta1.CustomResourceDefinition, error) {
+	fileName := os.Getenv("KLUSTERLET_CRD_FILE")
 	if fileName == "" {
-		return nil, fmt.Errorf("ENV ENDPOINT_CRD_FILE undefine")
+		return nil, fmt.Errorf("ENV KLUSTERLET_CRD_FILE undefined")
 	}
 
 	data, err := ioutil.ReadFile(fileName) // #nosec G304
@@ -140,14 +140,14 @@ func newEndpointCRD() (*apiextensionv1beta1.CustomResourceDefinition, error) {
 	return crd, nil
 }
 
-func newEndpointNamespace() *corev1.Namespace {
+func newKlusterletNamespace() *corev1.Namespace {
 	return &corev1.Namespace{
 		TypeMeta: metav1.TypeMeta{
 			APIVersion: corev1.SchemeGroupVersion.String(),
 			Kind:       "Namespace",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: EndpointNamespace,
+			Name: KlusterletNamespace,
 		},
 	}
 }
@@ -159,8 +159,8 @@ func newOperatorServiceAccount() *corev1.ServiceAccount {
 			Kind:       "ServiceAccount",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      EndpointOperatorName,
-			Namespace: EndpointNamespace,
+			Name:      KlusterletOperatorName,
+			Namespace: KlusterletNamespace,
 		},
 	}
 }
@@ -172,7 +172,7 @@ func newOperatorClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 			Kind:       "ClusterRoleBinding",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name: EndpointOperatorName,
+			Name: KlusterletOperatorName,
 		},
 		RoleRef: rbacv1.RoleRef{
 			APIGroup: rbacv1.SchemeGroupVersion.Group,
@@ -182,15 +182,15 @@ func newOperatorClusterRoleBinding() *rbacv1.ClusterRoleBinding {
 		Subjects: []rbacv1.Subject{
 			{
 				Kind:      "ServiceAccount",
-				Name:      EndpointOperatorName,
-				Namespace: EndpointNamespace,
+				Name:      KlusterletOperatorName,
+				Namespace: KlusterletNamespace,
 			},
 		},
 	}
 }
 
-func newBootstrapSecret(client client.Client, endpointConfig *multicloudv1alpha1.EndpointConfig) (*corev1.Secret, error) {
-	saToken, err := getBootstrapToken(client, endpointConfig)
+func newBootstrapSecret(client client.Client, klusterletConfig *klusterletcfgv1beta1.KlusterletConfig) (*corev1.Secret, error) {
+	saToken, err := getBootstrapToken(client, klusterletConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -231,7 +231,7 @@ func newBootstrapSecret(client client.Client, endpointConfig *multicloudv1alpha1
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      BootstrapSecretName,
-			Namespace: EndpointNamespace,
+			Namespace: KlusterletNamespace,
 		},
 		Data: map[string][]byte{
 			"kubeconfig": bootstrapConfigData,
@@ -239,8 +239,8 @@ func newBootstrapSecret(client client.Client, endpointConfig *multicloudv1alpha1
 	}, nil
 }
 
-func newEndpointImagePullSecret(client client.Client, endpointConfig *multicloudv1alpha1.EndpointConfig) (*corev1.Secret, error) {
-	secret, err := getImagePullSecret(client, endpointConfig)
+func newKlusterletImagePullSecret(client client.Client, klusterletConfig *klusterletcfgv1beta1.KlusterletConfig) (*corev1.Secret, error) {
+	secret, err := getImagePullSecret(client, klusterletConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -256,45 +256,45 @@ func newEndpointImagePullSecret(client client.Client, endpointConfig *multicloud
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      secret.Name,
-			Namespace: EndpointNamespace,
+			Namespace: KlusterletNamespace,
 		},
 		Data: secret.Data,
 		Type: secret.Type,
 	}, nil
 }
 
-// GetEndpointOperatorImage returns endpoint-operator image, imageTagPostfix, and a boolean indicates use SHA or not.
+// GetKlusterletOperatorImage returns klusterlet-operator image, imageTagPostfix, and a boolean indicates use SHA or not.
 // If `IMAGE_TAG_POSTFIX` env var is set, will return false for the boolean of useSHA.
-func GetEndpointOperatorImage(endpointConfig *multicloudv1alpha1.EndpointConfig) (imageName string, imageTagPostfix string, useSHA bool) {
+func GetKlusterletOperatorImage(klusterletConfig *klusterletcfgv1beta1.KlusterletConfig) (imageName string, imageTagPostfix string, useSHA bool) {
 	imageTagPostfix = os.Getenv(ImageTagPostfixKey)
-	endpointOperatorImage := os.Getenv(EndpointOperatorImageKey)
+	klusterletOperatorImage := os.Getenv(KlusterletOperatorImageKey)
 	useSHA = imageTagPostfix == ""
-	if endpointConfig.Spec.ImageRegistry == "" {
-		return endpointOperatorImage, imageTagPostfix, useSHA
+	if klusterletConfig.Spec.ImageRegistry == "" {
+		return klusterletOperatorImage, imageTagPostfix, useSHA
 	}
 
-	imageName = endpointConfig.Spec.ImageRegistry +
-		"/" + EndpointOperatorImageName +
-		endpointConfig.Spec.ImageNamePostfix +
-		":" + endpointConfig.Spec.Version
+	imageName = klusterletConfig.Spec.ImageRegistry +
+		"/" + KlusterletOperatorImageName +
+		klusterletConfig.Spec.ImageNamePostfix +
+		":" + klusterletConfig.Spec.Version
 
 	if imageTagPostfix != "" {
 		imageName += imageTagPostfix
 		return imageName, imageTagPostfix, useSHA
 	}
 
-	if endpointOperatorImage != "" {
-		imageName = endpointOperatorImage
+	if klusterletOperatorImage != "" {
+		imageName = klusterletOperatorImage
 	}
 
 	return imageName, "", useSHA
 }
 
-func newOperatorDeployment(endpointConfig *multicloudv1alpha1.EndpointConfig) *appsv1.Deployment {
-	imageName, imageTagPostfix, useSHA := GetEndpointOperatorImage(endpointConfig)
+func newOperatorDeployment(klusterletConfig *klusterletcfgv1beta1.KlusterletConfig) *appsv1.Deployment {
+	imageName, imageTagPostfix, useSHA := GetKlusterletOperatorImage(klusterletConfig)
 	imagePullSecrets := []corev1.LocalObjectReference{}
-	if len(endpointConfig.Spec.ImagePullSecret) > 0 {
-		imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{Name: endpointConfig.Spec.ImagePullSecret})
+	if len(klusterletConfig.Spec.ImagePullSecret) > 0 {
+		imagePullSecrets = append(imagePullSecrets, corev1.LocalObjectReference{Name: klusterletConfig.Spec.ImagePullSecret})
 	}
 
 	useSHAManifestEnv := "false"
@@ -308,26 +308,26 @@ func newOperatorDeployment(endpointConfig *multicloudv1alpha1.EndpointConfig) *a
 			Kind:       "Deployment",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      EndpointOperatorName,
-			Namespace: EndpointNamespace,
+			Name:      KlusterletOperatorName,
+			Namespace: KlusterletNamespace,
 		},
 		Spec: appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"name": EndpointOperatorName,
+					"name": KlusterletOperatorName,
 				},
 			},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{
 					Labels: map[string]string{
-						"name": EndpointOperatorName,
+						"name": KlusterletOperatorName,
 					},
 				},
 				Spec: corev1.PodSpec{
-					ServiceAccountName: EndpointOperatorName,
+					ServiceAccountName: KlusterletOperatorName,
 					Containers: []corev1.Container{
 						{
-							Name:            EndpointOperatorName,
+							Name:            KlusterletOperatorName,
 							Image:           imageName,
 							ImagePullPolicy: corev1.PullAlways,
 							Env: []corev1.EnvVar{
@@ -337,7 +337,7 @@ func newOperatorDeployment(endpointConfig *multicloudv1alpha1.EndpointConfig) *a
 								},
 								{
 									Name:  "OPERATOR_NAME",
-									Value: EndpointOperatorName,
+									Value: KlusterletOperatorName,
 								},
 								{
 									Name: "POD_NAME",
@@ -365,16 +365,16 @@ func newOperatorDeployment(endpointConfig *multicloudv1alpha1.EndpointConfig) *a
 	}
 }
 
-func newEndpointResource(endpointConfig *multicloudv1alpha1.EndpointConfig) *multicloudv1beta1.Endpoint {
-	return &multicloudv1beta1.Endpoint{
+func newKlusterletResource(klusterletConfig *klusterletcfgv1beta1.KlusterletConfig) *klusterletv1beta1.Klusterlet {
+	return &klusterletv1beta1.Klusterlet{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: multicloudv1beta1.SchemeGroupVersion.String(),
-			Kind:       "Endpoint",
+			APIVersion: klusterletv1beta1.SchemeGroupVersion.String(),
+			Kind:       "Klusterlet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      EndpointName,
-			Namespace: EndpointNamespace,
+			Name:      KlusterletName,
+			Namespace: KlusterletNamespace,
 		},
-		Spec: endpointConfig.Spec,
+		Spec: klusterletConfig.Spec,
 	}
 }
