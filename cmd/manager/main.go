@@ -78,16 +78,16 @@ func main() {
 
 	printVersion()
 
-	endpointCRDFilename := os.Getenv("ENDPOINT_CRD_FILE")
-	log.Info("ENV", "ENDPOINT_CRD_FILE", endpointCRDFilename)
+	klusterletCRDFilename := os.Getenv("KLUSTERLET_CRD_FILE")
+	log.Info("ENV", "KLUSTERLET_CRD_FILE", klusterletCRDFilename)
 
-	if endpointCRDFilename == "" {
-		log.Error(fmt.Errorf("undefine environment variable ENDPOINT_CRD_FILE"), "")
+	if klusterletCRDFilename == "" {
+		log.Error(fmt.Errorf("undefine environment variable KLUSTERLET_CRD_FILE"), "")
 		os.Exit(1)
 	}
 
-	if !utils.FileExist(endpointCRDFilename) {
-		log.Error(fmt.Errorf("ENDPOINT_CRD_FILE does not exist"), "")
+	if !utils.FileExist(klusterletCRDFilename) {
+		log.Error(fmt.Errorf("KLUSTERLET_CRD_FILE does not exist"), "")
 		os.Exit(1)
 	}
 

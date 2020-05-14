@@ -6,7 +6,7 @@
 //
 // Copyright (c) 2020 Red Hat, Inc.
 
-package endpointconfig
+package klusterletconfig
 
 import (
 	"bytes"
@@ -26,33 +26,33 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/yaml"
 
-	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
+	klusterletcfgv1beta1 "github.com/open-cluster-management/rcm-controller/pkg/apis/agent/v1beta1"
 	"github.com/open-cluster-management/rcm-controller/pkg/clusterimport"
 )
 
 const importSecretNamePostfix = "-import"
 
-func importSecretNsN(endpointConfig *multicloudv1alpha1.EndpointConfig) (types.NamespacedName, error) {
-	if endpointConfig == nil {
-		return types.NamespacedName{}, fmt.Errorf("nil EndpointConfig")
+func importSecretNsN(klusterletConfig *klusterletcfgv1beta1.KlusterletConfig) (types.NamespacedName, error) {
+	if klusterletConfig == nil {
+		return types.NamespacedName{}, fmt.Errorf("nil KlusterletConfig")
 	}
 
-	if endpointConfig.Spec.ClusterName == "" {
-		return types.NamespacedName{}, fmt.Errorf("empty EndpointConfig.Spec.ClusterName")
+	if klusterletConfig.Spec.ClusterName == "" {
+		return types.NamespacedName{}, fmt.Errorf("empty KlusterletConfig.Spec.ClusterName")
 	}
 
-	if endpointConfig.Spec.ClusterNamespace == "" {
-		return types.NamespacedName{}, fmt.Errorf("empty EndpointConfig.Spec.ClusterNamespace")
+	if klusterletConfig.Spec.ClusterNamespace == "" {
+		return types.NamespacedName{}, fmt.Errorf("empty KlusterletConfig.Spec.ClusterNamespace")
 	}
 
 	return types.NamespacedName{
-		Name:      endpointConfig.Spec.ClusterName + importSecretNamePostfix,
-		Namespace: endpointConfig.Spec.ClusterNamespace,
+		Name:      klusterletConfig.Spec.ClusterName + importSecretNamePostfix,
+		Namespace: klusterletConfig.Spec.ClusterNamespace,
 	}, nil
 }
 
-func getImportSecret(client client.Client, endpointConfig *multicloudv1alpha1.EndpointConfig) (*corev1.Secret, error) {
-	secretNsN, err := importSecretNsN(endpointConfig)
+func getImportSecret(client client.Client, klusterletConfig *klusterletcfgv1beta1.KlusterletConfig) (*corev1.Secret, error) {
+	secretNsN, err := importSecretNsN(klusterletConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -66,17 +66,17 @@ func getImportSecret(client client.Client, endpointConfig *multicloudv1alpha1.En
 	return secret, nil
 }
 
-func newImportSecret(client client.Client, endpointConfig *multicloudv1alpha1.EndpointConfig) (*corev1.Secret, error) {
-	// get endpoint crd yaml
-	endpointCRD, err := clusterimport.GenerateEndpointCRD()
+func newImportSecret(client client.Client, klusterletConfig *klusterletcfgv1beta1.KlusterletConfig) (*corev1.Secret, error) {
+	// get klusterlet crd yaml
+	klusterletCRD, err := clusterimport.GenerateKlusterletCRD()
 	if err != nil {
 		return nil, err
 	}
-	endpointCRDYAML, err := toYAML(endpointCRD)
+	klusterletCRDYAML, err := toYAML(klusterletCRD)
 	if err != nil {
 		return nil, err
 	}
-	runtimeObjects, err := clusterimport.GenerateImportObjects(client, endpointConfig)
+	runtimeObjects, err := clusterimport.GenerateImportObjects(client, klusterletConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -86,7 +86,7 @@ func newImportSecret(client client.Client, endpointConfig *multicloudv1alpha1.En
 		return nil, err
 	}
 
-	sNsN, err := importSecretNsN(endpointConfig)
+	sNsN, err := importSecretNsN(klusterletConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -98,8 +98,8 @@ func newImportSecret(client client.Client, endpointConfig *multicloudv1alpha1.En
 			Namespace: sNsN.Namespace,
 		},
 		Data: map[string][]byte{
-			"import.yaml":       importYAML,
-			"endpoint-crd.yaml": endpointCRDYAML,
+			"import.yaml":         importYAML,
+			"klusterlet-crd.yaml": klusterletCRDYAML,
 		},
 	}
 
@@ -110,9 +110,9 @@ func createImportSecret(
 	client client.Client,
 	scheme *runtime.Scheme,
 	cluster *clusterregistryv1alpha1.Cluster,
-	endpointConfig *multicloudv1alpha1.EndpointConfig,
+	klusterletConfig *klusterletcfgv1beta1.KlusterletConfig,
 ) (*corev1.Secret, error) {
-	secret, err := newImportSecret(client, endpointConfig)
+	secret, err := newImportSecret(client, klusterletConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -129,10 +129,10 @@ func createImportSecret(
 
 func updateImportSecret(
 	client client.Client,
-	endpointConfig *multicloudv1alpha1.EndpointConfig,
+	klusterletConfig *klusterletcfgv1beta1.KlusterletConfig,
 	oldImportSecret *corev1.Secret,
 ) (*corev1.Secret, error) {
-	secret, err := newImportSecret(client, endpointConfig)
+	secret, err := newImportSecret(client, klusterletConfig)
 	if err != nil {
 		return nil, err
 	}

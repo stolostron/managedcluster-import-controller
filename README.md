@@ -16,8 +16,8 @@
 `multicloud-operators-cluster-controller` is the controller that handles functionalities that's related to the clusterregistry cluster resource.
 
 current functionality of `multicloud-operators-cluster-controller`
-- installing multicluster-endpoint on cluster created by hive via syncset
-- triggering the remote deletion of multicluster-endpoint on managed cluster
+- installing klusterlet on cluster created by hive via syncset
+- triggering the remote deletion of klusterlet on managed cluster
 
 ## How to's
 
@@ -31,7 +31,7 @@ current functionality of `multicloud-operators-cluster-controller`
 
 [Importing an Hive provisioned OpenShift cluster](docs/hive_cluster_import.md)
 
-[Updating Endpoint on a managed cluster](docs/remote_endpoint_update.md)
+[Updating Klusterlet on a managed cluster](docs/remote_klusterlet_update.md)
 
 [Selective initilization of controllers](docs/selective_controller_init.md)
 

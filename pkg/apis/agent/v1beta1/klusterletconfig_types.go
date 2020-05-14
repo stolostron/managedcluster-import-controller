@@ -6,20 +6,20 @@
 //
 // Copyright (c) 2020 Red Hat, Inc.
 
-package v1alpha1
+package v1beta1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	multicloudv1beta1 "github.com/open-cluster-management/endpoint-operator/pkg/apis/multicloud/v1beta1"
+	klusterletv1beta1 "github.com/open-cluster-management/endpoint-operator/pkg/apis/agent/v1beta1"
 )
 
 // EDIT THIS FILE!  THIS IS SCAFFOLDING FOR YOU TO OWN!
 // NOTE: json tags are required.  Any new fields you add must have json tags for the fields to be serialized.
 
-// EndpointConfigStatus defines the observed state of EndpointConfig
+// KlusterletConfigStatus defines the observed state of KlusterletConfig
 // +k8s:openapi-gen=true
-type EndpointConfigStatus struct {
+type KlusterletConfigStatus struct {
 	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
 	// Important: Run "operator-sdk generate k8s" to regenerate code after modifying this file
 	// Add custom validation using kubebuilder tags: https://book-v1.book.kubebuilder.io/beyond_basics/generating_crd.html
@@ -27,25 +27,25 @@ type EndpointConfigStatus struct {
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// EndpointConfig is the Schema for the endpointconfigs API
+// KlusterletConfig is the Schema for the klusterletconfigs API
 // +k8s:openapi-gen=true
 // +kubebuilder:subresource:status
-type EndpointConfig struct {
+type KlusterletConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
-	Spec              multicloudv1beta1.EndpointSpec `json:"spec,omitempty"`
-	Status            EndpointConfigStatus           `json:"status,omitempty"`
+	Spec              klusterletv1beta1.KlusterletSpec `json:"spec,omitempty"`
+	Status            KlusterletConfigStatus           `json:"status,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
-// EndpointConfigList contains a list of EndpointConfig
-type EndpointConfigList struct {
+// KlusterletConfigList contains a list of KlusterletConfig
+type KlusterletConfigList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []EndpointConfig `json:"items"`
+	Items           []KlusterletConfig `json:"items"`
 }
 
 func init() {
-	SchemeBuilder.Register(&EndpointConfig{}, &EndpointConfigList{})
+	SchemeBuilder.Register(&KlusterletConfig{}, &KlusterletConfigList{})
 }

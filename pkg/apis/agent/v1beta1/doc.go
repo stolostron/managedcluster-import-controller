@@ -6,8 +6,8 @@
 //
 // Copyright (c) 2020 Red Hat, Inc.
 
-// Package v1alpha1 contains API Schema definitions for the multicloud v1alpha1 API group
+// Package v1beta1 contains API Schema definitions for the agent v1beta1 API group
 //
 // +k8s:deepcopy-gen=package,register
-// +groupName=multicloud.ibm.com
-package v1alpha1
+// +groupName=agent.open-cluster-management.io
+package v1beta1

@@ -13,19 +13,19 @@ import (
 	"os"
 	"testing"
 
-	multicloudv1beta1 "github.com/open-cluster-management/endpoint-operator/pkg/apis/multicloud/v1beta1"
-	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
+	klusterletv1beta1 "github.com/open-cluster-management/endpoint-operator/pkg/apis/agent/v1beta1"
+	klusterletcfgv1beta1 "github.com/open-cluster-management/rcm-controller/pkg/apis/agent/v1beta1"
 	"github.com/stretchr/testify/assert"
 )
 
 func init() {
-	os.Setenv("ENDPOINT_CRD_FILE", "../../build/resources/multicloud_v1beta1_endpoint_crd.yaml")
+	os.Setenv("KLUSTERLET_CRD_FILE", "../../build/resources/agent.open-cluster-management.io_v1beta1_klusterlet_crd.yaml")
 }
 
 func TestNewOperatorDeployment(t *testing.T) {
 	type args struct {
-		endpointConfig  *multicloudv1alpha1.EndpointConfig
-		imageTagPostfix string
+		klusterletConfig *klusterletcfgv1beta1.KlusterletConfig
+		imageTagPostfix  string
 	}
 	type expectValues struct {
 		imageName          string
@@ -41,28 +41,28 @@ func TestNewOperatorDeployment(t *testing.T) {
 		{
 			name: "Empty Postfix",
 			args: args{
-				endpointConfig: &multicloudv1alpha1.EndpointConfig{
-					Spec: multicloudv1beta1.EndpointSpec{
+				klusterletConfig: &klusterletcfgv1beta1.KlusterletConfig{
+					Spec: klusterletv1beta1.KlusterletSpec{
 						ImageRegistry: "sample-registry/uniquePath",
 						Version:       "2.3.0",
 					},
 				},
 				imageTagPostfix: "",
 			},
-			want: expectValues{"sample-registry/uniquePath/endpoint-operator:2.3.0", "", "true"},
+			want: expectValues{"sample-registry/uniquePath/klusterlet-operator:2.3.0", "", "true"},
 		},
 		{
 			name: "With Postfix Set",
 			args: args{
-				endpointConfig: &multicloudv1alpha1.EndpointConfig{
-					Spec: multicloudv1beta1.EndpointSpec{
+				klusterletConfig: &klusterletcfgv1beta1.KlusterletConfig{
+					Spec: klusterletv1beta1.KlusterletSpec{
 						ImageRegistry: "sample-registry-2/uniquePath-2",
 						Version:       "1.2.0",
 					},
 				},
 				imageTagPostfix: "-Unique-Postfix",
 			},
-			want: expectValues{"sample-registry-2/uniquePath-2/endpoint-operator:1.2.0-Unique-Postfix", "-Unique-Postfix", "false"},
+			want: expectValues{"sample-registry-2/uniquePath-2/klusterlet-operator:1.2.0-Unique-Postfix", "-Unique-Postfix", "false"},
 		},
 	}
 
@@ -73,7 +73,7 @@ func TestNewOperatorDeployment(t *testing.T) {
 			if err != nil {
 				t.Errorf("Cannot set env %s", ImageTagPostfixKey)
 			}
-			deployment := newOperatorDeployment(tt.args.endpointConfig)
+			deployment := newOperatorDeployment(tt.args.klusterletConfig)
 			assert.Equal(t, deployment.Spec.Template.Spec.Containers[0].Image, tt.want.imageName, "image name should match")
 			assert.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[3].Name, ImageTagPostfixKey)
 			assert.Equal(t, deployment.Spec.Template.Spec.Containers[0].Env[3].Value, tt.want.imageTagPostfixEnv, "tag postfix should be passed to env")
@@ -83,19 +83,19 @@ func TestNewOperatorDeployment(t *testing.T) {
 	}
 }
 
-func TestGenerateEndpointCRD(t *testing.T) {
-	_, err := GenerateEndpointCRD()
+func TestGenerateKlusterletCRD(t *testing.T) {
+	_, err := GenerateKlusterletCRD()
 	if err != nil {
-		t.Errorf("Cannot generate endpoint crd: %v", err)
+		t.Errorf("Cannot generate klusterlet crd: %v", err)
 		return
 	}
 }
 
-func TestGetEndpointOperatorImage(t *testing.T) {
+func TestGetKlusterletOperatorImage(t *testing.T) {
 	type args struct {
-		endpointConfig        *multicloudv1alpha1.EndpointConfig
-		imageTagPostfix       string
-		endpointOperatorImage string
+		klusterletConfig        *klusterletcfgv1beta1.KlusterletConfig
+		imageTagPostfix         string
+		klusterletOperatorImage string
 	}
 	type expectValues struct {
 		image           string
@@ -110,58 +110,58 @@ func TestGetEndpointOperatorImage(t *testing.T) {
 		{
 			name: "SHA Only",
 			args: args{
-				endpointConfig: &multicloudv1alpha1.EndpointConfig{
-					Spec: multicloudv1beta1.EndpointSpec{
+				klusterletConfig: &klusterletcfgv1beta1.KlusterletConfig{
+					Spec: klusterletv1beta1.KlusterletSpec{
 						ImageRegistry: "sample-registry/uniquePath",
 						Version:       "2.3.0",
 					},
 				},
-				imageTagPostfix:       "",
-				endpointOperatorImage: "sample-registry/uniquePath/endpoint-operator@abcdefghijklmn",
+				imageTagPostfix:         "",
+				klusterletOperatorImage: "sample-registry/uniquePath/klusterlet-operator@abcdefghijklmn",
 			},
-			want: expectValues{"sample-registry/uniquePath/endpoint-operator@abcdefghijklmn", "", true},
+			want: expectValues{"sample-registry/uniquePath/klusterlet-operator@abcdefghijklmn", "", true},
 		},
 		{
 			name: "Empty Postfix",
 			args: args{
-				endpointConfig: &multicloudv1alpha1.EndpointConfig{
-					Spec: multicloudv1beta1.EndpointSpec{
+				klusterletConfig: &klusterletcfgv1beta1.KlusterletConfig{
+					Spec: klusterletv1beta1.KlusterletSpec{
 						ImageRegistry: "sample-registry/uniquePath",
 						Version:       "2.3.0",
 					},
 				},
-				imageTagPostfix:       "",
-				endpointOperatorImage: "",
+				imageTagPostfix:         "",
+				klusterletOperatorImage: "",
 			},
-			want: expectValues{"sample-registry/uniquePath/endpoint-operator:2.3.0", "", true},
+			want: expectValues{"sample-registry/uniquePath/klusterlet-operator:2.3.0", "", true},
 		},
 		{
 			name: "Postfix set",
 			args: args{
-				endpointConfig: &multicloudv1alpha1.EndpointConfig{
-					Spec: multicloudv1beta1.EndpointSpec{
+				klusterletConfig: &klusterletcfgv1beta1.KlusterletConfig{
+					Spec: klusterletv1beta1.KlusterletSpec{
 						ImageRegistry: "sample-registry/uniquePath",
 						Version:       "2.3.0",
 					},
 				},
-				imageTagPostfix:       "-postfix",
-				endpointOperatorImage: "",
+				imageTagPostfix:         "-postfix",
+				klusterletOperatorImage: "",
 			},
-			want: expectValues{"sample-registry/uniquePath/endpoint-operator:2.3.0-postfix", "-postfix", false},
+			want: expectValues{"sample-registry/uniquePath/klusterlet-operator:2.3.0-postfix", "-postfix", false},
 		},
 		{
 			name: "SHA and Postfix both set",
 			args: args{
-				endpointConfig: &multicloudv1alpha1.EndpointConfig{
-					Spec: multicloudv1beta1.EndpointSpec{
+				klusterletConfig: &klusterletcfgv1beta1.KlusterletConfig{
+					Spec: klusterletv1beta1.KlusterletSpec{
 						ImageRegistry: "sample-registry/uniquePath",
 						Version:       "2.3.0",
 					},
 				},
-				imageTagPostfix:       "-postfix",
-				endpointOperatorImage: "sample-registry/uniquePath/endpoint-operator@fdklfjasdklfj",
+				imageTagPostfix:         "-postfix",
+				klusterletOperatorImage: "sample-registry/uniquePath/klusterlet-operator@fdklfjasdklfj",
 			},
-			want: expectValues{"sample-registry/uniquePath/endpoint-operator:2.3.0-postfix", "-postfix", false},
+			want: expectValues{"sample-registry/uniquePath/klusterlet-operator:2.3.0-postfix", "-postfix", false},
 		},
 	}
 	for _, tt := range tests {
@@ -171,10 +171,10 @@ func TestGetEndpointOperatorImage(t *testing.T) {
 				t.Errorf("Cannot set env %s", ImageTagPostfixKey)
 			}
 
-			if err := os.Setenv(EndpointOperatorImageKey, tt.args.endpointOperatorImage); err != nil {
-				t.Errorf("Cannot set env %s", EndpointOperatorImageKey)
+			if err := os.Setenv(KlusterletOperatorImageKey, tt.args.klusterletOperatorImage); err != nil {
+				t.Errorf("Cannot set env %s", KlusterletOperatorImageKey)
 			}
-			image, postfix, useSHA := GetEndpointOperatorImage(tt.args.endpointConfig)
+			image, postfix, useSHA := GetKlusterletOperatorImage(tt.args.klusterletConfig)
 			assert.Equal(t, image, tt.want.image, "image name should match")
 			assert.Equal(t, postfix, tt.want.imageTagPostfix, "postfix should match")
 			assert.Equal(t, useSHA, tt.want.useSHA, "postfix should match")

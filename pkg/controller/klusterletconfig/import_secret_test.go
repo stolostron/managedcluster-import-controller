@@ -6,9 +6,9 @@
 //
 // Copyright (c) 2020 Red Hat, Inc.
 
-//Package endpointconfig ...
+//Package klusterletconfig ...
 
-package endpointconfig
+package klusterletconfig
 
 import (
 	"bytes"
@@ -29,18 +29,18 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	multicloudv1beta1 "github.com/open-cluster-management/endpoint-operator/pkg/apis/multicloud/v1beta1"
-	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
+	klusterletv1beta1 "github.com/open-cluster-management/endpoint-operator/pkg/apis/agent/v1beta1"
+	klusterletcfgv1beta1 "github.com/open-cluster-management/rcm-controller/pkg/apis/agent/v1beta1"
 	"github.com/open-cluster-management/rcm-controller/pkg/controller/clusterregistry"
 )
 
 func init() {
-	os.Setenv("ENDPOINT_CRD_FILE", "../../../build/resources/multicloud_v1beta1_endpoint_crd.yaml")
+	os.Setenv("KLUSTERLET_CRD_FILE", "../../../build/resources/agent.open-cluster-management.io_v1beta1_klusterlet_crd.yaml")
 }
 
 func Test_importSecretNsN(t *testing.T) {
 	type args struct {
-		endpointConfig *multicloudv1alpha1.EndpointConfig
+		klusterletConfig *klusterletcfgv1beta1.KlusterletConfig
 	}
 
 	tests := []struct {
@@ -50,15 +50,15 @@ func Test_importSecretNsN(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name:    "nil EndpointConfig",
+			name:    "nil KlusterletConfig",
 			args:    args{},
 			want:    types.NamespacedName{},
 			wantErr: true,
 		},
 		{
-			name: "empty EndpointConfig.Spec.ClusterName",
+			name: "empty KlusterletConfig.Spec.ClusterName",
 			args: args{
-				endpointConfig: &multicloudv1alpha1.EndpointConfig{
+				klusterletConfig: &klusterletcfgv1beta1.KlusterletConfig{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
 						Namespace: "test",
@@ -69,14 +69,14 @@ func Test_importSecretNsN(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "empty EndpointConfig.Spec.ClusterNamespace",
+			name: "empty KlusterletConfig.Spec.ClusterNamespace",
 			args: args{
-				endpointConfig: &multicloudv1alpha1.EndpointConfig{
+				klusterletConfig: &klusterletcfgv1beta1.KlusterletConfig{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
 						Namespace: "test",
 					},
-					Spec: multicloudv1beta1.EndpointSpec{
+					Spec: klusterletv1beta1.KlusterletSpec{
 						ClusterName: "cluster-name",
 					},
 				},
@@ -87,12 +87,12 @@ func Test_importSecretNsN(t *testing.T) {
 		{
 			name: "no error",
 			args: args{
-				endpointConfig: &multicloudv1alpha1.EndpointConfig{
+				klusterletConfig: &klusterletcfgv1beta1.KlusterletConfig{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
 						Namespace: "test",
 					},
-					Spec: multicloudv1beta1.EndpointSpec{
+					Spec: klusterletv1beta1.KlusterletSpec{
 						ClusterName:      "cluster-name",
 						ClusterNamespace: "cluster-namespace",
 					},
@@ -108,7 +108,7 @@ func Test_importSecretNsN(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := importSecretNsN(tt.args.endpointConfig)
+			got, err := importSecretNsN(tt.args.klusterletConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("importSecretNsN() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -122,16 +122,16 @@ func Test_importSecretNsN(t *testing.T) {
 
 func Test_getImportSecret(t *testing.T) {
 	type args struct {
-		client         client.Client
-		endpointConfig *multicloudv1alpha1.EndpointConfig
+		client           client.Client
+		klusterletConfig *klusterletcfgv1beta1.KlusterletConfig
 	}
 
-	testEndpointConfig := &multicloudv1alpha1.EndpointConfig{
+	testKlusterletConfig := &klusterletcfgv1beta1.KlusterletConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cluster-name",
 			Namespace: "cluster-namespace",
 		},
-		Spec: multicloudv1beta1.EndpointSpec{
+		Spec: klusterletv1beta1.KlusterletSpec{
 			ClusterName:      "cluster-name",
 			ClusterNamespace: "cluster-namespace",
 		},
@@ -155,10 +155,10 @@ func Test_getImportSecret(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "nil EndpointConfig",
+			name: "nil KlusterletConfig",
 			args: args{
-				client:         fake.NewFakeClient([]runtime.Object{}...),
-				endpointConfig: nil,
+				client:           fake.NewFakeClient([]runtime.Object{}...),
+				klusterletConfig: nil,
 			},
 			want:    nil,
 			wantErr: true,
@@ -166,8 +166,8 @@ func Test_getImportSecret(t *testing.T) {
 		{
 			name: "secret does not exist",
 			args: args{
-				client:         fake.NewFakeClient([]runtime.Object{}...),
-				endpointConfig: testEndpointConfig,
+				client:           fake.NewFakeClient([]runtime.Object{}...),
+				klusterletConfig: testKlusterletConfig,
 			},
 			want:    nil,
 			wantErr: true,
@@ -175,8 +175,8 @@ func Test_getImportSecret(t *testing.T) {
 		{
 			name: "secret does exist",
 			args: args{
-				client:         fake.NewFakeClient([]runtime.Object{testSecret}...),
-				endpointConfig: testEndpointConfig,
+				client:           fake.NewFakeClient([]runtime.Object{testSecret}...),
+				klusterletConfig: testKlusterletConfig,
 			},
 			want:    testSecret,
 			wantErr: false,
@@ -185,7 +185,7 @@ func Test_getImportSecret(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := getImportSecret(tt.args.client, tt.args.endpointConfig)
+			got, err := getImportSecret(tt.args.client, tt.args.klusterletConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getImportSecret() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -200,15 +200,15 @@ func Test_getImportSecret(t *testing.T) {
 func Test_newImportSecret(t *testing.T) {
 	s := scheme.Scheme
 	s.AddKnownTypes(clusterregistryv1alpha1.SchemeGroupVersion, &clusterregistryv1alpha1.Cluster{})
-	s.AddKnownTypes(multicloudv1alpha1.SchemeGroupVersion, &multicloudv1alpha1.EndpointConfig{})
+	s.AddKnownTypes(klusterletcfgv1beta1.SchemeGroupVersion, &klusterletcfgv1beta1.KlusterletConfig{})
 	s.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{})
 
-	endpointConfig := &multicloudv1alpha1.EndpointConfig{
+	klusterletConfig := &klusterletcfgv1beta1.KlusterletConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cluster-name",
 			Namespace: "cluster-namespace",
 		},
-		Spec: multicloudv1beta1.EndpointSpec{
+		Spec: klusterletv1beta1.KlusterletSpec{
 			ClusterName:      "cluster-name",
 			ClusterNamespace: "cluster-namespace",
 		},
@@ -245,9 +245,9 @@ func Test_newImportSecret(t *testing.T) {
 	})
 
 	type args struct {
-		client         client.Client
-		scheme         *runtime.Scheme
-		endpointConfig *multicloudv1alpha1.EndpointConfig
+		client           client.Client
+		scheme           *runtime.Scheme
+		klusterletConfig *klusterletcfgv1beta1.KlusterletConfig
 	}
 
 	tests := []struct {
@@ -259,29 +259,29 @@ func Test_newImportSecret(t *testing.T) {
 		{
 			name: "nil scheme",
 			args: args{
-				client:         fake.NewFakeClient([]runtime.Object{}...),
-				scheme:         nil,
-				endpointConfig: nil,
+				client:           fake.NewFakeClient([]runtime.Object{}...),
+				scheme:           nil,
+				klusterletConfig: nil,
 			},
 			wantNil: true,
 			wantErr: true,
 		},
 		{
-			name: "nil endpointConfig",
+			name: "nil klusterletConfig",
 			args: args{
-				client:         fake.NewFakeClientWithScheme(s, []runtime.Object{}...),
-				scheme:         s,
-				endpointConfig: nil,
+				client:           fake.NewFakeClientWithScheme(s, []runtime.Object{}...),
+				scheme:           s,
+				klusterletConfig: nil,
 			},
 			wantNil: true,
 			wantErr: true,
 		},
 		{
-			name: "empty endpointConfig",
+			name: "empty klusterletConfig",
 			args: args{
-				client:         fake.NewFakeClientWithScheme(s, []runtime.Object{}...),
-				scheme:         s,
-				endpointConfig: &multicloudv1alpha1.EndpointConfig{},
+				client:           fake.NewFakeClientWithScheme(s, []runtime.Object{}...),
+				scheme:           s,
+				klusterletConfig: &klusterletcfgv1beta1.KlusterletConfig{},
 			},
 			wantNil: true,
 			wantErr: true,
@@ -290,15 +290,15 @@ func Test_newImportSecret(t *testing.T) {
 			name: "no error",
 			args: args{
 				client: fake.NewFakeClientWithScheme(s, []runtime.Object{
-					endpointConfig,
+					klusterletConfig,
 					cluster,
 					infrastructConfig,
 					serviceAccount,
 					tokenSecret,
 					clusterInfoConfigMap(),
 				}...),
-				scheme:         s,
-				endpointConfig: endpointConfig,
+				scheme:           s,
+				klusterletConfig: klusterletConfig,
 			},
 			wantNil: false,
 			wantErr: false,
@@ -307,7 +307,7 @@ func Test_newImportSecret(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := newImportSecret(tt.args.client, tt.args.endpointConfig)
+			got, err := newImportSecret(tt.args.client, tt.args.klusterletConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("newImportSecret() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -326,8 +326,8 @@ func Test_newImportSecret(t *testing.T) {
 					t.Errorf("import.yaml should not be empty")
 					return
 				}
-				if len(got.Data["endpoint-crd.yaml"]) == 0 {
-					t.Errorf("endpoint-crd.yaml should not be empty")
+				if len(got.Data["klusterlet-crd.yaml"]) == 0 {
+					t.Errorf("klusterlet-crd.yaml should not be empty")
 					return
 				}
 
@@ -337,12 +337,12 @@ func Test_newImportSecret(t *testing.T) {
 }
 
 func Test_createImportSecret(t *testing.T) {
-	endpointConfig := &multicloudv1alpha1.EndpointConfig{
+	klusterletConfig := &klusterletcfgv1beta1.KlusterletConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "cluster-name",
 			Namespace: "cluster-namespace",
 		},
-		Spec: multicloudv1beta1.EndpointSpec{
+		Spec: klusterletv1beta1.KlusterletSpec{
 			ClusterName:      "cluster-name",
 			ClusterNamespace: "cluster-namespace",
 		},
@@ -379,11 +379,11 @@ func Test_createImportSecret(t *testing.T) {
 
 	s := scheme.Scheme
 	s.AddKnownTypes(clusterregistryv1alpha1.SchemeGroupVersion, &clusterregistryv1alpha1.Cluster{})
-	s.AddKnownTypes(multicloudv1alpha1.SchemeGroupVersion, &multicloudv1alpha1.EndpointConfig{})
+	s.AddKnownTypes(klusterletcfgv1beta1.SchemeGroupVersion, &klusterletcfgv1beta1.KlusterletConfig{})
 	s.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{})
 
 	fakeClient := fake.NewFakeClientWithScheme(s,
-		endpointConfig,
+		klusterletConfig,
 		cluster,
 		infrastructConfig,
 		serviceAccount,
@@ -391,7 +391,7 @@ func Test_createImportSecret(t *testing.T) {
 		clusterInfoConfigMap(),
 	)
 
-	importSecret, err := newImportSecret(fakeClient, endpointConfig)
+	importSecret, err := newImportSecret(fakeClient, klusterletConfig)
 	if err != nil {
 		t.Errorf("fail to initialize import secret, error = %v", err)
 	}
@@ -403,10 +403,10 @@ func Test_createImportSecret(t *testing.T) {
 	}}
 
 	type args struct {
-		client         client.Client
-		scheme         *runtime.Scheme
-		cluster        *clusterregistryv1alpha1.Cluster
-		endpointConfig *multicloudv1alpha1.EndpointConfig
+		client           client.Client
+		scheme           *runtime.Scheme
+		cluster          *clusterregistryv1alpha1.Cluster
+		klusterletConfig *klusterletcfgv1beta1.KlusterletConfig
 	}
 
 	tests := []struct {
@@ -418,10 +418,10 @@ func Test_createImportSecret(t *testing.T) {
 		{
 			name: "no error",
 			args: args{
-				client:         fakeClient,
-				scheme:         s,
-				cluster:        cluster,
-				endpointConfig: endpointConfig,
+				client:           fakeClient,
+				scheme:           s,
+				cluster:          cluster,
+				klusterletConfig: klusterletConfig,
 			},
 			want:    importSecret,
 			wantErr: false,
@@ -430,16 +430,16 @@ func Test_createImportSecret(t *testing.T) {
 			name: "secret already exist",
 			args: args{
 				client: fake.NewFakeClientWithScheme(s,
-					endpointConfig,
+					klusterletConfig,
 					cluster,
 					serviceAccount,
 					tokenSecret,
 					clusterInfoConfigMap(),
 					importSecret,
 				),
-				scheme:         s,
-				cluster:        cluster,
-				endpointConfig: endpointConfig,
+				scheme:           s,
+				cluster:          cluster,
+				klusterletConfig: klusterletConfig,
 			},
 			want:    nil,
 			wantErr: true,
@@ -448,7 +448,7 @@ func Test_createImportSecret(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := createImportSecret(tt.args.client, tt.args.scheme, tt.args.cluster, tt.args.endpointConfig)
+			got, err := createImportSecret(tt.args.client, tt.args.scheme, tt.args.cluster, tt.args.klusterletConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createImportSecret() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -485,15 +485,15 @@ func Test_toYAML(t *testing.T) {
 						Kind:       "CustomResourceDefinition",
 					},
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "endpoint.multicloud.ibm.com",
+						Name: "klusterlet.agent.open-cluster-management.io",
 					},
 					Spec: apiextensionv1beta1.CustomResourceDefinitionSpec{
-						Group: "multicloud.ibm.com",
+						Group: "agent.open-cluster-management.io",
 						Names: apiextensionv1beta1.CustomResourceDefinitionNames{
-							Kind:     "Endpoint",
-							ListKind: "EndpointList",
-							Plural:   "endpoints",
-							Singular: "endpoint",
+							Kind:     "Klusterlet",
+							ListKind: "KlusterletList",
+							Plural:   "klusterlets",
+							Singular: "klusterlet",
 						},
 						Scope: "Namespaced",
 					},
@@ -525,14 +525,14 @@ apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
   creationTimestamp: null
-  name: endpoint.multicloud.ibm.com
+  name: klusterlet.agent.open-cluster-management.io
 spec:
-  group: multicloud.ibm.com
+  group: agent.open-cluster-management.io
   names:
-    kind: Endpoint
-    listKind: EndpointList
-    plural: endpoints
-    singular: endpoint
+    kind: Klusterlet
+    listKind: KlusterletList
+    plural: klusterlets
+    singular: klusterlet
   scope: Namespaced
 
 ---

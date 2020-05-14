@@ -21,7 +21,7 @@ If the manadatory kubernete resource is not present, the operator will not start
 
 - clusterregistry.k8s.io/v1alpha1
 
-### controller/endpointconfig
+### controller/klusterletconfig
 
 - clusterregistry.k8s.io/v1alpha1
 

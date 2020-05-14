@@ -19,13 +19,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
+	klusterletcfgv1beta1 "github.com/open-cluster-management/rcm-controller/pkg/apis/agent/v1beta1"
 )
 
-func imagePullSecretNsN(endpointConfig *multicloudv1alpha1.EndpointConfig) types.NamespacedName {
+func imagePullSecretNsN(klusterletConfig *klusterletcfgv1beta1.KlusterletConfig) types.NamespacedName {
 	return types.NamespacedName{
-		Name:      endpointConfig.Spec.ImagePullSecret,
-		Namespace: endpointConfig.Namespace,
+		Name:      klusterletConfig.Spec.ImagePullSecret,
+		Namespace: klusterletConfig.Namespace,
 	}
 }
 
@@ -36,14 +36,14 @@ func defaultImagePullSecretNsN() types.NamespacedName {
 	}
 }
 
-func getImagePullSecret(client client.Client, endpointConfig *multicloudv1alpha1.EndpointConfig) (*corev1.Secret, error) {
+func getImagePullSecret(client client.Client, klusterletConfig *klusterletcfgv1beta1.KlusterletConfig) (*corev1.Secret, error) {
 	//if using default image pull secret the pre-process in Reconcile should already stuff the default imagePullSecret in the spec
-	if endpointConfig.Spec.ImagePullSecret == "" {
+	if klusterletConfig.Spec.ImagePullSecret == "" {
 		return nil, nil
 	}
 
 	foundSecret := &corev1.Secret{}
-	secretNsN := imagePullSecretNsN(endpointConfig)
+	secretNsN := imagePullSecretNsN(klusterletConfig)
 	defaultSecretNsN := defaultImagePullSecretNsN()
 
 	//fetch secret from cluster namespace

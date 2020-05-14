@@ -24,7 +24,7 @@ namespace: open-cluster-management
 # here. These are deployed via a "make install" dependency.
 
 resources:
-- ./crds/multicloud_v1alpha1_endpointconfig_crd.yaml
+- ./crds/agent.open-cluster-management.io_v1beta1_klusterletconfig_crd.yaml
 - ./namespace.yaml
 - ./service_account.yaml
 - ./role_binding.yaml

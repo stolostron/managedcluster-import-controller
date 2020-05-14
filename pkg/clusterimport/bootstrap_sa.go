@@ -17,29 +17,29 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
+	klusterletcfgv1beta1 "github.com/open-cluster-management/rcm-controller/pkg/apis/agent/v1beta1"
 )
 
 // BootstrapServiceAccountNamePostfix is the postfix for bootstrap service account
 const BootstrapServiceAccountNamePostfix = "-bootstrap-sa"
 
-func bootstrapServiceAccountNsN(endpointConfig *multicloudv1alpha1.EndpointConfig) (types.NamespacedName, error) {
-	if endpointConfig == nil {
-		return types.NamespacedName{}, fmt.Errorf("endpontConfig can not be nil")
+func bootstrapServiceAccountNsN(klusterletConfig *klusterletcfgv1beta1.KlusterletConfig) (types.NamespacedName, error) {
+	if klusterletConfig == nil {
+		return types.NamespacedName{}, fmt.Errorf("klusterletconfig can not be nil")
 	}
 
-	if endpointConfig.Spec.ClusterName == "" {
-		return types.NamespacedName{}, fmt.Errorf("endpontConfig can not have empty ClusterName")
+	if klusterletConfig.Spec.ClusterName == "" {
+		return types.NamespacedName{}, fmt.Errorf("klusterletconfig can not have empty ClusterName")
 	}
 
 	return types.NamespacedName{
-		Name:      endpointConfig.Spec.ClusterName + BootstrapServiceAccountNamePostfix,
-		Namespace: endpointConfig.Namespace,
+		Name:      klusterletConfig.Spec.ClusterName + BootstrapServiceAccountNamePostfix,
+		Namespace: klusterletConfig.Namespace,
 	}, nil
 }
 
-func newBootstrapServiceAccount(endpointConfig *multicloudv1alpha1.EndpointConfig) (*corev1.ServiceAccount, error) {
-	saNsN, err := bootstrapServiceAccountNsN(endpointConfig)
+func newBootstrapServiceAccount(klusterletConfig *klusterletcfgv1beta1.KlusterletConfig) (*corev1.ServiceAccount, error) {
+	saNsN, err := bootstrapServiceAccountNsN(klusterletConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -57,8 +57,8 @@ func newBootstrapServiceAccount(endpointConfig *multicloudv1alpha1.EndpointConfi
 }
 
 // GetBootstrapServiceAccount get the service account use for multicluster-endpoint bootstrap
-func GetBootstrapServiceAccount(client client.Client, endpointConfig *multicloudv1alpha1.EndpointConfig) (*corev1.ServiceAccount, error) {
-	saNsN, err := bootstrapServiceAccountNsN(endpointConfig)
+func GetBootstrapServiceAccount(client client.Client, klusterletConfig *klusterletcfgv1beta1.KlusterletConfig) (*corev1.ServiceAccount, error) {
+	saNsN, err := bootstrapServiceAccountNsN(klusterletConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -73,8 +73,8 @@ func GetBootstrapServiceAccount(client client.Client, endpointConfig *multicloud
 }
 
 // CreateBootstrapServiceAccount create the service account use for multicluster-endpoint bootstrap
-func CreateBootstrapServiceAccount(client client.Client, endpointConfig *multicloudv1alpha1.EndpointConfig) (*corev1.ServiceAccount, error) {
-	sa, err := newBootstrapServiceAccount(endpointConfig)
+func CreateBootstrapServiceAccount(client client.Client, klusterletConfig *klusterletcfgv1beta1.KlusterletConfig) (*corev1.ServiceAccount, error) {
+	sa, err := newBootstrapServiceAccount(klusterletConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -86,8 +86,8 @@ func CreateBootstrapServiceAccount(client client.Client, endpointConfig *multicl
 	return sa, nil
 }
 
-func getBootstrapTokenSecret(client client.Client, endpointConfig *multicloudv1alpha1.EndpointConfig) (*corev1.Secret, error) {
-	sa, err := GetBootstrapServiceAccount(client, endpointConfig)
+func getBootstrapTokenSecret(client client.Client, klusterletConfig *klusterletcfgv1beta1.KlusterletConfig) (*corev1.Secret, error) {
+	sa, err := GetBootstrapServiceAccount(client, klusterletConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -111,8 +111,8 @@ func getBootstrapTokenSecret(client client.Client, endpointConfig *multicloudv1a
 	return nil, fmt.Errorf("fail to find service account token secret")
 }
 
-func getBootstrapToken(client client.Client, endpointConfig *multicloudv1alpha1.EndpointConfig) ([]byte, error) {
-	secret, err := getBootstrapTokenSecret(client, endpointConfig)
+func getBootstrapToken(client client.Client, klusterletConfig *klusterletcfgv1beta1.KlusterletConfig) ([]byte, error) {
+	secret, err := getBootstrapTokenSecret(client, klusterletConfig)
 	if err != nil {
 		return nil, err
 	}
