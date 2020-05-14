@@ -12,23 +12,24 @@ package clusterimport
 import (
 	"testing"
 
-	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+
+	klusterletcfgv1beta1 "github.com/open-cluster-management/rcm-controller/pkg/apis/agent/v1beta1"
 )
 
 func TestEqualRawExtensions(t *testing.T) {
 	baseRawExtension1 := runtime.RawExtension{
-		Object: &multicloudv1alpha1.EndpointConfig{
+		Object: &klusterletcfgv1beta1.KlusterletConfig{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "endpointConfig1",
+				Name:      "klusterletConfig1",
 				Namespace: "namespace",
 			}},
 	}
 	baseRawExtension2 := runtime.RawExtension{
-		Object: &multicloudv1alpha1.EndpointConfig{
+		Object: &klusterletcfgv1beta1.KlusterletConfig{
 			ObjectMeta: metav1.ObjectMeta{
-				Name:      "endpointConfig2",
+				Name:      "klusterletConfig2",
 				Namespace: "namespace",
 			}},
 	}

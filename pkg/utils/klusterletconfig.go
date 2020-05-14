@@ -15,20 +15,20 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
+	klusterletcfgv1beta1 "github.com/open-cluster-management/rcm-controller/pkg/apis/agent/v1beta1"
 )
 
-func endpointConfigNsN(name string, namespace string) types.NamespacedName {
+func klusterletConfigNsN(name string, namespace string) types.NamespacedName {
 	return types.NamespacedName{
 		Name:      name,
 		Namespace: namespace,
 	}
 }
 
-// GetEndpointConfig - Get the endpoint config
-func GetEndpointConfig(client client.Client, name string, namespace string) (*multicloudv1alpha1.EndpointConfig, error) {
-	ncNsN := endpointConfigNsN(name, namespace)
-	nc := &multicloudv1alpha1.EndpointConfig{}
+// GetKlusterletConfig - Get the klusterlet config
+func GetKlusterletConfig(client client.Client, name string, namespace string) (*klusterletcfgv1beta1.KlusterletConfig, error) {
+	ncNsN := klusterletConfigNsN(name, namespace)
+	nc := &klusterletcfgv1beta1.KlusterletConfig{}
 
 	if err := client.Get(context.TODO(), ncNsN, nc); err != nil {
 		return nil, err

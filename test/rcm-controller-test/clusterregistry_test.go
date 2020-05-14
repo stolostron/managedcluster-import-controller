@@ -61,8 +61,8 @@ func isOwner(owner *unstructured.Unstructured, obj interface{}) bool {
 
 var _ = Describe("Clusterregistry", func() {
 	AfterEach(func() {
-		By("Delete endpointconfig if exist")
-		deleteIfExists(clientHubDynamic, gvrEndpointconfig, testNamespace, testNamespace)
+		By("Delete klusterletconfig if exist")
+		deleteIfExists(clientHubDynamic, gvrKlusterletconfig, testNamespace, testNamespace)
 
 		By("Delete cluster if exist")
 		deleteIfExists(clientHubDynamic, gvrClusterregistry, testNamespace, testNamespace)
@@ -73,7 +73,7 @@ var _ = Describe("Clusterregistry", func() {
 		By("Delete other resources")
 		deleteIfExists(clientHubDynamic, gvrServiceaccount, testNamespace+"-bootstrap-sa", testNamespace)
 		deleteIfExists(clientHubDynamic, gvrSecret, testNamespace+"-import", testNamespace)
-		deleteIfExists(clientHubDynamic, gvrSyncset, testNamespace+"-multicluster-endpoint", testNamespace)
+		deleteIfExists(clientHubDynamic, gvrSyncset, testNamespace+"-klusterlet", testNamespace)
 
 	})
 	It("Should create bootstrap serviceAccount", func() {
@@ -97,66 +97,66 @@ var _ = Describe("Clusterregistry", func() {
 		})
 	})
 
-	It("Should add ownerRef to created endpointconfig", func() {
+	It("Should add ownerRef to created klusterletconfig", func() {
 		By("Creating clusterregistry")
 		cluster := newClusterregistry(testNamespace)
 		createNewUnstructured(clientHubDynamic, gvrClusterregistry,
 			cluster, testNamespace, testNamespace)
 
-		endpointconfig := newEndpointconfig(testNamespace, "", "")
-		By("Creating endpointconfig")
-		createNewUnstructured(clientHubDynamic, gvrEndpointconfig,
-			endpointconfig, testNamespace, testNamespace)
+		klusterletconfig := newKlusterletConfig(testNamespace, "", "")
+		By("Creating klusterletconfig")
+		createNewUnstructured(clientHubDynamic, gvrKlusterletconfig,
+			klusterletconfig, testNamespace, testNamespace)
 
-		When("endpointconfig created, wait for ownerRef", func() {
+		When("klusterletconfig created, wait for ownerRef", func() {
 			Eventually(func() bool {
 				klog.V(1).Info("Wait ownerRef ...")
-				namespace := clientHubDynamic.Resource(gvrEndpointconfig).Namespace(testNamespace)
-				endpointconfig, err := namespace.Get(testNamespace, metav1.GetOptions{})
+				namespace := clientHubDynamic.Resource(gvrKlusterletconfig).Namespace(testNamespace)
+				klusterletconfig, err := namespace.Get(testNamespace, metav1.GetOptions{})
 				if err != nil {
 					return false
 				}
-				return isOwner(cluster, endpointconfig)
+				return isOwner(cluster, klusterletconfig)
 			}, 30, 1).Should(BeTrue())
 			klog.V(1).Info("bootstrap serviceAccount created")
 		})
 	})
 
-	It("Should add ownerRef to existing endpointconfig", func() {
-		endpointconfig := newEndpointconfig(testNamespace, "", "")
-		By("Creating endpointconfig")
-		createNewUnstructured(clientHubDynamic, gvrEndpointconfig,
-			endpointconfig, testNamespace, testNamespace)
+	It("Should add ownerRef to existing klusterletconfig", func() {
+		klusterletconfig := newKlusterletConfig(testNamespace, "", "")
+		By("Creating klusterletconfig")
+		createNewUnstructured(clientHubDynamic, gvrKlusterletconfig,
+			klusterletconfig, testNamespace, testNamespace)
 
 		By("Creating clusterregistry")
 		cluster := newClusterregistry(testNamespace)
 		createNewUnstructured(clientHubDynamic, gvrClusterregistry,
 			cluster, testNamespace, testNamespace)
 
-		When("endpointconfig created, wait for ownerRef", func() {
+		When("klusterletconfig created, wait for ownerRef", func() {
 			Eventually(func() bool {
 				klog.V(1).Info("Wait ownerRef ...")
-				namespace := clientHubDynamic.Resource(gvrEndpointconfig).Namespace(testNamespace)
-				endpointconfig, err := namespace.Get(testNamespace, metav1.GetOptions{})
+				namespace := clientHubDynamic.Resource(gvrKlusterletconfig).Namespace(testNamespace)
+				klusterletconfig, err := namespace.Get(testNamespace, metav1.GetOptions{})
 				if err != nil {
 					return false
 				}
-				return isOwner(cluster, endpointconfig)
+				return isOwner(cluster, klusterletconfig)
 			}, 30, 1).Should(BeTrue())
 			klog.V(1).Info("bootstrap serviceAccount created")
 		})
 	})
 
-	It("Should create import secret if endpointconfig exists", func() {
+	It("Should create import secret if klusterletconfig exists", func() {
 		By("Creating clusterregistry")
 		cluster := newClusterregistry(testNamespace)
 		createNewUnstructured(clientHubDynamic, gvrClusterregistry,
 			cluster, testNamespace, testNamespace)
 
-		endpointconfig := newEndpointconfig(testNamespace, "", "")
-		By("Creating endpointconfig")
-		createNewUnstructured(clientHubDynamic, gvrEndpointconfig,
-			endpointconfig, testNamespace, testNamespace)
+		klusterletconfig := newKlusterletConfig(testNamespace, "", "")
+		By("Creating klusterletconfig")
+		createNewUnstructured(clientHubDynamic, gvrKlusterletconfig,
+			klusterletconfig, testNamespace, testNamespace)
 
 		var importSecret *corev1.Secret
 		When("clusterregistry created, wait for import secret", func() {
@@ -173,11 +173,11 @@ var _ = Describe("Clusterregistry", func() {
 		})
 	})
 
-	It("Should create syncset if clusterdeployment and endpointconfig exist", func() {
-		endpointconfig := newEndpointconfig(testNamespace, "", "")
-		By("Creating endpointconfig")
-		createNewUnstructured(clientHubDynamic, gvrEndpointconfig,
-			endpointconfig, testNamespace, testNamespace)
+	It("Should create syncset if clusterdeployment and klusterletconfig exist", func() {
+		klusterletconfig := newKlusterletConfig(testNamespace, "", "")
+		By("Creating klusterletconfig")
+		createNewUnstructured(clientHubDynamic, gvrKlusterletconfig,
+			klusterletconfig, testNamespace, testNamespace)
 
 		By("Creating clusterdeployment")
 		clusterdeployment := newClusterdeployment(testNamespace)
@@ -190,22 +190,22 @@ var _ = Describe("Clusterregistry", func() {
 			cluster, testNamespace, testNamespace)
 
 		By("Waiting syncset")
-		syncset := getWithTimeout(clientHubDynamic, gvrSyncset, testNamespace+"-multicluster-endpoint", testNamespace, true, 30)
+		syncset := getWithTimeout(clientHubDynamic, gvrSyncset, testNamespace+"-klusterlet", testNamespace, true, 30)
 
 		By("Checking ownerRef")
 		Expect(isOwner(cluster, syncset)).To(Equal(true))
 
 	})
-	It("Should create syncset if clusterdeployment and endpointconfig exist (different order)", func() {
+	It("Should create syncset if clusterdeployment and klusterletconfig exist (different order)", func() {
 		By("Creating clusterregistry")
 		cluster := newClusterregistry(testNamespace)
 		createNewUnstructured(clientHubDynamic, gvrClusterregistry,
 			cluster, testNamespace, testNamespace)
 
-		endpointconfig := newEndpointconfig(testNamespace, "quay.io/open-cluster-management", "fake-secret")
-		By("Creating endpointconfig")
-		createNewUnstructured(clientHubDynamic, gvrEndpointconfig,
-			endpointconfig, testNamespace, testNamespace)
+		klusterletconfig := newKlusterletConfig(testNamespace, "quay.io/open-cluster-management", "fake-secret")
+		By("Creating klusterletconfig")
+		createNewUnstructured(clientHubDynamic, gvrKlusterletconfig,
+			klusterletconfig, testNamespace, testNamespace)
 
 		By("Creating clusterdeployment")
 		clusterdeployment := newClusterdeployment(testNamespace)
@@ -213,18 +213,18 @@ var _ = Describe("Clusterregistry", func() {
 			clusterdeployment, testNamespace, testNamespace)
 
 		By("Waiting syncset")
-		syncset := getWithTimeout(clientHubDynamic, gvrSyncset, testNamespace+"-multicluster-endpoint", testNamespace, true, 30)
+		syncset := getWithTimeout(clientHubDynamic, gvrSyncset, testNamespace+"-klusterlet", testNamespace, true, 30)
 
 		By("Checking ownerRef")
 		Expect(isOwner(cluster, syncset)).To(Equal(true))
 
 	})
 
-	It("Should remove endpointconfig, import secret, syncset, serviceAccount when cluster is deleted", func() {
+	It("Should remove klusterletconfig, import secret, syncset, serviceAccount when cluster is deleted", func() {
 
-		By("Checking no endpointconfig, import secret, syncset, and serviceAccount")
-		getWithTimeout(clientHubDynamic, gvrEndpointconfig, testNamespace, testNamespace, false, 5)
-		getWithTimeout(clientHubDynamic, gvrSyncset, testNamespace+"-multicluster-endpoint", testNamespace, false, 5)
+		By("Checking no klusterletconfig, import secret, syncset, and serviceAccount")
+		getWithTimeout(clientHubDynamic, gvrKlusterletconfig, testNamespace, testNamespace, false, 5)
+		getWithTimeout(clientHubDynamic, gvrSyncset, testNamespace+"-klusterlet", testNamespace, false, 5)
 		getWithTimeout(clientHubDynamic, gvrSecret, testNamespace+"-import", testNamespace, false, 5)
 		getWithTimeout(clientHubDynamic, gvrServiceaccount, testNamespace+"-bootstrap-sa", testNamespace, false, 5)
 
@@ -233,10 +233,10 @@ var _ = Describe("Clusterregistry", func() {
 		createNewUnstructured(clientHubDynamic, gvrClusterregistry,
 			cluster, testNamespace, testNamespace)
 
-		endpointconfig := newEndpointconfig(testNamespace, "", "")
-		By("Creating endpointconfig")
-		createNewUnstructured(clientHubDynamic, gvrEndpointconfig,
-			endpointconfig, testNamespace, testNamespace)
+		klusterletconfig := newKlusterletConfig(testNamespace, "", "")
+		By("Creating klusterletconfig")
+		createNewUnstructured(clientHubDynamic, gvrKlusterletconfig,
+			klusterletconfig, testNamespace, testNamespace)
 
 		By("Creating clusterdeployment")
 		clusterdeployment := newClusterdeployment(testNamespace)
@@ -244,7 +244,7 @@ var _ = Describe("Clusterregistry", func() {
 			clusterdeployment, testNamespace, testNamespace)
 
 		By("Waiting import secret, syncset, and service account")
-		getWithTimeout(clientHubDynamic, gvrSyncset, testNamespace+"-multicluster-endpoint", testNamespace, true, 15)
+		getWithTimeout(clientHubDynamic, gvrSyncset, testNamespace+"-klusterlet", testNamespace, true, 15)
 		getWithTimeout(clientHubDynamic, gvrSecret, testNamespace+"-import", testNamespace, true, 15)
 		getWithTimeout(clientHubDynamic, gvrServiceaccount, testNamespace+"-bootstrap-sa", testNamespace, true, 5)
 
@@ -252,8 +252,8 @@ var _ = Describe("Clusterregistry", func() {
 		deleteIfExists(clientHubDynamic, gvrClusterregistry, testNamespace, testNamespace)
 
 		By("Waiting for deletion of import secret, syncset, and service account")
-		getWithTimeout(clientHubDynamic, gvrEndpointconfig, testNamespace, testNamespace, false, 15)
-		getWithTimeout(clientHubDynamic, gvrSyncset, testNamespace+"-multicluster-endpoint", testNamespace, false, 15)
+		getWithTimeout(clientHubDynamic, gvrKlusterletconfig, testNamespace, testNamespace, false, 15)
+		getWithTimeout(clientHubDynamic, gvrSyncset, testNamespace+"-klusterlet", testNamespace, false, 15)
 		getWithTimeout(clientHubDynamic, gvrSecret, testNamespace+"-import", testNamespace, false, 15)
 		getWithTimeout(clientHubDynamic, gvrServiceaccount, testNamespace+"-bootstrap-sa", testNamespace, false, 5)
 

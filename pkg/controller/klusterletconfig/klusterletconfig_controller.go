@@ -6,7 +6,7 @@
 //
 // Copyright (c) 2020 Red Hat, Inc.
 
-package endpointconfig
+package klusterletconfig
 
 import (
 	"context"
@@ -28,20 +28,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	multicloudv1beta1 "github.com/open-cluster-management/endpoint-operator/pkg/apis/multicloud/v1beta1"
+	klusterletv1beta1 "github.com/open-cluster-management/endpoint-operator/pkg/apis/agent/v1beta1"
 	mcmv1alpha1 "github.com/open-cluster-management/multicloud-operators-foundation/pkg/apis/mcm/v1alpha1"
-	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
+	klusterletcfgv1beta1 "github.com/open-cluster-management/rcm-controller/pkg/apis/agent/v1beta1"
 	"github.com/open-cluster-management/rcm-controller/pkg/controller/clusterregistry"
 )
 
-var log = logf.Log.WithName("controller_endpointconfig")
+var log = logf.Log.WithName("controller_klusterletconfig")
 
 /**
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
 * business logic.  Delete these comments after modifying this file.*
  */
 
-// Add creates a new EndpointConfig Controller and adds it to the Manager. The Manager will set fields on the Controller
+// Add creates a new KlusterletConfig Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(mgr manager.Manager) error {
 	return add(mgr, newReconciler(mgr))
@@ -49,20 +49,20 @@ func Add(mgr manager.Manager) error {
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	return &ReconcileEndpointConfig{client: mgr.GetClient(), scheme: mgr.GetScheme(), apireader: mgr.GetAPIReader()}
+	return &ReconcileKlusterletConfig{client: mgr.GetClient(), scheme: mgr.GetScheme(), apireader: mgr.GetAPIReader()}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("endpointconfig-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("klusterletconfig-controller", mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}
 
-	// Watch for changes to primary resource EndpointConfig
+	// Watch for changes to primary resource KlusterletConfig
 	err = c.Watch(
-		&source.Kind{Type: &multicloudv1alpha1.EndpointConfig{}},
+		&source.Kind{Type: &klusterletcfgv1beta1.KlusterletConfig{}},
 		&handler.EnqueueRequestForObject{},
 	)
 	if err != nil {
@@ -86,15 +86,15 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 		return err
 	}
 
-	// Watch for changes to secondary resource Pods and requeue the owner EndpointConfig
+	// Watch for changes to secondary resource Pods and requeue the owner KlusterletConfig
 	return nil
 }
 
-// blank assignment to verify that ReconcileEndpointConfig implements reconcile.Reconciler
-var _ reconcile.Reconciler = &ReconcileEndpointConfig{}
+// blank assignment to verify that ReconcileKlusterletConfig implements reconcile.Reconciler
+var _ reconcile.Reconciler = &ReconcileKlusterletConfig{}
 
-// ReconcileEndpointConfig reconciles a EndpointConfig object
-type ReconcileEndpointConfig struct {
+// ReconcileKlusterletConfig reconciles a KlusterletConfig object
+type ReconcileKlusterletConfig struct {
 	// This client, initialized using mgr.Client() above, is a split client
 	// that reads objects from the cache and writes to the apiserver
 	client    client.Client
@@ -102,17 +102,17 @@ type ReconcileEndpointConfig struct {
 	apireader client.Reader
 }
 
-// Reconcile reads that state of the cluster for a EndpointConfig object and makes changes based on the state read
-// and what is in the EndpointConfig.Spec
+// Reconcile reads that state of the cluster for a KlusterletConfig object and makes changes based on the state read
+// and what is in the KlusterletConfig.Spec
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileEndpointConfig) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileKlusterletConfig) Reconcile(request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling EndpointConfig")
+	reqLogger.Info("Reconciling KlusterletConfig")
 
-	// Fetch the EndpointConfig instance
-	instance := &multicloudv1alpha1.EndpointConfig{}
+	// Fetch the KlusterletConfig instance
+	instance := &klusterletcfgv1beta1.KlusterletConfig{}
 
 	if err := r.client.Get(context.TODO(), request.NamespacedName, instance); err != nil {
 		if errors.IsNotFound(err) {
@@ -129,12 +129,12 @@ func (r *ReconcileEndpointConfig) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, nil
 	}
 
-	// invalid EndpointConfig and should be prevented with ValidatingAdmissionWebhook
+	// invalid KlusterletConfig and should be prevented with ValidatingAdmissionWebhook
 	if instance.Spec.ClusterNamespace != instance.Namespace {
-		return reconcile.Result{}, fmt.Errorf("invalid EndpointConfig")
+		return reconcile.Result{}, fmt.Errorf("invalid KlusterletConfig")
 	}
 
-	// preprocessing of instance.Spec these changes will not be saved into the EndpointConfig instance
+	// preprocessing of instance.Spec these changes will not be saved into the KlusterletConfig instance
 
 	// if clusterNamespace is not set it should be configured to instance namespace
 	if instance.Spec.ClusterNamespace == "" {
@@ -153,7 +153,7 @@ func (r *ReconcileEndpointConfig) Reconcile(request reconcile.Request) (reconcil
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// when the ClusterRegistry.Cluster reconcile request for this controller will be enqueued
-			// all maybe we use endpointconfig information to create the cluster?
+			// all maybe we use klusterletconfig information to create the cluster?
 			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 		}
 
@@ -179,29 +179,29 @@ func (r *ReconcileEndpointConfig) Reconcile(request reconcile.Request) (reconcil
 		if err := controllerutil.SetControllerReference(cluster, instance, r.scheme); err != nil {
 			return reconcile.Result{}, err
 		}
-		reqLogger.V(5).Info("Updating endpointconfig to add controller reference")
+		reqLogger.V(5).Info("Updating klusterletconfig to add controller reference")
 		if err := r.client.Update(context.TODO(), instance); err != nil {
 			return reconcile.Result{}, err
 		}
 	}
 
-	endpointWork, _ := getEndpointUpdateWork(r, instance)
-	if endpointWork != nil {
-		if endpointWork.Status.Type == mcmv1alpha1.WorkFailed || endpointWork.Status.Type == mcmv1alpha1.WorkCompleted {
-			if err := deleteEndpointUpdateWork(r, endpointWork); err != nil {
+	klusterletWork, _ := getKlusterletUpdateWork(r, instance)
+	if klusterletWork != nil {
+		if klusterletWork.Status.Type == mcmv1alpha1.WorkFailed || klusterletWork.Status.Type == mcmv1alpha1.WorkCompleted {
+			if err := deleteKlusterletUpdateWork(r, klusterletWork); err != nil {
 				return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 			}
 		}
 		return reconcile.Result{}, nil
 	}
 
-	// Update endpoint on managed cluster
+	// Update klusterlet on managed cluster
 	if clusterregistry.IsClusterOnline(cluster) && cluster.DeletionTimestamp == nil {
-		endpointResourceView, err := getEndpointResourceView(r.client, cluster)
+		klusterletResourceView, err := getKlusterletResourceView(r.client, cluster)
 		if err != nil {
 			if errors.IsNotFound(err) {
-				reqLogger.V(5).Info("Creating resourceview to fetch endpoint for cluster ")
-				if _, err := createEndpointResourceview(r, cluster, instance); err != nil {
+				reqLogger.V(5).Info("Creating resourceview to fetch klusterlet for cluster ")
+				if _, err := createKlusterletResourceview(r, cluster, instance); err != nil {
 					return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 				}
 				return reconcile.Result{}, nil
@@ -209,16 +209,16 @@ func (r *ReconcileEndpointConfig) Reconcile(request reconcile.Request) (reconcil
 			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 		}
 
-		if !isEndpointResourceviewProcessing(endpointResourceView) {
+		if !isKlusterletResourceviewProcessing(klusterletResourceView) {
 			return reconcile.Result{}, nil
 		}
 
-		endpoint, err := getEndpointFromResourceView(r, cluster, endpointResourceView)
+		klusterlet, err := getKlusterletFromResourceView(r, cluster, klusterletResourceView)
 		if err != nil {
 			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 		}
 
-		if err := compareAndUpdateEndpoint(r, instance, endpoint); err != nil {
+		if err := compareAndUpdateKlusterlet(r, instance, klusterlet); err != nil {
 			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 		}
 
@@ -228,19 +228,22 @@ func (r *ReconcileEndpointConfig) Reconcile(request reconcile.Request) (reconcil
 	return reconcile.Result{}, nil
 }
 
-func compareAndUpdateEndpoint(r *ReconcileEndpointConfig, endpointc *multicloudv1alpha1.EndpointConfig, endpoint *multicloudv1beta1.Endpoint) error {
-	//Bootstrapconfig and cluster labels should not get updated
-	endpointc.Spec.ClusterLabels = endpoint.Spec.ClusterLabels
-	endpointc.Spec.BootStrapConfig = endpoint.Spec.BootStrapConfig
-	endpointc.Spec.ClusterName = endpoint.Spec.ClusterName
-	endpointc.Spec.ClusterNamespace = endpoint.Spec.ClusterNamespace
+func compareAndUpdateKlusterlet(r *ReconcileKlusterletConfig,
+	klusterletConfig *klusterletcfgv1beta1.KlusterletConfig,
+	klusterlet *klusterletv1beta1.Klusterlet) error {
 
-	// Create work if endpoinfconfig is not same as endpoint
-	if !reflect.DeepEqual(endpoint.Spec, endpointc.Spec) {
-		work, err := getEndpointUpdateWork(r, endpointc)
+	//Bootstrapconfig and cluster labels should not get updated
+	klusterletConfig.Spec.ClusterLabels = klusterlet.Spec.ClusterLabels
+	klusterletConfig.Spec.BootStrapConfig = klusterlet.Spec.BootStrapConfig
+	klusterletConfig.Spec.ClusterName = klusterlet.Spec.ClusterName
+	klusterletConfig.Spec.ClusterNamespace = klusterlet.Spec.ClusterNamespace
+
+	// Create work if klusterletconfig is not same as klusterlet
+	if !reflect.DeepEqual(klusterlet.Spec, klusterletConfig.Spec) {
+		work, err := getKlusterletUpdateWork(r, klusterletConfig)
 		if err == nil && work != nil {
 			if work.Status.Type == mcmv1alpha1.WorkCompleted || work.Status.Type == mcmv1alpha1.WorkFailed {
-				if err := deleteEndpointUpdateWork(r, work); err != nil {
+				if err := deleteKlusterletUpdateWork(r, work); err != nil {
 					return err
 				}
 				return nil
@@ -248,7 +251,7 @@ func compareAndUpdateEndpoint(r *ReconcileEndpointConfig, endpointc *multicloudv
 		}
 
 		if err != nil && errors.IsNotFound(err) {
-			if err := createEndpointUpdateWork(r, endpointc, endpoint); err != nil {
+			if err := createKlusterletUpdateWork(r, klusterletConfig, klusterlet); err != nil {
 				return err
 			}
 			return nil

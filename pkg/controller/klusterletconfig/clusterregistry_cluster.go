@@ -6,7 +6,7 @@
 //
 // Copyright (c) 2020 Red Hat, Inc.
 
-package endpointconfig
+package klusterletconfig
 
 import (
 	"context"
@@ -18,7 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
+	klusterletcfgv1beta1 "github.com/open-cluster-management/rcm-controller/pkg/apis/agent/v1beta1"
 )
 
 type clusterReconcileMapper struct{}
@@ -34,27 +34,27 @@ func (mapper *clusterReconcileMapper) Map(obj handler.MapObject) []reconcile.Req
 	}
 }
 
-func clusterRegistryNsN(endpointConfig *multicloudv1alpha1.EndpointConfig) (types.NamespacedName, error) {
-	if endpointConfig == nil {
-		return types.NamespacedName{}, fmt.Errorf("endpointConfig is nil")
+func clusterRegistryNsN(klusterletConfig *klusterletcfgv1beta1.KlusterletConfig) (types.NamespacedName, error) {
+	if klusterletConfig == nil {
+		return types.NamespacedName{}, fmt.Errorf("klusterletConfig is nil")
 	}
 
-	if endpointConfig.Spec.ClusterName == "" {
-		return types.NamespacedName{}, fmt.Errorf("endpointConfig.Spec.ClusterName is empty")
+	if klusterletConfig.Spec.ClusterName == "" {
+		return types.NamespacedName{}, fmt.Errorf("klusterletConfig.Spec.ClusterName is empty")
 	}
 
-	if endpointConfig.Spec.ClusterNamespace == "" {
-		return types.NamespacedName{}, fmt.Errorf("endpointConfig.Spec.ClusterNamespace is empty")
+	if klusterletConfig.Spec.ClusterNamespace == "" {
+		return types.NamespacedName{}, fmt.Errorf("klusterletConfig.Spec.ClusterNamespace is empty")
 	}
 
 	return types.NamespacedName{
-		Name:      endpointConfig.Spec.ClusterName,
-		Namespace: endpointConfig.Spec.ClusterNamespace,
+		Name:      klusterletConfig.Spec.ClusterName,
+		Namespace: klusterletConfig.Spec.ClusterNamespace,
 	}, nil
 }
 
-func getClusterRegistryCluster(client client.Client, endpointConfig *multicloudv1alpha1.EndpointConfig) (*clusterregistryv1alpha1.Cluster, error) {
-	crNsN, err := clusterRegistryNsN(endpointConfig)
+func getClusterRegistryCluster(client client.Client, klusterletConfig *klusterletcfgv1beta1.KlusterletConfig) (*clusterregistryv1alpha1.Cluster, error) {
+	crNsN, err := clusterRegistryNsN(klusterletConfig)
 	if err != nil {
 		return nil, err
 	}

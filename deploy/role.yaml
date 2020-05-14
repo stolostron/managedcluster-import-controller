@@ -10,7 +10,7 @@ rules:
   - pods
   - services
   - services/finalizers
-  - endpoints
+  - klusterlets
   - persistentvolumeclaims
   - events
   - configmaps

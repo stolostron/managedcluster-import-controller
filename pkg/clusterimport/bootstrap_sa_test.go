@@ -16,13 +16,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 
-	multicloudv1beta1 "github.com/open-cluster-management/endpoint-operator/pkg/apis/multicloud/v1beta1"
-	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
+	klusterletv1beta1 "github.com/open-cluster-management/endpoint-operator/pkg/apis/agent/v1beta1"
+	klusterletcfgv1beta1 "github.com/open-cluster-management/rcm-controller/pkg/apis/agent/v1beta1"
 )
 
 func Test_bootstrapServiceAccountNsN(t *testing.T) {
 	type args struct {
-		endpointConfig *multicloudv1alpha1.EndpointConfig
+		klusterletConfig *klusterletcfgv1beta1.KlusterletConfig
 	}
 
 	tests := []struct {
@@ -32,30 +32,30 @@ func Test_bootstrapServiceAccountNsN(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "nil EndpointConfig",
+			name: "nil KlusterletConfig",
 			args: args{
-				endpointConfig: nil,
+				klusterletConfig: nil,
 			},
 			want:    types.NamespacedName{},
 			wantErr: true,
 		},
 		{
-			name: "empty EndpointConfig",
+			name: "empty KlusterletConfig",
 			args: args{
-				endpointConfig: &multicloudv1alpha1.EndpointConfig{},
+				klusterletConfig: &klusterletcfgv1beta1.KlusterletConfig{},
 			},
 			want:    types.NamespacedName{},
 			wantErr: true,
 		},
 		{
-			name: "good EndpointConfig",
+			name: "good KlusterletConfig",
 			args: args{
-				endpointConfig: &multicloudv1alpha1.EndpointConfig{
+				klusterletConfig: &klusterletcfgv1beta1.KlusterletConfig{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "endpointConfig",
+						Name:      "klusterletConfig",
 						Namespace: "namespace",
 					},
-					Spec: multicloudv1beta1.EndpointSpec{
+					Spec: klusterletv1beta1.KlusterletSpec{
 						ClusterName: "clustername",
 					},
 				},
@@ -70,7 +70,7 @@ func Test_bootstrapServiceAccountNsN(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := bootstrapServiceAccountNsN(tt.args.endpointConfig)
+			got, err := bootstrapServiceAccountNsN(tt.args.klusterletConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("bootstrapServiceAccountNsN() error = %v, wantErr %v", err, tt.wantErr)
 				return

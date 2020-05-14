@@ -14,8 +14,6 @@ import (
 	"encoding/json"
 	"reflect"
 
-	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
-
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -24,23 +22,25 @@ import (
 	clusterregistryv1alpha1 "k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	klusterletcfgv1beta1 "github.com/open-cluster-management/rcm-controller/pkg/apis/agent/v1beta1"
 )
 
-const syncsetNamePostfix = "-multicluster-endpoint"
+const syncsetNamePostfix = "-klusterlet"
 
-func syncSetNsN(endpointConfig *multicloudv1alpha1.EndpointConfig, clusterDeployment *hivev1.ClusterDeployment) types.NamespacedName {
+func syncSetNsN(klusterletConfig *klusterletcfgv1beta1.KlusterletConfig, clusterDeployment *hivev1.ClusterDeployment) types.NamespacedName {
 	return types.NamespacedName{
-		Name:      endpointConfig.Spec.ClusterName + syncsetNamePostfix,
+		Name:      klusterletConfig.Spec.ClusterName + syncsetNamePostfix,
 		Namespace: clusterDeployment.Namespace,
 	}
 }
 
 func newSyncSet(
 	client client.Client,
-	endpointConfig *multicloudv1alpha1.EndpointConfig,
+	klusterletConfig *klusterletcfgv1beta1.KlusterletConfig,
 	clusterDeployment *hivev1.ClusterDeployment,
 ) (*hivev1.SyncSet, error) {
-	runtimeObjects, err := GenerateImportObjects(client, endpointConfig)
+	runtimeObjects, err := GenerateImportObjects(client, klusterletConfig)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func newSyncSet(
 		runtimeRawExtensions = append(runtimeRawExtensions, runtime.RawExtension{Object: obj})
 	}
 
-	ssNsN := syncSetNsN(endpointConfig, clusterDeployment)
+	ssNsN := syncSetNsN(klusterletConfig, clusterDeployment)
 
 	return &hivev1.SyncSet{
 		TypeMeta: metav1.TypeMeta{
@@ -68,20 +68,20 @@ func newSyncSet(
 			},
 			ClusterDeploymentRefs: []corev1.LocalObjectReference{
 				{
-					Name: endpointConfig.Name,
+					Name: klusterletConfig.Name,
 				},
 			},
 		},
 	}, nil
 }
 
-// GetSyncSet get the syncset use for installing multicluster-endpoint
+// GetSyncSet get the syncset use for installing klusterlet
 func GetSyncSet(
 	client client.Client,
-	endpointConfig *multicloudv1alpha1.EndpointConfig,
+	klusterletConfig *klusterletcfgv1beta1.KlusterletConfig,
 	clusterDeployment *hivev1.ClusterDeployment,
 ) (*hivev1.SyncSet, error) {
-	ssNsN := syncSetNsN(endpointConfig, clusterDeployment)
+	ssNsN := syncSetNsN(klusterletConfig, clusterDeployment)
 	ss := &hivev1.SyncSet{}
 
 	if err := client.Get(context.TODO(), ssNsN, ss); err != nil {
@@ -91,19 +91,19 @@ func GetSyncSet(
 	return ss, nil
 }
 
-// CreateSyncSet create the syncset use for installing multicluster-endpoint
+// CreateSyncSet create the syncset use for installing klusterlet
 func CreateSyncSet(
 	client client.Client,
 	scheme *runtime.Scheme,
 	cluster *clusterregistryv1alpha1.Cluster,
-	endpointConfig *multicloudv1alpha1.EndpointConfig,
+	klusterletConfig *klusterletcfgv1beta1.KlusterletConfig,
 	clusterDeployment *hivev1.ClusterDeployment,
 ) (*hivev1.SyncSet, error) {
-	ss, err := newSyncSet(client, endpointConfig, clusterDeployment)
+	ss, err := newSyncSet(client, klusterletConfig, clusterDeployment)
 	if err != nil {
 		return nil, err
 	}
-	// set ownerReference to endpointconfig
+	// set ownerReference to klusterletconfig
 	if err := controllerutil.SetControllerReference(cluster, ss, scheme); err != nil {
 		return nil, err
 	}
@@ -138,14 +138,14 @@ func equalRawExtensions(a, b *runtime.RawExtension) (bool, error) {
 	return reflect.DeepEqual(obj1, obj2), nil
 }
 
-// UpdateSyncSet updates the syncset base on endpointConfig
+// UpdateSyncSet updates the syncset base on klusterletConfig
 func UpdateSyncSet(
 	client client.Client,
-	endpointConfig *multicloudv1alpha1.EndpointConfig,
+	klusterletConfig *klusterletcfgv1beta1.KlusterletConfig,
 	clusterDeployment *hivev1.ClusterDeployment,
 	oldSyncSet *hivev1.SyncSet,
 ) (*hivev1.SyncSet, error) {
-	runtimeObjects, err := GenerateImportObjects(client, endpointConfig)
+	runtimeObjects, err := GenerateImportObjects(client, klusterletConfig)
 	if err != nil {
 		return nil, err
 	}

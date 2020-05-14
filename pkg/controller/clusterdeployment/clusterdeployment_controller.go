@@ -26,7 +26,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
+	klusterletcfgv1beta1 "github.com/open-cluster-management/rcm-controller/pkg/apis/agent/v1beta1"
 	"github.com/open-cluster-management/rcm-controller/pkg/clusterimport"
 )
 
@@ -59,7 +59,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	// Watch for changes to secondary resource Pods and requeue the owner ClusterDeployment
 	err = c.Watch(
-		&source.Kind{Type: &multicloudv1alpha1.EndpointConfig{}},
+		&source.Kind{Type: &klusterletcfgv1beta1.KlusterletConfig{}},
 		&handler.EnqueueRequestsFromMapFunc{ToRequests: handler.ToRequestsFunc(func(obj handler.MapObject) []reconcile.Request {
 			return []reconcile.Request{
 				{
@@ -174,37 +174,37 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 		}
 	}
 
-	// requeue until EndpointConfig is created for the cluster
-	reqLogger.V(5).Info("getEndpointConfig")
-	endpointConfig, err := getEndpointConfig(r.client, instance)
+	// requeue until KlusterletConfig is created for the cluster
+	reqLogger.V(5).Info("getKlusterletConfig")
+	klusterletConfig, err := getKlusterletConfig(r.client, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
-			reqLogger.V(5).Info("EndPointConfig Not found")
+			reqLogger.V(5).Info("KlusterletConfig Not found")
 			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 		}
 		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, err
 	}
 
-	// if clusterNamespace is not set it should be configured to endpointconfig namespace
-	if endpointConfig.Spec.ClusterNamespace == "" {
-		endpointConfig.Spec.ClusterNamespace = endpointConfig.Namespace
+	// if clusterNamespace is not set it should be configured to klusterletConfig namespace
+	if klusterletConfig.Spec.ClusterNamespace == "" {
+		klusterletConfig.Spec.ClusterNamespace = klusterletConfig.Namespace
 	}
 
-	if endpointConfig.Spec.ImagePullSecret == "" {
-		endpointConfig.Spec.ImagePullSecret = os.Getenv("DEFAULT_IMAGE_PULL_SECRET")
+	if klusterletConfig.Spec.ImagePullSecret == "" {
+		klusterletConfig.Spec.ImagePullSecret = os.Getenv("DEFAULT_IMAGE_PULL_SECRET")
 	}
 
-	if endpointConfig.Spec.ImageRegistry == "" {
-		endpointConfig.Spec.ImageRegistry = os.Getenv("DEFAULT_IMAGE_REGISTRY")
+	if klusterletConfig.Spec.ImageRegistry == "" {
+		klusterletConfig.Spec.ImageRegistry = os.Getenv("DEFAULT_IMAGE_REGISTRY")
 	}
 
 	// create syncset if does not exist
 	reqLogger.V(5).Info("clusterimport.GetSyncSet")
-	syncSet, err := clusterimport.GetSyncSet(r.client, endpointConfig, instance)
+	syncSet, err := clusterimport.GetSyncSet(r.client, klusterletConfig, instance)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			reqLogger.V(5).Info("clusterimport.CreateSyncSet")
-			if _, err := clusterimport.CreateSyncSet(r.client, r.scheme, cluster, endpointConfig, instance); err != nil {
+			if _, err := clusterimport.CreateSyncSet(r.client, r.scheme, cluster, klusterletConfig, instance); err != nil {
 				return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 			}
 		}
@@ -212,7 +212,7 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 	}
 
 	reqLogger.V(5).Info("clusterimport.UpdateSyncSet")
-	if _, err := clusterimport.UpdateSyncSet(r.client, endpointConfig, instance, syncSet); err != nil {
+	if _, err := clusterimport.UpdateSyncSet(r.client, klusterletConfig, instance, syncSet); err != nil {
 		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, err
 	}
 

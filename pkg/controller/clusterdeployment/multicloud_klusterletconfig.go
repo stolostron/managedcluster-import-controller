@@ -16,19 +16,19 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
-	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
+	klusterletcfgv1beta1 "github.com/open-cluster-management/rcm-controller/pkg/apis/agent/v1beta1"
 )
 
-func endpointConfigNsN(clusterDeployment *hivev1.ClusterDeployment) types.NamespacedName {
+func klusterletConfigNsN(clusterDeployment *hivev1.ClusterDeployment) types.NamespacedName {
 	return types.NamespacedName{
 		Name:      clusterDeployment.Spec.ClusterName,
 		Namespace: clusterDeployment.Spec.ClusterName,
 	}
 }
 
-func getEndpointConfig(client client.Client, clusterDeployment *hivev1.ClusterDeployment) (*multicloudv1alpha1.EndpointConfig, error) {
-	ncNsN := endpointConfigNsN(clusterDeployment)
-	nc := &multicloudv1alpha1.EndpointConfig{}
+func getKlusterletConfig(client client.Client, clusterDeployment *hivev1.ClusterDeployment) (*klusterletcfgv1beta1.KlusterletConfig, error) {
+	ncNsN := klusterletConfigNsN(clusterDeployment)
+	nc := &klusterletcfgv1beta1.KlusterletConfig{}
 
 	if err := client.Get(context.TODO(), ncNsN, nc); err != nil {
 		return nil, err

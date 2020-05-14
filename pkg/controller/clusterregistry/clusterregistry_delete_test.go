@@ -19,10 +19,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	mcmv1alpha1 "github.com/open-cluster-management/multicloud-operators-foundation/pkg/apis/mcm/v1alpha1"
-	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
+	klusterletcfgv1beta1 "github.com/open-cluster-management/rcm-controller/pkg/apis/agent/v1beta1"
 )
 
-func Test_getEndpointDeleteWork(t *testing.T) {
+func Test_getKlusterletDeleteWork(t *testing.T) {
 	testscheme := scheme.Scheme
 
 	testscheme.AddKnownTypes(mcmv1alpha1.SchemeGroupVersion, &mcmv1alpha1.Work{})
@@ -33,7 +33,7 @@ func Test_getEndpointDeleteWork(t *testing.T) {
 			Kind:       "Work",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      EndpointDeleteWork,
+			Name:      KlusterletDeleteWork,
 			Namespace: "test-cluster",
 		},
 	}
@@ -179,7 +179,7 @@ func Test_createDeleteWork(t *testing.T) {
 	testscheme := scheme.Scheme
 
 	testscheme.AddKnownTypes(mcmv1alpha1.SchemeGroupVersion, &mcmv1alpha1.Work{})
-	testscheme.AddKnownTypes(multicloudv1alpha1.SchemeGroupVersion, &multicloudv1alpha1.EndpointConfig{})
+	testscheme.AddKnownTypes(klusterletcfgv1beta1.SchemeGroupVersion, &klusterletcfgv1beta1.KlusterletConfig{})
 
 	testcluster := &clusterregistryv1alpha1.Cluster{
 		ObjectMeta: metav1.ObjectMeta{
@@ -194,15 +194,15 @@ func Test_createDeleteWork(t *testing.T) {
 			Kind:       "Work",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      EndpointDeleteWork,
+			Name:      KlusterletDeleteWork,
 			Namespace: "test-cluster",
 		},
 	}
 
-	endpointConf := &multicloudv1alpha1.EndpointConfig{
+	klusterletConf := &klusterletcfgv1beta1.KlusterletConfig{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: multicloudv1alpha1.SchemeGroupVersion.String(),
-			Kind:       "Endpointconfig",
+			APIVersion: klusterletcfgv1beta1.SchemeGroupVersion.String(),
+			Kind:       "KlusterletConfig",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
@@ -211,9 +211,9 @@ func Test_createDeleteWork(t *testing.T) {
 	}
 
 	type args struct {
-		r              *ReconcileCluster
-		cluster        *clusterregistryv1alpha1.Cluster
-		endpointconfig *multicloudv1alpha1.EndpointConfig
+		r                *ReconcileCluster
+		cluster          *clusterregistryv1alpha1.Cluster
+		klusterletconfig *klusterletcfgv1beta1.KlusterletConfig
 	}
 
 	tests := []struct {
@@ -227,12 +227,12 @@ func Test_createDeleteWork(t *testing.T) {
 			args: args{
 				r: &ReconcileCluster{
 					client: fake.NewFakeClientWithScheme(testscheme, []runtime.Object{
-						testcluster, endpointConf,
+						testcluster, klusterletConf,
 					}...),
 					scheme: testscheme,
 				},
-				cluster:        testcluster,
-				endpointconfig: endpointConf,
+				cluster:          testcluster,
+				klusterletconfig: klusterletConf,
 			},
 			want:    testDeleteWork,
 			wantErr: false,
@@ -242,12 +242,12 @@ func Test_createDeleteWork(t *testing.T) {
 			args: args{
 				r: &ReconcileCluster{
 					client: fake.NewFakeClientWithScheme(testscheme, []runtime.Object{
-						testcluster, endpointConf, testDeleteWork,
+						testcluster, klusterletConf, testDeleteWork,
 					}...),
 					scheme: testscheme,
 				},
-				cluster:        testcluster,
-				endpointconfig: endpointConf,
+				cluster:          testcluster,
+				klusterletconfig: klusterletConf,
 			},
 			want:    nil,
 			wantErr: true,

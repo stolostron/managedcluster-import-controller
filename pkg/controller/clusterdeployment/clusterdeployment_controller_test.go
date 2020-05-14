@@ -27,13 +27,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	multicloudv1beta1 "github.com/open-cluster-management/endpoint-operator/pkg/apis/multicloud/v1beta1"
-	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
+	klusterletv1beta1 "github.com/open-cluster-management/endpoint-operator/pkg/apis/agent/v1beta1"
+	klusterletcfgv1beta1 "github.com/open-cluster-management/rcm-controller/pkg/apis/agent/v1beta1"
 	"github.com/open-cluster-management/rcm-controller/pkg/clusterimport"
 )
 
 func init() {
-	os.Setenv("ENDPOINT_CRD_FILE", "../../../build/resources/multicloud_v1beta1_endpoint_crd.yaml")
+	os.Setenv("KLUSTERLET_CRD_FILE", "../../../build/resources/agent.open-cluster-management.io_v1beta1_klusterlet_crd.yaml")
 }
 
 func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
@@ -87,25 +87,25 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 			Kind:       "SelectorSyncSet",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "multicluster-endpoint",
+			Name:      "klusterlet",
 			Namespace: "",
 		},
 	}
-	endpointConfig := &multicloudv1alpha1.EndpointConfig{
+	klusterletConfig := &klusterletcfgv1beta1.KlusterletConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "test",
 		},
-		Spec: multicloudv1beta1.EndpointSpec{
+		Spec: klusterletv1beta1.KlusterletSpec{
 			ClusterName: "test",
 		},
 	}
-	endpointConfigWithSecret := &multicloudv1alpha1.EndpointConfig{
+	klusterletConfigWithSecret := &klusterletcfgv1beta1.KlusterletConfig{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test",
 			Namespace: "test",
 		},
-		Spec: multicloudv1beta1.EndpointSpec{
+		Spec: klusterletv1beta1.KlusterletSpec{
 			ClusterName:     "test",
 			ImagePullSecret: imagePullSecret.Name,
 		},
@@ -136,7 +136,7 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 	s.AddKnownTypes(corev1.SchemeGroupVersion, &corev1.Namespace{}, &corev1.Secret{}, &corev1.ServiceAccount{})
 	s.AddKnownTypes(hivev1.SchemeGroupVersion, &hivev1.ClusterDeployment{}, &hivev1.SyncSet{}, &hivev1.SelectorSyncSet{})
 	s.AddKnownTypes(clusterregistryv1alpha1.SchemeGroupVersion, &clusterregistryv1alpha1.Cluster{})
-	s.AddKnownTypes(multicloudv1alpha1.SchemeGroupVersion, &multicloudv1alpha1.EndpointConfig{})
+	s.AddKnownTypes(klusterletcfgv1beta1.SchemeGroupVersion, &klusterletcfgv1beta1.KlusterletConfig{})
 	s.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{})
 
 	req := reconcile.Request{
@@ -193,11 +193,11 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "ClusterDeployment & EndpointConfig",
+			name: "ClusterDeployment & KlusterletConfig",
 			fields: fields{
 				client: fake.NewFakeClient([]runtime.Object{
 					clusterDeployment,
-					endpointConfig,
+					klusterletConfig,
 					infrastructConfig,
 					bootstrapServiceAccount,
 					bootstrapTokenSecret,
@@ -218,12 +218,12 @@ func TestReconcileClusterDeployment_Reconcile(t *testing.T) {
 			// wantErr: false,
 		},
 		{
-			name: "ClusterDeployment & EndpointConfig with ImagePullSecret",
+			name: "ClusterDeployment & KlusterletConfig with ImagePullSecret",
 			fields: fields{
 				client: fake.NewFakeClient([]runtime.Object{
 					imagePullSecret,
 					clusterDeployment,
-					endpointConfigWithSecret,
+					klusterletConfigWithSecret,
 					infrastructConfig,
 					bootstrapServiceAccount,
 					bootstrapTokenSecret,

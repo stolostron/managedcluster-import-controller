@@ -41,13 +41,13 @@ var _ = Describe("Clusterdeployment", func() {
 		labelValue          string
 	)
 	BeforeEach(func() {
-		selectorsyncsetName = "multicluster-endpoint"
+		selectorsyncsetName = "klusterlet"
 		labelKey = "cluster-managed"
 		labelValue = "true"
 	})
 	AfterEach(func() {
-		By("Delete endpointconfig if exist")
-		deleteIfExists(clientHubDynamic, gvrEndpointconfig, testNamespace, testNamespace)
+		By("Delete klusterletconfig if exist")
+		deleteIfExists(clientHubDynamic, gvrKlusterletconfig, testNamespace, testNamespace)
 
 		By("Delete cluster if exist")
 		deleteIfExists(clientHubDynamic, gvrClusterregistry, testNamespace, testNamespace)
@@ -58,7 +58,7 @@ var _ = Describe("Clusterdeployment", func() {
 		By("Delete other resources")
 		deleteIfExists(clientHubDynamic, gvrServiceaccount, testNamespace+"-bootstrap-sa", testNamespace)
 		deleteIfExists(clientHubDynamic, gvrSecret, testNamespace+"-import", testNamespace)
-		deleteIfExists(clientHubDynamic, gvrSyncset, testNamespace+"-multicluster-endpoint", testNamespace)
+		deleteIfExists(clientHubDynamic, gvrSyncset, testNamespace+"-klusterlet", testNamespace)
 	})
 	It("Should create selectorsyncset with selector", func() {
 		By("Deleting selectorsyncset if needed")

@@ -7,7 +7,7 @@
 // Copyright (c) 2020 Red Hat, Inc.
 
 //Package clusterregistry contains common utility functions that gets call by many differerent packages
-package endpointconfig
+package klusterletconfig
 
 import (
 	"testing"
@@ -19,10 +19,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	mcmv1alpha1 "github.com/open-cluster-management/multicloud-operators-foundation/pkg/apis/mcm/v1alpha1"
-	multicloudv1alpha1 "github.com/open-cluster-management/rcm-controller/pkg/apis/multicloud/v1alpha1"
+	klusterletcfgv1beta1 "github.com/open-cluster-management/rcm-controller/pkg/apis/agent/v1beta1"
 )
 
-func Test_getEndpointResourceView(t *testing.T) {
+func Test_getKlusterletResourceView(t *testing.T) {
 	testscheme := scheme.Scheme
 
 	testscheme.AddKnownTypes(mcmv1alpha1.SchemeGroupVersion, &mcmv1alpha1.ResourceView{})
@@ -33,7 +33,7 @@ func Test_getEndpointResourceView(t *testing.T) {
 			Kind:       "ResourceView",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster" + "-get-endpoint",
+			Name:      "test-cluster" + "-get-klusterlet",
 			Namespace: "test-cluster",
 		},
 	}
@@ -43,7 +43,7 @@ func Test_getEndpointResourceView(t *testing.T) {
 	}...)
 
 	type args struct {
-		r       *ReconcileEndpointConfig
+		r       *ReconcileKlusterletConfig
 		cluster *clusterregistryv1alpha1.Cluster
 	}
 
@@ -56,7 +56,7 @@ func Test_getEndpointResourceView(t *testing.T) {
 		{
 			name: "empty cluster",
 			args: args{
-				r: &ReconcileEndpointConfig{
+				r: &ReconcileKlusterletConfig{
 					client: testclient,
 					scheme: testscheme,
 				},
@@ -68,7 +68,7 @@ func Test_getEndpointResourceView(t *testing.T) {
 		{
 			name: "success",
 			args: args{
-				r: &ReconcileEndpointConfig{
+				r: &ReconcileKlusterletConfig{
 					client: testclient,
 					scheme: testscheme,
 				},
@@ -85,7 +85,7 @@ func Test_getEndpointResourceView(t *testing.T) {
 		{
 			name: "resourceview does not exists",
 			args: args{
-				r: &ReconcileEndpointConfig{
+				r: &ReconcileKlusterletConfig{
 					client: fake.NewFakeClientWithScheme(testscheme, []runtime.Object{}...),
 					scheme: testscheme,
 				},
@@ -103,13 +103,13 @@ func Test_getEndpointResourceView(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := getEndpointResourceView(tt.args.r.client, tt.args.cluster)
+			got, err := getKlusterletResourceView(tt.args.r.client, tt.args.cluster)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("getEndpointResourceView() error = %v, wantErr = %v", err, tt.wantErr)
+				t.Errorf("getKlusterletResourceView() error = %v, wantErr = %v", err, tt.wantErr)
 			}
 			if err == nil {
 				if got.Namespace != tt.want.GetNamespace() || got.Name != tt.want.GetName() {
-					t.Errorf("getEndpointResourceView() = %v, want = %v", got, tt.want)
+					t.Errorf("getKlusterletResourceView() = %v, want = %v", got, tt.want)
 				}
 			}
 		})
@@ -133,14 +133,14 @@ func Test_createResourceView(t *testing.T) {
 			Kind:       "ResourceView",
 		},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-cluster" + "-get-endpoint",
+			Name:      "test-cluster" + "-get-klusterlet",
 			Namespace: "test-cluster",
 		},
 	}
-	endpointConf := &multicloudv1alpha1.EndpointConfig{
+	klusterletConf := &klusterletcfgv1beta1.KlusterletConfig{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: multicloudv1alpha1.SchemeGroupVersion.String(),
-			Kind:       "Endpointconfig",
+			APIVersion: klusterletcfgv1beta1.SchemeGroupVersion.String(),
+			Kind:       "Klusterletconfig",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-cluster",
@@ -149,9 +149,9 @@ func Test_createResourceView(t *testing.T) {
 	}
 
 	type args struct {
-		r              *ReconcileEndpointConfig
-		cluster        *clusterregistryv1alpha1.Cluster
-		endpointconfig *multicloudv1alpha1.EndpointConfig
+		r                *ReconcileKlusterletConfig
+		cluster          *clusterregistryv1alpha1.Cluster
+		klusterletConfig *klusterletcfgv1beta1.KlusterletConfig
 	}
 
 	tests := []struct {
@@ -163,14 +163,14 @@ func Test_createResourceView(t *testing.T) {
 		{
 			name: "success",
 			args: args{
-				r: &ReconcileEndpointConfig{
+				r: &ReconcileKlusterletConfig{
 					client: fake.NewFakeClientWithScheme(testscheme, []runtime.Object{
-						testcluster, endpointConf,
+						testcluster, klusterletConf,
 					}...),
 					scheme: testscheme,
 				},
-				cluster:        testcluster,
-				endpointconfig: endpointConf,
+				cluster:          testcluster,
+				klusterletConfig: klusterletConf,
 			},
 			want:    resourceView,
 			wantErr: false,
@@ -178,14 +178,14 @@ func Test_createResourceView(t *testing.T) {
 		{
 			name: "resourceView already exists",
 			args: args{
-				r: &ReconcileEndpointConfig{
+				r: &ReconcileKlusterletConfig{
 					client: fake.NewFakeClientWithScheme(testscheme, []runtime.Object{
-						testcluster, resourceView, endpointConf,
+						testcluster, resourceView, klusterletConf,
 					}...),
 					scheme: testscheme,
 				},
-				cluster:        testcluster,
-				endpointconfig: endpointConf,
+				cluster:          testcluster,
+				klusterletConfig: klusterletConf,
 			},
 			want:    resourceView,
 			wantErr: true,
@@ -194,13 +194,13 @@ func Test_createResourceView(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := createEndpointResourceview(tt.args.r, tt.args.cluster, tt.args.endpointconfig)
+			got, err := createKlusterletResourceview(tt.args.r, tt.args.cluster, tt.args.klusterletConfig)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("createResourceView() error = %v, wantErr = %v", err, tt.wantErr)
+				t.Errorf("createKlusterletResourceview() error = %v, wantErr = %v", err, tt.wantErr)
 			}
 			if err == nil {
 				if got.Namespace != tt.want.GetNamespace() || got.Name != tt.want.GetName() {
-					t.Errorf("createResourceView() = %v, want = %v", got, tt.want)
+					t.Errorf("createKlusterletResourceview() = %v, want = %v", got, tt.want)
 				}
 			}
 		})
