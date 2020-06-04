@@ -49,7 +49,7 @@ func TestNewOperatorDeployment(t *testing.T) {
 				},
 				imageTagPostfix: "",
 			},
-			want: expectValues{"sample-registry/uniquePath/klusterlet-operator:2.3.0", "", "true"},
+			want: expectValues{"sample-registry/uniquePath/endpoint-operator:2.3.0", "", "true"},
 		},
 		{
 			name: "With Postfix Set",
@@ -62,7 +62,7 @@ func TestNewOperatorDeployment(t *testing.T) {
 				},
 				imageTagPostfix: "-Unique-Postfix",
 			},
-			want: expectValues{"sample-registry-2/uniquePath-2/klusterlet-operator:1.2.0-Unique-Postfix", "-Unique-Postfix", "false"},
+			want: expectValues{"sample-registry-2/uniquePath-2/endpoint-operator:1.2.0-Unique-Postfix", "-Unique-Postfix", "false"},
 		},
 	}
 
@@ -117,9 +117,9 @@ func TestGetKlusterletOperatorImage(t *testing.T) {
 					},
 				},
 				imageTagPostfix:         "",
-				klusterletOperatorImage: "sample-registry/uniquePath/klusterlet-operator@abcdefghijklmn",
+				klusterletOperatorImage: "sample-registry/uniquePath/endpoint-operator@abcdefghijklmn",
 			},
-			want: expectValues{"sample-registry/uniquePath/klusterlet-operator@abcdefghijklmn", "", true},
+			want: expectValues{"sample-registry/uniquePath/endpoint-operator@abcdefghijklmn", "", true},
 		},
 		{
 			name: "Empty Postfix",
@@ -133,7 +133,7 @@ func TestGetKlusterletOperatorImage(t *testing.T) {
 				imageTagPostfix:         "",
 				klusterletOperatorImage: "",
 			},
-			want: expectValues{"sample-registry/uniquePath/klusterlet-operator:2.3.0", "", true},
+			want: expectValues{"sample-registry/uniquePath/endpoint-operator:2.3.0", "", true},
 		},
 		{
 			name: "Postfix set",
@@ -147,7 +147,7 @@ func TestGetKlusterletOperatorImage(t *testing.T) {
 				imageTagPostfix:         "-postfix",
 				klusterletOperatorImage: "",
 			},
-			want: expectValues{"sample-registry/uniquePath/klusterlet-operator:2.3.0-postfix", "-postfix", false},
+			want: expectValues{"sample-registry/uniquePath/endpoint-operator:2.3.0-postfix", "-postfix", false},
 		},
 		{
 			name: "SHA and Postfix both set",
@@ -159,9 +159,9 @@ func TestGetKlusterletOperatorImage(t *testing.T) {
 					},
 				},
 				imageTagPostfix:         "-postfix",
-				klusterletOperatorImage: "sample-registry/uniquePath/klusterlet-operator@fdklfjasdklfj",
+				klusterletOperatorImage: "sample-registry/uniquePath/endpoint-operator@fdklfjasdklfj",
 			},
-			want: expectValues{"sample-registry/uniquePath/klusterlet-operator:2.3.0-postfix", "-postfix", false},
+			want: expectValues{"sample-registry/uniquePath/endpoint-operator:2.3.0-postfix", "-postfix", false},
 		},
 	}
 	for _, tt := range tests {
