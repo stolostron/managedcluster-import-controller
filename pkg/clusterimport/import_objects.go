@@ -43,7 +43,7 @@ const KlusterletOperatorName = "klusterlet-operator"
 const BootstrapSecretName = "klusterlet-bootstrap"
 
 // KlusterletOperatorImageName is the name of the klusterlet operator image
-const KlusterletOperatorImageName = "klusterlet-operator"
+const KlusterletOperatorImageName = "endpoint-operator"
 
 // ImageTagPostfixKey is the name of the environment variable of klusterlet operator image tag's postfix
 const ImageTagPostfixKey = "IMAGE_TAG_POSTFIX"
