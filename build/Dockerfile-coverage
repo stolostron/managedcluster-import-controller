@@ -15,7 +15,8 @@ WORKDIR $REMOTE_SOURCE_DIR/app
 RUN git config --global url."https://${GITHUB_TOKEN}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
 RUN GOFLAGS="" go test -covermode=atomic -coverpkg=github.com/open-cluster-management/rcm-controller/pkg/... -c -tags testrunmain ./cmd/manager -o manager
 
-FROM registry.access.redhat.com/ubi8/ubi-minimal:8.1-398
+FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
+RUN microdnf update
 
 ARG VCS_REF
 ARG VCS_URL
