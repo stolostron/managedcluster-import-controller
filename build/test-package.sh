@@ -17,7 +17,7 @@ _cover_pkgs=$2
 echo -e "\nTesting package $_package"
 
 # Make sure temporary files do not exist
-rm -f test/coverage/cover.tmp
+rm -f test/unit/coverage/cover.tmp
 
 # Support for TAP output
 _package_base=${PROJECT_DIR/$GOPATH\/src\/}  # TODO need a better solution since $(go list) doesn't work any more (won't work with go 1.11)
@@ -29,13 +29,13 @@ mkdir -p $_tap_out_dir
 
 # Run tests
 # DO NOT USE -coverpkg=./...
-go test -v -cover -coverpkg=$_cover_pkgs -covermode=atomic -coverprofile=test/coverage/cover.tmp $_package 2> >( grep -v "warning: no packages being tested depend on" >&2 ) | $GOPATH/bin/patter | tee $_tap_out_dir/$_tap_name.tap | grep -v "TAP version 13" | grep -v ": PASS:" | grep -v -i "# /us"
+go test -v -cover -coverpkg=$_cover_pkgs -covermode=atomic -coverprofile=test/unit/coverage/cover.tmp $_package 2> >( grep -v "warning: no packages being tested depend on" >&2 ) | $GOPATH/bin/patter | tee $_tap_out_dir/$_tap_name.tap | grep -v "TAP version 13" | grep -v ": PASS:" | grep -v -i "# /us"
 
 # Merge coverage files
-if [ -f test/coverage/cover.tmp ]; then
-    $GOPATH/bin/gocovmerge test/coverage/cover.tmp test/coverage/cover.out > test/coverage/cover.all
-    mv test/coverage/cover.all test/coverage/cover.out
+if [ -f test/unit/coverage/cover.tmp ]; then
+    $GOPATH/bin/gocovmerge test/unit/coverage/cover.tmp test/unit/coverage/cover.out > test/unit/coverage/cover.all
+    mv test/unit/coverage/cover.all test/unit/coverage/cover.out
 fi
 
 # Clean up temporary files
-rm -f test/coverage/cover.tmp
+rm -f test/unit/coverage/cover.tmp

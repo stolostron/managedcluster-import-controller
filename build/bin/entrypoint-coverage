@@ -5,7 +5,7 @@
 
 if ! whoami &>/dev/null; then
   if [ -w /etc/passwd ]; then
-    echo "${USER_NAME:-endpoint-operator}:x:$(id -u):$(id -g):${USER_NAME:-endpoint-operator} user:${HOME}:/sbin/nologin" >> /etc/passwd
+    echo "${USER_NAME:-rcm-controller}:x:$(id -u):$(id -g):${USER_NAME:-rcm-controller} user:${HOME}:/sbin/nologin" >> /etc/passwd
   fi
 fi
 

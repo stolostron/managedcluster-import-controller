@@ -16,29 +16,28 @@ import (
 	"runtime"
 	"time"
 
+	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
+	workv1 "github.com/open-cluster-management/api/work/v1"
+
 	ocinfrav1 "github.com/openshift/api/config/v1"
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 	kubemetrics "github.com/operator-framework/operator-sdk/pkg/kube-metrics"
 	"github.com/operator-framework/operator-sdk/pkg/leader"
 	"github.com/operator-framework/operator-sdk/pkg/log/zap"
-	"github.com/operator-framework/operator-sdk/pkg/metrics"
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 	"github.com/spf13/pflag"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/util/intstr"
 	_ "k8s.io/client-go/plugin/pkg/client/auth" // Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.
 	"k8s.io/client-go/rest"
-	clusterregistryv1alpha1 "k8s.io/cluster-registry/pkg/apis/clusterregistry/v1alpha1"
+	rbacv1 "k8s.io/kubernetes/pkg/apis/rbac/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	mcmv1alpha1 "github.com/open-cluster-management/multicloud-operators-foundation/pkg/apis/mcm/v1alpha1"
-	"github.com/open-cluster-management/rcm-controller/pkg/apis"
+	// "github.com/open-cluster-management/rcm-controller/pkg/apis"
 	"github.com/open-cluster-management/rcm-controller/pkg/controller"
-	"github.com/open-cluster-management/rcm-controller/pkg/utils"
+	// "github.com/open-cluster-management/rcm-controller/pkg/utils"
 )
 
 // Change below variables to serve metrics on different host or port.
@@ -78,19 +77,6 @@ func main() {
 
 	printVersion()
 
-	klusterletCRDFilename := os.Getenv("KLUSTERLET_CRD_FILE")
-	log.Info("ENV", "KLUSTERLET_CRD_FILE", klusterletCRDFilename)
-
-	if klusterletCRDFilename == "" {
-		log.Error(fmt.Errorf("undefine environment variable KLUSTERLET_CRD_FILE"), "")
-		os.Exit(1)
-	}
-
-	if !utils.FileExist(klusterletCRDFilename) {
-		log.Error(fmt.Errorf("KLUSTERLET_CRD_FILE does not exist"), "")
-		os.Exit(1)
-	}
-
 	namespace, err := k8sutil.GetWatchNamespace()
 	if err != nil {
 		log.Error(err, "Failed to get watch namespace")
@@ -125,15 +111,6 @@ func main() {
 	log.Info("Registering Components.")
 
 	// Setup Scheme for all resources
-	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
-		log.Error(err, "")
-		os.Exit(1)
-	}
-
-	if err := clusterregistryv1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
-		log.Error(err, "")
-		os.Exit(1)
-	}
 
 	if err := ocinfrav1.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Error(err, "")
@@ -145,54 +122,69 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := mcmv1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
-		log.Error(err, "")
-		os.Exit(1)
-	}
+	// if err := mcmv1alpha1.AddToScheme(mgr.GetScheme()); err != nil {
+	// 	log.Error(err, "")
+	// 	os.Exit(1)
+	// }
 
 	if err := corev1.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Error(err, "")
 		os.Exit(1)
 	}
 
-	if err = serveCRMetrics(cfg); err != nil {
-		log.Info("Could not generate and serve custom resource metrics", "error", err.Error())
+	if err := clusterv1.Install(mgr.GetScheme()); err != nil {
+		log.Error(err, "")
+		os.Exit(1)
 	}
 
-	// Add to the below struct any other metrics ports you want to expose.
-	servicePorts := []v1.ServicePort{
-		{
-			Port:       metricsPort,
-			Name:       metrics.OperatorPortName,
-			Protocol:   v1.ProtocolTCP,
-			TargetPort: intstr.IntOrString{Type: intstr.Int, IntVal: metricsPort},
-		},
-		{
-			Port:       operatorMetricsPort,
-			Name:       metrics.CRPortName,
-			Protocol:   v1.ProtocolTCP,
-			TargetPort: intstr.IntOrString{Type: intstr.Int, IntVal: operatorMetricsPort},
-		},
-	}
-	// Create Service object to expose the metrics port(s).
-	service, err := metrics.CreateMetricsService(ctx, cfg, servicePorts)
-	if err != nil {
-		log.Info("Could not create metrics Service", "error", err.Error())
+	if err := workv1.Install(mgr.GetScheme()); err != nil {
+		log.Error(err, "")
+		os.Exit(1)
 	}
 
-	// CreateServiceMonitors will automatically create the prometheus-operator ServiceMonitor resources
-	// necessary to configure Prometheus to scrape metrics from this operator.
-	services := []*v1.Service{service}
-
-	_, err = metrics.CreateServiceMonitors(cfg, namespace, services)
-	if err != nil {
-		log.Info("Could not create ServiceMonitor object", "error", err.Error())
-		// If this operator is deployed to a cluster without the prometheus-operator running, it will return
-		// ErrServiceMonitorNotPresent, which can be used to safely skip ServiceMonitor creation.
-		if err == metrics.ErrServiceMonitorNotPresent {
-			log.Info("Install prometheus-operator in your cluster to create ServiceMonitor objects", "error", err.Error())
-		}
+	if err := rbacv1.AddToScheme(mgr.GetScheme()); err != nil {
+		log.Error(err, "")
+		os.Exit(1)
 	}
+
+	// if err = serveCRMetrics(cfg); err != nil {
+	// 	log.Info("Could not generate and serve custom resource metrics", "error", err.Error())
+	// }
+
+	// // Add to the below struct any other metrics ports you want to expose.
+	// servicePorts := []v1.ServicePort{
+	// 	{
+	// 		Port:       metricsPort,
+	// 		Name:       metrics.OperatorPortName,
+	// 		Protocol:   v1.ProtocolTCP,
+	// 		TargetPort: intstr.IntOrString{Type: intstr.Int, IntVal: metricsPort},
+	// 	},
+	// 	{
+	// 		Port:       operatorMetricsPort,
+	// 		Name:       metrics.CRPortName,
+	// 		Protocol:   v1.ProtocolTCP,
+	// 		TargetPort: intstr.IntOrString{Type: intstr.Int, IntVal: operatorMetricsPort},
+	// 	},
+	// }
+	// // Create Service object to expose the metrics port(s).
+	// service, err := metrics.CreateMetricsService(ctx, cfg, servicePorts)
+	// if err != nil {
+	// 	log.Info("Could not create metrics Service", "error", err.Error())
+	// }
+
+	// // CreateServiceMonitors will automatically create the prometheus-operator ServiceMonitor resources
+	// // necessary to configure Prometheus to scrape metrics from this operator.
+	// services := []*v1.Service{service}
+
+	// _, err = metrics.CreateServiceMonitors(cfg, namespace, services)
+	// if err != nil {
+	// 	log.Info("Could not create ServiceMonitor object", "error", err.Error())
+	// 	// If this operator is deployed to a cluster without the prometheus-operator running, it will return
+	// 	// ErrServiceMonitorNotPresent, which can be used to safely skip ServiceMonitor creation.
+	// 	if err == metrics.ErrServiceMonitorNotPresent {
+	// 		log.Info("Install prometheus-operator in your cluster to create ServiceMonitor objects", "error", err.Error())
+	// 	}
+	// }
 
 	log.Info("Setup manager with controllers")
 	missingGVS, err := controller.GetMissingGVS(cfg)
@@ -247,7 +239,7 @@ func main() {
 func serveCRMetrics(cfg *rest.Config) error {
 	// Below function returns filtered operator/CustomResource specific GVKs.
 	// For more control override the below GVK list with your own custom logic.
-	filteredGVK, err := k8sutil.GetGVKsFromAddToScheme(apis.AddToScheme)
+	filteredGVK, err := k8sutil.GetGVKsFromAddToScheme(clusterv1.AddToScheme)
 	if err != nil {
 		return err
 	}

@@ -44,7 +44,7 @@ func AddToManager(m manager.Manager, missingGVS []schema.GroupVersion) error {
 	return nil
 }
 
-//mandatoryGVSatisfied Check if the mandaottry GVs for a controller are not missing.
+//mandatoryGVSatisfied Check if the mandatory GVs for a controller are not missing.
 func mandatoryGVSatisfied(a addToManager, missingGVS []schema.GroupVersion) bool {
 	if a.MandatoryGroupVersions == nil ||
 		len(a.MandatoryGroupVersions) == 0 {
