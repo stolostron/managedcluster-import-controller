@@ -1,6 +1,7 @@
 
 SHELL := /bin/bash
 
+export BINDATA_TEMP_DIR := $(shell mktemp -d)
 
 export GIT_COMMIT      = $(shell git rev-parse --short HEAD)
 export GIT_REMOTE_URL  = $(shell git config --get remote.origin.url)
@@ -34,14 +35,14 @@ export DOCKER_NAMESPACE  ?= open-cluster-management
 export DOCKER_IMAGE      ?= $(COMPONENT_NAME)
 export DOCKER_BUILD_TAG  ?= latest
 export DOCKER_TAG        ?= $(shell whoami)
-export DOCKER_BUILD_OPTS  = --build-arg "VCS_REF=$(VCS_REF)" \
-	--build-arg "VCS_URL=$(GIT_REMOTE_URL)" \
-	--build-arg "IMAGE_NAME=$(DOCKER_IMAGE)" \
-	--build-arg "IMAGE_DESCRIPTION=$(IMAGE_DESCRIPTION)" \
-	--build-arg "ARCH_TYPE=$(ARCH_TYPE)" \
-	--build-arg "REMOTE_SOURCE=." \
-	--build-arg "REMOTE_SOURCE_DIR=/remote-source" \
-	--build-arg "GITHUB_TOKEN=$(GITHUB_TOKEN)" \
+export DOCKER_BUILD_OPTS  = --build-arg VCS_REF=$(VCS_REF) \
+	--build-arg VCS_URL=$(GIT_REMOTE_URL) \
+	--build-arg IMAGE_NAME=$(DOCKER_IMAGE) \
+	--build-arg IMAGE_DESCRIPTION=$(IMAGE_DESCRIPTION) \
+	--build-arg ARCH_TYPE=$(ARCH_TYPE) \
+	--build-arg REMOTE_SOURCE=. \
+	--build-arg REMOTE_SOURCE_DIR=/remote-source \
+	--build-arg GITHUB_TOKEN=$(GITHUB_TOKEN)
 
 BEFORE_SCRIPT := $(shell build/before-make.sh)
 
@@ -66,24 +67,50 @@ deps: init component/init
 
 .PHONY: check
 ## Runs a set of required checks
-check: lint ossccheck copyright-check
+# check: lint ossccheck copyright-check
+check: ossccheck copyright-check go-bindata-check
 
 .PHONY: test
 ## Runs go unit tests
 test: component/test/unit
 
+.PHONY: go-bindata
+go-bindata:
+	@if which go-bindata > /dev/null; then \
+		echo "##### Updating go-bindata..."; \
+		cd $(mktemp -d) && GOSUMDB=off go get -u github.com/go-bindata/go-bindata/...; \
+	fi
+	@go-bindata --version
+	go-bindata -nometadata -pkg bindata -o pkg/bindata/bindata_generated.go -prefix resources/  resources/...
+
+.PHONY: gobindata-check
+go-bindata-check:
+	@if which go-bindata > /dev/null; then \
+		echo "##### Updating go-bindata..."; \
+		cd $(mktemp -d) && GOSUMDB=off go get -u github.com/go-bindata/go-bindata/...; \
+	fi
+	@go-bindata --version
+	@echo "##### go-bindata-check ####"
+	@go-bindata -nometadata -pkg bindata -o $(BINDATA_TEMP_DIR)/bindata_generated.go -prefix resources/  resources/...; \
+	diff $(BINDATA_TEMP_DIR)/bindata_generated.go pkg/bindata/bindata_generated.go > go-bindata.diff; \
+	if [ $$? != 0 ]; then \
+	  echo "#### Difference detected and saved in go-bindata.diff, run 'make go-bindata' to regenerate the bindata_generated.go"; \
+	  cat go-bindata.diff; \
+	  exit 1; \
+	fi
+	@echo "##### go-bindata-check #### Success"
+
 .PHONY: build
 ## Builds controller binary inside of an image
-build:
-	docker build . $(DOCKER_BUILD_OPTS) \
-	-t $(DOCKER_IMAGE):$(DOCKER_BUILD_TAG) \
-	-f build/Dockerfile
+build: component/build
 
 .PHONY: build-coverage
 build-coverage:
-	docker build . $(DOCKER_BUILD_OPTS) \
-	-t $(DOCKER_IMAGE):$(DOCKER_BUILD_TAG) \
-	-f build/Dockerfile-coverage
+	$(SELF) component/build COMPONENT_TAG_EXTENSION=-coverage COMPONENT_BUILD_COMMAND=$(PWD)/build/build-coverage.sh 
+
+.PHONY: build-e2e
+build-e2e:
+	$(SELF) component/build COMPONENT_TAG_EXTENSION=-e2e COMPONENT_BUILD_COMMAND=$(PWD)/build/build-e2e.sh 
 
 .PHONY: copyright-check
 copyright-check:
@@ -100,7 +127,7 @@ clean::
 .PHONY: run
 ## Run the operator against the kubeconfig targeted cluster
 run:
-	@operator-sdk run --local --namespace="" --operator-flags="--zap-devel=true"
+	@operator-sdk run local --watch-namespace="" --operator-flags="--zap-devel=true"
 
 .PHONY: lint
 ## Runs linter against go files
@@ -136,24 +163,24 @@ deploy:
 .PHONY: install-fake-crds
 install-fake-crds:
 	@echo installing crds
-	kubectl apply -f test/cluster-registry-crd.yaml 
-	kubectl apply -f test/fake_resourceview_crd.yaml
-	kubectl apply -f test/hive_v1_clusterdeployment_crd.yaml
-	kubectl apply -f test/hive_v1_selectorsyncset.yaml  
-	kubectl apply -f test/hive_v1_syncset.yaml 
-	kubectl apply -f test/infrastructure_crd.yaml 
+	kubectl apply -f test/functional/resources/hive_v1_clusterdeployment_crd.yaml
+	kubectl apply -f test/functional/resources/hive_v1_syncset.yaml 
+	kubectl apply -f test/functional/resources/infrastructure_crd.yaml 
+	kubectl apply -f test/functional/resources/0000_00_clusters.open-cluster-management.io_managedclusters.crd.yaml
+	kubectl apply -f test/functional/resources/0000_00_work.open-cluster-management.io_manifestworks.crd.yaml
 	@sleep 10 
 
 .PHONY: kind-cluster-setup
 kind-cluster-setup: install-fake-crds
 	@echo installing fake infrastructure resource
-	kubectl apply -f test/fake_infrastructure_cr.yaml
+	kubectl apply -f test/functional/resources/fake_infrastructure_cr.yaml
 
 .PHONY: functional-test
 functional-test:
-	ginkgo -tags functional -v --slowSpecThreshold=10 test/rcm-controller-test
+	# ginkgo -tags functional -v --focus="(.*)import-managedcluster(.*)" --slowSpecThreshold=10 test/managedcluster-import-controller-test -- -v=5
+	ginkgo -tags functional -v --slowSpecThreshold=10 test/functional -- -v=1
 
 .PHONY: functional-test-full
-functional-test-full:
+functional-test-full: 
 	$(SELF) component/build COMPONENT_TAG_EXTENSION=-coverage COMPONENT_BUILD_COMMAND=$(PWD)/build/build-coverage.sh 
 	$(SELF) component/test/functional COMPONENT_TAG_EXTENSION=-coverage

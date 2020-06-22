@@ -44,6 +44,14 @@ jobs:
         - export COMPONENT_BUILD_COMMAND=${TRAVIS_BUILD_DIR}/build/build-coverage.sh 
         - ./build/travis.sh
     
+    - stage: build
+      name: "build and push e2e image"
+      if: type = pull_request
+      script:
+        - export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}-e2e"
+        - export COMPONENT_BUILD_COMMAND=${TRAVIS_BUILD_DIR}/build/build-e2e.sh 
+        - ./build/travis.sh
+
     - stage: unit-test
       name: "Run unit tests"
       script:

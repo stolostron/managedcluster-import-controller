@@ -26,8 +26,8 @@ if [ -z $DOCKER_PASS ]; then
    exit 1
 fi
 
-export FUNCT_TEST_TMPDIR="${CURR_FOLDER_PATH}/../test/functional_test_tmp"
-
+export FUNCT_TEST_TMPDIR="${CURR_FOLDER_PATH}/../test/functional/tmp"
+export FUNCT_TEST_COVERAGE="${CURR_FOLDER_PATH}/../test/functional/coverage"
 
 if ! which kubectl > /dev/null; then
     echo "installing kubectl"
@@ -50,11 +50,15 @@ if ! which gocovmerge > /dev/null; then
   go get -u github.com/wadey/gocovmerge
 fi
 
-echo "setting up test folder"
+echo "setting up test tmp folder"
 [ -d "$FUNCT_TEST_TMPDIR" ] && rm -r "$FUNCT_TEST_TMPDIR"
 mkdir -p "$FUNCT_TEST_TMPDIR"
-mkdir -p "$FUNCT_TEST_TMPDIR/output"
+# mkdir -p "$FUNCT_TEST_TMPDIR/output"
 mkdir -p "$FUNCT_TEST_TMPDIR/kind-config"
+
+echo "setting up test tmp folder"
+[ -d "$FUNCT_TEST_COVERAGE" ] && rm -r "$FUNCT_TEST_COVERAGE"
+mkdir -p "${FUNCT_TEST_COVERAGE}"
 
 echo "generating kind configfile"
 cat << EOF > "${FUNCT_TEST_TMPDIR}/kind-config/kind-config.yaml"
@@ -63,7 +67,7 @@ apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
 - role: control-plane
   extraMounts:
-  - hostPath: "${FUNCT_TEST_TMPDIR}/output"
+  - hostPath: "${FUNCT_TEST_COVERAGE}"
     containerPath: /tmp/coverage
 EOF
 
@@ -76,6 +80,8 @@ kind get kubeconfig --name functional-test > ${KIND_KUBECONFIG}
 # load image if possible
 kind load docker-image ${DOCKER_IMAGE_AND_TAG} --name=functional-test -v 99 || echo "failed to load image locally, will use imagePullSecret"
 
+# create namespace
+
 echo "install cluster"
 # setup cluster
 make kind-cluster-setup
@@ -84,17 +90,16 @@ for dir in overlays/test/* ; do
   echo ">>>>>>>>>>>>>>>Executing test: $dir"
 
   # install rcm-controller
-  echo "install rcm-controller"
-  kubectl apply -k "$dir"
+  echo "install managedcluster-import-controller"
+  kubectl apply -k "$dir" --dry-run=true -o yaml | sed "s|REPLACE_IMAGE|${DOCKER_IMAGE_AND_TAG}|g" | kubectl apply -f -
+
   echo "install imagePullSecret"
   kubectl create secret -n open-cluster-management docker-registry multiclusterhub-operator-pull-secret --docker-server=quay.io --docker-username=${DOCKER_USER} --docker-password=${DOCKER_PASS}
 
   # patch image
-  echo "patch image"
-  kubectl patch deployment rcm-controller -n open-cluster-management -p "{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"rcm-controller\",\"image\":\"${DOCKER_IMAGE_AND_TAG}\"}]}}}}"
-  kubectl rollout status -n open-cluster-management deployment rcm-controller --timeout=90s
-  sleep 10
-
+  echo "Wait rollout"
+  kubectl rollout status -n open-cluster-management deployment managedcluster-import-controller --timeout=90s
+  
   echo "run functional test..."
   make functional-test
 
@@ -111,17 +116,17 @@ if [ `find $FUNCT_TEST_TMPDIR/output -prune -empty 2>/dev/null` ]; then
 else
   echo "merging coverage files"
   # report coverage if has any coverage files
-  rm -rf "${CURR_FOLDER_PATH}/../test/coverage-functional"
-  mkdir -p "${CURR_FOLDER_PATH}/../test/coverage-functional"
+  # rm -rf "${FUNCT_TEST_COVERAGE}"
+  # mkdir -p "${FUNCT_TEST_COVERAGE}"
 
-  cp "$FUNCT_TEST_TMPDIR/output/"* "${CURR_FOLDER_PATH}/../test/coverage-functional/"
-  ls -l "${CURR_FOLDER_PATH}/../test/coverage-functional/"
+  # cp "$FUNCT_TEST_TMPDIR/output/"* "${FUNCT_TEST_COVERAGE}/"
+  # ls -l "${FUNCT_TEST_COVERAGE}/"
 
-  gocovmerge "${CURR_FOLDER_PATH}/../test/coverage-functional/"* >> "${CURR_FOLDER_PATH}/../test/coverage-functional/cover-functional.out"
-  COVERAGE=$(go tool cover -func="${CURR_FOLDER_PATH}/../test/coverage-functional/cover-functional.out" | grep "total:" | awk '{ print $3 }' | sed 's/[][()><%]/ /g')
+  gocovmerge "${FUNCT_TEST_COVERAGE}/"* >> "${FUNCT_TEST_COVERAGE}/cover-functional.out"
+  COVERAGE=$(go tool cover -func="${FUNCT_TEST_COVERAGE}/cover-functional.out" | grep "total:" | awk '{ print $3 }' | sed 's/[][()><%]/ /g')
   echo "-------------------------------------------------------------------------"
   echo "TOTAL COVERAGE IS ${COVERAGE}%"
   echo "-------------------------------------------------------------------------"
 
-  go tool cover -html "${CURR_FOLDER_PATH}/../test/coverage-functional/cover-functional.out" -o ${PROJECT_DIR}/test/coverage-functional/cover-functional.html
+  go tool cover -html "${FUNCT_TEST_COVERAGE}/cover-functional.out" -o ${PROJECT_DIR}/test/functional/coverage/cover-functional.html
 fi

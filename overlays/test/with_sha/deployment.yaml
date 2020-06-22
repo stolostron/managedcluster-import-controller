@@ -1,7 +1,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: rcm-controller
+  name: managedcluster-import-controller
 spec:
   template:
     spec:
@@ -10,7 +10,9 @@ spec:
       imagePullSecrets:
       - name: multiclusterhub-operator-pull-secret
       containers:
-      - name: rcm-controller
+      - name: managedcluster-import-controller
+        command:
+        imagePullPolicy: IfNotPresent
         volumeMounts:
           - mountPath: /tmp/coverage
             name: coverage-dir  

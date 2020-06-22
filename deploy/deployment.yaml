@@ -1,25 +1,27 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: rcm-controller
+  name: managedcluster-import-controller
   namespace: open-cluster-management
   labels:
-    app: rcm-controller
+    app: managedcluster-import-controller
 spec:
   replicas: 1
   selector:
     matchLabels:
-      name: rcm-controller
+      name: managedcluster-import-controller
   template:
     metadata:
       labels:
-        name: rcm-controller
+        name: managedcluster-import-controller
     spec:
-      serviceAccountName: rcm-controller
+      serviceAccountName: managedcluster-import-controller
       containers:
-        - name: rcm-controller
-          image: quay.io/open-cluster-management/rcm-controller:latest
-          imagePullPolicy: IfNotPresent
+        - name: managedcluster-import-controller
+          image: REPLACE_IMAGE
+          imagePullPolicy: Always
+          command: 
+          - managedcluster-import-controller
           env:
             - name: WATCH_NAMESPACE
             - name: POD_NAME
@@ -27,11 +29,13 @@ spec:
                 fieldRef:
                   fieldPath: metadata.name
             - name: OPERATOR_NAME
-              value: "rcm-controller"
+              value: "managedcluster-import-controller"
             - name: DEFAULT_IMAGE_PULL_SECRET
               value: multiclusterhub-operator-pull-secret
             - name: DEFAULT_IMAGE_REGISTRY
               value: quay.io/open-cluster-management
+            - name: KLUSTERLET_OPERATOR_IMAGE
+              value: quay.io/open-cluster-management/registration_operator:latest
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:

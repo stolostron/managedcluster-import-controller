@@ -2,7 +2,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   creationTimestamp: null
-  name: rcm-controller
+  name: managedcluster-import-controller
 rules:
 - apiGroups:
   - ""
@@ -38,7 +38,7 @@ rules:
 - apiGroups:
   - apps
   resourceNames:
-  - rcm-controller
+  - managedcluster-import-controller
   resources:
   - deployments/finalizers
   verbs:

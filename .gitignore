@@ -6,14 +6,22 @@
 build-harness
 build-harness-extensions
 vendor
-test/coverage
+test/unit/coverage
 test/out
 overlays/deploy
+test/e2e/resources/clusters
+test/e2e/resources/hub
 
 # Files
 .build-harness
 .build-harness-bootstrap
 OPENSOURCE.check
+.DS_Store
+coverate.out
+gosec.json
+go-bindata.diff
+e2e.test
+results.xml
 
 # override build harness vendoring
 !vbh/.build-harness-vendorized
@@ -21,7 +29,7 @@ OPENSOURCE.check
 !vbh/build-harness-extensions
 
 # test outputs
-test/functional_test_tmp
-test/coverage-functional
+test/functional/tmp
+test/functional/coverage
 kind_kubeconfig.yaml
 
