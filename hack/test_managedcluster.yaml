@@ -1,0 +1,10 @@
+apiVersion: cluster.open-cluster-management.io/v1
+kind: ManagedCluster
+metadata:
+  name: rcm-functional-tests  
+spec:
+  hubAcceptsClient: true
+  spokeClientConfigs: 
+  - url: test_url
+    caBundle: "0x9f"
+    

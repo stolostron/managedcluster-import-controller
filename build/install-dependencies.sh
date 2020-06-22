@@ -19,8 +19,14 @@ if ! which golangci-lint > /dev/null; then
 fi
 if ! which ossc > /dev/null; then
 	# do a get in a tmp dir to avoid local go.mod update
+	echo "Installing ossc..."
 	cd $(mktemp -d) && GOSUMDB=off go get -u github.com/open-cluster-management/go-ossc/ossc
 fi
+if ! which go-bindata > /dev/null; then
+	echo "Installing go-bindata..."
+	cd $(mktemp -d) && GOSUMDB=off go get -u github.com/go-bindata/go-bindata/...
+fi
+go-bindata --version
 
 # Build tools
 
