@@ -14,21 +14,18 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"os"
-	"os/user"
-	"path/filepath"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	libgoclient "github.com/open-cluster-management/library-go/pkg/client"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 )
 
@@ -42,6 +39,7 @@ var (
 	gvrServiceaccount    schema.GroupVersionResource
 	gvrManagedcluster    schema.GroupVersionResource
 	gvrManifestwork      schema.GroupVersionResource
+	gvrCSR               schema.GroupVersionResource
 
 	optionsFile         string
 	baseDomain          string
@@ -224,9 +222,14 @@ var _ = BeforeSuite(func() {
 	gvrServiceaccount = schema.GroupVersionResource{Version: "v1", Resource: "serviceaccounts"}
 	gvrManagedcluster = schema.GroupVersionResource{Group: "cluster.open-cluster-management.io", Version: "v1", Resource: "managedclusters"}
 	gvrManifestwork = schema.GroupVersionResource{Group: "work.open-cluster-management.io", Version: "v1", Resource: "manifestworks"}
+	gvrCSR = schema.GroupVersionResource{Group: "certificates.k8s.io", Version: "v1beta1", Resource: "certificatesigningrequests"}
 
-	clientHub = NewKubeClient("", "", "")
-	clientHubDynamic = NewKubeClientDynamic("", "", "")
+	var err error
+	clientHub, err = libgoclient.NewDefaultKubeClient("")
+	Expect(err).To(BeNil())
+	clientHubDynamic, err = libgoclient.NewDefaultKubeClientDynamic("")
+	Expect(err).To(BeNil())
+
 	defaultImageRegistry = "quay.io/open-cluster-management"
 	defaultImagePullSecretName = "multiclusterhub-operator-pull-secret"
 })
@@ -234,66 +237,4 @@ var _ = BeforeSuite(func() {
 func TestRcmController(t *testing.T) {
 	RegisterFailHandler(Fail)
 	RunSpecs(t, "RcmController Suite")
-}
-
-func NewKubeClient(url, kubeconfig, context string) kubernetes.Interface {
-	klog.V(5).Infof("Create kubeclient for url %s using kubeconfig path %s\n", url, kubeconfig)
-	config, err := LoadConfig(url, kubeconfig, context)
-	if err != nil {
-		panic(err)
-	}
-
-	clientset, err := kubernetes.NewForConfig(config)
-	if err != nil {
-		panic(err)
-	}
-
-	return clientset
-}
-
-func NewKubeClientDynamic(url, kubeconfig, context string) dynamic.Interface {
-	klog.V(5).Infof("Create kubeclient dynamic for url %s using kubeconfig path %s\n", url, kubeconfig)
-	config, err := LoadConfig(url, kubeconfig, context)
-	if err != nil {
-		panic(err)
-	}
-
-	clientset, err := dynamic.NewForConfig(config)
-	if err != nil {
-		panic(err)
-	}
-
-	return clientset
-}
-
-func LoadConfig(url, kubeconfig, context string) (*rest.Config, error) {
-	if kubeconfig == "" {
-		kubeconfig = os.Getenv("KUBECONFIG")
-	}
-	klog.V(5).Infof("Kubeconfig path %s\n", kubeconfig)
-	// If we have an explicit indication of where the kubernetes config lives, read that.
-	if kubeconfig != "" {
-		if context == "" {
-			return clientcmd.BuildConfigFromFlags(url, kubeconfig)
-		}
-		return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
-			&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfig},
-			&clientcmd.ConfigOverrides{
-				CurrentContext: context,
-			}).ClientConfig()
-	}
-	// If not, try the in-cluster config.
-	if c, err := rest.InClusterConfig(); err == nil {
-		return c, nil
-	}
-	// If no in-cluster config, try the default location in the user's home directory.
-	if usr, err := user.Current(); err == nil {
-		klog.V(5).Infof("clientcmd.BuildConfigFromFlags for url %s using %s\n", url, filepath.Join(usr.HomeDir, ".kube", "config"))
-		if c, err := clientcmd.BuildConfigFromFlags("", filepath.Join(usr.HomeDir, ".kube", "config")); err == nil {
-			return c, nil
-		}
-	}
-
-	return nil, fmt.Errorf("could not create a valid kubeconfig")
-
 }
