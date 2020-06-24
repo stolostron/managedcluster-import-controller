@@ -6,13 +6,10 @@ package e2e
 
 import (
 	"context"
-	"fmt"
-	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	certificatesv1beta1 "k8s.io/api/certificates/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -22,6 +19,7 @@ import (
 	libgoapplier "github.com/open-cluster-management/library-go/pkg/applier"
 	libgoclient "github.com/open-cluster-management/library-go/pkg/client"
 	libgounstructured "github.com/open-cluster-management/library-go/pkg/unstructured"
+
 	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -122,22 +120,6 @@ var _ = Describe("Manual import cluster", func() {
 				Expect(namespaces.Get(context.TODO(), clusterName, metav1.GetOptions{})).NotTo(BeNil())
 			})
 
-			// By("creating the secret to retrieve the images", func() {
-			// 	klog.V(1).Info("Creating the secret to retrieve the images from the repository")
-			// 	userpw64 := base64.StdEncoding.EncodeToString([]byte(registryUser + ":" + registryPassword))
-			// 	//Create the cluster NS on master
-			// 	Expect(clientHub.CoreV1().Secrets(clusterName).Create(context.TODO(), &corev1.Secret{
-			// 		ObjectMeta: metav1.ObjectMeta{
-			// 			Name: MANUAL_IMPORT_IMAGE_PULL_SECRET,
-			// 		},
-			// 		Type: corev1.SecretTypeDockerConfigJson,
-			// 		StringData: map[string]string{
-			// 			corev1.DockerConfigJsonKey: "{\"auths\":{\"" + registry + "\":{\"username\":\"" + registryUser + "\",\"password\":\"" + registryPassword + "\",\"auth\":\"" + userpw64 + "\"}}}",
-			// 		},
-			// 	}, metav1.CreateOptions{})).NotTo(BeNil())
-			// 	Expect(clientHub.CoreV1().Secrets(clusterName).Get(context.TODO(), MANUAL_IMPORT_IMAGE_PULL_SECRET, metav1.GetOptions{})).NotTo(BeNil())
-			// })
-
 			By("creating the managedCluster", func() {
 				klog.V(1).Info("Creating the managedCluster")
 				values := struct {
@@ -174,38 +156,7 @@ var _ = Describe("Manual import cluster", func() {
 				Expect(clusterApplier.CreateOrUpdateAssets(importSecret.Data["import.yaml"], nil, "---")).NotTo(HaveOccurred())
 			})
 
-			var csrFound certificatesv1beta1.CertificateSigningRequest
-			When("Import launched, wait for csr", func() {
-				signingRequest := clientHub.CertificatesV1beta1().CertificateSigningRequests()
-				Eventually(func() error {
-					klog.V(1).Info("Waiting CSR...")
-					csrs, err := signingRequest.List(context.TODO(), metav1.ListOptions{})
-					if err != nil {
-						return err
-					}
-					for _, csr := range csrs.Items {
-						if strings.HasPrefix(csr.Name, clusterName) {
-							csrFound = csr
-							return nil
-						}
-					}
-					return fmt.Errorf("CSR starting with %s not found", clusterName)
-				}).Should(BeNil())
-			})
-
-			By("Approving CSR", func() {
-				signingRequest := clientHub.CertificatesV1beta1().CertificateSigningRequests()
-				csrFound.Status.Conditions = append(csrFound.Status.Conditions, certificatesv1beta1.CertificateSigningRequestCondition{
-					Type:           certificatesv1beta1.CertificateApproved,
-					Reason:         "e2e test manual-approval",
-					Message:        "This CSR was approved by e2e test manual-approval",
-					LastUpdateTime: metav1.Now(),
-				})
-				_, err := signingRequest.UpdateApproval(context.TODO(), &csrFound, metav1.UpdateOptions{})
-				Expect(err).Should(BeNil())
-			})
-
-			When("CSR Approved, wait for cluster ready", func() {
+			When("Import launched, wait for cluster ready", func() {
 				gvr := schema.GroupVersionResource{Group: "cluster.open-cluster-management.io", Version: "v1", Resource: "managedclusters"}
 				Eventually(func() error {
 					klog.V(1).Infof("Wait %s comes online...", clusterName)

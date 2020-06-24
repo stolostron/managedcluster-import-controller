@@ -6,14 +6,28 @@ package functional
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"fmt"
+	"math/rand"
+	"net"
 	"os"
 	"reflect"
 	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	libgoapplier "github.com/open-cluster-management/library-go/pkg/applier"
+	libgoclient "github.com/open-cluster-management/library-go/pkg/client"
+	libgoconfig "github.com/open-cluster-management/library-go/pkg/config"
+	libgounstructured "github.com/open-cluster-management/library-go/pkg/unstructured"
+
+	certificatesv1beta1 "k8s.io/api/certificates/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -537,4 +551,174 @@ func clean(clientHubDynamic dynamic.Interface,
 		return err
 	}).ShouldNot(BeNil())
 
+}
+
+var _ = Describe("CSR Approval", func() {
+	myTestNameSpace := "csrapproval-test"
+	BeforeEach(func() {
+		SetDefaultEventuallyTimeout(10 * time.Second)
+		SetDefaultEventuallyPollingInterval(1 * time.Second)
+		By("Creating managedCluster", func() {
+			managedCluster := newManagedcluster(myTestNameSpace)
+			createNewUnstructuredClusterScoped(clientHubDynamic, gvrManagedcluster, managedCluster, myTestNameSpace)
+		})
+		By("Create ClusterRole and ClusterRoleBinding", func() {
+			var clientHubApplier *libgoapplier.Applier
+			yamlReader := libgoapplier.NewYamlFileReader("resources")
+			templateProcessor, err := libgoapplier.NewTemplateProcessor(yamlReader, &libgoapplier.Options{})
+			Expect(err).To(BeNil())
+			hubClientClient, err := libgoclient.NewDefaultClient("", client.Options{})
+			Expect(err).To(BeNil())
+			clientHubApplier, err = libgoapplier.NewApplier(templateProcessor, hubClientClient, nil, nil, nil)
+			Expect(err).To(BeNil())
+			values := struct {
+				ClusterName string
+			}{
+				ClusterName: myTestNameSpace,
+			}
+			Expect(clientHubApplier.CreateOrUpdateInPath("csr", nil, false, values)).To(BeNil())
+		})
+	})
+
+	AfterEach(func() {
+		cleanCSR(myTestNameSpace)
+	})
+
+	Context("With valid CSR", func() {
+		It("Should approve the CSR (approve-csr/valid)", func() {
+			By("Creating the CSR", func() {
+				config, err := libgoconfig.LoadConfig("", "", "")
+				Expect(err).To(BeNil())
+				config.Impersonate.UserName = fmt.Sprintf("system:serviceaccount:%s:%s-bootstrap-sa", myTestNameSpace, myTestNameSpace)
+				clientset, err := kubernetes.NewForConfig(config)
+				signerName := certificatesv1beta1.KubeAPIServerClientSignerName
+				csr, err := newCSR(myTestNameSpace,
+					map[string]string{"open-cluster-management.io/cluster-name": myTestNameSpace},
+					&signerName,
+					"redhat",
+					[]string{"RedHat"},
+					"",
+					"CERTIFICATE REQUEST",
+				)
+				Expect(err).To(BeNil())
+				signingRequest := clientset.CertificatesV1beta1().CertificateSigningRequests()
+				_, err = signingRequest.Create(context.TODO(), csr, metav1.CreateOptions{})
+				Expect(err).To(BeNil())
+			})
+
+			When("CSR created, waiting approval", func() {
+				Eventually(func() error {
+					klog.V(1).Infof("Wait approval of CSR %s", myTestNameSpace)
+					ns := clientHubDynamic.Resource(gvrCSR)
+					csr, err := ns.Get(context.TODO(), myTestNameSpace, metav1.GetOptions{})
+					Expect(err).To(BeNil())
+					_, err = libgounstructured.GetCondition(csr, string(certificatesv1beta1.CertificateApproved))
+					return err
+				}).Should(BeNil())
+			})
+		})
+	})
+
+	Context("With CSR having wrong labels", func() {
+		It("Should not approve the CSR (approve-csr/wrong-label)", func() {
+			By("Creating the CSR", func() {
+				config, err := libgoconfig.LoadConfig("", "", "")
+				Expect(err).To(BeNil())
+				config.Impersonate.UserName = fmt.Sprintf("system:serviceaccount:%s:%s-bootstrap-sa", myTestNameSpace, myTestNameSpace)
+				clientset, err := kubernetes.NewForConfig(config)
+				signerName := certificatesv1beta1.KubeAPIServerClientSignerName
+				csr, err := newCSR(myTestNameSpace,
+					map[string]string{"wronglabel": myTestNameSpace},
+					&signerName,
+					"redhat",
+					[]string{"RedHat"},
+					"",
+					"CERTIFICATE REQUEST",
+				)
+				Expect(err).To(BeNil())
+				signingRequest := clientset.CertificatesV1beta1().CertificateSigningRequests()
+				_, err = signingRequest.Create(context.TODO(), csr, metav1.CreateOptions{})
+				Expect(err).To(BeNil())
+			})
+
+			When("CSR created, waiting if get approved", func() {
+				Consistently(func() error {
+					klog.V(1).Infof("Wait approval of CSR %s", myTestNameSpace)
+					ns := clientHubDynamic.Resource(gvrCSR)
+					csr, err := ns.Get(context.TODO(), myTestNameSpace, metav1.GetOptions{})
+					Expect(err).To(BeNil())
+					_, err = libgounstructured.GetCondition(csr, string(certificatesv1beta1.CertificateApproved))
+					return err
+				}).ShouldNot(BeNil())
+			})
+		})
+	})
+
+})
+
+func newCSR(name string, labels map[string]string, signerName *string, cn string, orgs []string, username string, reqBlockType string) (*certificatesv1beta1.CertificateSigningRequest, error) {
+	insecureRand := rand.New(rand.NewSource(0))
+	pk, err := ecdsa.GenerateKey(elliptic.P256(), insecureRand)
+	if err != nil {
+		return nil, err
+	}
+	csrb, err := x509.CreateCertificateRequest(insecureRand, &x509.CertificateRequest{
+		Subject: pkix.Name{
+			CommonName:   cn,
+			Organization: orgs,
+		},
+		DNSNames:       []string{},
+		EmailAddresses: []string{},
+		IPAddresses:    []net.IP{},
+	}, pk)
+	if err != nil {
+		return nil, err
+	}
+	return &certificatesv1beta1.CertificateSigningRequest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   name,
+			Labels: labels,
+		},
+		Spec: certificatesv1beta1.CertificateSigningRequestSpec{
+			Username:   username,
+			Usages:     []certificatesv1beta1.KeyUsage{},
+			SignerName: signerName,
+			Request:    pem.EncodeToMemory(&pem.Block{Type: reqBlockType, Bytes: csrb}),
+		},
+	}, nil
+}
+
+func cleanCSR(myTestNameSpace string) {
+	clientHubDynamic.Resource(gvrCSR).Delete(context.TODO(), myTestNameSpace, metav1.DeleteOptions{})
+	Eventually(func() error {
+		klog.V(1).Info("Wait CSR deleted")
+		ns := clientHubDynamic.Resource(gvrCSR)
+		_, err := ns.Get(context.TODO(), myTestNameSpace, metav1.GetOptions{})
+		return err
+	}).ShouldNot(BeNil())
+	crb := clientHub.RbacV1().ClusterRoleBindings()
+	crb.Delete(context.TODO(), myTestNameSpace, metav1.DeleteOptions{})
+	Eventually(func() error {
+		klog.V(1).Info("Wait clusterrolebinding deleted")
+		_, err := crb.Get(context.TODO(), myTestNameSpace, metav1.GetOptions{})
+		return err
+	}).ShouldNot(BeNil())
+
+	cr := clientHub.RbacV1().ClusterRoles()
+	cr.Delete(context.TODO(), myTestNameSpace, metav1.DeleteOptions{})
+	Eventually(func() error {
+		klog.V(1).Info("Wait clusterroleb deleted")
+		_, err := cr.Get(context.TODO(), myTestNameSpace, metav1.GetOptions{})
+		return err
+	}).ShouldNot(BeNil())
+	err := clientHubDynamic.Resource(gvrManagedcluster).Delete(context.TODO(), myTestNameSpace, metav1.DeleteOptions{})
+	if err != nil {
+		klog.V(5).Infof("ManagedCluster: %s", err.Error())
+	}
+	Eventually(func() error {
+		klog.V(1).Info("Wait managedcluster deleted")
+		ns := clientHubDynamic.Resource(gvrManagedcluster)
+		_, err := ns.Get(context.TODO(), myTestNameSpace, metav1.GetOptions{})
+		return err
+	}).ShouldNot(BeNil())
 }
