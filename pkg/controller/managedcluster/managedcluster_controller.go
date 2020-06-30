@@ -4,13 +4,13 @@ package managedcluster
 
 import (
 	"context"
-	"reflect"
+	"fmt"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -33,7 +33,11 @@ import (
 
 // constants for delete work and finalizer
 const (
-	managedClusterFinalizer = "managedcluster-import-controller.managedcluster"
+	managedClusterFinalizer = "managedcluster-import-controller.open-cluster-management.io/cleanup"
+	registrationFinalizer   = "cluster.open-cluster-management.io/api-resource-cleanup"
+	workPostfix             = ":managed-cluster-work"
+	registrationPostfix     = ":managed-cluster-registration"
+	leasePrefix             = "cluster-lease-"
 )
 
 var log = logf.Log.WithName("controller_managedcluster")
@@ -72,55 +76,81 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	// Watch for changes to secondary resource Pods and requeue the owner ManagedCluster
-	err = c.Watch(&source.Kind{Type: &rbacv1.ClusterRole{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &clusterv1.ManagedCluster{},
-	})
+	err = c.Watch(
+		&source.Kind{Type: &rbacv1.ClusterRole{}},
+		&handler.EnqueueRequestForOwner{
+			IsController: true,
+			OwnerType:    &clusterv1.ManagedCluster{},
+		},
+	)
 	if err != nil {
 		log.Error(err, "Fail to add Watch for ClusterRole to controller")
 		return err
 	}
 
-	err = c.Watch(&source.Kind{Type: &corev1.ServiceAccount{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &clusterv1.ManagedCluster{},
-	})
+	err = c.Watch(
+		&source.Kind{Type: &corev1.ServiceAccount{}},
+		&handler.EnqueueRequestForOwner{
+			IsController: true,
+			OwnerType:    &clusterv1.ManagedCluster{},
+		},
+	)
 	if err != nil {
 		log.Error(err, "Fail to add Watch for ServiceAccount to controller")
 		return err
 	}
 
-	err = c.Watch(&source.Kind{Type: &hivev1.ClusterDeployment{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &clusterv1.ManagedCluster{},
-	})
+	err = c.Watch(
+		&source.Kind{Type: &hivev1.ClusterDeployment{}},
+		&handler.EnqueueRequestsFromMapFunc{
+			ToRequests: handler.ToRequestsFunc(func(obj handler.MapObject) []reconcile.Request {
+				return []reconcile.Request{
+					{
+						NamespacedName: types.NamespacedName{
+							Name:      obj.Meta.GetName(),
+							Namespace: obj.Meta.GetNamespace(),
+						},
+					},
+				}
+			}),
+		},
+	)
 	if err != nil {
 		log.Error(err, "Fail to add Watch for ClusterDeployment to controller")
 		return err
 	}
 
-	err = c.Watch(&source.Kind{Type: &rbacv1.ClusterRoleBinding{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &clusterv1.ManagedCluster{},
-	})
+	err = c.Watch(
+		&source.Kind{Type: &rbacv1.ClusterRoleBinding{}},
+		&handler.EnqueueRequestForOwner{
+			IsController: true,
+			OwnerType:    &clusterv1.ManagedCluster{},
+		},
+	)
 	if err != nil {
 		log.Error(err, "Fail to add Watch for ClusterRoleBinding to controller")
 		return err
 	}
 
-	err = c.Watch(&source.Kind{Type: &hivev1.SyncSet{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &clusterv1.ManagedCluster{},
-	})
+	err = c.Watch(
+		&source.Kind{Type: &hivev1.SyncSet{}},
+		&handler.EnqueueRequestForOwner{
+			IsController: true,
+			OwnerType:    &clusterv1.ManagedCluster{},
+		},
+	)
 	if err != nil {
 		log.Error(err, "Fail to add Watch for SyncSet to controller")
 		return err
 	}
 
-	err = c.Watch(&source.Kind{Type: &workv1.ManifestWork{}}, &handler.EnqueueRequestForOwner{
-		IsController: true,
-		OwnerType:    &clusterv1.ManagedCluster{},
-	})
+	err = c.Watch(
+		&source.Kind{Type: &workv1.ManifestWork{}},
+		&handler.EnqueueRequestForOwner{
+			IsController: true,
+			OwnerType:    &clusterv1.ManagedCluster{},
+		},
+	)
 	if err != nil {
 		log.Error(err, "Fail to add Watch for ManifestWork to controller")
 		return err
@@ -140,35 +170,6 @@ type ReconcileManagedCluster struct {
 	scheme *runtime.Scheme
 }
 
-var merger applier.Merger = func(current,
-	new *unstructured.Unstructured,
-) (
-	future *unstructured.Unstructured,
-	update bool,
-) {
-	if spec, ok := new.Object["spec"]; ok &&
-		!reflect.DeepEqual(spec, current.Object["spec"]) {
-		update = true
-		current.Object["spec"] = spec
-	}
-	if rules, ok := new.Object["rules"]; ok &&
-		!reflect.DeepEqual(rules, current.Object["rules"]) {
-		update = true
-		current.Object["rules"] = rules
-	}
-	if roleRef, ok := new.Object["roleRef"]; ok &&
-		!reflect.DeepEqual(roleRef, current.Object["roleRef"]) {
-		update = true
-		current.Object["roleRef"] = roleRef
-	}
-	if subjects, ok := new.Object["subjects"]; ok &&
-		!reflect.DeepEqual(subjects, current.Object["subjects"]) {
-		update = true
-		current.Object["subjects"] = subjects
-	}
-	return current, update
-}
-
 // Reconcile reads that state of the cluster for a ManagedCluster object and makes changes based on the state read
 // and what is in the ManagedCluster.Spec
 // Note:
@@ -181,11 +182,22 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 	// Fetch the ManagedCluster instance
 	instance := &clusterv1.ManagedCluster{}
 
-	if err := r.client.Get(context.TODO(), request.NamespacedName, instance); err != nil {
+	if err := r.client.Get(
+		context.TODO(),
+		types.NamespacedName{Namespace: "", Name: request.Name},
+		instance,
+	); err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
+			reqLogger.Info(fmt.Sprintf("deleteNamespace: %s", request.Name))
+			err = r.deleteNamespace(request.Name)
+			if err != nil {
+				reqLogger.Error(err, "Failed to delete namespace")
+				return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
+			}
+
 			return reconcile.Result{}, nil
 		}
 		// Error reading the object - requeue the request.
@@ -193,29 +205,72 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 	}
 
 	if instance.DeletionTimestamp != nil {
-		hasFinalizers := checkOtherFinalizers(instance)
-		if hasFinalizers {
+		reqLogger.Info(fmt.Sprintf("Instance in Terminating: %s", instance.Name))
+		if len(filterFinalizers(instance, []string{managedClusterFinalizer, registrationFinalizer})) != 0 {
 			return reconcile.Result{Requeue: true}, nil
 		}
-		err := deleteSyncSetAndManifestWork(r.client, instance)
+
+		offLine := checkOffLine(instance)
+		reqLogger.Info(fmt.Sprintf("deleteAllOtherManifestWork: %s", instance.Name))
+		err := deleteAllOtherManifestWork(r.client, instance)
+		if err != nil {
+			if !offLine {
+				return reconcile.Result{}, err
+			}
+		}
+
+		if offLine {
+			reqLogger.Info(fmt.Sprintf("evictAllOtherManifestWork: %s", instance.Name))
+			err = evictAllOtherManifestWork(r.client, instance)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+
+		clusterDeployment := &hivev1.ClusterDeployment{}
+		err = r.client.Get(context.TODO(),
+			types.NamespacedName{
+				Name:      instance.Name,
+				Namespace: instance.Name},
+			clusterDeployment)
+		if err == nil {
+			reqLogger.Info(fmt.Sprintf("deleteKlusterletSyncSets: %s", instance.Name))
+			err = deleteKlusterletSyncSets(r.client, instance)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+		} else {
+			if errors.IsNotFound(err) {
+				reqLogger.Info(fmt.Sprintf("deleteKlusterletManifestWorks: %s", instance.Name))
+				err = deleteKlusterletManifestWorks(r.client, instance)
+				if err != nil {
+					return reconcile.Result{}, err
+				}
+			} else {
+				return reconcile.Result{}, err
+			}
+		}
+
+		if !offLine {
+			return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
+		}
+
+		reqLogger.Info(fmt.Sprintf("evictKlusterletManifestWorks: %s", instance.Name))
+		err = evictKlusterletManifestWorks(r.client, instance)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
-		if !checkOffLine(instance) {
-			return reconcile.Result{Requeue: true}, nil
-		}
-		err = evictManifestWorks(r.client, instance)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-		utils.RemoveFinalizer(instance, managedClusterFinalizer)
+
+		reqLogger.Info(fmt.Sprintf("Remove all finalizer: %s", instance.Name))
+		instance.ObjectMeta.Finalizers = nil
 		if err := r.client.Update(context.TODO(), instance); err != nil {
 			return reconcile.Result{}, err
 		}
 
-		return reconcile.Result{}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: 5 * time.Second}, nil
 	}
 
+	reqLogger.Info(fmt.Sprintf("AddFinalizer to instance: %s", instance.Name))
 	utils.AddFinalizer(instance, managedClusterFinalizer)
 
 	if err := r.client.Update(context.TODO(), instance); err != nil {
@@ -238,11 +293,12 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, err
 	}
 
-	a, err := applier.NewApplier(tp, r.client, instance, r.scheme, merger)
+	a, err := applier.NewApplier(tp, r.client, instance, r.scheme, applier.DefaultKubernetesMerger)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
+	reqLogger.Info(fmt.Sprintf("CreateOrUpdateInPath hub/managedcluster/manifests: %s", instance.Name))
 	err = a.CreateOrUpdateInPath(
 		"hub/managedcluster/manifests",
 		nil,
@@ -254,6 +310,7 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, err
 	}
 
+	reqLogger.Info(fmt.Sprintf("createOrUpdateImportSecret: %s", instance.Name))
 	_, err = createOrUpdateImportSecret(r.client, r.scheme, instance)
 	if err != nil {
 		log.Error(err, "create ManagedCluster Import Secret")
@@ -267,12 +324,14 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 			Namespace: instance.Name},
 		clusterDeployment)
 	if err == nil {
+		reqLogger.Info(fmt.Sprintf("createOrUpdateSyncSets: %s", instance.Name))
 		_, _, err := createOrUpdateSyncSets(r.client, r.scheme, instance)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 	} else {
 		if !checkOffLine(instance) {
+			reqLogger.Info(fmt.Sprintf("createOrUpdateManifestWorks: %s", instance.Name))
 			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance)
 			if err != nil {
 				return reconcile.Result{}, err
@@ -282,13 +341,38 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 	return reconcile.Result{}, nil
 }
 
-//checkOtherFinalizer checks if other finalizers left
-func checkOtherFinalizers(managedCluster *clusterv1.ManagedCluster) bool {
+//checkOtherFinalizersThanMCAndReg checks if other than the managedCluster and registration finalizers left
+func checkOtherFinalizersThanMCAndReg(managedCluster *clusterv1.ManagedCluster) bool {
 	finalizers := managedCluster.GetFinalizers()
-	if len(finalizers) > 1 {
+	if len(finalizers) > 2 {
 		return true
 	}
-	return len(finalizers) != 0 && finalizers[0] != managedClusterFinalizer
+	if len(finalizers) == 2 {
+		return (finalizers[0] != managedClusterFinalizer || finalizers[1] != registrationFinalizer) &&
+			(finalizers[1] != managedClusterFinalizer || finalizers[0] != registrationFinalizer)
+	}
+	if len(finalizers) == 1 {
+		return finalizers[0] != managedClusterFinalizer && finalizers[0] != registrationFinalizer
+	}
+	return false
+}
+
+func filterFinalizers(managedCluster *clusterv1.ManagedCluster, finalizers []string) []string {
+	results := make([]string, 0)
+	clusterFinalizers := managedCluster.GetFinalizers()
+	for _, cf := range clusterFinalizers {
+		found := false
+		for _, f := range finalizers {
+			if cf == f {
+				found = true
+				break
+			}
+		}
+		if !found {
+			results = append(results, cf)
+		}
+	}
+	return results
 }
 
 func checkOffLine(managedCluster *clusterv1.ManagedCluster) bool {
@@ -300,20 +384,58 @@ func checkOffLine(managedCluster *clusterv1.ManagedCluster) bool {
 	return true
 }
 
-func deleteSyncSetAndManifestWork(client client.Client, instance *clusterv1.ManagedCluster) error {
-	clusterDeployment := &hivev1.ClusterDeployment{}
-	err := client.Get(context.TODO(),
+func (r *ReconcileManagedCluster) deleteNamespace(namespaceName string) error {
+	ns := &corev1.Namespace{}
+	err := r.client.Get(
+		context.TODO(),
 		types.NamespacedName{
-			Name:      instance.Name,
-			Namespace: instance.Name},
-		clusterDeployment)
-	if err == nil {
-		err := deleteSyncSets(client, instance)
-		if err != nil {
+			Name: namespaceName,
+		}, ns,
+	)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("Namespace " + namespaceName + " not found")
+			return nil
+		}
+		log.Error(err, "Failed to get namespace")
+		return err
+	}
+	if ns.DeletionTimestamp != nil {
+		log.Info("Already in deletion")
+		return nil
+	}
+
+	clusterDeployment := &hivev1.ClusterDeployment{}
+	err = r.client.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      namespaceName,
+			Namespace: namespaceName,
+		},
+		clusterDeployment,
+	)
+	tobeDeleted := false
+	if err != nil {
+		if errors.IsNotFound(err) {
+			tobeDeleted = true
+		} else {
+			log.Error(err, "Failed to get cluster deployment")
 			return err
 		}
 	} else {
-		return deleteManifestWorks(client, instance)
+		return fmt.Errorf(
+			"can not delete namespace %s as ClusterDeployment %s still exist",
+			namespaceName,
+			namespaceName,
+		)
 	}
+	if tobeDeleted {
+		err = r.client.Delete(context.TODO(), ns)
+		if err != nil && !errors.IsNotFound(err) {
+			log.Error(err, "Failed to delete namespace")
+			return err
+		}
+	}
+
 	return nil
 }

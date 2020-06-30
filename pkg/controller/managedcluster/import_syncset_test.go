@@ -538,7 +538,7 @@ func Test_deleteSyncSets(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := deleteSyncSets(tt.args.client, tt.args.managedCluster); (err != nil) != tt.wantErr {
+			if err := deleteKlusterletSyncSets(tt.args.client, tt.args.managedCluster); (err != nil) != tt.wantErr {
 				t.Errorf("deleteSyncSets() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if !tt.wantErr {
