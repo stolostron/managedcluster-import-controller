@@ -168,7 +168,7 @@ func createOrUpdateManifestWork(
 	return mw, nil
 }
 
-func deleteManifestWorks(
+func deleteKlusterletManifestWorks(
 	client client.Client,
 	managedCluster *clusterv1.ManagedCluster,
 ) error {
@@ -204,7 +204,33 @@ func deleteManifestWork(client client.Client, name, namespace string) error {
 	return nil
 }
 
-func evictManifestWorks(
+func deleteAllOtherManifestWork(c client.Client, instance *clusterv1.ManagedCluster) error {
+	mwNsN, err := manifestWorkNsN(instance)
+	if err != nil {
+		return err
+	}
+
+	mws := &workv1.ManifestWorkList{}
+	err = c.List(context.TODO(), mws, &client.ListOptions{
+		Namespace: mwNsN.Namespace,
+	})
+
+	if err != nil {
+		return err
+	}
+	for _, mw := range mws.Items {
+		if mw.GetName() == mwNsN.Name || mw.GetName() == mwNsN.Name+manifestWorkCRDSPostfix {
+			continue
+		}
+		err := deleteManifestWork(c, mw.GetName(), mw.GetNamespace())
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func evictKlusterletManifestWorks(
 	client client.Client,
 	managedCluster *clusterv1.ManagedCluster,
 ) error {
@@ -239,6 +265,30 @@ func evictManifestWork(client client.Client, name, namespace string) error {
 		}
 	} else if !errors.IsNotFound(err) {
 		return err
+	}
+	return nil
+}
+
+func evictAllOtherManifestWork(c client.Client, instance *clusterv1.ManagedCluster) error {
+	mwNsN, err := manifestWorkNsN(instance)
+	if err != nil {
+		return err
+	}
+
+	mws := &workv1.ManifestWorkList{}
+	err = c.List(context.TODO(), mws)
+	if err != nil {
+		return err
+	}
+	for _, mw := range mws.Items {
+		if (mw.GetName() == mwNsN.Name || mw.GetName() == mwNsN.Name+manifestWorkCRDSPostfix) &&
+			mw.GetNamespace() == mwNsN.Namespace {
+			continue
+		}
+		err := evictManifestWork(c, mw.GetName(), mw.GetNamespace())
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

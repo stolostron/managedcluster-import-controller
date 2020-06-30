@@ -22,8 +22,10 @@ import (
 )
 
 const (
-	klusterletImageName = "KLUSTERLET_OPERATOR_IMAGE"
-	klusterletNamespace = "open-cluster-management-agent"
+	registrationOperatorImageEnvVarName = "REGISTRATION_OPERATOR_IMAGE"
+	registrationImageEnvVarName         = "REGISTRATION_IMAGE"
+	workImageEnvVarName                 = "WORK_IMAGE"
+	klusterletNamespace                 = "open-cluster-management-agent"
 )
 
 func generateImportYAMLs(
@@ -55,27 +57,41 @@ func generateImportYAMLs(
 		return nil, nil, err
 	}
 
-	klusterletImage := os.Getenv(klusterletImageName)
-	if klusterletImage == "" {
-		return nil, nil, fmt.Errorf("Environment variable %s not defined", klusterletImageName)
+	registrationOperatorImageName := os.Getenv(registrationOperatorImageEnvVarName)
+	if registrationOperatorImageName == "" {
+		return nil, nil, fmt.Errorf("Environment variable %s not defined", registrationOperatorImageEnvVarName)
+	}
+
+	registrationImageName := os.Getenv(registrationImageEnvVarName)
+	if registrationImageName == "" {
+		return nil, nil, fmt.Errorf("Environment variable %s not defined", registrationImageEnvVarName)
+	}
+
+	workImageName := os.Getenv(workImageEnvVarName)
+	if workImageName == "" {
+		return nil, nil, fmt.Errorf("Environment variable %s not defined", workImageEnvVarName)
 	}
 
 	config := struct {
-		KlusterletNamespace     string
-		ManagedClusterNamespace string
-		BootstrapKubeconfig     string
-		ImagePullSecretName     string
-		ImagePullSecretData     string
-		ImagePullSecretType     corev1.SecretType
-		ImageName               string
+		KlusterletNamespace       string
+		ManagedClusterNamespace   string
+		BootstrapKubeconfig       string
+		ImagePullSecretName       string
+		ImagePullSecretData       string
+		ImagePullSecretType       corev1.SecretType
+		RegistrationOperatorImage string
+		RegistrationImageName     string
+		WorkImageName             string
 	}{
-		ManagedClusterNamespace: managedCluster.Name,
-		KlusterletNamespace:     klusterletNamespace,
-		BootstrapKubeconfig:     base64.StdEncoding.EncodeToString(bootstrapKubeconfigData),
-		ImagePullSecretName:     imagePullSecret.Name,
-		ImagePullSecretData:     base64.StdEncoding.EncodeToString(imagePullSecret.Data[".dockerconfigjson"]),
-		ImagePullSecretType:     imagePullSecret.Type,
-		ImageName:               klusterletImage,
+		ManagedClusterNamespace:   managedCluster.Name,
+		KlusterletNamespace:       klusterletNamespace,
+		BootstrapKubeconfig:       base64.StdEncoding.EncodeToString(bootstrapKubeconfigData),
+		ImagePullSecretName:       imagePullSecret.Name,
+		ImagePullSecretData:       base64.StdEncoding.EncodeToString(imagePullSecret.Data[".dockerconfigjson"]),
+		ImagePullSecretType:       imagePullSecret.Type,
+		RegistrationOperatorImage: registrationOperatorImageName,
+		RegistrationImageName:     registrationImageName,
+		WorkImageName:             workImageName,
 	}
 
 	tp, err = applier.NewTemplateProcessor(bindata.NewBindataReader(), &applier.Options{})

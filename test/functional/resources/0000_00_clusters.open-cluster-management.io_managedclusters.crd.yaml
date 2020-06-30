@@ -12,7 +12,6 @@ spec:
   scope: "Cluster"
   subresources:
     status: {}
-  preserveUnknownFields: false
   validation:
     openAPIV3Schema:
       description: "ManagedCluster represents the desired state and current status

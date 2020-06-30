@@ -125,6 +125,7 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &hivev1.ClusterDeployment{})
 	testscheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
 	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWork{})
+	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWorkList{})
 	testscheme.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{})
 
 	req := reconcile.Request{
@@ -359,7 +360,8 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 				request: req,
 			},
 			want: reconcile.Result{
-				Requeue: false,
+				Requeue:      true,
+				RequeueAfter: 5 * time.Second,
 			},
 			wantErr: false,
 		},
@@ -377,7 +379,8 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 				request: req,
 			},
 			want: reconcile.Result{
-				Requeue: true,
+				Requeue:      true,
+				RequeueAfter: 1 * time.Minute,
 			},
 			wantErr: false,
 		},
@@ -395,7 +398,8 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 				request: req,
 			},
 			want: reconcile.Result{
-				Requeue: false,
+				Requeue:      true,
+				RequeueAfter: 5 * time.Second,
 			},
 			wantErr: false,
 		},
@@ -434,64 +438,64 @@ func newFakeImagePullSecret() *corev1.Secret {
 	}
 }
 
-func Test_checkOtherFinalizers(t *testing.T) {
+// func Test_checkOtherFinalizers(t *testing.T) {
 
-	type args struct {
-		managedCluster *clusterv1.ManagedCluster
-	}
-	tests := []struct {
-		name string
-		args args
-		want bool
-	}{
-		{
-			name: "No Finalizer",
-			args: args{
-				managedCluster: &clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: managedClusterNameReconcile,
-					},
-					Spec: clusterv1.ManagedClusterSpec{},
-				},
-			},
-			want: false,
-		},
-		{
-			name: "With other Finalizers",
-			args: args{
-				managedCluster: &clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:       managedClusterNameReconcile,
-						Finalizers: []string{managedClusterFinalizer, "other"},
-					},
-					Spec: clusterv1.ManagedClusterSpec{},
-				},
-			},
-			want: true,
-		},
-		{
-			name: "With no other Finalizers",
-			args: args{
-				managedCluster: &clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:       managedClusterNameReconcile,
-						Finalizers: []string{managedClusterFinalizer},
-					},
-					Spec: clusterv1.ManagedClusterSpec{},
-				},
-			},
-			want: false,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Logf("name: %s", tt.name)
-			if got := checkOtherFinalizers(tt.args.managedCluster); got != tt.want {
-				t.Errorf("checkFinalizers() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
+// 	type args struct {
+// 		managedCluster *clusterv1.ManagedCluster
+// 	}
+// 	tests := []struct {
+// 		name string
+// 		args args
+// 		want bool
+// 	}{
+// 		{
+// 			name: "No Finalizer",
+// 			args: args{
+// 				managedCluster: &clusterv1.ManagedCluster{
+// 					ObjectMeta: metav1.ObjectMeta{
+// 						Name: managedClusterNameReconcile,
+// 					},
+// 					Spec: clusterv1.ManagedClusterSpec{},
+// 				},
+// 			},
+// 			want: false,
+// 		},
+// 		{
+// 			name: "With other Finalizers",
+// 			args: args{
+// 				managedCluster: &clusterv1.ManagedCluster{
+// 					ObjectMeta: metav1.ObjectMeta{
+// 						Name:       managedClusterNameReconcile,
+// 						Finalizers: []string{managedClusterFinalizer, "other"},
+// 					},
+// 					Spec: clusterv1.ManagedClusterSpec{},
+// 				},
+// 			},
+// 			want: true,
+// 		},
+// 		{
+// 			name: "With no other Finalizers",
+// 			args: args{
+// 				managedCluster: &clusterv1.ManagedCluster{
+// 					ObjectMeta: metav1.ObjectMeta{
+// 						Name:       managedClusterNameReconcile,
+// 						Finalizers: []string{managedClusterFinalizer},
+// 					},
+// 					Spec: clusterv1.ManagedClusterSpec{},
+// 				},
+// 			},
+// 			want: false,
+// 		},
+// 	}
+// 	for _, tt := range tests {
+// 		t.Run(tt.name, func(t *testing.T) {
+// 			t.Logf("name: %s", tt.name)
+// 			if got := checkOtherFinalizers(tt.args.managedCluster); got != tt.want {
+// 				t.Errorf("checkFinalizers() = %v, want %v", got, tt.want)
+// 			}
+// 		})
+// 	}
+// }
 
 func Test_checkOffLine(t *testing.T) {
 	type args struct {

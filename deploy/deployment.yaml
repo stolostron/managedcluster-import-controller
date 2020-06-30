@@ -34,8 +34,10 @@ spec:
               value: multiclusterhub-operator-pull-secret
             - name: DEFAULT_IMAGE_REGISTRY
               value: quay.io/open-cluster-management
-            - name: KLUSTERLET_OPERATOR_IMAGE
-              value: quay.io/open-cluster-management/registration_operator:latest
+            - name: REGISTRATION_OPERATOR_IMAGE
+              value: quay.io/open-cluster-management/registration:latest
+            - name: WORK_OPERATOR_IMAGE
+              value: quay.io/open-cluster-management/work:latest
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:

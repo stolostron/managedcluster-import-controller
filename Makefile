@@ -126,7 +126,7 @@ clean::
 
 .PHONY: run
 ## Run the operator against the kubeconfig targeted cluster
-run:
+run: go-bindata
 	@operator-sdk run local --watch-namespace="" --operator-flags="--zap-devel=true"
 
 .PHONY: lint
