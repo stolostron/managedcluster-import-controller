@@ -6,11 +6,13 @@ package e2e
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -76,7 +78,7 @@ var _ = Describe("Manual import cluster", func() {
 			klog.V(1).Infof("========================= Test cluster import cluster %s ===============================", clusterName)
 			clusterClientClient, err = libgoclient.NewDefaultClient(clusterKubeconfig, client.Options{})
 			Expect(err).To(BeNil())
-			clusterApplier, err = libgoapplier.NewApplier(templateProcessor, clusterClientClient, nil, nil, nil)
+			clusterApplier, err = libgoapplier.NewApplier(templateProcessor, clusterClientClient, nil, nil, libgoapplier.DefaultKubernetesMerger)
 			Expect(err).To(BeNil())
 			Eventually(func() error {
 				klog.V(1).Info("Check CRDs")
@@ -110,14 +112,21 @@ var _ = Describe("Manual import cluster", func() {
 
 			By("creating the namespace in which the cluster will be imported", func() {
 				//Create the cluster NS on master
-				klog.V(1).Info("Creating the namesapce in which the cluster will be imported")
+				klog.V(1).Info("Creating the namespace in which the cluster will be imported")
 				namespaces := clientHub.CoreV1().Namespaces()
-				Expect(namespaces.Create(context.TODO(), &corev1.Namespace{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: clusterName,
-					},
-				}, metav1.CreateOptions{})).NotTo(BeNil())
-				Expect(namespaces.Get(context.TODO(), clusterName, metav1.GetOptions{})).NotTo(BeNil())
+				_, err := namespaces.Get(context.TODO(), clusterName, metav1.GetOptions{})
+				if err != nil {
+					if errors.IsNotFound(err) {
+						Expect(namespaces.Create(context.TODO(), &corev1.Namespace{
+							ObjectMeta: metav1.ObjectMeta{
+								Name: clusterName,
+							},
+						}, metav1.CreateOptions{})).NotTo(BeNil())
+						Expect(namespaces.Get(context.TODO(), clusterName, metav1.GetOptions{})).NotTo(BeNil())
+					} else {
+						Fail(err.Error())
+					}
+				}
 			})
 
 			By("creating the managedCluster", func() {
@@ -177,61 +186,47 @@ var _ = Describe("Manual import cluster", func() {
 				}).Should(BeNil())
 				klog.V(1).Info("Cluster imported")
 			})
+			By(fmt.Sprintf("Detaching the %s CR on the hub", clusterName), func() {
+				klog.V(1).Infof("Detaching the %s CR on the hub", clusterName)
+				gvr := schema.GroupVersionResource{Group: "cluster.open-cluster-management.io", Version: "v1", Resource: "managedclusters"}
+				Expect(clientHubDynamic.Resource(gvr).Delete(context.TODO(), clusterName, metav1.DeleteOptions{})).Should(BeNil())
+
+			})
+
+			When("the deletion of the cluster is requested, wait for the effective deletion", func() {
+				By(fmt.Sprintf("Checking the deletion of the %s CR on the hub", clusterName), func() {
+					klog.V(1).Infof("Checking the deletion of the %s CR on the hub", clusterName)
+					gvr := schema.GroupVersionResource{Group: "cluster.open-cluster-management.io", Version: "v1", Resource: "managedclusters"}
+					Eventually(func() bool {
+						klog.V(1).Infof("Wait %s CR deletion...", clusterName)
+						_, err := clientHubDynamic.Resource(gvr).Get(context.TODO(), clusterName, metav1.GetOptions{})
+						if err != nil {
+							klog.V(1).Info(err)
+							return errors.IsNotFound(err)
+						}
+						return false
+					}).Should(BeTrue())
+					klog.V(1).Infof("%s CR deleted", clusterName)
+				})
+			})
+
+			When("the deletion of the cluster is done, wait for the namespace deletion", func() {
+				By(fmt.Sprintf("Checking the deletion of the %s namespace on the hub", clusterName), func() {
+					klog.V(1).Infof("Checking the deletion of the %s namespace on the hub", clusterName)
+					Eventually(func() bool {
+						klog.V(1).Infof("Wait %s CR deletion...", clusterName)
+						_, err := clientHub.CoreV1().Namespaces().Get(context.TODO(), clusterName, metav1.GetOptions{})
+						if err != nil {
+							klog.V(1).Info(err)
+							return errors.IsNotFound(err)
+						}
+						return false
+					}).Should(BeTrue())
+					klog.V(1).Infof("%s namespace deleted", clusterName)
+				})
+			})
 		}
+
 	})
 
-	// 	By(fmt.Sprintf("Deleting the %s CR on the hub", managedClusterForManualImport.Name), func() {
-	// 		klog.V(1).Infof("Deleting the %s CR on the hub", managedClusterForManualImport.Name)
-	// 		gvr := schema.GroupVersionResource{Group: "clusterregistry.k8s.io", Version: "v1alpha1", Resource: "clusters"}
-	// 		Expect(clientHubDynamic.Resource(gvr).Namespace(managedClusterForManualImport.Name).Delete(managedClusterForManualImport.Name, &metav1.DeleteOptions{})).NotTo(HaveOccurred())
-	// 	})
-
-	// 	When("the deletion of the cluster is requested, wait for the effective deletion", func() {
-	// 		By(fmt.Sprintf("Checking the deletion of the %s CR on the hub", managedClusterForManualImport.Name), func() {
-	// 			klog.V(1).Infof("Checking the deletion of the %s CR on the hub", managedClusterForManualImport.Name)
-	// 			gvr := schema.GroupVersionResource{Group: "clusterregistry.k8s.io", Version: "v1alpha1", Resource: "clusters"}
-	// 			Eventually(func() bool {
-	// 				klog.V(1).Infof("Wait %s CR deletion...", managedClusterForManualImport.Name)
-	// 				_, err := clientHubDynamic.Resource(gvr).Namespace(managedClusterForManualImport.Name).Get(managedClusterForManualImport.Name, metav1.GetOptions{})
-	// 				if err != nil {
-	// 					klog.V(1).Info(err)
-	// 					return errors.IsNotFound(err)
-	// 				}
-	// 				return false
-	// 			}).Should(BeTrue())
-	// 			klog.V(1).Infof("%s CR deleted", managedClusterForManualImport.Name)
-	// 		})
-
-	// 		By("Checking the deletion of the namespace multicluster-endpoint on the managed cluster", func() {
-	// 			klog.V(1).Info("Checking the deletion of the namespace multicluster-endpoint on the managed cluster")
-	// 			Eventually(func() bool {
-	// 				klog.V(1).Info("Wait namespace multicluster-endpoint deletion...")
-	// 				_, err := clientManagedCluster.CoreV1().Namespaces().Get("multicluster-endpoint", metav1.GetOptions{})
-	// 				if err != nil {
-	// 					klog.V(1).Info(err)
-	// 					return errors.IsNotFound(err)
-	// 				}
-	// 				return false
-	// 			}).Should(BeTrue())
-	// 			klog.V(1).Info("namespace multicluster-endpoint deleted")
-	// 		})
-	// 	})
-
-	// 	When("the deletion of the namespace multicluster-endpoint is done, delete the namespace on the hub", func() {
-	// 		klog.V(1).Info("the deletion of the namespace multicluster-endpoint is done, delete the namespace on the hub")
-	// 		By(fmt.Sprintf("deleting the cluster namespace %s on the hub", managedClusterForManualImport.Name), func() {
-	// 			Expect(clientHub.CoreV1().Namespaces().Delete(managedClusterForManualImport.Name, &metav1.DeleteOptions{})).NotTo(HaveOccurred())
-	// 		})
-	// 		By(fmt.Sprintf("Checking the deletion of the hub cluster namespace %s", managedClusterForManualImport.Name), func() {
-	// 			Eventually(func() bool {
-	// 				klog.V(1).Infof("Wait cluster namespace %s deletion...", managedClusterForManualImport.Name)
-	// 				_, err = clientHub.CoreV1().Namespaces().Get(managedClusterForManualImport.Name, metav1.GetOptions{})
-	// 				if err != nil {
-	// 					return errors.IsNotFound(err)
-	// 				}
-	// 				return false
-	// 			}).Should(BeTrue())
-	// 			klog.V(1).Infof("cluster namespace %s deleted", managedClusterForManualImport.Name)
-	// 		})
-	// 	})
 })

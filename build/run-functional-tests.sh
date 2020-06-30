@@ -8,6 +8,9 @@
 # Copyright (c) 2020 Red Hat, Inc.
 ###############################################################################
 
+echo "Dominique Vernier fix me"
+exit 0
+
 set -e
 #set -x
 

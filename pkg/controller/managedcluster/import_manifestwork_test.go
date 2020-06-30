@@ -27,7 +27,7 @@ const (
 )
 
 func init() {
-	os.Setenv(klusterletImageName, "quay.io/open-cluster-management/nucleus:latest")
+	os.Setenv(registrationImageEnvVarName, "quay.io/open-cluster-management/registration:latest")
 }
 
 func Test_manifestWorktNsN(t *testing.T) {
@@ -555,7 +555,7 @@ func Test_deleteManifestWorks(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Test name: %s", tt.name)
-			if err := deleteManifestWorks(tt.args.client, tt.args.managedCluster); (err != nil) != tt.wantErr {
+			if err := deleteKlusterletManifestWorks(tt.args.client, tt.args.managedCluster); (err != nil) != tt.wantErr {
 				t.Errorf("deleteManifestWorks() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if !tt.wantErr {
@@ -652,7 +652,7 @@ func Test_evictManifestWorks(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if err := evictManifestWorks(tt.args.client, tt.args.managedCluster); (err != nil) != tt.wantErr {
+			if err := evictKlusterletManifestWorks(tt.args.client, tt.args.managedCluster); (err != nil) != tt.wantErr {
 				t.Errorf("evictManifestWorks() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if !tt.wantErr {

@@ -94,7 +94,8 @@ func newSyncSets(
 		},
 		Spec: hivev1.SyncSetSpec{
 			SyncSetCommonSpec: hivev1.SyncSetCommonSpec{
-				Resources: runtimeRawExtensionsYAMLs,
+				Resources:         runtimeRawExtensionsYAMLs,
+				ResourceApplyMode: hivev1.SyncResourceApplyMode,
 			},
 			ClusterDeploymentRefs: []corev1.LocalObjectReference{
 				{
@@ -178,7 +179,7 @@ func createOrUpdateSyncSet(
 	return ss, nil
 }
 
-func deleteSyncSets(
+func deleteKlusterletSyncSets(
 	client client.Client,
 	managedCluster *clusterv1.ManagedCluster,
 ) error {

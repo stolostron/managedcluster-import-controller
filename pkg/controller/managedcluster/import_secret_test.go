@@ -34,7 +34,9 @@ const (
 
 func init() {
 	os.Setenv("KLUSTERLET_CRD_FILE", "../../../build/resources/agent.open-cluster-management.io_v1beta1_klusterlet_crd.yaml")
-	os.Setenv(klusterletImageName, "quay.io/open-cluster-management/nucleus:latest")
+	os.Setenv(registrationOperatorImageEnvVarName, "quay.io/open-cluster-management/registration-operator:latest")
+	os.Setenv(workImageEnvVarName, "quay.io/open-cluster-management/work:latest")
+	os.Setenv(registrationImageEnvVarName, "quay.io/open-cluster-management/registration:latest")
 }
 
 func Test_importSecretNsN(t *testing.T) {
@@ -446,25 +448,27 @@ func serviceAccountTokenSecret(serviceAccount *corev1.ServiceAccount) (*corev1.S
 func TestTemplating(t *testing.T) {
 	g := NewGomegaWithT(t)
 	config := struct {
-		KlusterletNamespace     string
-		ClusterRoleName         string
-		ServiceAccountName      string
-		ManagedClusterName      string
-		ClusterName             string
-		BootstrapSecretToken    []byte
-		BootstrapSecretCaCert   []byte
-		HubKubeConfigSecretName string
-		HubKubeConfigSecret     string
+		KlusterletNamespace       string
+		ClusterRoleName           string
+		ServiceAccountName        string
+		ManagedClusterName        string
+		ClusterName               string
+		BootstrapSecretToken      []byte
+		BootstrapSecretCaCert     []byte
+		HubKubeConfigSecretName   string
+		HubKubeConfigSecret       string
+		RegistrationOperatorImage string
 	}{
-		ClusterName:             "klusterlet",
-		KlusterletNamespace:     "KlusterletNamespace",
-		ClusterRoleName:         "ClusterRoleName",
-		ServiceAccountName:      "ServiceAccountName",
-		ManagedClusterName:      "ManagedClusterName",
-		BootstrapSecretToken:    []byte("BootstrapSecretToken"),
-		BootstrapSecretCaCert:   []byte("BootstrapSecretCaCert"),
-		HubKubeConfigSecretName: "HubKubeConfigSecretName",
-		HubKubeConfigSecret:     "HubKubeConfigSecret",
+		ClusterName:               "klusterlet",
+		KlusterletNamespace:       "KlusterletNamespace",
+		ClusterRoleName:           "ClusterRoleName",
+		ServiceAccountName:        "ServiceAccountName",
+		ManagedClusterName:        "ManagedClusterName",
+		BootstrapSecretToken:      []byte("BootstrapSecretToken"),
+		BootstrapSecretCaCert:     []byte("BootstrapSecretCaCert"),
+		HubKubeConfigSecretName:   "HubKubeConfigSecretName",
+		HubKubeConfigSecret:       "HubKubeConfigSecret",
+		RegistrationOperatorImage: "RegistrationOperatorImage",
 	}
 
 	tp, err := applier.NewTemplateProcessor(bindata.NewBindataReader(), &applier.Options{})
