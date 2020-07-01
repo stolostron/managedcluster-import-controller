@@ -26,6 +26,7 @@ const (
 	registrationImageEnvVarName         = "REGISTRATION_IMAGE"
 	workImageEnvVarName                 = "WORK_IMAGE"
 	klusterletNamespace                 = "open-cluster-management-agent"
+	envVarNotDefined                    = "Environment variable %s not defined"
 )
 
 func generateImportYAMLs(
@@ -59,17 +60,17 @@ func generateImportYAMLs(
 
 	registrationOperatorImageName := os.Getenv(registrationOperatorImageEnvVarName)
 	if registrationOperatorImageName == "" {
-		return nil, nil, fmt.Errorf("Environment variable %s not defined", registrationOperatorImageEnvVarName)
+		return nil, nil, fmt.Errorf(envVarNotDefined, registrationOperatorImageEnvVarName)
 	}
 
 	registrationImageName := os.Getenv(registrationImageEnvVarName)
 	if registrationImageName == "" {
-		return nil, nil, fmt.Errorf("Environment variable %s not defined", registrationImageEnvVarName)
+		return nil, nil, fmt.Errorf(envVarNotDefined, registrationImageEnvVarName)
 	}
 
 	workImageName := os.Getenv(workImageEnvVarName)
 	if workImageName == "" {
-		return nil, nil, fmt.Errorf("Environment variable %s not defined", workImageEnvVarName)
+		return nil, nil, fmt.Errorf(envVarNotDefined, workImageEnvVarName)
 	}
 
 	config := struct {

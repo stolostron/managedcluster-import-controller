@@ -322,7 +322,7 @@ github.com/onsi/ginkgo,v1.12.0
 github.com/onsi/gomega,v1.9.0
 github.com/open-cluster-management/api,a516cac2e038
 github.com/open-cluster-management/library-e2e-go,c80fc3c14997
-github.com/open-cluster-management/library-go,58b8fe07116f
+github.com/open-cluster-management/library-go,c38b9f4da215
 github.com/opencontainers/go-digest,v1.0.0
 github.com/opencontainers/image-spec,775207bd45b6
 github.com/opencontainers/runc,v0.1.1

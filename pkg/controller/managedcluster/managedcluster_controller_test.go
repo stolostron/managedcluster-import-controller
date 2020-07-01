@@ -15,6 +15,7 @@ import (
 	ocinfrav1 "github.com/openshift/api/config/v1"
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -438,65 +439,6 @@ func newFakeImagePullSecret() *corev1.Secret {
 	}
 }
 
-// func Test_checkOtherFinalizers(t *testing.T) {
-
-// 	type args struct {
-// 		managedCluster *clusterv1.ManagedCluster
-// 	}
-// 	tests := []struct {
-// 		name string
-// 		args args
-// 		want bool
-// 	}{
-// 		{
-// 			name: "No Finalizer",
-// 			args: args{
-// 				managedCluster: &clusterv1.ManagedCluster{
-// 					ObjectMeta: metav1.ObjectMeta{
-// 						Name: managedClusterNameReconcile,
-// 					},
-// 					Spec: clusterv1.ManagedClusterSpec{},
-// 				},
-// 			},
-// 			want: false,
-// 		},
-// 		{
-// 			name: "With other Finalizers",
-// 			args: args{
-// 				managedCluster: &clusterv1.ManagedCluster{
-// 					ObjectMeta: metav1.ObjectMeta{
-// 						Name:       managedClusterNameReconcile,
-// 						Finalizers: []string{managedClusterFinalizer, "other"},
-// 					},
-// 					Spec: clusterv1.ManagedClusterSpec{},
-// 				},
-// 			},
-// 			want: true,
-// 		},
-// 		{
-// 			name: "With no other Finalizers",
-// 			args: args{
-// 				managedCluster: &clusterv1.ManagedCluster{
-// 					ObjectMeta: metav1.ObjectMeta{
-// 						Name:       managedClusterNameReconcile,
-// 						Finalizers: []string{managedClusterFinalizer},
-// 					},
-// 					Spec: clusterv1.ManagedClusterSpec{},
-// 				},
-// 			},
-// 			want: false,
-// 		},
-// 	}
-// 	for _, tt := range tests {
-// 		t.Run(tt.name, func(t *testing.T) {
-// 			t.Logf("name: %s", tt.name)
-// 			if got := checkOtherFinalizers(tt.args.managedCluster); got != tt.want {
-// 				t.Errorf("checkFinalizers() = %v, want %v", got, tt.want)
-// 			}
-// 		})
-// 	}
-// }
-
 func Test_checkOffLine(t *testing.T) {
 	type args struct {
 		managedCluster *clusterv1.ManagedCluster
@@ -575,6 +517,152 @@ func Test_checkOffLine(t *testing.T) {
 			t.Logf("name: %s", tt.name)
 			if got := checkOffLine(tt.args.managedCluster); got != tt.want {
 				t.Errorf("checkOffLine() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestReconcileManagedCluster_deleteNamespace(t *testing.T) {
+	testscheme := scheme.Scheme
+
+	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &hivev1.ClusterDeployment{})
+	testscheme.AddKnownTypes(corev1.SchemeGroupVersion, &corev1.Namespace{})
+
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "mycluster",
+		},
+	}
+
+	now := metav1.NewTime(time.Now())
+
+	nsDeletionTimestamp := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              "mycluster",
+			DeletionTimestamp: &now,
+		},
+	}
+
+	clusterDeployment := &hivev1.ClusterDeployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "mycluster",
+			Namespace: "mycluster",
+		},
+	}
+
+	type fields struct {
+		client client.Client
+		scheme *runtime.Scheme
+	}
+	type args struct {
+		namespaceName string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "Namespace not exists",
+			fields: fields{
+				client: fake.NewFakeClientWithScheme(testscheme,
+					ns,
+				),
+				scheme: testscheme,
+			},
+			args: args{
+				namespaceName: "wrongNamespace",
+			},
+			wantErr: false,
+		},
+		{
+			name: "Namespace has deletionTimestamp",
+			fields: fields{
+				client: fake.NewFakeClientWithScheme(testscheme,
+					nsDeletionTimestamp,
+				),
+				scheme: testscheme,
+			},
+			args: args{
+				namespaceName: "mycluster",
+			},
+			wantErr: false,
+		},
+		{
+			name: "Namespace deleted without clusterDeployment",
+			fields: fields{
+				client: fake.NewFakeClientWithScheme(testscheme,
+					ns,
+				),
+				scheme: testscheme,
+			},
+			args: args{
+				namespaceName: "mycluster",
+			},
+			wantErr: false,
+		},
+		{
+			name: "Namespace deleted with clusterDeployment",
+			fields: fields{
+				client: fake.NewFakeClientWithScheme(testscheme,
+					ns,
+					clusterDeployment,
+				),
+				scheme: testscheme,
+			},
+			args: args{
+				namespaceName: "mycluster",
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &ReconcileManagedCluster{
+				client: tt.fields.client,
+				scheme: tt.fields.scheme,
+			}
+			if err := r.deleteNamespace(tt.args.namespaceName); (err != nil) != tt.wantErr {
+				t.Errorf("ReconcileManagedCluster.deleteNamespace() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			gotNS := &corev1.Namespace{}
+			err := tt.fields.client.Get(context.TODO(), types.NamespacedName{
+				Name: tt.args.namespaceName,
+			}, gotNS)
+			if !tt.wantErr {
+				switch tt.name {
+				case "Namespace not exists", "Namespace deleted without clusterDeployment":
+					if err != nil {
+						if !errors.IsNotFound(err) {
+							t.Errorf("ReconcileManagedCluster.deleteNamespace() got %s but wanted %s",
+								errors.ReasonForError(err),
+								metav1.StatusReasonNotFound)
+						}
+					} else {
+						t.Errorf("ReconcileManagedCluster.deleteNamespace() %s namespace exits",
+							tt.args.namespaceName)
+					}
+				case "Namespace has deletionTimestamp":
+					if err != nil {
+						if !errors.IsNotFound(err) {
+							t.Errorf("ReconcileManagedCluster.deleteNamespace() got %s but wanted %s",
+								errors.ReasonForError(err),
+								metav1.StatusReasonNotFound)
+						}
+					}
+				}
+			} else {
+				switch tt.name {
+				case "Namespace deleted with clusterDeployment":
+					if err != nil {
+						if !errors.IsNotFound(err) {
+							t.Errorf("ReconcileManagedCluster.deleteNamespace() got %s but wanted %s",
+								errors.ReasonForError(err),
+								metav1.StatusReasonNotFound)
+						}
+					}
+				}
 			}
 		})
 	}
