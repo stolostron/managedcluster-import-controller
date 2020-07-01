@@ -8,9 +8,6 @@
 # Copyright (c) 2020 Red Hat, Inc.
 ###############################################################################
 
-echo "Dominique Vernier fix me"
-exit 0
-
 set -e
 #set -x
 
@@ -59,7 +56,7 @@ mkdir -p "$FUNCT_TEST_TMPDIR"
 # mkdir -p "$FUNCT_TEST_TMPDIR/output"
 mkdir -p "$FUNCT_TEST_TMPDIR/kind-config"
 
-echo "setting up test tmp folder"
+echo "setting up test coverage folder"
 [ -d "$FUNCT_TEST_COVERAGE" ] && rm -r "$FUNCT_TEST_COVERAGE"
 mkdir -p "${FUNCT_TEST_COVERAGE}"
 
@@ -114,7 +111,7 @@ done;
 echo "delete cluster"
 kind delete cluster --name functional-test
 
-if [ `find $FUNCT_TEST_TMPDIR/output -prune -empty 2>/dev/null` ]; then
+if [ `find $FUNCT_TEST_COVERAGE -prune -empty 2>/dev/null` ]; then
   echo "no coverage files found. skipping"
 else
   echo "merging coverage files"
