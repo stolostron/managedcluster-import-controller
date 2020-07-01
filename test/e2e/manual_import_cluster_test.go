@@ -18,9 +18,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	libgooptions "github.com/open-cluster-management/library-e2e-go/pkg/options"
+	libgocrdv1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1/crd"
+	libgounstructuredv1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1/unstructured"
 	libgoapplier "github.com/open-cluster-management/library-go/pkg/applier"
 	libgoclient "github.com/open-cluster-management/library-go/pkg/client"
-	libgounstructured "github.com/open-cluster-management/library-go/pkg/unstructured"
 
 	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/client-go/dynamic"
@@ -80,18 +81,19 @@ var _ = Describe("Manual import cluster", func() {
 			Expect(err).To(BeNil())
 			clusterApplier, err = libgoapplier.NewApplier(templateProcessor, clusterClientClient, nil, nil, libgoapplier.DefaultKubernetesMerger)
 			Expect(err).To(BeNil())
-			Eventually(func() error {
+			Eventually(func() bool {
 				klog.V(1).Info("Check CRDs")
-				return libgoclient.HaveCRDs(clientHubClientset,
+				has, _, _ := libgocrdv1.HasCRDs(clientHubClientset,
 					[]string{
 						"managedclusters.cluster.open-cluster-management.io",
 						"manifestworks.work.open-cluster-management.io",
 						"clusterdeployments.hive.openshift.io",
 						"syncsets.hive.openshift.io",
 					})
-			}).Should(BeNil())
+				return has
+			}).Should(BeTrue())
 			// Eventually(func() error {
-			// 	return libgoclient.HaveDeploymentsInNamespace(testOptions.HubCluster, testOptions.KubeConfig,
+			// 	return libgodeploymentv1.HasDeploymentsInNamespace(testOptions.HubCluster, testOptions.KubeConfig,
 			// 		"open-cluster-management",
 			// 		[]string{"cert-manager-webhook",
 			// 			"console-header",
@@ -172,7 +174,7 @@ var _ = Describe("Manual import cluster", func() {
 					managedCluster, err := clientHubDynamic.Resource(gvr).Get(context.TODO(), clusterName, metav1.GetOptions{})
 					if err == nil {
 						var condition map[string]interface{}
-						condition, err = libgounstructured.GetCondition(managedCluster, "ManagedClusterConditionAvailable")
+						condition, err = libgounstructuredv1.GetConditionByType(managedCluster, "ManagedClusterConditionAvailable")
 						if err != nil {
 							return err
 						}
@@ -194,11 +196,11 @@ var _ = Describe("Manual import cluster", func() {
 			})
 
 			When("the deletion of the cluster is requested, wait for the effective deletion", func() {
-				By(fmt.Sprintf("Checking the deletion of the %s CR on the hub", clusterName), func() {
-					klog.V(1).Infof("Checking the deletion of the %s CR on the hub", clusterName)
+				By(fmt.Sprintf("Checking the deletion of the %s managedCluster on the hub", clusterName), func() {
+					klog.V(1).Infof("Checking the deletion of the %s managedCluster on the hub", clusterName)
 					gvr := schema.GroupVersionResource{Group: "cluster.open-cluster-management.io", Version: "v1", Resource: "managedclusters"}
 					Eventually(func() bool {
-						klog.V(1).Infof("Wait %s CR deletion...", clusterName)
+						klog.V(1).Infof("Wait %s managedCluster deletion...", clusterName)
 						_, err := clientHubDynamic.Resource(gvr).Get(context.TODO(), clusterName, metav1.GetOptions{})
 						if err != nil {
 							klog.V(1).Info(err)
@@ -206,7 +208,7 @@ var _ = Describe("Manual import cluster", func() {
 						}
 						return false
 					}).Should(BeTrue())
-					klog.V(1).Infof("%s CR deleted", clusterName)
+					klog.V(1).Infof("%s managedCluster deleted", clusterName)
 				})
 			})
 
@@ -214,7 +216,7 @@ var _ = Describe("Manual import cluster", func() {
 				By(fmt.Sprintf("Checking the deletion of the %s namespace on the hub", clusterName), func() {
 					klog.V(1).Infof("Checking the deletion of the %s namespace on the hub", clusterName)
 					Eventually(func() bool {
-						klog.V(1).Infof("Wait %s CR deletion...", clusterName)
+						klog.V(1).Infof("Wait %s namespace deletion...", clusterName)
 						_, err := clientHub.CoreV1().Namespaces().Get(context.TODO(), clusterName, metav1.GetOptions{})
 						if err != nil {
 							klog.V(1).Info(err)

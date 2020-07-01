@@ -26,18 +26,15 @@ import (
 
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 
+	libgometav1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1"
 	"github.com/open-cluster-management/library-go/pkg/applier"
 	"github.com/open-cluster-management/rcm-controller/pkg/bindata"
-	"github.com/open-cluster-management/rcm-controller/pkg/utils"
 )
 
 // constants for delete work and finalizer
 const (
 	managedClusterFinalizer = "managedcluster-import-controller.open-cluster-management.io/cleanup"
 	registrationFinalizer   = "cluster.open-cluster-management.io/api-resource-cleanup"
-	workPostfix             = ":managed-cluster-work"
-	registrationPostfix     = ":managed-cluster-registration"
-	leasePrefix             = "cluster-lease-"
 )
 
 var log = logf.Log.WithName("controller_managedcluster")
@@ -205,73 +202,11 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 	}
 
 	if instance.DeletionTimestamp != nil {
-		reqLogger.Info(fmt.Sprintf("Instance in Terminating: %s", instance.Name))
-		if len(filterFinalizers(instance, []string{managedClusterFinalizer, registrationFinalizer})) != 0 {
-			return reconcile.Result{Requeue: true}, nil
-		}
-
-		offLine := checkOffLine(instance)
-		reqLogger.Info(fmt.Sprintf("deleteAllOtherManifestWork: %s", instance.Name))
-		err := deleteAllOtherManifestWork(r.client, instance)
-		if err != nil {
-			if !offLine {
-				return reconcile.Result{}, err
-			}
-		}
-
-		if offLine {
-			reqLogger.Info(fmt.Sprintf("evictAllOtherManifestWork: %s", instance.Name))
-			err = evictAllOtherManifestWork(r.client, instance)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-		}
-
-		clusterDeployment := &hivev1.ClusterDeployment{}
-		err = r.client.Get(context.TODO(),
-			types.NamespacedName{
-				Name:      instance.Name,
-				Namespace: instance.Name},
-			clusterDeployment)
-		if err == nil {
-			reqLogger.Info(fmt.Sprintf("deleteKlusterletSyncSets: %s", instance.Name))
-			err = deleteKlusterletSyncSets(r.client, instance)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-		} else {
-			if errors.IsNotFound(err) {
-				reqLogger.Info(fmt.Sprintf("deleteKlusterletManifestWorks: %s", instance.Name))
-				err = deleteKlusterletManifestWorks(r.client, instance)
-				if err != nil {
-					return reconcile.Result{}, err
-				}
-			} else {
-				return reconcile.Result{}, err
-			}
-		}
-
-		if !offLine {
-			return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
-		}
-
-		reqLogger.Info(fmt.Sprintf("evictKlusterletManifestWorks: %s", instance.Name))
-		err = evictKlusterletManifestWorks(r.client, instance)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-
-		reqLogger.Info(fmt.Sprintf("Remove all finalizer: %s", instance.Name))
-		instance.ObjectMeta.Finalizers = nil
-		if err := r.client.Update(context.TODO(), instance); err != nil {
-			return reconcile.Result{}, err
-		}
-
-		return reconcile.Result{Requeue: true, RequeueAfter: 5 * time.Second}, nil
+		return r.managedClusterDeletion(instance)
 	}
 
 	reqLogger.Info(fmt.Sprintf("AddFinalizer to instance: %s", instance.Name))
-	utils.AddFinalizer(instance, managedClusterFinalizer)
+	libgometav1.AddFinalizer(instance, managedClusterFinalizer)
 
 	if err := r.client.Update(context.TODO(), instance); err != nil {
 		return reconcile.Result{}, err
@@ -341,20 +276,71 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 	return reconcile.Result{}, nil
 }
 
-//checkOtherFinalizersThanMCAndReg checks if other than the managedCluster and registration finalizers left
-func checkOtherFinalizersThanMCAndReg(managedCluster *clusterv1.ManagedCluster) bool {
-	finalizers := managedCluster.GetFinalizers()
-	if len(finalizers) > 2 {
-		return true
+func (r *ReconcileManagedCluster) managedClusterDeletion(instance *clusterv1.ManagedCluster) (reconcile.Result, error) {
+	reqLogger := log.WithValues("Instance.Namespace", instance.Namespace, "Instance.Name", instance.Name)
+	reqLogger.Info(fmt.Sprintf("Instance in Terminating: %s", instance.Name))
+	if len(filterFinalizers(instance, []string{managedClusterFinalizer, registrationFinalizer})) != 0 {
+		return reconcile.Result{Requeue: true}, nil
 	}
-	if len(finalizers) == 2 {
-		return (finalizers[0] != managedClusterFinalizer || finalizers[1] != registrationFinalizer) &&
-			(finalizers[1] != managedClusterFinalizer || finalizers[0] != registrationFinalizer)
+
+	offLine := checkOffLine(instance)
+	reqLogger.Info(fmt.Sprintf("deleteAllOtherManifestWork: %s", instance.Name))
+	err := deleteAllOtherManifestWork(r.client, instance)
+	if err != nil {
+		if !offLine {
+			return reconcile.Result{}, err
+		}
 	}
-	if len(finalizers) == 1 {
-		return finalizers[0] != managedClusterFinalizer && finalizers[0] != registrationFinalizer
+
+	if offLine {
+		reqLogger.Info(fmt.Sprintf("evictAllOtherManifestWork: %s", instance.Name))
+		err = evictAllOtherManifestWork(r.client, instance)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
 	}
-	return false
+
+	clusterDeployment := &hivev1.ClusterDeployment{}
+	err = r.client.Get(context.TODO(),
+		types.NamespacedName{
+			Name:      instance.Name,
+			Namespace: instance.Name},
+		clusterDeployment)
+	if err == nil {
+		reqLogger.Info(fmt.Sprintf("deleteKlusterletSyncSets: %s", instance.Name))
+		err = deleteKlusterletSyncSets(r.client, instance)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+	} else {
+		if errors.IsNotFound(err) {
+			reqLogger.Info(fmt.Sprintf("deleteKlusterletManifestWorks: %s", instance.Name))
+			err = deleteKlusterletManifestWorks(r.client, instance)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+		} else {
+			return reconcile.Result{}, err
+		}
+	}
+
+	if !offLine {
+		return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
+	}
+
+	reqLogger.Info(fmt.Sprintf("evictKlusterletManifestWorks: %s", instance.Name))
+	err = evictKlusterletManifestWorks(r.client, instance)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	reqLogger.Info(fmt.Sprintf("Remove all finalizer: %s", instance.Name))
+	instance.ObjectMeta.Finalizers = nil
+	if err := r.client.Update(context.TODO(), instance); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	return reconcile.Result{Requeue: true, RequeueAfter: 5 * time.Second}, nil
 }
 
 func filterFinalizers(managedCluster *clusterv1.ManagedCluster, finalizers []string) []string {
@@ -390,7 +376,8 @@ func (r *ReconcileManagedCluster) deleteNamespace(namespaceName string) error {
 		context.TODO(),
 		types.NamespacedName{
 			Name: namespaceName,
-		}, ns,
+		},
+		ns,
 	)
 	if err != nil {
 		if errors.IsNotFound(err) {

@@ -14,7 +14,6 @@ import (
 	"fmt"
 	"math/rand"
 	"net"
-	"os"
 	"reflect"
 	"time"
 
@@ -22,10 +21,10 @@ import (
 	. "github.com/onsi/gomega"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	libgounstructuredv1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1/unstructured"
 	libgoapplier "github.com/open-cluster-management/library-go/pkg/applier"
 	libgoclient "github.com/open-cluster-management/library-go/pkg/client"
 	libgoconfig "github.com/open-cluster-management/library-go/pkg/config"
-	libgounstructured "github.com/open-cluster-management/library-go/pkg/unstructured"
 
 	certificatesv1beta1 "k8s.io/api/certificates/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -40,13 +39,20 @@ import (
 )
 
 const (
-	clusterRolePrefix                  = "system:open-cluster-management:managedcluster:bootstrap:"
-	clusterRoleBindingPrefix           = "system:open-cluster-management:managedcluster:bootstrap:"
-	bootstrapServiceAccountNamePostfix = "-bootstrap-sa"
-	manifestWorkNamePostfix            = "-klusterlet"
-	syncsetNamePostfix                 = "-klusterlet"
-	importSecretNamePostfix            = "-import"
-	klusterletImageName                = "KLUSTERLET_OPERATOR_IMAGE"
+	clusterRolePrefix                   = "system:open-cluster-management:managedcluster:bootstrap:"
+	clusterRoleBindingPrefix            = "system:open-cluster-management:managedcluster:bootstrap:"
+	bootstrapServiceAccountNamePostfix  = "-bootstrap-sa"
+	manifestWorkNamePostfix             = "-klusterlet"
+	syncsetNamePostfix                  = "-klusterlet"
+	importSecretNamePostfix             = "-import"
+	registrationOperatorImageEnvVarName = "REGISTRATION_OPERATOR_IMAGE"
+	registrationImageEnvVarName         = "REGISTRATION_IMAGE"
+	workImageEnvVarName                 = "WORK_IMAGE"
+)
+
+const (
+	managedClusterFinalizer = "managedcluster-import-controller.open-cluster-management.io/cleanup"
+	registrationFinalizer   = "cluster.open-cluster-management.io/api-resource-cleanup"
 )
 
 var _ = Describe("Managedcluster", func() {
@@ -54,7 +60,9 @@ var _ = Describe("Managedcluster", func() {
 	BeforeEach(func() {
 		SetDefaultEventuallyTimeout(10 * time.Second)
 		SetDefaultEventuallyPollingInterval(1 * time.Second)
-		os.Setenv(klusterletImageName, "quay.io/open-cluster-management/nucleus:latest")
+		// os.Setenv(registrationOperatorImageEnvVarName, "quay.io/open-cluster-management/registration-operator:latest")
+		// os.Setenv(registrationEnvVarImageName, "quay.io/open-cluster-management/registration:latest")
+		// os.Setenv(workEnvVarImageName, "quay.io/open-cluster-management/work:latest")
 		// clean(clientHubDynamic, clientHub, myTestNameSpace)
 	})
 
@@ -382,7 +390,7 @@ func checkManagedClusterCreation(
 			Expect(err).To(BeNil())
 
 			for _, f := range sc.GetFinalizers() {
-				if f == "managedcluster-import-controller.managedcluster" {
+				if f == managedClusterFinalizer {
 					klog.V(5).Info("Finalizer added")
 					return true
 				}
@@ -612,7 +620,7 @@ var _ = Describe("CSR Approval", func() {
 					ns := clientHubDynamic.Resource(gvrCSR)
 					csr, err := ns.Get(context.TODO(), myTestNameSpace, metav1.GetOptions{})
 					Expect(err).To(BeNil())
-					_, err = libgounstructured.GetCondition(csr, string(certificatesv1beta1.CertificateApproved))
+					_, err = libgounstructuredv1.GetConditionByType(csr, string(certificatesv1beta1.CertificateApproved))
 					return err
 				}).Should(BeNil())
 			})
@@ -647,7 +655,7 @@ var _ = Describe("CSR Approval", func() {
 					ns := clientHubDynamic.Resource(gvrCSR)
 					csr, err := ns.Get(context.TODO(), myTestNameSpace, metav1.GetOptions{})
 					Expect(err).To(BeNil())
-					_, err = libgounstructured.GetCondition(csr, string(certificatesv1beta1.CertificateApproved))
+					_, err = libgounstructuredv1.GetConditionByType(csr, string(certificatesv1beta1.CertificateApproved))
 					return err
 				}).ShouldNot(BeNil())
 			})
