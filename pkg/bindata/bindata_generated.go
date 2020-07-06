@@ -9,6 +9,7 @@
 // resources/klusterlet/crds/0000_00_operator.open-cluster-management.io_klusterlets.crd.yaml
 // resources/klusterlet/image_pull_secret.yaml
 // resources/klusterlet/klusterlet.yaml
+// resources/klusterlet/klusterlet_admin_aggregate_clusterrole.yaml
 // resources/klusterlet/namespace.yaml
 // resources/klusterlet/operator.yaml
 // resources/klusterlet/service_account.yaml
@@ -268,6 +269,26 @@ func klusterletKlusterletYaml() (*asset, error) {
 	return a, nil
 }
 
+var _klusterletKlusterlet_admin_aggregate_clusterroleYaml = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x7c\x8e\xbd\x4e\xec\x30\x10\x85\x7b\x3f\xc5\xc8\xf5\x4d\xae\xe8\x90\x5b\x0a\x7a\x0a\x1a\xb4\xc5\x24\x39\xca\x5a\xb1\x3d\xd6\x78\xbc\x48\x3c\x3d\x4a\xc2\x6a\x2b\xa8\xe6\x68\xce\x8f\x3e\xae\xf1\x1d\xda\xa2\x94\x40\x3a\xf1\x3c\x72\xb7\xab\x68\xfc\x62\x8b\x52\xc6\xed\xb9\x8d\x51\xfe\xdf\x9e\xdc\x16\xcb\x12\xe8\x25\xf5\x66\xd0\x37\x49\x70\x19\xc6\x0b\x1b\x07\x47\x54\x38\x23\x90\x54\x94\x61\x3e\x23\x43\xe6\xc2\x2b\x32\x8a\x85\xed\x7c\x25\xd8\xc0\x4b\x8e\x65\xe0\x75\x55\xac\x6c\xb8\xa7\x75\x1f\x24\x4a\x3c\x21\xb5\x7d\x90\xfe\xa0\x79\xb4\x4d\xce\xc1\x40\xde\xb4\xc3\x3b\xed\x09\x2d\xb8\x81\xb8\xc6\x57\x95\x5e\x5b\xa0\x0f\x2f\x15\xca\x26\x3a\xfe\x02\x38\x46\xf1\x17\x47\xa4\x68\xd2\x75\xc6\x51\x7a\x40\xb7\xc3\xbc\x41\xa7\xc3\x58\x61\xfe\x1f\xf9\x14\xdb\x71\x3f\xd9\xe6\xeb\x2e\x66\x05\x1b\x76\xd5\xeb\xf2\xa3\xea\xdd\x5c\x90\x60\xf0\x97\xef\x00\x00\x00\xff\xff\xa9\x93\x0a\x52\x70\x01\x00\x00")
+
+func klusterletKlusterlet_admin_aggregate_clusterroleYamlBytes() ([]byte, error) {
+	return bindataRead(
+		_klusterletKlusterlet_admin_aggregate_clusterroleYaml,
+		"klusterlet/klusterlet_admin_aggregate_clusterrole.yaml",
+	)
+}
+
+func klusterletKlusterlet_admin_aggregate_clusterroleYaml() (*asset, error) {
+	bytes, err := klusterletKlusterlet_admin_aggregate_clusterroleYamlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "klusterlet/klusterlet_admin_aggregate_clusterrole.yaml", size: 0, mode: os.FileMode(0), modTime: time.Unix(0, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
 var _klusterletNamespaceYaml = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x4a\x2c\xc8\x0c\x4b\x2d\x2a\xce\xcc\xcf\xb3\x52\x28\x33\xe4\xca\xce\xcc\x4b\xb1\x52\xf0\x4b\xcc\x4d\x2d\x2e\x48\x4c\x4e\xe5\xca\x4d\x2d\x49\x4c\x49\x2c\x49\xb4\xe2\x52\x50\xc8\x4b\xcc\x4d\xb5\x52\x50\xaa\xae\x56\xd0\xf3\xce\x29\x2d\x2e\x49\x2d\xca\x49\x2d\x81\x2b\x55\xa8\xad\x55\x02\x04\x00\x00\xff\xff\xeb\x15\x94\xaf\x4d\x00\x00\x00")
 
 func klusterletNamespaceYamlBytes() ([]byte, error) {
@@ -389,6 +410,7 @@ var _bindata = map[string]func() (*asset, error){
 	"klusterlet/crds/0000_00_operator.open-cluster-management.io_klusterlets.crd.yaml": klusterletCrds0000_00_operatorOpenClusterManagementIo_klusterletsCrdYaml,
 	"klusterlet/image_pull_secret.yaml":                                                klusterletImage_pull_secretYaml,
 	"klusterlet/klusterlet.yaml":                                                       klusterletKlusterletYaml,
+	"klusterlet/klusterlet_admin_aggregate_clusterrole.yaml":                           klusterletKlusterlet_admin_aggregate_clusterroleYaml,
 	"klusterlet/namespace.yaml":                                                        klusterletNamespaceYaml,
 	"klusterlet/operator.yaml":                                                         klusterletOperatorYaml,
 	"klusterlet/service_account.yaml":                                                  klusterletService_accountYaml,
@@ -451,11 +473,12 @@ var _bintree = &bintree{nil, map[string]*bintree{
 		"crds": &bintree{nil, map[string]*bintree{
 			"0000_00_operator.open-cluster-management.io_klusterlets.crd.yaml": &bintree{klusterletCrds0000_00_operatorOpenClusterManagementIo_klusterletsCrdYaml, map[string]*bintree{}},
 		}},
-		"image_pull_secret.yaml": &bintree{klusterletImage_pull_secretYaml, map[string]*bintree{}},
-		"klusterlet.yaml":        &bintree{klusterletKlusterletYaml, map[string]*bintree{}},
-		"namespace.yaml":         &bintree{klusterletNamespaceYaml, map[string]*bintree{}},
-		"operator.yaml":          &bintree{klusterletOperatorYaml, map[string]*bintree{}},
-		"service_account.yaml":   &bintree{klusterletService_accountYaml, map[string]*bintree{}},
+		"image_pull_secret.yaml":                      &bintree{klusterletImage_pull_secretYaml, map[string]*bintree{}},
+		"klusterlet.yaml":                             &bintree{klusterletKlusterletYaml, map[string]*bintree{}},
+		"klusterlet_admin_aggregate_clusterrole.yaml": &bintree{klusterletKlusterlet_admin_aggregate_clusterroleYaml, map[string]*bintree{}},
+		"namespace.yaml":                              &bintree{klusterletNamespaceYaml, map[string]*bintree{}},
+		"operator.yaml":                               &bintree{klusterletOperatorYaml, map[string]*bintree{}},
+		"service_account.yaml":                        &bintree{klusterletService_accountYaml, map[string]*bintree{}},
 	}},
 }}
 
