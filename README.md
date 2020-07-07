@@ -23,7 +23,7 @@ current functionality of `multicloud-operators-cluster-controller`
 
 [Auto importing of an existing cluster](docs/cluster_auto_import.md)
 
-[Manual importing of an existing cluster](docs/cluster_manual_import.md)
+[Manual importing of an existing cluster](docs/managedcluster_manual_import.md)
 
 [Auto importing of a ClusterAPI provisioned cluster](docs/clusterapi_cluster_import.md)
 
