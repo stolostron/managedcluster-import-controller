@@ -1,15 +1,19 @@
-# Detatching a managed cluster from Multicloud Manager
+# Detatching a managed cluster
 
 ## User action
 
-### Remove ClusterRegistry Cluster for the managed cluster
+### Remove ManagedCluster to detach a cluster
 
-- `kubectl delete clusterregistry.k8s.io <cluster-name> -n <cluster-namespace>`
+- `kubectl delete managedcluster <cluster-name>`
 
-## ClusterController action
+#### If cluster is offline
 
-### ClusterRegistry Cluster Controller
+Deleting an offline (not Available) ManagedCluster is allowed, and it removes all resources on hub without removing anything on the managed cluster. To completely cleanup the managed cluster, user can run the [self-destruct.sh](https://github.com/open-cluster-management/endpoint-operator/blob/master/hack/self-destruct.sh) script on managedcluster.
 
-- ClusterRegistry Cluster deletion triggers `Reconcile()` in `pkg/controllers/clusterregistry/cluster_controller.go`.
-- If the cluster is Online the controller will create a Work that creates a Job on the managed cluster to uninstall klusterlet.
-- Once the cluster is Offline the finalizer will be removed from the ClusterRegistry Cluster and the Cluster will be deleted.
+## ManagedCluster Import Controller action
+
+###  ManagedCluster Import Controller
+
+- ManagedCluster deletion triggers `Reconcile()` in [/pkg/controller/managedcluster/managedcluster_controller.go](https://github.com/open-cluster-management/rcm-controller/blob/master/pkg/controller/managedcluster/managedcluster_controller.go).
+- If the managed cluster is online the controller will wait for klusterlet-addon-controller to remove all addon manifestworks first, and then delete the manifestwork of klusterlet.
+- Once the managed cluster is Offline the finalizer will be removed from the ManagedCluster. Then, the ManagedCluster and cluster namespace will be deleted.
