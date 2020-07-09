@@ -2,30 +2,26 @@
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 **Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
 
-- [multicloud-operators-cluster-controller](#multicloud-operators-cluster-controller)
-    - [What is the multicloud-operators-cluster-controller](#what-is-the-multicloud-operators-cluster-controller)
+- [managedcluster-import-controller](#managedcluster-import-controller)
+    - [What is the managedcluster-import-controller](#what-is-the-managedcluster-import-controller)
     - [How to's](#how-tos)
     - [Community, discussion, contribution, and support](#community-discussion-contribution-and-support)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
 
-# multicloud-operators-cluster-controller
+# managedcluster-import-controller
 
-## What is the multicloud-operators-cluster-controller
+## What is the managedcluster-import-controller
 
-`multicloud-operators-cluster-controller` is the controller that handles functionalities that's related to the clusterregistry cluster resource.
+`managedcluster-import-controller` is the controller that handles functionalities that's related to the managedcluster  resource.
 
-current functionality of `multicloud-operators-cluster-controller`
+current functionality of `managedcluster-import-controller`
 - installing klusterlet on cluster created by hive via syncset
 - triggering the remote deletion of klusterlet on managed cluster
 
 ## How to's
 
-[Auto importing of an existing cluster](docs/cluster_auto_import.md)
-
 [Manual importing of an existing cluster](docs/managedcluster_manual_import.md)
-
-[Auto importing of a ClusterAPI provisioned cluster](docs/clusterapi_cluster_import.md)
 
 [Detatching a managed cluster from Multicloud Manager](docs/detatch_managed_cluster.md)
 
