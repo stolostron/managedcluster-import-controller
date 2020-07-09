@@ -26,12 +26,6 @@
 
 ## Developer quick start
 
-- Setup `GIT_HOST` to override the setting for your custom path.
-
-```bash
-export GIT_HOST=github.com/<YOUR_GITHUB_ID>
-```
-
 - Setup Git personal access token
 ```bash
 export GITHUB_TOKEN=
@@ -58,7 +52,7 @@ make deps
 - Build
 
 
-- Run the `test` before building the binary.
+- Run the unit test before building the image.
 
 ```bash
 make test
@@ -71,36 +65,22 @@ make build
 make run
 ```
 
-- Build and push container image for local development.
-
-```bash
-export IMG=<YOUR_CUSTOMIZED_IMAGE_NAME>
-export REGISTRY=<YOUR_CUSTOMIZED_IMAGE_REGISTRY>
-make dev-images
-```
-
 > **Note:** You need to login the image registry before running the command above.
 
 - Deploy controller for local development
 
 ```bash
-make dev-deploy
+make deploy
 ```
 
-> **Note:** If you are using a private image registry you need follow the rest of the instruction to create image pull secret and patch service account to use the image pull secret
+> **Note:** If you are using a private image registry you need follow the rest of the instruction to create image pull secret 
 
 - Create image pull secret
 
 ```bash
-export IMAGE_PULL_SECRET=<image pull secret name>
+export DEFAULT_IMAGE_PULL_SECRET=<image pull secret name>
 kubectl create secret generic $IMAGE_PULL_SECRET \
     --from-file=.dockerconfigjson=<path/to/.docker/config.json> \
     --type=kubernetes.io/dockerconfigjson
 ```
 
-- Patch service account to use image pull secret
-
-```bash
-export IMAGE_PULL_SECRET=<image pull secret name>
-make regcred-patch-sa
-```

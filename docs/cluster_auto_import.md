@@ -1,3 +1,7 @@
+<!--
+    Not supported in this release. This can be future feature
+-->
+
 # Auto importing of an existing cluster
 
 ## Prerequisite

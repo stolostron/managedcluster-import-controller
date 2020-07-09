@@ -1,3 +1,6 @@
+<!--
+    Auto-import not supported 
+-->
 # Auto importing of a ClusterAPI provisioned cluster
 
 ## Prereq
