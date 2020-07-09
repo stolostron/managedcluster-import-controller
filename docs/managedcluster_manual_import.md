@@ -1,6 +1,6 @@
 # Manual importing of an existing cluster
 
-## Creating a namespace in witch the cluster will get imported
+## Creating a namespace in which the cluster will get imported
 On the Hub cluster:
 - Create a namespace
   ```shell

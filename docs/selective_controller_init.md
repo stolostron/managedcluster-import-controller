@@ -12,18 +12,14 @@ If the manadatory kubernete resource is not present, the operator will not start
 
 ## Controller and their manadatory resources
 
-### controller/clusterdeployment
+### controller/managedcluster-import
 
 - clusterdeployments.hive.openshift.io/v1
-- clusterregistry.k8s.io/v1alpha1
+- cluster.open-cluster-management.io/v1
 
-### controller/clusterregistry
+### controller/csr
 
-- clusterregistry.k8s.io/v1alpha1
-
-### controller/klusterletconfig
-
-- clusterregistry.k8s.io/v1alpha1
+- certificates.k8s.io/v1beta1
 
 ## Development note
 
