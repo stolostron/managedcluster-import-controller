@@ -29,12 +29,13 @@ import (
 	"k8s.io/klog"
 )
 
-const MANAGEDCLUSTERS_KUBECONFIGS_DIR = "test/e2e/resources/clusters"
-const HUBCLUSTER_KUBECONFIG_DIR = "test/e2e/resources/hubs"
-
 const (
-	MANUAL_IMPORT_IMAGE_PULL_SECRET = "image-pull-secret"
-	MANUAL_IMPORT_CLUSTER_SCENARIO  = "manual-import"
+	manualImportClusterScenario              = "manual-import"
+	openClusterManagementAgentNamespace      = "open-cluster-management-agent"
+	openClusterManagementAgentAddonNamespace = "open-cluster-management-agent-addon"
+	klusterletCRDName                        = "klusterlet"
+	manifestWorkNamePostfix                  = "-klusterlet"
+	manifestWorkCRDSPostfix                  = "-crds"
 )
 
 var _ = Describe("Manual import cluster", func() {
@@ -43,6 +44,8 @@ var _ = Describe("Manual import cluster", func() {
 	var managedClustersForManualImport map[string]string
 	var hubClientClient client.Client
 	var clusterClientClient client.Client
+	var clientCluster kubernetes.Interface
+	var clientClusterDynamic dynamic.Interface
 	var clientHub kubernetes.Interface
 	var clientHubDynamic dynamic.Interface
 	var clientHubClientset clientset.Interface
@@ -51,7 +54,7 @@ var _ = Describe("Manual import cluster", func() {
 	var clusterApplier *libgoapplier.Applier
 
 	BeforeEach(func() {
-		managedClustersForManualImport, err = libgooptions.GetManagedClusterKubeConfigs(testOptions.ManagedClusters.ConfigDir, MANUAL_IMPORT_CLUSTER_SCENARIO)
+		managedClustersForManualImport, err = libgooptions.GetManagedClusterKubeConfigs(testOptions.ManagedClusters.ConfigDir, manualImportClusterScenario)
 		Expect(err).To(BeNil())
 		if len(managedClustersForManualImport) == 0 {
 			Skip("Manual import not executed because no managed cluster defined for import")
@@ -80,6 +83,10 @@ var _ = Describe("Manual import cluster", func() {
 			clusterClientClient, err = libgoclient.NewDefaultClient(clusterKubeconfig, client.Options{})
 			Expect(err).To(BeNil())
 			clusterApplier, err = libgoapplier.NewApplier(templateProcessor, clusterClientClient, nil, nil, libgoapplier.DefaultKubernetesMerger)
+			Expect(err).To(BeNil())
+			clientCluster, err = libgoclient.NewDefaultKubeClient(clusterKubeconfig)
+			Expect(err).To(BeNil())
+			clientClusterDynamic, err = libgoclient.NewDefaultKubeClientDynamic(clusterKubeconfig)
 			Expect(err).To(BeNil())
 			Eventually(func() bool {
 				klog.V(1).Info("Check CRDs")
@@ -162,6 +169,8 @@ var _ = Describe("Manual import cluster", func() {
 				klog.V(1).Info("Apply the crds.yaml")
 				klog.V(5).Infof("importSecret.Data[crds.yaml]: %s\n", importSecret.Data["crds.yaml"])
 				Expect(clusterApplier.CreateOrUpdateAssets(importSecret.Data["crds.yaml"], nil, "---")).NotTo(HaveOccurred())
+				//Wait 2 sec to make sure the CRDs are effective. The UI does the same.
+				time.Sleep(2 * time.Second)
 				klog.V(1).Info("Apply the import.yaml")
 				klog.V(5).Infof("importSecret.Data[import.yaml]: %s\n", importSecret.Data["import.yaml"])
 				Expect(clusterApplier.CreateOrUpdateAssets(importSecret.Data["import.yaml"], nil, "---")).NotTo(HaveOccurred())
@@ -188,6 +197,57 @@ var _ = Describe("Manual import cluster", func() {
 				}).Should(BeNil())
 				klog.V(1).Info("Cluster imported")
 			})
+
+			When("Cluster ready, wait manifestWorks to be applied", func() {
+				manifestWorkCRDsName := clusterName + manifestWorkNamePostfix + manifestWorkCRDSPostfix
+				By(fmt.Sprintf("Checking manfestwork %s to be applied", manifestWorkCRDsName), func() {
+					klog.V(1).Infof("Checking manfestwork %s to be applied", manifestWorkCRDsName)
+					Eventually(func() error {
+						klog.V(1).Infof("Wait manifestwork %s to be applied...", manifestWorkCRDsName)
+						gvr := schema.GroupVersionResource{Group: "work.open-cluster-management.io", Version: "v1", Resource: "manifestworks"}
+						mwcrd, err := clientHubDynamic.Resource(gvr).Namespace(clusterName).Get(context.TODO(), manifestWorkCRDsName, metav1.GetOptions{})
+						if err == nil {
+							var condition map[string]interface{}
+							condition, err = libgounstructuredv1.GetConditionByType(mwcrd, "Applied")
+							if err != nil {
+								return err
+							}
+							if v, ok := condition["status"]; ok && v == metav1.ConditionTrue {
+								return nil
+							}
+						} else {
+							klog.V(1).Info(err)
+						}
+						return err
+					}).Should(BeNil())
+					klog.V(1).Infof("manifestwork %s applied", manifestWorkCRDsName)
+				})
+
+				manifestWorkYAMLsName := clusterName + manifestWorkNamePostfix
+				By(fmt.Sprintf("Checking manfestwork %s to be applied", manifestWorkYAMLsName), func() {
+					klog.V(1).Infof("Checking manfestwork %s to be applied", manifestWorkYAMLsName)
+					Eventually(func() error {
+						klog.V(1).Infof("Wait manifestwork %s to be applied...", manifestWorkYAMLsName)
+						gvr := schema.GroupVersionResource{Group: "work.open-cluster-management.io", Version: "v1", Resource: "manifestworks"}
+						mwyaml, err := clientHubDynamic.Resource(gvr).Namespace(clusterName).Get(context.TODO(), manifestWorkYAMLsName, metav1.GetOptions{})
+						if err == nil {
+							var condition map[string]interface{}
+							condition, err = libgounstructuredv1.GetConditionByType(mwyaml, "Applied")
+							if err != nil {
+								return err
+							}
+							if v, ok := condition["status"]; ok && v == metav1.ConditionTrue {
+								return nil
+							}
+						} else {
+							klog.V(1).Info(err)
+						}
+						return err
+					}).Should(BeNil())
+					klog.V(1).Infof("manifestwork %s applied", manifestWorkYAMLsName)
+				})
+			})
+
 			By(fmt.Sprintf("Detaching the %s CR on the hub", clusterName), func() {
 				klog.V(1).Infof("Detaching the %s CR on the hub", clusterName)
 				gvr := schema.GroupVersionResource{Group: "cluster.open-cluster-management.io", Version: "v1", Resource: "managedclusters"}
@@ -225,6 +285,70 @@ var _ = Describe("Manual import cluster", func() {
 						return false
 					}).Should(BeTrue())
 					klog.V(1).Infof("%s namespace deleted", clusterName)
+				})
+			})
+
+			When("the namespace is deleted, check if managed cluster is well cleaned", func() {
+				By(fmt.Sprintf("Checking if the %s is deleted", clusterName), func() {
+					klog.V(1).Infof("Checking if the %s is deleted", clusterName)
+					Eventually(func() bool {
+						klog.V(1).Infof("Wait %s namespace deletion...", clusterName)
+						_, err := clientCluster.CoreV1().Namespaces().Get(context.TODO(), clusterName, metav1.GetOptions{})
+						if err != nil {
+							klog.V(1).Info(err)
+							return errors.IsNotFound(err)
+						}
+						return false
+					}).Should(BeTrue())
+				})
+				By(fmt.Sprintf("Checking if the %s namespace is deleted", openClusterManagementAgentAddonNamespace), func() {
+					klog.V(1).Infof("Checking if the %s is deleted", openClusterManagementAgentAddonNamespace)
+					Eventually(func() bool {
+						klog.V(1).Infof("Wait %s namespace deletion...", openClusterManagementAgentAddonNamespace)
+						_, err := clientCluster.CoreV1().Namespaces().Get(context.TODO(), openClusterManagementAgentAddonNamespace, metav1.GetOptions{})
+						if err != nil {
+							klog.V(1).Info(err)
+							return errors.IsNotFound(err)
+						}
+						return false
+					}).Should(BeTrue())
+				})
+				By(fmt.Sprintf("Checking if the %s namespace is deleted", openClusterManagementAgentNamespace), func() {
+					klog.V(1).Infof("Checking if the %s is deleted", openClusterManagementAgentNamespace)
+					Eventually(func() bool {
+						klog.V(1).Infof("Wait %s namespace deletion...", openClusterManagementAgentNamespace)
+						_, err := clientCluster.CoreV1().Namespaces().Get(context.TODO(), openClusterManagementAgentNamespace, metav1.GetOptions{})
+						if err != nil {
+							klog.V(1).Info(err)
+							return errors.IsNotFound(err)
+						}
+						return false
+					}).Should(BeTrue())
+				})
+				By(fmt.Sprintf("Checking if the %s namespace is deleted", openClusterManagementAgentAddonNamespace), func() {
+					klog.V(1).Infof("Checking if the %s is deleted", openClusterManagementAgentAddonNamespace)
+					Eventually(func() bool {
+						klog.V(1).Infof("Wait %s namespace deletion...", openClusterManagementAgentAddonNamespace)
+						_, err := clientCluster.CoreV1().Namespaces().Get(context.TODO(), openClusterManagementAgentAddonNamespace, metav1.GetOptions{})
+						if err != nil {
+							klog.V(1).Info(err)
+							return errors.IsNotFound(err)
+						}
+						return false
+					}).Should(BeTrue())
+				})
+				By(fmt.Sprintf("Checking if the %s crd is deleted", klusterletCRDName), func() {
+					klog.V(1).Infof("Checking if the %s crd is deleted", klusterletCRDName)
+					gvr := schema.GroupVersionResource{Group: "operator.open-cluster-management.io", Version: "v1", Resource: "klusterlets"}
+					Eventually(func() bool {
+						klog.V(1).Infof("Wait %s crd deletion...", klusterletCRDName)
+						_, err := clientClusterDynamic.Resource(gvr).Get(context.TODO(), klusterletCRDName, metav1.GetOptions{})
+						if err != nil {
+							klog.V(1).Info(err)
+							return errors.IsNotFound(err)
+						}
+						return false
+					}).Should(BeTrue())
 				})
 			})
 		}
