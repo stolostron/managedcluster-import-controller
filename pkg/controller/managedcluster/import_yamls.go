@@ -27,6 +27,7 @@ const (
 	workImageEnvVarName                 = "WORK_IMAGE"
 	klusterletNamespace                 = "open-cluster-management-agent"
 	envVarNotDefined                    = "Environment variable %s not defined"
+	managedClusterImagePullSecretName   = "open-cluster-management-image-pull-credentials"
 )
 
 func generateImportYAMLs(
@@ -87,7 +88,7 @@ func generateImportYAMLs(
 		ManagedClusterNamespace:   managedCluster.Name,
 		KlusterletNamespace:       klusterletNamespace,
 		BootstrapKubeconfig:       base64.StdEncoding.EncodeToString(bootstrapKubeconfigData),
-		ImagePullSecretName:       imagePullSecret.Name,
+		ImagePullSecretName:       managedClusterImagePullSecretName,
 		ImagePullSecretData:       base64.StdEncoding.EncodeToString(imagePullSecret.Data[".dockerconfigjson"]),
 		ImagePullSecretType:       imagePullSecret.Type,
 		RegistrationOperatorImage: registrationOperatorImageName,
