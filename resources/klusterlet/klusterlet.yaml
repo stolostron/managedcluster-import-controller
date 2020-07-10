@@ -7,4 +7,3 @@ spec:
   workImagePullSpec: {{ .WorkImageName }}
   clusterName: {{ .ManagedClusterNamespace }}
   namespace: {{ .KlusterletNamespace }}
-  imagePullSecret: {{ .ImagePullSecretName }}
