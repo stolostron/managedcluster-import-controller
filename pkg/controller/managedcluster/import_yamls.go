@@ -54,9 +54,15 @@ func generateImportYAMLs(
 		return nil, nil, err
 	}
 
+	useImagePullSecret := false
+	imagePullSecretDataBase64 := ""
 	imagePullSecret, err := getImagePullSecret(client)
 	if err != nil {
 		return nil, nil, err
+	}
+	if imagePullSecret != nil && len(imagePullSecret.Data[".dockerconfigjson"]) != 0 {
+		imagePullSecretDataBase64 = base64.StdEncoding.EncodeToString(imagePullSecret.Data[".dockerconfigjson"])
+		useImagePullSecret = true
 	}
 
 	registrationOperatorImageName := os.Getenv(registrationOperatorImageEnvVarName)
@@ -78,6 +84,7 @@ func generateImportYAMLs(
 		KlusterletNamespace       string
 		ManagedClusterNamespace   string
 		BootstrapKubeconfig       string
+		UseImagePullSecret        bool
 		ImagePullSecretName       string
 		ImagePullSecretData       string
 		ImagePullSecretType       corev1.SecretType
@@ -88,9 +95,10 @@ func generateImportYAMLs(
 		ManagedClusterNamespace:   managedCluster.Name,
 		KlusterletNamespace:       klusterletNamespace,
 		BootstrapKubeconfig:       base64.StdEncoding.EncodeToString(bootstrapKubeconfigData),
+		UseImagePullSecret:        useImagePullSecret,
 		ImagePullSecretName:       managedClusterImagePullSecretName,
-		ImagePullSecretData:       base64.StdEncoding.EncodeToString(imagePullSecret.Data[".dockerconfigjson"]),
-		ImagePullSecretType:       imagePullSecret.Type,
+		ImagePullSecretData:       imagePullSecretDataBase64,
+		ImagePullSecretType:       corev1.SecretTypeDockerConfigJson,
 		RegistrationOperatorImage: registrationOperatorImageName,
 		RegistrationImageName:     registrationImageName,
 		WorkImageName:             workImageName,
@@ -100,9 +108,13 @@ func generateImportYAMLs(
 	if err != nil {
 		return nil, nil, err
 	}
+	excluded := []string{}
+	if !useImagePullSecret {
+		excluded = append(excluded, "klusterlet/image_pull_secret.yaml")
+	}
 	klusterletYAMLs, err := tp.TemplateAssetsInPathYaml(
 		"klusterlet",
-		nil,
+		excluded,
 		false,
 		config,
 	)
@@ -117,6 +129,9 @@ func generateImportYAMLs(
 }
 
 func getImagePullSecret(client client.Client) (*corev1.Secret, error) {
+	if os.Getenv("DEFAULT_IMAGE_PULL_SECRET") == "" {
+		return nil, nil
+	}
 	secret := &corev1.Secret{}
 	err := client.Get(context.TODO(), types.NamespacedName{
 		Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
