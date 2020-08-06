@@ -1,0 +1,39 @@
+apiVersion: hive.openshift.io/v1
+kind: ClusterDeployment
+metadata:
+  name: {{ .ManagedClusterName }}
+  namespace: {{ .ManagedClusterName }}
+  labels:
+    cloud: {{ .ManagedClusterCloud }}
+    region: {{ .ManagedClusterRegion }}
+    vendor: {{ .ManagedClusterVendor }}
+spec:
+  baseDomain: {{ .ManagedClusterBaseDomain }}
+  clusterName: {{ .ManagedClusterName }}
+  controlPlaneConfig:
+    servingCertificates: {}
+  installed: false
+  platform:
+{{if (eq .ManagedClusterCloud "aws") }}
+    aws:
+{{ end }}
+{{if (eq .ManagedClusterCloud "azure") }}
+    azure:
+      baseDomainResourceGroupName: {{ .ManagedClusterBaseDomainRGN }}
+{{ end }}
+{{if (eq .ManagedClusterCloud "gcp") }}
+    gcp:
+{{ end }}
+      credentialsSecretRef:
+        name: {{ .ManagedClusterName }}-creds
+      region: {{ .ManagedClusterRegion }}
+  provisioning:
+    installConfigSecretRef:
+      name: {{ .ManagedClusterName }}-install-config
+    sshPrivateKeySecretRef:
+      name: {{ .ManagedClusterName }}-ssh-private-key
+    imageSetRef:
+       #quay.io/openshift-release-dev/ocp-release:4.3.28-x86_64
+      name: {{ .ManagedClusterImageRefName }}
+  pullSecretRef:
+    name: {{ .ManagedClusterName }}-pull-secret

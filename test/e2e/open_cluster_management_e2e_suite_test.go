@@ -5,214 +5,313 @@
 package e2e
 
 import (
+	"context"
 	"flag"
 	"fmt"
-	"io/ioutil"
-	"math/rand"
-	"os"
+	"path/filepath"
 	"testing"
-	"time"
 
-	"gopkg.in/yaml.v2"
+	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	. "github.com/onsi/ginkgo"
+	"github.com/onsi/ginkgo/config"
 	"github.com/onsi/ginkgo/reporters"
 	. "github.com/onsi/gomega"
-	libe2egoapis "github.com/open-cluster-management/library-e2e-go/pkg/apis"
+
+	libgocmd "github.com/open-cluster-management/library-e2e-go/pkg/cmd"
 	libgooptions "github.com/open-cluster-management/library-e2e-go/pkg/options"
-	libgoproviders "github.com/open-cluster-management/library-e2e-go/pkg/providers"
-	"github.com/sclevine/agouti"
+	libgocrdv1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1/crd"
+	libgounstructuredv1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1/unstructured"
+	libgoapplier "github.com/open-cluster-management/library-go/pkg/applier"
+	libgoclient "github.com/open-cluster-management/library-go/pkg/client"
 )
 
-var kubeadminUser string
-var kubeadminCredential string
-var reportFile string
+const (
+	importClusterScenario                    = "import"
+	createClusterScenario                    = "create"
+	openClusterManagementAgentNamespace      = "open-cluster-management-agent"
+	openClusterManagementAgentAddonNamespace = "open-cluster-management-agent-addon"
+	klusterletCRDName                        = "klusterlet"
+	manifestWorkNamePostfix                  = "-klusterlet"
+	manifestWorkCRDSPostfix                  = "-crds"
+)
 
-var registry string
-var registryUser string
-var registryPassword string
-
-var optionsFile, clusterDeployFile, installConfigFile string
-var clusterDeploy libe2egoapis.ClusterDeploy
-var installConfig libe2egoapis.InstallConfig
-var testOptionsContainer libgooptions.TestOptionsContainer
-var testOptions libgooptions.TestOptions
-
-var testUITimeout time.Duration
-var testHeadless bool
-var testIdentityProvider int
-
-var ownerPrefix string
-
-var hubNamespace string
-var pullSecretName string
-var installConfigAWS, installConfigGCP, installConfigAzure string
-var hiveClusterName, hiveGCPClusterName, hiveAzureClusterName string
-
-const charset = "abcdefghijklmnopqrstuvwxyz" +
-	"0123456789"
-
-var seededRand *rand.Rand = rand.New(
-	rand.NewSource(time.Now().UnixNano()))
-
-func StringWithCharset(length int, charset string) string {
-	b := make([]byte, length)
-	for i := range b {
-		b[i] = charset[seededRand.Intn(len(charset))]
-	}
-	return string(b)
-}
-
-func randString(length int) string {
-	return StringWithCharset(length, charset)
-}
+var cloudProviders string
+var ocpImageRelease string
 
 func init() {
 	klog.SetOutput(GinkgoWriter)
 	klog.InitFlags(nil)
 
-	flag.StringVar(&kubeadminUser, "kubeadmin-user", "kubeadmin", "Provide the kubeadmin credential for the cluster under test (e.g. -kubeadmin-user=\"xxxxx\").")
-	flag.StringVar(&kubeadminCredential, "kubeadmin-credential", "", "Provide the kubeadmin credential for the cluster under test (e.g. -kubeadmin-credential=\"xxxxx-xxxxx-xxxxx-xxxxx\").")
-	flag.StringVar(&reportFile, "report-file", "results.xml", "Provide the path to where the junit results will be printed.")
+	libgocmd.InitFlags(nil)
 
-	flag.StringVar(&optionsFile, "options", "", "Location of an \"options.yaml\" file to provide input for various tests")
+	flag.StringVar(&cloudProviders, "cloud-providers", "",
+		"A comma separated list of cloud providers (ie: aws,azure) "+
+			"If set only these cloud providers will be tested")
+	flag.StringVar(&ocpImageRelease, "ocp-image-release", "",
+		"If set this image will be use to create an imageSet reference instead of the one in options.yaml")
 
 }
 
 func TestOpenClusterManagementE2e(t *testing.T) {
 	RegisterFailHandler(Fail)
-	junitReporter := reporters.NewJUnitReporter(reportFile)
+	junitReporter := reporters.NewJUnitReporter(fmt.Sprintf("%s-%d.xml", libgocmd.End2End.ReportFile, config.GinkgoConfig.ParallelNode))
 	RunSpecsWithDefaultAndCustomReporters(t, "OpenClusterManagementE2E Suite", []Reporter{junitReporter})
 }
 
-var agoutiDriver *agouti.WebDriver
+var hubClientClient client.Client
+var hubClient kubernetes.Interface
+var hubClientDynamic dynamic.Interface
+var hubClientAPIExtension clientset.Interface
+var createTemplateProcessor *libgoapplier.TemplateProcessor
+var hubCreateApplier *libgoapplier.Applier
+var importTemplateProcessor *libgoapplier.TemplateProcessor
+var hubImportApplier *libgoapplier.Applier
 
 var _ = BeforeSuite(func() {
-
-	initVars()
-
-	// Choose a WebDriver:
-	//agoutiDriver = agouti.PhantomJS()
-	// agoutiDriver = agouti.Selenium()
-	agoutiDriver = agouti.ChromeDriver()
-
-	Expect(agoutiDriver.Start()).To(Succeed())
+	var err error
+	Expect(initVars()).To(BeNil())
+	kubeconfig := libgooptions.GetHubKubeConfig(filepath.Join(libgooptions.TestOptions.Hub.ConfigDir, "kube"), libgooptions.TestOptions.Hub.KubeConfigPath)
+	hubClient, err = libgoclient.NewDefaultKubeClient(kubeconfig)
+	Expect(err).To(BeNil())
+	hubClientDynamic, err = libgoclient.NewDefaultKubeClientDynamic(kubeconfig)
+	Expect(err).To(BeNil())
+	hubClientAPIExtension, err = libgoclient.NewDefaultKubeClientAPIExtension(kubeconfig)
+	Expect(err).To(BeNil())
+	hubClientClient, err = libgoclient.NewDefaultClient(kubeconfig, client.Options{})
+	Expect(err).To(BeNil())
+	createYamlReader := libgoapplier.NewYamlFileReader(filepath.Join(libgooptions.TestOptions.Hub.ConfigDir, createClusterScenario))
+	createTemplateProcessor, err = libgoapplier.NewTemplateProcessor(createYamlReader, &libgoapplier.Options{})
+	Expect(err).To(BeNil())
+	hubCreateApplier, err = libgoapplier.NewApplier(createTemplateProcessor, hubClientClient, nil, nil, nil)
+	Expect(err).To(BeNil())
+	importTamlReader := libgoapplier.NewYamlFileReader(filepath.Join(libgooptions.TestOptions.Hub.ConfigDir, importClusterScenario))
+	importTemplateProcessor, err = libgoapplier.NewTemplateProcessor(importTamlReader, &libgoapplier.Options{})
+	Expect(err).To(BeNil())
+	hubImportApplier, err = libgoapplier.NewApplier(importTemplateProcessor, hubClientClient, nil, nil, nil)
+	Expect(err).To(BeNil())
 })
 
 var _ = AfterSuite(func() {
-	//Expect(agoutiDriver.Stop()).To(Succeed())
 })
 
-func initVars() {
+func initVars() error {
 
-	// default ginkgo test timeout 30s
-	// increased from original 10s
-	testUITimeout = time.Second * 30
+	err := libgooptions.LoadOptions(libgocmd.End2End.OptionsFile)
 
-	if optionsFile == "" {
-		optionsFile = os.Getenv("OPTIONS")
-		if optionsFile == "" {
-			optionsFile = "resources/options.yaml"
+	return err
+}
+
+func waitClusterImported(hubClientDynamic dynamic.Interface, clusterName string) {
+	Eventually(func() error {
+		gvr := schema.GroupVersionResource{Group: "cluster.open-cluster-management.io", Version: "v1", Resource: "managedclusters"}
+		klog.V(1).Infof("Cluster %s: Wait %s to be imported...", clusterName, clusterName)
+		managedCluster, err := hubClientDynamic.Resource(gvr).Get(context.TODO(), clusterName, metav1.GetOptions{})
+		if err != nil {
+			klog.V(4).Info(err)
+			return err
 		}
-	}
-
-	klog.V(1).Infof("options filename=%s", optionsFile)
-
-	data, err := ioutil.ReadFile(optionsFile)
-	if err != nil {
-		klog.Errorf("--options error: %v", err)
-	}
-	Expect(err).NotTo(HaveOccurred())
-
-	fmt.Printf("file preview: %s \n", string(optionsFile))
-
-	err = yaml.Unmarshal([]byte(data), &testOptionsContainer)
-	if err != nil {
-		klog.Errorf("--options error: %v", err)
-	}
-
-	testOptions = testOptionsContainer.Options
-
-	// clusterdeploy.yaml is optional
-	var clusterDeployFile = "resources/clusterdeploy.yaml"
-	cd, err := ioutil.ReadFile(clusterDeployFile)
-	if err != nil {
-		klog.Warningf("warning: %v", err)
-	}
-	err = yaml.Unmarshal([]byte(cd), &clusterDeploy)
-	if err != nil {
-		klog.Errorf("clusterdeploy file error: %v", err)
-	}
-
-	// install-config.yaml is optional
-	var installConfigFile = "resources/install-config.yaml"
-	ic, err := ioutil.ReadFile(installConfigFile)
-	if err != nil {
-		klog.Warningf("warning: %v", err)
-	}
-	err = yaml.Unmarshal([]byte(ic), &installConfig)
-	if err != nil {
-		klog.Errorf("installconfig file error: %v", err)
-	}
-
-	// default Headless is `true`
-	// to disable, set Headless: false
-	// in options file
-	if testOptions.Headless == "" {
-		testHeadless = true
-	} else {
-		if testOptions.Headless == "false" {
-			testHeadless = false
+		var condition map[string]interface{}
+		condition, err = libgounstructuredv1.GetConditionByType(managedCluster, "ManagedClusterConditionAvailable")
+		if err != nil {
+			return err
+		}
+		klog.V(4).Infof("Cluster %s: Condition %#v", clusterName, condition)
+		if v, ok := condition["status"]; ok && v == string(metav1.ConditionTrue) {
+			return nil
 		} else {
-			testHeadless = true
+			klog.V(4).Infof("Cluster %s: Current is not equal to \"%s\" but \"%v\"", clusterName, metav1.ConditionTrue, v)
+			return fmt.Errorf("status is %s", v)
+		}
+	}).Should(BeNil())
+	klog.V(1).Infof("Cluster %s: imported", clusterName)
+}
+
+func checkManifestWorksApplied(hubClientDynamic dynamic.Interface, clusterName string) {
+	manifestWorkCRDsName := clusterName + manifestWorkNamePostfix + manifestWorkCRDSPostfix
+	By(fmt.Sprintf("Checking manfestwork %s to be applied", manifestWorkCRDsName), func() {
+		klog.V(1).Infof("Cluster %s: Checking manfestwork %s to be applied", clusterName, manifestWorkCRDsName)
+		Eventually(func() error {
+			klog.V(1).Infof("Cluster %s: Wait manifestwork %s to be applied...", clusterName, manifestWorkCRDsName)
+			gvr := schema.GroupVersionResource{Group: "work.open-cluster-management.io", Version: "v1", Resource: "manifestworks"}
+			mwcrd, err := hubClientDynamic.Resource(gvr).Namespace(clusterName).Get(context.TODO(), manifestWorkCRDsName, metav1.GetOptions{})
+			if err != nil {
+				klog.V(4).Infof("Cluster %s: %s", clusterName, err)
+				return err
+			}
+			var condition map[string]interface{}
+			condition, err = libgounstructuredv1.GetConditionByType(mwcrd, "Applied")
+			if err != nil {
+				klog.V(4).Infof("Cluster %s: %s", clusterName, err)
+				return err
+			}
+			klog.V(4).Info(condition)
+			if v, ok := condition["status"]; ok && v == string(metav1.ConditionTrue) {
+				return nil
+			}
+			err = fmt.Errorf("Cluster %s: status not found or not true", clusterName)
+			klog.V(4).Infof("Cluster %s: %s", clusterName, err)
+			return err
+		}).Should(BeNil())
+		klog.V(1).Infof("Cluster %s: manifestwork %s applied", clusterName, manifestWorkCRDsName)
+	})
+
+	manifestWorkYAMLsName := clusterName + manifestWorkNamePostfix
+	By(fmt.Sprintf("Checking manfestwork %s to be applied", manifestWorkYAMLsName), func() {
+		klog.V(1).Infof("Cluster %s: Checking manfestwork %s to be applied", clusterName, manifestWorkYAMLsName)
+		Eventually(func() error {
+			klog.V(1).Infof("Cluster %s: Wait manifestwork %s to be applied...", clusterName, manifestWorkYAMLsName)
+			gvr := schema.GroupVersionResource{Group: "work.open-cluster-management.io", Version: "v1", Resource: "manifestworks"}
+			mwyaml, err := hubClientDynamic.Resource(gvr).Namespace(clusterName).Get(context.TODO(), manifestWorkYAMLsName, metav1.GetOptions{})
+			if err != nil {
+				klog.V(4).Info(err)
+				return err
+			}
+			var condition map[string]interface{}
+			condition, err = libgounstructuredv1.GetConditionByType(mwyaml, "Applied")
+			if err != nil {
+				return err
+			}
+			if v, ok := condition["status"]; ok && v == string(metav1.ConditionTrue) {
+				return nil
+			}
+			return fmt.Errorf("Cluster %s: status not found or not true", clusterName)
+		}).Should(BeNil())
+		klog.V(1).Infof("Cluster %s: manifestwork %s applied", clusterName, manifestWorkYAMLsName)
+	})
+}
+
+func waitDetached(hubClientDynamic dynamic.Interface, clusterName string) {
+	By(fmt.Sprintf("Checking the deletion of the %s managedCluster on the hub", clusterName), func() {
+		klog.V(1).Infof("Cluster %s: Checking the deletion of the %s managedCluster on the hub", clusterName, clusterName)
+		gvr := schema.GroupVersionResource{Group: "cluster.open-cluster-management.io", Version: "v1", Resource: "managedclusters"}
+		Eventually(func() bool {
+			klog.V(1).Infof("Cluster %s: Wait %s managedCluster deletion...", clusterName, clusterName)
+			_, err := hubClientDynamic.Resource(gvr).Get(context.TODO(), clusterName, metav1.GetOptions{})
+			if err != nil {
+				klog.V(4).Infof("Cluster %s: %s", clusterName, err)
+				return errors.IsNotFound(err)
+			}
+			return false
+		}).Should(BeTrue())
+		klog.V(1).Infof("Cluster %s: %s managedCluster deleted", clusterName, clusterName)
+	})
+}
+
+func validateClusterImported(hubClientDynamic dynamic.Interface, hubClient kubernetes.Interface, clusterName string) {
+	gvr := schema.GroupVersionResource{Group: "hive.openshift.io", Version: "v1", Resource: "clusterdeployments"}
+	clusterDeployment, err := hubClientDynamic.Resource(gvr).Namespace(clusterName).Get(context.TODO(), clusterName, metav1.GetOptions{})
+	Expect(err).To(BeNil())
+	var configSecretRef string
+	if si, ok := clusterDeployment.Object["spec"]; ok {
+		s := si.(map[string]interface{})
+		if ci, ok := s["clusterMetadata"]; ok {
+			c := ci.(map[string]interface{})
+			if ai, ok := c["adminKubeconfigSecretRef"]; ok {
+				a := ai.(map[string]interface{})
+				if ni, ok := a["name"]; ok {
+					configSecretRef = ni.(string)
+				}
+			}
 		}
 	}
+	if configSecretRef == "" {
+		Fail(fmt.Sprintf("adminKubeconfigSecretRef.name not found in clusterDeployment %s", clusterName))
+	}
+	s, err := hubClient.CoreV1().Secrets(clusterName).Get(context.TODO(), configSecretRef, metav1.GetOptions{})
+	Expect(err).To(BeNil())
+	config, err := clientcmd.Load(s.Data["kubeconfig"])
+	Expect(err).To(BeNil())
+	rconfig, err := clientcmd.NewDefaultClientConfig(
+		*config,
+		&clientcmd.ConfigOverrides{}).ClientConfig()
+	Expect(err).To(BeNil())
+	By("Checking if \"open-cluster-management-agent\" namespace on managed cluster exits", func() {
+		clientset, err := kubernetes.NewForConfig(rconfig)
+		Expect(err).To(BeNil())
+		_, err = clientset.CoreV1().Namespaces().Get(context.TODO(), "open-cluster-management-agent", metav1.GetOptions{})
+		Expect(err).To(BeNil())
+		klog.V(1).Info("\"open-cluster-management-agent\" namespace on managed cluster exists")
+	})
+	By("Checking if \"klusterlet\" on managed cluster exits", func() {
+		gvr := schema.GroupVersionResource{Group: "operator.open-cluster-management.io", Version: "v1", Resource: "klusterlets"}
+		clientDynamic, err := dynamic.NewForConfig(rconfig)
+		Expect(err).To(BeNil())
+		_, err = clientDynamic.Resource(gvr).Get(context.TODO(), "klusterlet", metav1.GetOptions{})
+		Expect(err).To(BeNil())
+		klog.V(1).Info("klusterlet on managed cluster exists")
+	})
+}
 
-	// OwnerPrefix is used to help identify who owns deployed resources
-	//    If a value is not supplied, the default is OS environment variable $USER
-	if testOptions.OwnerPrefix == "" {
-		ownerPrefix = os.Getenv("USER")
-		if ownerPrefix == "" {
-			ownerPrefix = "ginkgo"
+func validateClusterDetached(hubClientDynamic dynamic.Interface, hubClient kubernetes.Interface, clusterName string) {
+	gvr := schema.GroupVersionResource{Group: "hive.openshift.io", Version: "v1", Resource: "clusterdeployments"}
+	clusterDeployment, err := hubClientDynamic.Resource(gvr).Namespace(clusterName).Get(context.TODO(), clusterName, metav1.GetOptions{})
+	Expect(err).To(BeNil())
+	var configSecretRef string
+	if si, ok := clusterDeployment.Object["spec"]; ok {
+		s := si.(map[string]interface{})
+		if ci, ok := s["clusterMetadata"]; ok {
+			c := ci.(map[string]interface{})
+			if ai, ok := c["adminKubeconfigSecretRef"]; ok {
+				a := ai.(map[string]interface{})
+				if ni, ok := a["name"]; ok {
+					configSecretRef = ni.(string)
+				}
+			}
 		}
-	} else {
-		ownerPrefix = testOptions.OwnerPrefix
 	}
-	klog.V(1).Infof("ownerPrefix=%s", ownerPrefix)
-
-	// identity provider can either be 0 or 1
-	// with 0 for kube:admin or `kubeadmin` and
-	// 1 for any other use, ie. user defined users
-	// default to `kubeadmin` logins, otherwise
-	// select the second option
-	testIdentityProvider = 0
-	if kubeadminUser != "kubeadmin" {
-		testIdentityProvider = 1
+	if configSecretRef == "" {
+		Fail(fmt.Sprintf("adminKubeconfigSecretRef.name not found in clusterDeployment %s", clusterName))
 	}
-
-	// if testOptions.ImageRegistry.Server != "" {
-	// 	registry = testOptions.ImageRegistry.Server
-	// 	registryUser = testOptions.ImageRegistry.User
-	// 	registryPassword = testOptions.ImageRegistry.Password
-	// } else {
-	// 	klog.Warningf("No `imageRegistry.server` was included in the options.yaml file. Ignoring any tests that require an ImageRegistry.")
-	// }
-
-	hiveClusterName = ownerPrefix + "-aws-" + randString(4)
-	hiveGCPClusterName = ownerPrefix + "-gcp-" + randString(4)
-	hiveAzureClusterName = ownerPrefix + "-azure-" + randString(4)
-
-	var installerConfigAWS = libgoproviders.InstallerConfigAWS{Name: hiveClusterName, BaseDnsDomain: testOptions.Connection.Keys.AWS.BaseDnsDomain, SSHKey: testOptions.Connection.SSHPublicKey, Region: testOptions.Connection.Keys.AWS.Region}
-	installConfigAWS, err = libgoproviders.GetInstallConfigAWS(installerConfigAWS)
+	s, err := hubClient.CoreV1().Secrets(clusterName).Get(context.TODO(), configSecretRef, metav1.GetOptions{})
 	Expect(err).To(BeNil())
-
-	var installerConfigGCP = libgoproviders.InstallerConfigGCP{Name: hiveGCPClusterName, BaseDnsDomain: testOptions.Connection.Keys.GCP.BaseDnsDomain, SSHKey: testOptions.Connection.SSHPublicKey, ProjectID: testOptions.Connection.Keys.GCP.ProjectID, Region: testOptions.Connection.Keys.GCP.Region}
-	installConfigGCP, err = libgoproviders.GetInstallConfigGCP(installerConfigGCP)
+	config, err := clientcmd.Load(s.Data["kubeconfig"])
 	Expect(err).To(BeNil())
-
-	var installerConfigAzure = libgoproviders.InstallerConfigAzure{Name: hiveAzureClusterName, BaseDnsDomain: testOptions.Connection.Keys.Azure.BaseDnsDomain, SSHKey: testOptions.Connection.SSHPublicKey, BaseDomainRGN: testOptions.Connection.Keys.Azure.BaseDomainRGN, Region: testOptions.Connection.Keys.Azure.Region}
-	installConfigAzure, err = libgoproviders.GetInstallConfigAzure(installerConfigAzure)
+	rconfig, err := clientcmd.NewDefaultClientConfig(
+		*config,
+		&clientcmd.ConfigOverrides{}).ClientConfig()
 	Expect(err).To(BeNil())
-
+	By("Checking if \"klusterlet\" on managed cluster is deleted", func() {
+		gvr := schema.GroupVersionResource{Group: "operator.open-cluster-management.io", Version: "v1", Resource: "klusterlets"}
+		clientDynamic, err := dynamic.NewForConfig(rconfig)
+		Expect(err).To(BeNil())
+		_, err = clientDynamic.Resource(gvr).Get(context.TODO(), "klusterlet", metav1.GetOptions{})
+		deleted := false
+		if err != nil {
+			klog.V(4).Info(err)
+			deleted = errors.IsNotFound(err)
+		}
+		Expect(deleted).To(BeTrue())
+		klog.V(1).Info("klusterlet on managed cluster deleted")
+	})
+	By("Checking if \"klusterlet CRD\" on managed cluster is deleted", func() {
+		clientset, err := clientset.NewForConfig(rconfig)
+		Expect(err).To(BeNil())
+		has, _, _ := libgocrdv1.HasCRDs(clientset,
+			[]string{
+				"klusterlets.operator.open-cluster-management.io",
+			})
+		Expect(has).To(BeFalse())
+		klog.V(1).Info("klusterlet CRD on managed cluster deleted")
+	})
+	By("Checking if \"open-cluster-management-agent\" namespace on managed cluster is deleted", func() {
+		clientset, err := kubernetes.NewForConfig(rconfig)
+		Expect(err).To(BeNil())
+		_, err = clientset.CoreV1().Namespaces().Get(context.TODO(), "open-cluster-management-agent", metav1.GetOptions{})
+		deleted := false
+		if err != nil {
+			klog.V(4).Info(err)
+			deleted = errors.IsNotFound(err)
+		}
+		Expect(deleted).To(BeTrue())
+		klog.V(1).Info("\"open-cluster-management-agent\" namespace on managed cluster deleted")
+	})
 }
