@@ -10,7 +10,7 @@ test/unit/coverage
 test/out
 overlays/deploy
 test/e2e/resources/clusters
-test/e2e/resources/hub
+test/e2e/resources/hub/kube
 
 # Files
 .build-harness
@@ -21,7 +21,9 @@ coverate.out
 gosec.json
 go-bindata.diff
 e2e.test
-results.xml
+results-*.xml
+test/e2e/resources/options.yaml
+
 
 # override build harness vendoring
 !vbh/.build-harness-vendorized

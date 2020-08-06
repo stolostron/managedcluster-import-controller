@@ -1,0 +1,54 @@
+#Resource prefix, priority:
+# 1. From command-line
+# 2. From options.yaml
+# 3. Using the $USER environment variable.
+# 4. Default: ginkgo
+owner:
+#hub information
+hub:
+  #Directory where are the different hub resources, such as cr/crds for the applier
+  configDir: "resources/hub"
+  #The baseDomain of the hub
+  baseDomain: itdove.dev02.red-chesterfield.com
+  #The hub kubeconfig path, if empty uses (library-e2e-go):
+  # 1. configDir
+  # 2. $KUBECONFIG 
+  # 3. In cluster
+  # 4. User home directory
+  kubeconfig:
+managedClusters:
+  #Directory where are the different managed cluster resources, such as cr/crds for the applier
+  configDir:  "resources/clusters"
+  #The imageSet reference name of the ocp image, if empty use the ocp release image defined in the cmd or in the here below.
+  imageSetRefName: 
+  #The ocp image release, this can be overwritten by the -ocp-image-release of the command line.
+  OCPImageRelease: quay.io/openshift-release-dev/ocp-release:4.3.28-x86_64
+cloudConnection:
+  #The ssh private key to ssh the cluster
+  sshPrivatekey:
+  #The ssh public keyn to ssh the cluster
+  sshPublickey:
+  apiKeys:
+    #AWS specifics
+    aws:
+      awsAccessKeyID:
+      awsSecretAccessKeyID:
+      baseDnsDomain:
+      region:
+      vendor:
+    #GCP specifics
+    gcp:
+      gcpProjectID:
+      gcpServiceAccountJsonKey:
+      baseDnsDomain:
+      vendor:
+    #Azure specifics
+    azure:
+      azureBaseDomainRGN:
+      baseDnsDomain:
+      clientId:
+      clientSecret:
+      tenantId:
+      subscriptionId:
+      region:
+          

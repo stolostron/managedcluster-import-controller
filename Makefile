@@ -67,8 +67,7 @@ deps: init component/init
 
 .PHONY: check
 ## Runs a set of required checks
-# check: lint ossccheck copyright-check
-check: ossccheck copyright-check go-bindata-check
+check: copyright-check go-bindata-check
 
 .PHONY: test
 ## Runs go unit tests
@@ -134,14 +133,6 @@ run: go-bindata
 lint:
 	@echo "Running linting tool ..."
 	@GOGC=25 golangci-lint run --timeout 5m
-
-.PHONY: ossccheck
-ossccheck:
-	ossc --check
-
-.PHONY: ossc
-ossc:
-	ossc
 
 .PHONY: helpz
 helpz:

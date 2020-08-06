@@ -41,11 +41,9 @@ var (
 	gvrManifestwork      schema.GroupVersionResource
 	gvrCSR               schema.GroupVersionResource
 
-	optionsFile         string
-	baseDomain          string
-	kubeadminUser       string
-	kubeadminCredential string
-	kubeconfig          string
+	optionsFile string
+	baseDomain  string
+	kubeconfig  string
 
 	defaultImageRegistry       string
 	defaultImagePullSecretName string
@@ -205,9 +203,6 @@ func init() {
 	klog.SetOutput(GinkgoWriter)
 	klog.InitFlags(nil)
 
-	flag.StringVar(&kubeadminUser, "kubeadmin-user", "kubeadmin", "Provide the kubeadmin credential for the cluster under test (e.g. -kubeadmin-user=\"xxxxx\").")
-	flag.StringVar(&kubeadminCredential, "kubeadmin-credential", "",
-		"Provide the kubeadmin credential for the cluster under test (e.g. -kubeadmin-credential=\"xxxxx-xxxxx-xxxxx-xxxxx\").")
 	flag.StringVar(&baseDomain, "base-domain", "", "Provide the base domain for the cluster under test (e.g. -base-domain=\"demo.red-chesterfield.com\").")
 
 	flag.StringVar(&optionsFile, "options", "", "Location of an \"options.yaml\" file to provide input for various tests")
