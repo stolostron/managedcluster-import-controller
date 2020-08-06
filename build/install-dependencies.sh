@@ -17,11 +17,6 @@ if ! which gocovmerge > /dev/null; then  echo "Installing gocovmerge..."; go get
 if ! which golangci-lint > /dev/null; then
    curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.23.6
 fi
-if ! which ossc > /dev/null; then
-	# do a get in a tmp dir to avoid local go.mod update
-	echo "Installing ossc..."
-	cd $(mktemp -d) && GOSUMDB=off go get -u github.com/open-cluster-management/go-ossc/ossc
-fi
 if ! which go-bindata > /dev/null; then
 	echo "Installing go-bindata..."
 	cd $(mktemp -d) && GOSUMDB=off go get -u github.com/go-bindata/go-bindata/...

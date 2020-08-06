@@ -19,6 +19,7 @@ import (
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	workv1 "github.com/open-cluster-management/api/work/v1"
 	certificatesv1beta1 "k8s.io/api/certificates/v1beta1"
+	"k8s.io/klog"
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
@@ -56,6 +57,7 @@ func printVersion() {
 }
 
 func main() {
+	klog.InitFlags(nil)
 	// Add the zap logger flag set to the CLI. The flag set must
 	// be added before calling pflag.Parse().
 	pflag.CommandLine.AddFlagSet(zap.FlagSet())
