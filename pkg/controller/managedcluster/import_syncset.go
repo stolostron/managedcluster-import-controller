@@ -62,10 +62,6 @@ func newSyncSets(
 	}
 
 	crdsSyncSet := &hivev1.SyncSet{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: hivev1.SchemeGroupVersion.String(),
-			Kind:       "SyncSet",
-		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ssNsN.Name + syncsetCRDSPostfix,
 			Namespace: ssNsN.Namespace,
@@ -84,10 +80,6 @@ func newSyncSets(
 	}
 
 	yamlsSyncSet := &hivev1.SyncSet{
-		TypeMeta: metav1.TypeMeta{
-			APIVersion: hivev1.SchemeGroupVersion.String(),
-			Kind:       "SyncSet",
-		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      ssNsN.Name,
 			Namespace: ssNsN.Namespace,
