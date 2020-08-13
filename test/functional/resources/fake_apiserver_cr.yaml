@@ -1,0 +1,5 @@
+apiVersion: config.openshift.io/v1
+kind: APIServer
+metadata:
+  name: cluster
+spec: {}

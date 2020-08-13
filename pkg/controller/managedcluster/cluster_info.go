@@ -5,13 +5,21 @@ package managedcluster
 
 import (
 	"context"
+	"fmt"
+	"strings"
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-const infrastructureConfigName = "cluster"
+const (
+	infrastructureConfigName = "cluster"
+	apiserverConfigName      = "cluster"
+	openshiftConfigNamespace = "openshift-config"
+)
 
 func infrastructureConfigNameNsN() types.NamespacedName {
 	return types.NamespacedName{
@@ -27,4 +35,62 @@ func getKubeAPIServerAddress(client client.Client) (string, error) {
 	}
 
 	return infraConfig.Status.APIServerURL, nil
+}
+
+// getKubeAPIServerSecretName iterate through all namespacedCertificates
+// returns the first one which has a name matches the given dnsName
+func getKubeAPIServerSecretName(client client.Client, dnsName string) (string, error) {
+	apiserver := &ocinfrav1.APIServer{}
+	if err := client.Get(
+		context.TODO(),
+		types.NamespacedName{Name: apiserverConfigName},
+		apiserver,
+	); err != nil {
+		if errors.IsNotFound(err) {
+			log.Info("APIServer cluster not found")
+			return "", nil
+		}
+		return "", err
+	}
+	// iterate through all namedcertificates
+	for _, namedCert := range apiserver.Spec.ServingCerts.NamedCertificates {
+		for _, name := range namedCert.Names {
+			if strings.EqualFold(name, dnsName) {
+				return namedCert.ServingCertificate.Name, nil
+			}
+		}
+	}
+	return "", nil
+}
+
+// getKubeAPIServerCertificate looks for secret in openshift-config namespace, and returns tls.crt
+func getKubeAPIServerCertificate(client client.Client, secretName string) ([]byte, error) {
+	secret := &corev1.Secret{}
+	if err := client.Get(
+		context.TODO(),
+		types.NamespacedName{Name: secretName, Namespace: openshiftConfigNamespace},
+		secret,
+	); err != nil {
+		log.Error(err, fmt.Sprintf("Failed to get secret %s/%s", openshiftConfigNamespace, secretName))
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if secret.Type != corev1.SecretTypeTLS {
+		return nil, fmt.Errorf(
+			"secret %s/%s should have type=kubernetes.io/tls",
+			openshiftConfigNamespace,
+			secretName,
+		)
+	}
+	res, ok := secret.Data["tls.crt"]
+	if !ok {
+		return nil, fmt.Errorf(
+			"failed to find data[tls.crt] in secret %s/%s",
+			openshiftConfigNamespace,
+			secretName,
+		)
+	}
+	return res, nil
 }
