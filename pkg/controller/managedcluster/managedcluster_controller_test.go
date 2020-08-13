@@ -127,7 +127,7 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 	testscheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
 	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWork{})
 	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWorkList{})
-	testscheme.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{})
+	testscheme.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{}, &ocinfrav1.APIServer{})
 
 	req := reconcile.Request{
 		types.NamespacedName{

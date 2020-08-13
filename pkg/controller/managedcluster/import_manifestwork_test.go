@@ -104,7 +104,7 @@ func Test_newManifestWorks(t *testing.T) {
 	testscheme := scheme.Scheme
 
 	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWork{})
-	testscheme.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{})
+	testscheme.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{}, &ocinfrav1.APIServer{})
 
 	testSA := &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{
@@ -240,7 +240,7 @@ func Test_createOrUpdateManifestWork(t *testing.T) {
 
 	testScheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWork{})
 	testScheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
-	testScheme.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{})
+	testScheme.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{}, &ocinfrav1.APIServer{})
 
 	testSA := &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{

@@ -104,7 +104,7 @@ func Test_newImportSecret(t *testing.T) {
 
 	s := scheme.Scheme
 	s.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
-	s.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{})
+	s.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{}, &ocinfrav1.APIServer{})
 
 	infraConfig := &ocinfrav1.Infrastructure{
 		ObjectMeta: metav1.ObjectMeta{
