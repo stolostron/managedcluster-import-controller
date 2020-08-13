@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 
+	"net/url"
+
 	corev1 "k8s.io/api/core/v1"
 
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
@@ -152,7 +154,24 @@ func createKubeconfigData(client client.Client, bootStrapSecret *corev1.Secret) 
 	}
 
 	insecureSkipTLSVerify := false
-	if _, ok := bootStrapSecret.Data["ca.crt"]; !ok {
+	var certData []byte
+	if u, err := url.Parse(kubeAPIServer); err == nil {
+		apiServerCertSecretName, err := getKubeAPIServerSecretName(client, u.Hostname())
+		if err != nil {
+			return nil, err
+		}
+		if len(apiServerCertSecretName) > 0 {
+			apiServerCert, err := getKubeAPIServerCertificate(client, apiServerCertSecretName)
+			if err != nil {
+				return nil, err
+			}
+			certData = apiServerCert
+		}
+	}
+	if _, ok := bootStrapSecret.Data["ca.crt"]; ok && certData == nil {
+		certData = bootStrapSecret.Data["ca.crt"]
+	}
+	if len(certData) == 0 {
 		insecureSkipTLSVerify = true
 	}
 
@@ -161,7 +180,7 @@ func createKubeconfigData(client client.Client, bootStrapSecret *corev1.Secret) 
 		Clusters: map[string]*clientcmdapi.Cluster{"default-cluster": {
 			Server:                   kubeAPIServer,
 			InsecureSkipTLSVerify:    insecureSkipTLSVerify,
-			CertificateAuthorityData: bootStrapSecret.Data["ca.crt"],
+			CertificateAuthorityData: certData,
 		}},
 		// Define auth based on the obtained client cert.
 		AuthInfos: map[string]*clientcmdapi.AuthInfo{"default-auth": {

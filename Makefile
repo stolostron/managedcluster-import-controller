@@ -157,6 +157,7 @@ install-fake-crds:
 	kubectl apply -f test/functional/resources/hive_v1_clusterdeployment_crd.yaml
 	kubectl apply -f test/functional/resources/hive_v1_syncset.yaml 
 	kubectl apply -f test/functional/resources/infrastructure_crd.yaml 
+	kubectl apply -f test/functional/resources/apiserver_crd.yaml 
 	kubectl apply -f test/functional/resources/0000_00_clusters.open-cluster-management.io_managedclusters.crd.yaml
 	kubectl apply -f test/functional/resources/0000_00_work.open-cluster-management.io_manifestworks.crd.yaml
 	@sleep 10 
@@ -165,6 +166,8 @@ install-fake-crds:
 kind-cluster-setup: install-fake-crds
 	@echo installing fake infrastructure resource
 	kubectl apply -f test/functional/resources/fake_infrastructure_cr.yaml
+	kubectl apply -f test/functional/resources/fake_apiserver_cr.yaml
+
 
 .PHONY: functional-test
 functional-test:
