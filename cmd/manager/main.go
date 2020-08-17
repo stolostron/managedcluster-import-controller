@@ -29,8 +29,8 @@ import (
 	// kubemetrics "github.com/operator-framework/operator-sdk/pkg/kube-metrics"
 	corev1 "k8s.io/api/core/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth" // Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.
+	"k8s.io/client-go/rest"
 	rbacv1 "k8s.io/kubernetes/pkg/apis/rbac/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -53,24 +53,29 @@ var log = logf.Log.WithName("cmd")
 
 func main() {
 	var metricsAddr string
+	var enableLeaderElection bool
 	klog.InitFlags(nil)
 	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	// Get a config to talk to the apiserver
-	cfg, err := config.GetConfig()
-	if err != nil {
-		log.Error(err, "")
-		os.Exit(1)
-	}
 
-	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+	cfg := ctrl.GetConfigOrDie()
+
+	enableLeaderElection = false
+	if _, err := rest.InClusterConfig(); err == nil {
+		setupLog.Info("LeaderElection enabled as running in a cluster")
+		enableLeaderElection = true
+	} else {
+		setupLog.Info("LeaderElection disabled as not running in a cluster")
+	}
+	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 		Scheme:             scheme,
 		Namespace:          os.Getenv("WATCH_NAMESPACE"),
 		MetricsBindAddress: fmt.Sprintf("%s:%d", metricsHost, metricsPort),
 		Port:               operatorMetricsPort,
-		LeaderElection:     true,
+		LeaderElection:     enableLeaderElection,
 		LeaderElectionID:   "managedcluster-import-controller-leader.open-cluster-management.io",
 	})
 	if err != nil {
