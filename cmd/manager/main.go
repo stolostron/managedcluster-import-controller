@@ -9,83 +9,55 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"os"
-	"runtime"
 	"time"
 
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	workv1 "github.com/open-cluster-management/api/work/v1"
+	"github.com/open-cluster-management/rcm-controller/pkg/controller"
 	certificatesv1beta1 "k8s.io/api/certificates/v1beta1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/klog"
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
-	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
-	kubemetrics "github.com/operator-framework/operator-sdk/pkg/kube-metrics"
-	"github.com/operator-framework/operator-sdk/pkg/leader"
-	"github.com/operator-framework/operator-sdk/pkg/log/zap"
-	sdkVersion "github.com/operator-framework/operator-sdk/version"
-	"github.com/spf13/pflag"
+
+	// "github.com/operator-framework/operator-sdk/internal/util/k8sutil"
+
+	// kubemetrics "github.com/operator-framework/operator-sdk/pkg/kube-metrics"
 	corev1 "k8s.io/api/core/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth" // Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.
-	"k8s.io/client-go/rest"
 	rbacv1 "k8s.io/kubernetes/pkg/apis/rbac/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	ctrl "sigs.k8s.io/controller-runtime"
 	// "github.com/open-cluster-management/rcm-controller/pkg/apis"
-	"github.com/open-cluster-management/rcm-controller/pkg/controller"
 	// "github.com/open-cluster-management/rcm-controller/pkg/utils"
 )
 
 // Change below variables to serve metrics on different host or port.
 var (
-	metricsHost               = "0.0.0.0"
-	metricsPort         int32 = 8383
-	operatorMetricsPort int32 = 8686
+	metricsHost             = "0.0.0.0"
+	metricsPort         int = 8383
+	operatorMetricsPort int = 8686
+)
+var (
+	scheme   = runtime.NewScheme()
+	setupLog = ctrl.Log.WithName("setup")
 )
 var log = logf.Log.WithName("cmd")
 
-func printVersion() {
-	log.Info(fmt.Sprintf("Go Version: %s", runtime.Version()))
-	log.Info(fmt.Sprintf("Go OS/Arch: %s/%s", runtime.GOOS, runtime.GOARCH))
-	log.Info(fmt.Sprintf("Version of operator-sdk: %v", sdkVersion.Version))
-}
-
 func main() {
+	var metricsAddr string
 	klog.InitFlags(nil)
-	// Add the zap logger flag set to the CLI. The flag set must
-	// be added before calling pflag.Parse().
-	pflag.CommandLine.AddFlagSet(zap.FlagSet())
+	flag.StringVar(&metricsAddr, "metrics-addr", ":8080", "The address the metric endpoint binds to.")
+	flag.Parse()
 
-	// Add flags registered by imported packages (e.g. glog and
-	// controller-runtime)
-	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
-
-	pflag.Parse()
-
-	// Use a zap logr.Logger implementation. If none of the zap
-	// flags are configured (or if the zap flag set is not being
-	// used), this defaults to a production zap logger.
-	//
-	// The logger instantiated here can be changed to any logger
-	// implementing the logr.Logger interface. This logger will
-	// be propagated through the whole operator, generating
-	// uniform and structured logs.
-	logf.SetLogger(zap.Logger())
-
-	printVersion()
-
-	namespace, err := k8sutil.GetWatchNamespace()
-	if err != nil {
-		log.Error(err, "Failed to get watch namespace")
-		os.Exit(1)
-	}
-
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	// Get a config to talk to the apiserver
 	cfg, err := config.GetConfig()
 	if err != nil {
@@ -93,21 +65,16 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx := context.TODO()
-	// Become the leader before proceeding
-	err = leader.Become(ctx, "rcm-controller-lock")
-	if err != nil {
-		log.Error(err, "")
-		os.Exit(1)
-	}
-
-	// Create a new Cmd to provide shared dependencies and start components
-	mgr, err := manager.New(cfg, manager.Options{
-		Namespace:          namespace,
+	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
+		Scheme:             scheme,
+		Namespace:          os.Getenv("WATCH_NAMESPACE"),
 		MetricsBindAddress: fmt.Sprintf("%s:%d", metricsHost, metricsPort),
+		Port:               operatorMetricsPort,
+		LeaderElection:     true,
+		LeaderElectionID:   "managedcluster-import-controller-leader.open-cluster-management.io",
 	})
 	if err != nil {
-		log.Error(err, "")
+		setupLog.Error(err, "unable to start manager")
 		os.Exit(1)
 	}
 
@@ -196,29 +163,4 @@ func main() {
 		log.Error(err, "Manager exited non-zero")
 		os.Exit(1)
 	}
-}
-
-// serveCRMetrics gets the Operator/CustomResource GVKs and generates metrics based on those types.
-// It serves those metrics on "http://metricsHost:operatorMetricsPort".
-func serveCRMetrics(cfg *rest.Config) error {
-	// Below function returns filtered operator/CustomResource specific GVKs.
-	// For more control override the below GVK list with your own custom logic.
-	filteredGVK, err := k8sutil.GetGVKsFromAddToScheme(clusterv1.AddToScheme)
-	if err != nil {
-		return err
-	}
-	// Get the namespace the operator is currently deployed in.
-	operatorNs, err := k8sutil.GetOperatorNamespace()
-	if err != nil {
-		return err
-	}
-	// To generate metrics in other namespaces, add the values below.
-	ns := []string{operatorNs}
-	// Generate and serve custom resource specific metrics.
-	err = kubemetrics.GenerateAndServeCRMetrics(cfg, ns, filteredGVK, metricsHost, operatorMetricsPort)
-	if err != nil {
-		return err
-	}
-
-	return nil
 }

@@ -126,7 +126,7 @@ clean::
 .PHONY: run
 ## Run the operator against the kubeconfig targeted cluster
 run: go-bindata
-	@operator-sdk run local --watch-namespace="" --operator-flags="--zap-devel=true"
+	@operator-sdk run local --watch-namespace="" --operator-flags="-v=5"
 
 .PHONY: lint
 ## Runs linter against go files
