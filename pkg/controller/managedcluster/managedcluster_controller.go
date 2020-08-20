@@ -5,6 +5,7 @@ package managedcluster
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -36,6 +37,8 @@ const (
 	managedClusterFinalizer = "managedcluster-import-controller.open-cluster-management.io/cleanup"
 	registrationFinalizer   = "cluster.open-cluster-management.io/api-resource-cleanup"
 )
+
+const selfManagedLabel = "local-cluster"
 
 var log = logf.Log.WithName("controller_managedcluster")
 
@@ -248,8 +251,21 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 	reqLogger.Info(fmt.Sprintf("createOrUpdateImportSecret: %s", instance.Name))
 	_, err = createOrUpdateImportSecret(r.client, r.scheme, instance)
 	if err != nil {
-		log.Error(err, "create ManagedCluster Import Secret")
+		reqLogger.Error(err, "create ManagedCluster Import Secret")
 		return reconcile.Result{}, err
+	}
+
+	//If self managed then apply the crds/yamls
+	if v, ok := instance.GetLabels()[selfManagedLabel]; ok {
+		managed, err := strconv.ParseBool(v)
+		if err != nil {
+			managed = false
+		}
+		if managed {
+			if err := r.selfManaged(instance); err != nil {
+				return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
+			}
+		}
 	}
 
 	clusterDeployment := &hivev1.ClusterDeployment{}
@@ -424,5 +440,66 @@ func (r *ReconcileManagedCluster) deleteNamespace(namespaceName string) error {
 		}
 	}
 
+	return nil
+}
+
+func (r *ReconcileManagedCluster) selfManaged(managedCluster *clusterv1.ManagedCluster) error {
+	mwNSN, err := manifestWorkNsN(managedCluster)
+	if err != nil {
+		return err
+	}
+	mw := &workv1.ManifestWork{}
+	err = r.client.Get(context.TODO(), mwNSN, mw)
+	if err == nil {
+		return nil
+	}
+	if !errors.IsNotFound(err) {
+		return err
+	}
+
+	yamlSecret := &corev1.Secret{}
+	err = r.client.Get(context.TODO(),
+		types.NamespacedName{Namespace: managedCluster.Name, Name: managedCluster.Name + "-import"},
+		yamlSecret)
+	if err != nil {
+		return err
+	}
+	//Apply CRDs
+	tp, err := applier.NewTemplateProcessor(
+		applier.NewYamlStringReader(string(yamlSecret.Data["crds.yaml"]),
+			applier.KubernetesYamlsDelimiter),
+		nil)
+	if err != nil {
+		return err
+	}
+
+	a, err := applier.NewApplier(tp, r.client, nil, nil, applier.DefaultKubernetesMerger)
+	if err != nil {
+		return err
+	}
+
+	err = a.CreateOrUpdateInPath(".", nil, false, nil)
+	if err != nil {
+		return err
+	}
+
+	//Apply Yamls
+	tp, err = applier.NewTemplateProcessor(
+		applier.NewYamlStringReader(string(yamlSecret.Data["import.yaml"]),
+			applier.KubernetesYamlsDelimiter),
+		nil)
+	if err != nil {
+		return err
+	}
+
+	a, err = applier.NewApplier(tp, r.client, nil, nil, applier.DefaultKubernetesMerger)
+	if err != nil {
+		return err
+	}
+
+	err = a.CreateOrUpdateInPath(".", nil, false, nil)
+	if err != nil {
+		return err
+	}
 	return nil
 }
