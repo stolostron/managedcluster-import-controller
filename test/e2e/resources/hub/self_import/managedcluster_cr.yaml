@@ -1,0 +1,11 @@
+apiVersion: cluster.open-cluster-management.io/v1
+kind: ManagedCluster
+metadata:
+  name: {{ .ManagedClusterName }}
+  labels:
+    local-cluster: "true"
+    cloud: auto-detect
+    vendor: Openshift
+    name: {{ .ManagedClusterName }}
+spec:
+  hubAcceptsClient: true

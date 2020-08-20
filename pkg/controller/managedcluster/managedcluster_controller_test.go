@@ -6,6 +6,7 @@ import (
 	"context"
 	"os"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -48,6 +49,16 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 	testManagedCluster := &clusterv1.ManagedCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: managedClusterNameReconcile,
+		},
+		Spec: clusterv1.ManagedClusterSpec{},
+	}
+
+	testManagedClusterHub := &clusterv1.ManagedCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: managedClusterNameReconcile,
+			Labels: map[string]string{
+				"local-cluster": "true",
+			},
 		},
 		Spec: clusterv1.ManagedClusterSpec{},
 	}
@@ -164,6 +175,25 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 			fields: fields{
 				client: fake.NewFakeClientWithScheme(testscheme,
 					testManagedCluster,
+					tokenSecret,
+					imagePullSecret,
+					testInfraConfig,
+				),
+				scheme: testscheme,
+			},
+			args: args{
+				request: req,
+			},
+			want: reconcile.Result{
+				Requeue: false,
+			},
+			wantErr: false,
+		},
+		{
+			name: "success self import",
+			fields: fields{
+				client: fake.NewFakeClientWithScheme(testscheme,
+					testManagedClusterHub,
 					tokenSecret,
 					imagePullSecret,
 					testInfraConfig,
@@ -334,6 +364,21 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 						t.Error("Manifestwork exist with a offline cluster")
 					} else if err != nil && !checkOffLine(managedCluster) {
 						t.Error("Manifestwork doesn't exist with an online cluster")
+					}
+				}
+				if v, ok := managedCluster.GetLabels()["local-cluster"]; ok {
+					b, err := strconv.ParseBool(v)
+					if err != nil {
+						t.Error(err)
+					}
+					if b {
+						ns := &corev1.Namespace{}
+						err := r.client.Get(context.TODO(), types.NamespacedName{
+							Name: "open-cluster-management-agent",
+						}, ns)
+						if err != nil {
+							t.Error(err)
+						}
 					}
 				}
 			}

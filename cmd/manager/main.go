@@ -24,9 +24,6 @@ import (
 	ocinfrav1 "github.com/openshift/api/config/v1"
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 
-	// "github.com/operator-framework/operator-sdk/internal/util/k8sutil"
-
-	// kubemetrics "github.com/operator-framework/operator-sdk/pkg/kube-metrics"
 	corev1 "k8s.io/api/core/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth" // Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.
 	"k8s.io/client-go/rest"
@@ -35,8 +32,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	ctrl "sigs.k8s.io/controller-runtime"
-	// "github.com/open-cluster-management/rcm-controller/pkg/apis"
-	// "github.com/open-cluster-management/rcm-controller/pkg/utils"
 )
 
 // Change below variables to serve metrics on different host or port.
@@ -45,10 +40,12 @@ var (
 	metricsPort         int = 8383
 	operatorMetricsPort int = 8686
 )
+
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
+
 var log = logf.Log.WithName("cmd")
 
 func main() {
