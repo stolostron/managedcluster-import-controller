@@ -36,6 +36,7 @@ import (
 
 const (
 	importClusterScenario                    = "import"
+	selfImportClusterScenario                = "self_import"
 	createClusterScenario                    = "create"
 	openClusterManagementAgentNamespace      = "open-cluster-management-agent"
 	openClusterManagementAgentAddonNamespace = "open-cluster-management-agent-addon"
@@ -74,7 +75,9 @@ var hubClientAPIExtension clientset.Interface
 var createTemplateProcessor *libgoapplier.TemplateProcessor
 var hubCreateApplier *libgoapplier.Applier
 var importTemplateProcessor *libgoapplier.TemplateProcessor
+var selfImportTemplateProcessor *libgoapplier.TemplateProcessor
 var hubImportApplier *libgoapplier.Applier
+var hubSelfImportApplier *libgoapplier.Applier
 
 var _ = BeforeSuite(func() {
 	var err error
@@ -98,6 +101,11 @@ var _ = BeforeSuite(func() {
 	Expect(err).To(BeNil())
 	hubImportApplier, err = libgoapplier.NewApplier(importTemplateProcessor, hubClientClient, nil, nil, nil)
 	Expect(err).To(BeNil())
+	selfImportTamlReader := libgoapplier.NewYamlFileReader(filepath.Join(libgooptions.TestOptions.Hub.ConfigDir, selfImportClusterScenario))
+	selfImportTemplateProcessor, err = libgoapplier.NewTemplateProcessor(selfImportTamlReader, &libgoapplier.Options{})
+	Expect(err).To(BeNil())
+	hubSelfImportApplier, err = libgoapplier.NewApplier(selfImportTemplateProcessor, hubClientClient, nil, nil, nil)
+	Expect(err).To(BeNil())
 })
 
 var _ = AfterSuite(func() {
@@ -112,27 +120,32 @@ func initVars() error {
 
 func waitClusterImported(hubClientDynamic dynamic.Interface, clusterName string) {
 	Eventually(func() error {
-		gvr := schema.GroupVersionResource{Group: "cluster.open-cluster-management.io", Version: "v1", Resource: "managedclusters"}
 		klog.V(1).Infof("Cluster %s: Wait %s to be imported...", clusterName, clusterName)
-		managedCluster, err := hubClientDynamic.Resource(gvr).Get(context.TODO(), clusterName, metav1.GetOptions{})
-		if err != nil {
-			klog.V(4).Info(err)
-			return err
-		}
-		var condition map[string]interface{}
-		condition, err = libgounstructuredv1.GetConditionByType(managedCluster, "ManagedClusterConditionAvailable")
-		if err != nil {
-			return err
-		}
-		klog.V(4).Infof("Cluster %s: Condition %#v", clusterName, condition)
-		if v, ok := condition["status"]; ok && v == string(metav1.ConditionTrue) {
-			return nil
-		} else {
-			klog.V(4).Infof("Cluster %s: Current is not equal to \"%s\" but \"%v\"", clusterName, metav1.ConditionTrue, v)
-			return fmt.Errorf("status is %s", v)
-		}
+		return checkClusterImported(hubClientDynamic, clusterName)
 	}).Should(BeNil())
 	klog.V(1).Infof("Cluster %s: imported", clusterName)
+}
+
+func checkClusterImported(hubClientDynamic dynamic.Interface, clusterName string) error {
+	klog.V(1).Infof("Cluster %s: Check %s is imported...", clusterName, clusterName)
+	gvr := schema.GroupVersionResource{Group: "cluster.open-cluster-management.io", Version: "v1", Resource: "managedclusters"}
+	managedCluster, err := hubClientDynamic.Resource(gvr).Get(context.TODO(), clusterName, metav1.GetOptions{})
+	if err != nil {
+		klog.V(4).Info(err)
+		return err
+	}
+	var condition map[string]interface{}
+	condition, err = libgounstructuredv1.GetConditionByType(managedCluster, "ManagedClusterConditionAvailable")
+	if err != nil {
+		return err
+	}
+	klog.V(4).Infof("Cluster %s: Condition %#v", clusterName, condition)
+	if v, ok := condition["status"]; ok && v == string(metav1.ConditionTrue) {
+		return nil
+	} else {
+		klog.V(4).Infof("Cluster %s: Current is not equal to \"%s\" but \"%v\"", clusterName, metav1.ConditionTrue, v)
+		return fmt.Errorf("status is %s", v)
+	}
 }
 
 func checkManifestWorksApplied(hubClientDynamic dynamic.Interface, clusterName string) {
