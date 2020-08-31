@@ -5,6 +5,7 @@ package managedcluster
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -16,9 +17,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
@@ -29,6 +32,7 @@ import (
 
 	libgometav1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1"
 	"github.com/open-cluster-management/library-go/pkg/applier"
+	"github.com/open-cluster-management/library-go/pkg/templateprocessor"
 	"github.com/open-cluster-management/rcm-controller/pkg/bindata"
 )
 
@@ -150,13 +154,45 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			IsController: true,
 			OwnerType:    &clusterv1.ManagedCluster{},
 		},
+		newManifestWorkStatusPredicate(),
 	)
 	if err != nil {
 		log.Error(err, "Fail to add Watch for ManifestWork to controller")
 		return err
 	}
-
 	return nil
+}
+
+func newManifestWorkStatusPredicate() predicate.Predicate {
+	return predicate.Predicate(predicate.Funcs{
+		GenericFunc: func(e event.GenericEvent) bool { return false },
+		CreateFunc:  func(e event.CreateEvent) bool { return false },
+		DeleteFunc:  func(e event.DeleteEvent) bool { return true },
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if e.MetaOld == nil {
+				log.Error(nil, "Update event has no old metadata", "event", e)
+				return false
+			}
+			if e.ObjectOld == nil {
+				log.Error(nil, "Update event has no old runtime object to update", "event", e)
+				return false
+			}
+			if e.ObjectNew == nil {
+				log.Error(nil, "Update event has no new runtime object for update", "event", e)
+				return false
+			}
+			if e.MetaNew == nil {
+				log.Error(nil, "Update event has no new metadata", "event", e)
+				return false
+			}
+			newManifestWork, okNew := e.ObjectNew.(*workv1.ManifestWork)
+			oldManifestWork, okOld := e.ObjectOld.(*workv1.ManifestWork)
+			if okNew && okOld {
+				return !reflect.DeepEqual(newManifestWork.Spec, oldManifestWork.Spec)
+			}
+			return false
+		},
+	})
 }
 
 // blank assignment to verify that ReconcileManagedCluster implements reconcile.Reconciler
@@ -226,12 +262,14 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		BootstrapServiceAccountName: instance.Name + bootstrapServiceAccountNamePostfix,
 	}
 
-	tp, err := applier.NewTemplateProcessor(bindata.NewBindataReader(), nil)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	a, err := applier.NewApplier(tp, r.client, instance, r.scheme, applier.DefaultKubernetesMerger)
+	a, err := applier.NewApplier(
+		bindata.NewBindataReader(),
+		nil,
+		r.client,
+		instance,
+		r.scheme,
+		applier.DefaultKubernetesMerger,
+		nil)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -464,16 +502,14 @@ func (r *ReconcileManagedCluster) selfManaged(managedCluster *clusterv1.ManagedC
 	if err != nil {
 		return err
 	}
-	//Apply CRDs
-	tp, err := applier.NewTemplateProcessor(
-		applier.NewYamlStringReader(string(yamlSecret.Data["crds.yaml"]),
-			applier.KubernetesYamlsDelimiter),
-		nil)
-	if err != nil {
-		return err
-	}
-
-	a, err := applier.NewApplier(tp, r.client, nil, nil, applier.DefaultKubernetesMerger)
+	a, err := applier.NewApplier(
+		templateprocessor.NewYamlStringReader(string(yamlSecret.Data["crds.yaml"]),
+			templateprocessor.KubernetesYamlsDelimiter),
+		nil,
+		r.client,
+		nil,
+		nil,
+		applier.DefaultKubernetesMerger, nil)
 	if err != nil {
 		return err
 	}
@@ -483,16 +519,15 @@ func (r *ReconcileManagedCluster) selfManaged(managedCluster *clusterv1.ManagedC
 		return err
 	}
 
-	//Apply Yamls
-	tp, err = applier.NewTemplateProcessor(
-		applier.NewYamlStringReader(string(yamlSecret.Data["import.yaml"]),
-			applier.KubernetesYamlsDelimiter),
+	a, err = applier.NewApplier(
+		templateprocessor.NewYamlStringReader(string(yamlSecret.Data["import.yaml"]),
+			templateprocessor.KubernetesYamlsDelimiter),
+		nil,
+		r.client,
+		nil,
+		nil,
+		applier.DefaultKubernetesMerger,
 		nil)
-	if err != nil {
-		return err
-	}
-
-	a, err = applier.NewApplier(tp, r.client, nil, nil, applier.DefaultKubernetesMerger)
 	if err != nil {
 		return err
 	}
