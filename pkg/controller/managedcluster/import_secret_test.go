@@ -13,7 +13,7 @@ import (
 	"github.com/ghodss/yaml"
 	. "github.com/onsi/gomega"
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
-	"github.com/open-cluster-management/library-go/pkg/applier"
+	"github.com/open-cluster-management/library-go/pkg/templateprocessor"
 	"github.com/open-cluster-management/rcm-controller/pkg/bindata"
 	ocinfrav1 "github.com/openshift/api/config/v1"
 	appsv1 "k8s.io/api/apps/v1"
@@ -471,7 +471,7 @@ func TestTemplating(t *testing.T) {
 		RegistrationOperatorImage: "RegistrationOperatorImage",
 	}
 
-	tp, err := applier.NewTemplateProcessor(bindata.NewBindataReader(), &applier.Options{})
+	tp, err := templateprocessor.NewTemplateProcessor(bindata.NewBindataReader(), &templateprocessor.Options{})
 	if err != nil {
 		t.Error(err)
 	}
@@ -511,7 +511,7 @@ func newBootstrapServiceAccount(managedCluster *clusterv1.ManagedCluster) (*core
 		BootstrapServiceAccountName: saNsN.Name,
 		ManagedClusterNamespace:     saNsN.Namespace,
 	}
-	tp, err := applier.NewTemplateProcessor(bindata.NewBindataReader(), &applier.Options{})
+	tp, err := templateprocessor.NewTemplateProcessor(bindata.NewBindataReader(), &templateprocessor.Options{})
 	if err != nil {
 		return nil, err
 	}

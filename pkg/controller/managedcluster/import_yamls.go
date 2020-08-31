@@ -14,7 +14,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
-	"github.com/open-cluster-management/library-go/pkg/applier"
+	"github.com/open-cluster-management/library-go/pkg/templateprocessor"
 	"github.com/open-cluster-management/rcm-controller/pkg/bindata"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -37,7 +37,7 @@ func generateImportYAMLs(
 	managedCluster *clusterv1.ManagedCluster,
 ) (yamls [][]byte, crds [][]byte, err error) {
 
-	tp, err := applier.NewTemplateProcessor(bindata.NewBindataReader(), &applier.Options{})
+	tp, err := templateprocessor.NewTemplateProcessor(bindata.NewBindataReader(), &templateprocessor.Options{})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -106,7 +106,7 @@ func generateImportYAMLs(
 		WorkImageName:             workImageName,
 	}
 
-	tp, err = applier.NewTemplateProcessor(bindata.NewBindataReader(), &applier.Options{})
+	tp, err = templateprocessor.NewTemplateProcessor(bindata.NewBindataReader(), &templateprocessor.Options{})
 	if err != nil {
 		return nil, nil, err
 	}

@@ -22,6 +22,7 @@ import (
 	libgodeploymentv1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1/deployment"
 	libgoapplier "github.com/open-cluster-management/library-go/pkg/applier"
 	libgoclient "github.com/open-cluster-management/library-go/pkg/client"
+	"github.com/open-cluster-management/library-go/pkg/templateprocessor"
 
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -52,7 +53,7 @@ var _ = Describe("Import cluster", func() {
 			klog.V(1).Infof("========================= Test cluster import cluster %s ===============================", clusterName)
 			managedClusterClient, err = libgoclient.NewDefaultClient(clusterKubeconfig, client.Options{})
 			Expect(err).To(BeNil())
-			managedClusterApplier, err = libgoapplier.NewApplier(importTemplateProcessor, managedClusterClient, nil, nil, libgoapplier.DefaultKubernetesMerger)
+			managedClusterApplier, err = libgoapplier.NewApplier(importTamlReader, &templateprocessor.Options{}, managedClusterClient, nil, nil, libgoapplier.DefaultKubernetesMerger, nil)
 			Expect(err).To(BeNil())
 			managedClusterKubeClient, err = libgoclient.NewDefaultKubeClient(clusterKubeconfig)
 			Expect(err).To(BeNil())
