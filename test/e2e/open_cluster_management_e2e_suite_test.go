@@ -32,6 +32,7 @@ import (
 	libgounstructuredv1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1/unstructured"
 	libgoapplier "github.com/open-cluster-management/library-go/pkg/applier"
 	libgoclient "github.com/open-cluster-management/library-go/pkg/client"
+	"github.com/open-cluster-management/library-go/pkg/templateprocessor"
 )
 
 const (
@@ -72,10 +73,9 @@ var hubClientClient client.Client
 var hubClient kubernetes.Interface
 var hubClientDynamic dynamic.Interface
 var hubClientAPIExtension clientset.Interface
-var createTemplateProcessor *libgoapplier.TemplateProcessor
+var createTemplateProcessor *templateprocessor.TemplateProcessor
 var hubCreateApplier *libgoapplier.Applier
-var importTemplateProcessor *libgoapplier.TemplateProcessor
-var selfImportTemplateProcessor *libgoapplier.TemplateProcessor
+var importTamlReader templateprocessor.TemplateReader
 var hubImportApplier *libgoapplier.Applier
 var hubSelfImportApplier *libgoapplier.Applier
 
@@ -91,20 +91,16 @@ var _ = BeforeSuite(func() {
 	Expect(err).To(BeNil())
 	hubClientClient, err = libgoclient.NewDefaultClient(kubeconfig, client.Options{})
 	Expect(err).To(BeNil())
-	createYamlReader := libgoapplier.NewYamlFileReader(filepath.Join(libgooptions.TestOptions.Hub.ConfigDir, createClusterScenario))
-	createTemplateProcessor, err = libgoapplier.NewTemplateProcessor(createYamlReader, &libgoapplier.Options{})
+	createYamlReader := templateprocessor.NewYamlFileReader(filepath.Join(libgooptions.TestOptions.Hub.ConfigDir, createClusterScenario))
+	createTemplateProcessor, err = templateprocessor.NewTemplateProcessor(createYamlReader, &templateprocessor.Options{})
 	Expect(err).To(BeNil())
-	hubCreateApplier, err = libgoapplier.NewApplier(createTemplateProcessor, hubClientClient, nil, nil, nil)
+	hubCreateApplier, err = libgoapplier.NewApplier(createYamlReader, &templateprocessor.Options{}, hubClientClient, nil, nil, nil, nil)
 	Expect(err).To(BeNil())
-	importTamlReader := libgoapplier.NewYamlFileReader(filepath.Join(libgooptions.TestOptions.Hub.ConfigDir, importClusterScenario))
-	importTemplateProcessor, err = libgoapplier.NewTemplateProcessor(importTamlReader, &libgoapplier.Options{})
+	importTamlReader = templateprocessor.NewYamlFileReader(filepath.Join(libgooptions.TestOptions.Hub.ConfigDir, importClusterScenario))
+	hubImportApplier, err = libgoapplier.NewApplier(importTamlReader, &templateprocessor.Options{}, hubClientClient, nil, nil, nil, nil)
 	Expect(err).To(BeNil())
-	hubImportApplier, err = libgoapplier.NewApplier(importTemplateProcessor, hubClientClient, nil, nil, nil)
-	Expect(err).To(BeNil())
-	selfImportTamlReader := libgoapplier.NewYamlFileReader(filepath.Join(libgooptions.TestOptions.Hub.ConfigDir, selfImportClusterScenario))
-	selfImportTemplateProcessor, err = libgoapplier.NewTemplateProcessor(selfImportTamlReader, &libgoapplier.Options{})
-	Expect(err).To(BeNil())
-	hubSelfImportApplier, err = libgoapplier.NewApplier(selfImportTemplateProcessor, hubClientClient, nil, nil, nil)
+	selfImportTamlReader := templateprocessor.NewYamlFileReader(filepath.Join(libgooptions.TestOptions.Hub.ConfigDir, selfImportClusterScenario))
+	hubSelfImportApplier, err = libgoapplier.NewApplier(selfImportTamlReader, &templateprocessor.Options{}, hubClientClient, nil, nil, nil, nil)
 	Expect(err).To(BeNil())
 })
 

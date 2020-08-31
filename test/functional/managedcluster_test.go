@@ -25,6 +25,7 @@ import (
 	libgoapplier "github.com/open-cluster-management/library-go/pkg/applier"
 	libgoclient "github.com/open-cluster-management/library-go/pkg/client"
 	libgoconfig "github.com/open-cluster-management/library-go/pkg/config"
+	"github.com/open-cluster-management/library-go/pkg/templateprocessor"
 
 	certificatesv1beta1 "k8s.io/api/certificates/v1beta1"
 	corev1 "k8s.io/api/core/v1"
@@ -58,7 +59,7 @@ const (
 var _ = Describe("Managedcluster", func() {
 	myTestNameSpace := "managedcluster-test"
 	BeforeEach(func() {
-		SetDefaultEventuallyTimeout(10 * time.Second)
+		SetDefaultEventuallyTimeout(20 * time.Second)
 		SetDefaultEventuallyPollingInterval(1 * time.Second)
 		// os.Setenv(registrationOperatorImageEnvVarName, "quay.io/open-cluster-management/registration-operator:latest")
 		// os.Setenv(registrationEnvVarImageName, "quay.io/open-cluster-management/registration:latest")
@@ -669,16 +670,23 @@ var _ = Describe("CSR Approval", func() {
 		SetDefaultEventuallyPollingInterval(1 * time.Second)
 		By("Creating managedCluster", func() {
 			managedCluster := newManagedcluster(myTestNameSpace)
-			createNewUnstructuredClusterScoped(clientHubDynamic, gvrManagedcluster, managedCluster, myTestNameSpace)
+			createNewUnstructuredClusterScoped(clientHubDynamic,
+				gvrManagedcluster,
+				managedCluster,
+				myTestNameSpace)
 		})
 		By("Create ClusterRole and ClusterRoleBinding", func() {
 			var clientHubApplier *libgoapplier.Applier
-			yamlReader := libgoapplier.NewYamlFileReader("resources")
-			templateProcessor, err := libgoapplier.NewTemplateProcessor(yamlReader, &libgoapplier.Options{})
-			Expect(err).To(BeNil())
+			yamlReader := templateprocessor.NewYamlFileReader("resources")
 			hubClientClient, err := libgoclient.NewDefaultClient("", client.Options{})
 			Expect(err).To(BeNil())
-			clientHubApplier, err = libgoapplier.NewApplier(templateProcessor, hubClientClient, nil, nil, nil)
+			clientHubApplier, err = libgoapplier.NewApplier(yamlReader,
+				&templateprocessor.Options{},
+				hubClientClient,
+				nil,
+				nil,
+				nil,
+				nil)
 			Expect(err).To(BeNil())
 			values := struct {
 				ClusterName string

@@ -25,6 +25,7 @@ import (
 	libgocrdv1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1/crd"
 	libgodeploymentv1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1/deployment"
 	libgoapplier "github.com/open-cluster-management/library-go/pkg/applier"
+	"github.com/open-cluster-management/library-go/pkg/templateprocessor"
 
 	"k8s.io/client-go/dynamic"
 	"k8s.io/klog"
@@ -337,7 +338,7 @@ func createCredentialsSecret(hubCreateApplier *libgoapplier.Applier, clusterName
 }
 
 func createInstallConfig(hubCreateApplier *libgoapplier.Applier,
-	createTemplateProcessor *libgoapplier.TemplateProcessor,
+	createTemplateProcessor *templateprocessor.TemplateProcessor,
 	clusterName,
 	cloud string) error {
 	baseDomain, err := libgooptions.GetBaseDomain(cloud)
