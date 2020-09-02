@@ -154,7 +154,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			IsController: true,
 			OwnerType:    &clusterv1.ManagedCluster{},
 		},
-		newManifestWorkStatusPredicate(),
+		newManifestWorkSpecPredicate(),
 	)
 	if err != nil {
 		log.Error(err, "Fail to add Watch for ManifestWork to controller")
@@ -163,7 +163,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	return nil
 }
 
-func newManifestWorkStatusPredicate() predicate.Predicate {
+func newManifestWorkSpecPredicate() predicate.Predicate {
 	return predicate.Predicate(predicate.Funcs{
 		GenericFunc: func(e event.GenericEvent) bool { return false },
 		CreateFunc:  func(e event.CreateEvent) bool { return false },

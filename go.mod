@@ -3,14 +3,7 @@ module github.com/open-cluster-management/rcm-controller
 go 1.13
 
 require (
-	cloud.google.com/go v0.49.0 // indirect
-	github.com/Azure/go-autorest/autorest v0.9.3-0.20191028180845-3492b2aff503 // indirect
-	github.com/Azure/go-autorest/autorest/adal v0.8.1-0.20191028180845-3492b2aff503 // indirect
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
-	github.com/go-logr/zapr v0.1.1 // indirect
-	github.com/golang/groupcache v0.0.0-20191027212112-611e8accdfc9 // indirect
-	github.com/gophercloud/gophercloud v0.6.0 // indirect
-	github.com/nats-io/nats-server/v2 v2.1.7 // indirect
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.1
 	github.com/open-cluster-management/api v0.0.0-20200602195039-a516cac2e038
@@ -18,20 +11,17 @@ require (
 	github.com/open-cluster-management/library-go v0.0.0-20200828173847-299c21e6c3fc
 	github.com/openshift/api v3.9.1-0.20191112184635-86def77f6f90+incompatible
 	github.com/openshift/hive v0.0.0-20200318152403-0c1ea8babb4e
-	github.com/pkg/errors v0.9.1 // indirect
-	github.com/prometheus/client_golang v1.5.1 // indirect
-	github.com/stretchr/testify v1.5.1 // indirect
-	go.uber.org/zap v1.14.1 // indirect
-	golang.org/x/lint v0.0.0-20191125180803-fdd1cda4f05f // indirect
-	golang.org/x/sys v0.0.0-20200625212154-ddb9806d33ae // indirect
-	golang.org/x/tools v0.0.0-20200403190813-44a64ad78b9b // indirect
-	google.golang.org/appengine v1.6.5 // indirect
+	github.com/operator-framework/operator-sdk v0.18.1
+	github.com/sclevine/agouti v3.0.0+incompatible // indirect
+	github.com/spf13/pflag v1.0.5
+	gopkg.in/yaml.v2 v2.3.0 // indirect
 	k8s.io/api v0.18.8
 	k8s.io/apiextensions-apiserver v0.18.6
 	k8s.io/apimachinery v0.18.8
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/cluster-registry v0.0.6 // indirect
 	k8s.io/klog v1.0.0
+	k8s.io/kubectl v0.18.4 // indirect
 	k8s.io/kubernetes v1.18.8
 	sigs.k8s.io/controller-runtime v0.6.2
 )
