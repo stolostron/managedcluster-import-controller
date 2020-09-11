@@ -35,6 +35,7 @@ const (
 func generateImportYAMLs(
 	client client.Client,
 	managedCluster *clusterv1.ManagedCluster,
+	excluded []string,
 ) (yamls [][]byte, crds [][]byte, err error) {
 
 	tp, err := templateprocessor.NewTemplateProcessor(bindata.NewBindataReader(), &templateprocessor.Options{})
@@ -110,7 +111,6 @@ func generateImportYAMLs(
 	if err != nil {
 		return nil, nil, err
 	}
-	excluded := []string{}
 	if !useImagePullSecret {
 		excluded = append(excluded, "klusterlet/image_pull_secret.yaml")
 	}
