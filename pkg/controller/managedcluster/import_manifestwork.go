@@ -40,7 +40,7 @@ func newManifestWorks(
 	managedCluster *clusterv1.ManagedCluster,
 ) (*workv1.ManifestWork, *workv1.ManifestWork, error) {
 
-	crds, yamls, err := generateImportYAMLs(client, managedCluster)
+	crds, yamls, err := generateImportYAMLs(client, managedCluster, []string{})
 	if err != nil {
 		return nil, nil, err
 	}
