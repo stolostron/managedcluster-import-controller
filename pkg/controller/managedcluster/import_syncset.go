@@ -41,7 +41,7 @@ func newSyncSets(
 	managedCluster *clusterv1.ManagedCluster,
 ) (*hivev1.SyncSet, *hivev1.SyncSet, error) {
 
-	crds, yamls, err := generateImportYAMLs(client, managedCluster)
+	crds, yamls, err := generateImportYAMLs(client, managedCluster, []string{})
 	if err != nil {
 		return nil, nil, err
 	}

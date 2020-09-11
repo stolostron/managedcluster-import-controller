@@ -274,10 +274,29 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, err
 	}
 
-	reqLogger.Info(fmt.Sprintf("CreateOrUpdateInPath hub/managedcluster/manifests: %s", instance.Name))
+	sa := &corev1.ServiceAccount{}
+	if err := r.client.Get(context.TODO(),
+		types.NamespacedName{
+			Name:      instance.Name + bootstrapServiceAccountNamePostfix,
+			Namespace: instance.Name,
+		},
+		sa); err != nil && errors.IsNotFound(err) {
+		reqLogger.Info(
+			fmt.Sprintf("Create hub/managedcluster/manifests/managedcluster-service-account.yaml: %s",
+				instance.Name))
+		err = a.CreateResource(
+			"hub/managedcluster/manifests/managedcluster-service-account.yaml",
+			config,
+		)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
+	reqLogger.Info(fmt.Sprintf("CreateOrUpdateInPath hub/managedcluster/manifests except sa: %s", instance.Name))
 	err = a.CreateOrUpdateInPath(
 		"hub/managedcluster/manifests",
-		nil,
+		[]string{"hub/managedcluster/manifests/managedcluster-service-account.yaml"},
 		false,
 		config,
 	)
@@ -502,8 +521,22 @@ func (r *ReconcileManagedCluster) selfManaged(managedCluster *clusterv1.ManagedC
 	if err != nil {
 		return err
 	}
+	excluded := make([]string, 0)
+	sa := &corev1.ServiceAccount{}
+	if err := r.client.Get(context.TODO(),
+		types.NamespacedName{
+			Name:      "klusterlet",
+			Namespace: klusterletNamespace,
+		}, sa); err == nil {
+		excluded = append(excluded, "klusterlet/service_account.yaml")
+	}
+	crds, yamls, err := generateImportYAMLs(r.client, managedCluster, excluded)
+	if err != nil {
+		return err
+	}
+
 	a, err := applier.NewApplier(
-		templateprocessor.NewYamlStringReader(string(yamlSecret.Data["crds.yaml"]),
+		templateprocessor.NewYamlStringReader(templateprocessor.ConvertArrayOfBytesToString(crds),
 			templateprocessor.KubernetesYamlsDelimiter),
 		nil,
 		r.client,
@@ -520,7 +553,7 @@ func (r *ReconcileManagedCluster) selfManaged(managedCluster *clusterv1.ManagedC
 	}
 
 	a, err = applier.NewApplier(
-		templateprocessor.NewYamlStringReader(string(yamlSecret.Data["import.yaml"]),
+		templateprocessor.NewYamlStringReader(templateprocessor.ConvertArrayOfBytesToString(yamls),
 			templateprocessor.KubernetesYamlsDelimiter),
 		nil,
 		r.client,
@@ -532,7 +565,7 @@ func (r *ReconcileManagedCluster) selfManaged(managedCluster *clusterv1.ManagedC
 		return err
 	}
 
-	err = a.CreateOrUpdateInPath(".", nil, false, nil)
+	err = a.CreateOrUpdateInPath(".", excluded, false, nil)
 	if err != nil {
 		return err
 	}

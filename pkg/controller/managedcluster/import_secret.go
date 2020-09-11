@@ -45,7 +45,7 @@ func newImportSecret(client client.Client, managedCluster *clusterv1.ManagedClus
 		return nil, err
 	}
 
-	crds, yamls, err := generateImportYAMLs(client, managedCluster)
+	crds, yamls, err := generateImportYAMLs(client, managedCluster, []string{})
 	if err != nil {
 		return nil, err
 	}

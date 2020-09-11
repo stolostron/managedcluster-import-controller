@@ -129,9 +129,9 @@ clean::
 ## Run the operator against the kubeconfig targeted cluster
 run: go-bindata
 	@if [[ "$(OPERATOR_SDK_VERSION)" < "v1.0.0" ]]; then \
-       operator-sdk run local  --watch-namespace="" --operator-flags="-v=5"; \
+       operator-sdk run local  --watch-namespace="" --operator-flags="-v=2"; \
     else \
-       go run cmd/manager/main.go -v=5; \
+       go run cmd/manager/main.go -v=2; \
     fi
 
 .PHONY: lint
