@@ -18,8 +18,8 @@ addons:
       secure: "GTwvxkCBtPYRBlJeucjiCVWvwIwZ3EBH3hu83q9yVSjjgbg6Ge2gFY/ocWLowyrAxynxzAChvlCvtEuEO44iuBFaKr38036q+4v6ysDQWO6AqU+NMThAhtGiJIJsJjtyxupgw+z6OUNFtQIIUlGYVPO7SZvj/Q7D7wYKTHgMxBRk/i9GYol/unZA6qThgI628KstPR5zEI5itW3qECJSzlm385K07c+XYCWb4FXc6zhlAHXvbT5mLzuW1xW2ipcxvRAP73N2ARUWhoDbUfiZsK0HaYwBN6MtLsCq+u6i5f8KcmwjNKqZxbldlOWtebQ3v2VHt67gUvdpMwPaqBoqKMauYoUpAtfvvhAmeWo4M58AwDn9FJuSdFyZfSjI7MLofrs2NKUdx/RETQWVYNXnKLI+AThgXZXTxDBdnW+g5nOYoYOUI9R7/i0gTnJekHQYdLbN2vkii2ryVrn8F7hp1wuLmrJKgD7lurbLkEsAZhxmFBoBVHtOhXzYkpC4DmNCanuDPmRmNm7ifasLDtU5C8cWRzDs/9L1HkCKbeaTTCiXD8dwJNH5n6jMAPMwYumJ5B2NucZQPLhngUGZ/Bw7aNO02zMKmx/BCBUN3hMfCSXLrmQgW6woPorcJ4sjs2fn5PrqsXeqK/yktdJjkkczDSC+aINZfmbq3UkL6gaL5Q4="
 
 stages:
-  - build
   - unit-test
+  - build
   - functional-test
   - release-ff
   - publish
@@ -30,33 +30,36 @@ before_script:
 
 jobs:
   include:
-    - stage: build
-      name: "Run all checks, unit tests, build and push image"
-      script:
-        - if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}"; fi;
-        - ./build/travis.sh   # to remove overhead and keep output clean
-        - make security/scans
-    - stage: build
-      name: "build and push coverage image"
-      if: type = pull_request
-      script:
-        - export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}-coverage"
-        - export COMPONENT_BUILD_COMMAND=${TRAVIS_BUILD_DIR}/build/build-coverage.sh 
-        - ./build/travis.sh
-    
-    - stage: build
-      name: "build and push e2e image"
-      if: type = pull_request
-      script:
-        - export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}-e2e"
-        - export COMPONENT_BUILD_COMMAND=${TRAVIS_BUILD_DIR}/build/build-e2e.sh 
-        - ./build/travis.sh
-
     - stage: unit-test
       name: "Run unit tests"
       script:
         - if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}"; fi; 
         - make sonar/go
+
+    - stage: build
+      name: "build image"
+      script:
+        - if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}"; fi;
+        - make component/init
+        - make check
+        - make component/build   # to remove overhead and keep output clean
+        - make component/push
+        - make security/scans
+    
+    - stage: build
+      name: "build and push coverage image"
+      script:
+        - if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}"; fi;
+        - make component/build-coverage
+        - make component/push-coverage
+      
+    # - stage: build
+    #   name: "build and push e2e image"
+    #   if: type = pull_request
+    #   script:
+    #   - if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}"; fi;
+    #   - make component/build-e2e
+    #   - make component/push-e2e
 
     - stage: functional-test
       name: "Run functional-test"
@@ -65,14 +68,6 @@ jobs:
         - make component/pull
         - make component/test/functional
     
-    - stage: functional-test
-      name: "Run functional-test for coverage"
-      if: type = pull_request
-      script:
-        - export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}-coverage"
-        - make component/pull
-        - make component/test/functional
-
     - stage: release-ff
       name: "Push commits to current release branch"
       if: type = push AND branch =~ /^master$/

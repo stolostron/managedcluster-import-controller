@@ -15,6 +15,7 @@ COPY $REMOTE_SOURCE $REMOTE_SOURCE_DIR/app/
 WORKDIR $REMOTE_SOURCE_DIR/app
 RUN git config --global url."https://${GITHUB_TOKEN}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
 RUN GOFLAGS="" go build ./cmd/manager
+RUN GOFLAGS="" go test -covermode=atomic -coverpkg=github.com/open-cluster-management/rcm-controller/pkg/... -c -tags testrunmain ./cmd/manager -o manager-coverage
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 RUN microdnf update
@@ -33,6 +34,7 @@ ENV OPERATOR=/usr/local/bin/rcm-controller \
 
 # install operator binary
 COPY --from=builder $REMOTE_SOURCE_DIR/app/manager ${OPERATOR}
+COPY --from=builder $REMOTE_SOURCE_DIR/app/manager-coverage ${OPERATOR}-coverage
 COPY --from=builder $REMOTE_SOURCE_DIR/app/build/bin /usr/local/bin
 COPY --from=builder $REMOTE_SOURCE_DIR/app/build/resources /usr/local/resources
 RUN  /usr/local/bin/user_setup

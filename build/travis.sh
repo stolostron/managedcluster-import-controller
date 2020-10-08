@@ -60,9 +60,10 @@ fold_start checks "Checks"
 announce make check
 fold_end checks
 
-fold_start unit "Unit Tests"
-announce make component/test/unit
-fold_end unit
+# The unit test are done from travis.yaml as a stage
+# fold_start unit "Unit Tests"
+# announce make component/test/unit
+# fold_end unit
 
 fold_start build "Image Build"
 announce make component/build

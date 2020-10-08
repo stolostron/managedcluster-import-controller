@@ -12,6 +12,12 @@ COMPONENT_TAG_EXTENSION ?= -${TRAVIS_COMMIT}
 # Build the details for the remote destination repo for the image
 COMPONENT_DOCKER_REPO ?= quay.io/open-cluster-management
 
+# Docker image coverage postfix
+DOCKER_IMAGE_COVERAGE_POSTFIX ?= -coverage
+
+# Docker image coverage postfix
+DOCKER_IMAGE_E2E_POSTFIX ?= -e2e
+
 # Variables Requred by different component types:
 #---helmoperator---#
 IMAGE_DEPLOYED_NAME ?=
@@ -20,6 +26,10 @@ IMAGE_DEPLOYED_NAME ?=
 COMPONENT_INIT_COMMAND ?= ${COMPONENT_SCRIPTS_PATH}/install-dependencies.sh
 # The command to run to execute a build
 COMPONENT_BUILD_COMMAND ?= ${COMPONENT_SCRIPTS_PATH}/build.sh
+# The command to run to execute a build the image coverage
+COMPONENT_BUILD_COVERAGE_COMMAND ?= ${COMPONENT_SCRIPTS_PATH}/build-coverage.sh
+# The command to run to execute a build the image e2e
+COMPONENT_BUILD_E2E_COMMAND ?= ${COMPONENT_SCRIPTS_PATH}/build-e2e.sh
 # The command to run to execute unit tests
 COMPONENT_UNIT_TEST_COMMAND ?= ${COMPONENT_SCRIPTS_PATH}/run-unit-tests.sh
 # The command to run to execute functional tests
@@ -46,6 +56,20 @@ component/build: %build: %init
 	${COMPONENT_BUILD_COMMAND} ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}
 	@echo "Built the following image: ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}"
 
+.PHONY: component/build-coverage
+## Build the component
+component/build-coverage: %build-coverage: %init %build
+	@echo component/build-coverage
+	${COMPONENT_BUILD_COVERAGE_COMMAND} ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION} ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}${DOCKER_IMAGE_COVERAGE_POSTFIX}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}
+	@echo "Built the following image: ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}${DOCKER_IMAGE_COVERAGE_POSTFIX}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}"
+
+.PHONY: component/build-e2e
+## Build the component
+component/build-e2e: %build-e2e: %init
+	@echo component/build-e2e
+	${COMPONENT_BUILD_E2E_COMMAND} ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}${DOCKER_IMAGE_E2E_POSTFIX}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}
+	@echo "Built the following image: ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}${DOCKER_IMAGE_E2E_POSTFIX}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}"
+
 .PHONY: component/test/unit
 ## Execute component's unit tests
 component/test/unit: %test/unit:
@@ -61,8 +85,8 @@ component/test/functional: %test/functional:
 	$(call assert-set,COMPONENT_NAME)
 	$(call assert-set,COMPONENT_VERSION)
 	@echo component/test/functional
-	${COMPONENT_FUNCTIONAL_TEST_COMMAND} ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}
-	@echo "Run FUNCTIONAL Tests on the following image: ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}"
+	#Provide image and image coverage to allow the developer to use either one while running tests.
+	${COMPONENT_FUNCTIONAL_TEST_COMMAND} ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION} ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}${DOCKER_IMAGE_COVERAGE_POSTFIX}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}
 
 .PHONY: component/test/e2e
 ## Execute component's e2e tests
@@ -96,6 +120,28 @@ component/push: %push:
 	$(DOCKER) push ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}
 	@echo "Pushed the following image: ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}"
 
+.PHONY: component/push-coverage
+## Push the component to COMPONENT_DOCKER_REPO
+component/push-coverage: %push-coverage:
+	$(call assert-set,DOCKER_USER)
+	$(call assert-set,DOCKER_PASS)
+	$(call assert-set,COMPONENT_NAME)
+	$(call assert-set,COMPONENT_VERSION)
+	$(DOCKER) login ${COMPONENT_DOCKER_REPO} -u ${DOCKER_USER} -p ${DOCKER_PASS}
+	$(DOCKER) push ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}${DOCKER_IMAGE_COVERAGE_POSTFIX}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}
+	@echo "Pushed the following image: ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}${DOCKER_IMAGE_COVERAGE_POSTFIX}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}"
+
+.PHONY: component/push-e2e
+## Push the component to COMPONENT_DOCKER_REPO
+component/push-e2e: %push-e2e:
+	$(call assert-set,DOCKER_USER)
+	$(call assert-set,DOCKER_PASS)
+	$(call assert-set,COMPONENT_NAME)
+	$(call assert-set,COMPONENT_VERSION)
+	$(DOCKER) login ${COMPONENT_DOCKER_REPO} -u ${DOCKER_USER} -p ${DOCKER_PASS}
+	$(DOCKER) push ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}${DOCKER_IMAGE_E2E_POSTFIX}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}
+	@echo "Pushed the following image: ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}${DOCKER_IMAGE_E2E_POSTFIX}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}"
+
 .PHONY: component/tag
 ## Tag the component into COMPONENT_NEWTAG
 component/tag: %tag:
@@ -118,4 +164,3 @@ component/pull: %pull:
 	$(DOCKER) login ${COMPONENT_DOCKER_REPO} -u ${DOCKER_USER} -p ${DOCKER_PASS}
 	$(DOCKER) pull ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}
 	@echo "Pulled the following image: ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}"
-

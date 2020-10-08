@@ -1,21 +1,39 @@
-FROM openshift/origin-release:golang-1.13 as builder
+ARG DOCKER_BASE_IMAGE
+
+FROM $DOCKER_BASE_IMAGE
 
 ARG REMOTE_SOURCE
 ARG REMOTE_SOURCE_DIR
 ARG GITHUB_TOKEN
 
-ENV USE_VENDORIZED_BUILD_HARNESS=true
-ENV COMPONENT_NAME=rcm-controller
-ENV COMPONENT_VERSION=1.0
-#RUN yum install -y tar gzip make which
+ENV OPERATOR=/usr/local/bin/rcm-controller \
+    USER_UID=1001 \
+    USER_NAME=rcm-controller \
+    KLUSTERLET_CRD_FILE=/usr/local/resources/agent.open-cluster-management.io_v1beta1_klusterlet_crd.yaml
 
-COPY $REMOTE_SOURCE $REMOTE_SOURCE_DIR/app/
-WORKDIR $REMOTE_SOURCE_DIR/app
-RUN git config --global url."https://${GITHUB_TOKEN}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
-RUN GOFLAGS="" go test -covermode=atomic -coverpkg=github.com/open-cluster-management/rcm-controller/pkg/... -c -tags testrunmain ./cmd/manager -o manager
-
-FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
+USER root
+# Install unzip
+RUN microdnf -y install unzip
+RUN microdnf -y install procps
 RUN microdnf update
+
+# install operator binary
+RUN cp ${OPERATOR}-coverage ${OPERATOR}
+# install aws cli
+RUN	curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.0.30.zip" -o "awscliv2.zip";
+RUN	unzip awscliv2.zip;
+RUN	./aws/install;
+RUN rm awscliv2.zip
+RUN rm -rf aws
+
+# install kubectl
+RUN curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
+RUN chmod +x ./kubectl
+RUN mv ./kubectl /usr/local/bin/kubectl
+
+USER ${USER_UID}
+
+ENTRYPOINT ["/usr/local/bin/entrypoint-coverage"]
 
 ARG VCS_REF
 ARG VCS_URL
@@ -23,21 +41,6 @@ ARG IMAGE_NAME
 ARG IMAGE_DESCRIPTION
 ARG ARCH_TYPE
 ARG REMOTE_SOURCE_DIR
-
-ENV OPERATOR=/usr/local/bin/rcm-controller \
-    USER_UID=1001 \
-    USER_NAME=rcm-controller \
-    KLUSTERLET_CRD_FILE=/usr/local/resources/agent.open-cluster-management.io_v1beta1_klusterlet_crd.yaml
-
-# install operator binary
-COPY --from=builder $REMOTE_SOURCE_DIR/app/manager ${OPERATOR}
-COPY --from=builder $REMOTE_SOURCE_DIR/app/build/bin /usr/local/bin
-COPY --from=builder $REMOTE_SOURCE_DIR/app/build/resources /usr/local/resources
-RUN  /usr/local/bin/user_setup
-
-ENTRYPOINT ["/usr/local/bin/entrypoint-coverage"]
-
-USER ${USER_UID}
 
 LABEL com.redhat.component="rcm-controller-container" \
       name="rhacm1-tech-preview/rcm-controller-rhel8" \
