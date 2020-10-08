@@ -19,6 +19,7 @@ manifest_filename=$1
 new_filename=$2
 dictionary_filename=$3
 
+echo Current directory: $PWD
 echo Incoming manfiest filename: $manifest_filename
 echo Creating shad manfiest filename: $new_filename
 

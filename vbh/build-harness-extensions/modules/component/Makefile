@@ -58,7 +58,7 @@ component/build: %build: %init
 
 .PHONY: component/build-coverage
 ## Build the component
-component/build-coverage: %build-coverage: %init %build
+component/build-coverage: %build-coverage: %build
 	@echo component/build-coverage
 	${COMPONENT_BUILD_COVERAGE_COMMAND} ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION} ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}${DOCKER_IMAGE_COVERAGE_POSTFIX}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}
 	@echo "Built the following image: ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}${DOCKER_IMAGE_COVERAGE_POSTFIX}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}"
@@ -87,6 +87,8 @@ component/test/functional: %test/functional:
 	@echo component/test/functional
 	#Provide image and image coverage to allow the developer to use either one while running tests.
 	${COMPONENT_FUNCTIONAL_TEST_COMMAND} ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION} ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}${DOCKER_IMAGE_COVERAGE_POSTFIX}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}
+	@echo "Run FUNCTIONAL Tests on the following image: ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}"
+	@echo "or image (depending on the run-functional-tests.sh implementation): ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}${DOCKER_IMAGE_COVERAGE_POSTFIX}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}"
 
 .PHONY: component/test/e2e
 ## Execute component's e2e tests
@@ -121,7 +123,7 @@ component/push: %push:
 	@echo "Pushed the following image: ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}"
 
 .PHONY: component/push-coverage
-## Push the component to COMPONENT_DOCKER_REPO
+### Push the component's coverage image to COMPONENT_DOCKER_REPO
 component/push-coverage: %push-coverage:
 	$(call assert-set,DOCKER_USER)
 	$(call assert-set,DOCKER_PASS)
@@ -132,7 +134,7 @@ component/push-coverage: %push-coverage:
 	@echo "Pushed the following image: ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}${DOCKER_IMAGE_COVERAGE_POSTFIX}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}"
 
 .PHONY: component/push-e2e
-## Push the component to COMPONENT_DOCKER_REPO
+## Push the component's e2e testing image to COMPONENT_DOCKER_REPO
 component/push-e2e: %push-e2e:
 	$(call assert-set,DOCKER_USER)
 	$(call assert-set,DOCKER_PASS)
@@ -164,3 +166,4 @@ component/pull: %pull:
 	$(DOCKER) login ${COMPONENT_DOCKER_REPO} -u ${DOCKER_USER} -p ${DOCKER_PASS}
 	$(DOCKER) pull ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}
 	@echo "Pulled the following image: ${COMPONENT_DOCKER_REPO}/${COMPONENT_NAME}:${COMPONENT_VERSION}${COMPONENT_TAG_EXTENSION}"
+

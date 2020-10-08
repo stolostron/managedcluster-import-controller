@@ -1,0 +1,5 @@
+  platform:
+    gcp:
+      credentialsSecretRef:
+        name: __CLUSTERPOOL_GCP_CREDS_NAME__
+      region: __CLUSTERPOOL_GCP_REGION__

@@ -1,0 +1,12 @@
+apiVersion: hive.openshift.io/v1
+kind: ClusterPool
+metadata:
+  name: __CLUSTERPOOL_NAME__
+  namespace: __CLUSTERPOOL_HOST_NAMESPACE__
+spec:
+  baseDomain: __CLUSTERPOOL_BASE_DOMAIN__
+  imageSetRef:
+    name: __CLUSTERPOOL_IMAGESET_NAME__
+  size: __CLUSTERPOOL_SIZE__
+  pullSecretRef:
+    name: __CLUSTERPOOL_PULL_SECRET_NAME__
