@@ -1,0 +1,6 @@
+  platform:
+    azure:
+      baseDomainResourceGroupName: __CLUSTERPOOL_AZURE_BASE_DOMAIN_RESOURCE_GROUP_NAME__
+      credentialsSecretRef:
+        name: __CLUSTERPOOL_AZURE_CREDS_NAME__
+      region: __CLUSTERPOOL_AZURE_REGION__
