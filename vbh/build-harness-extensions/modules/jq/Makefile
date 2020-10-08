@@ -11,7 +11,7 @@ JQ ?= $(BUILD_HARNESS_PATH)/vendor/jq
 jq/install: %install:
 	@[ -x $(JQ) ] || ( \
 		echo "Installing JQ $(JQ_VERSION) ($(JQ_PLATFORM)$(JQ_ARCH)) from $(JQ_URL)" && \
-		curl '-#' -fL -o $(JQ) $(JQ_URL) && \
+		curl '-#' -s -fL -o $(JQ) $(JQ_URL) && \
 		chmod +x $(JQ) \
 		)
 	$(JQ) --version

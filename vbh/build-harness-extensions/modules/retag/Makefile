@@ -29,11 +29,11 @@ retag/quay: %quay:
 	$(call assert-set,RETAG_QUAY_COMPONENT_TAG)
 	$(call assert-set,PIPELINE_MANIFEST_ORG)
 	@$(SELF) jq/install > /dev/null
-	@$(eval RETAG_QUAY_SHA := $(shell $(CURL) -X GET -H "Authorization: Bearer ${QUAY_TOKEN}" "https://quay.io/api/v1/repository/${PIPELINE_MANIFEST_ORG}/${COMPONENT_NAME}/tag/?onlyActiveTags=true&specificTag=${RETAG_QUAY_COMPONENT_TAG}" | $(JQ) -r .tags[0].manifest_digest))
+	@$(eval RETAG_QUAY_SHA := $(shell $(CURL) --fail --silent --show-error -X GET -H "Authorization: Bearer ${QUAY_TOKEN}" "https://quay.io/api/v1/repository/${PIPELINE_MANIFEST_ORG}/${COMPONENT_NAME}/tag/?onlyActiveTags=true&specificTag=${RETAG_QUAY_COMPONENT_TAG}" | $(JQ) -r .tags[0].manifest_digest))
 	@if [ "${RETAG_QUAY_SHA}" == "null" ] ;then (echo "Tag ${RETAG_QUAY_COMPONENT_TAG} doesn't exist"; exit 1) ; fi
 	@if [ "${RETAG_DRY_RUN}" == "true" ]; \
 	then echo "Tag ${RETAG_QUAY_COMPONENT_TAG} exists"; \
-	else $(CURL) -X PUT -H "Authorization: Bearer ${QUAY_TOKEN}" "https://quay.io/api/v1/repository/${PIPELINE_MANIFEST_ORG}/${COMPONENT_NAME}/tag/${RETAG_SNAPSHOT_NAME}" -H "Content-Type: application/json" --data '{"manifest_digest": "${RETAG_QUAY_SHA}"}' ; \
+	else $(CURL) --silent --show-error -X PUT -H "Authorization: Bearer ${QUAY_TOKEN}" "https://quay.io/api/v1/repository/${PIPELINE_MANIFEST_ORG}/${COMPONENT_NAME}/tag/${RETAG_SNAPSHOT_NAME}" -H "Content-Type: application/json" --data '{"manifest_digest": "${RETAG_QUAY_SHA}"}' ; \
 	fi
 
 # Add a tag in github for this commit sha
@@ -47,15 +47,15 @@ retag/git: %git:
 	$(call assert-set,RETAG_SNAPSHOT_NAME)
 	$(call assert-set,RETAG_REPO)
 	@if [ "${RETAG_DRY_RUN}" == "true" ]; \
-	then $(CURL) --fail --output /dev/null -L -X GET -H "Authorization: token ${GITHUB_TOKEN}" "https://api.github.com/repos/${RETAG_REPO}/git/commits/${RETAG_GITHUB_SHA}"; \
-	else $(CURL) -L -X POST -H "Authorization: token ${GITHUB_TOKEN}" "https://api.github.com/repos/${RETAG_REPO}/git/refs" --data '{ "ref": "refs/tags/${RETAG_SNAPSHOT_NAME}", "sha": "${RETAG_GITHUB_SHA}" }'; \
+	then $(CURL) --silent --show-error --fail --output /dev/null -L -X GET -H "Authorization: token ${GITHUB_TOKEN}" "https://api.github.com/repos/${RETAG_REPO}/git/commits/${RETAG_GITHUB_SHA}"; \
+	else $(CURL) --silent --show-error -L -X POST -H "Authorization: token ${GITHUB_TOKEN}" "https://api.github.com/repos/${RETAG_REPO}/git/refs" --data '{ "ref": "refs/tags/${RETAG_SNAPSHOT_NAME}", "sha": "${RETAG_GITHUB_SHA}" }'; \
 	fi
 
 .PHONY: retag/getquaysha
 ## Get the quay sha256 out of the manifest digest
 retag/getquaysha: %getquaysha:
 	@$(shell $(SELF) jq/install > /dev/null)
-	@$(CURL) --fail --silent -X GET -H "Authorization: Bearer ${QUAY_TOKEN}" "https://quay.io/api/v1/repository/${PIPELINE_MANIFEST_ORG}/${COMPONENT_NAME}/tag/?onlyActiveTags=true&specificTag=${RETAG_QUAY_COMPONENT_TAG}" | $(JQ) -r .tags[0].manifest_digest
+	@$(CURL) --fail --silent --show-error -X GET -H "Authorization: Bearer ${QUAY_TOKEN}" "https://quay.io/api/v1/repository/${PIPELINE_MANIFEST_ORG}/${COMPONENT_NAME}/tag/?onlyActiveTags=true&specificTag=${RETAG_QUAY_COMPONENT_TAG}" | $(JQ) -r .tags[0].manifest_digest
 
 .PHONY: retag/shabuild
 ## Build/package with inserted digest sha256 values

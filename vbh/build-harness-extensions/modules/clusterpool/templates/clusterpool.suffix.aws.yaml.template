@@ -1,0 +1,5 @@
+  platform:
+    aws:
+      credentialsSecretRef:
+        name: __CLUSTERPOOL_AWS_CRED_NAME__
+      region: __CLUSTERPOOL_AWS_REGION__

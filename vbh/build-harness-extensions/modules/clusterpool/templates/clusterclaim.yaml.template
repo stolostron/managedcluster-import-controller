@@ -1,0 +1,11 @@
+apiVersion: hive.openshift.io/v1
+kind: ClusterClaim
+metadata:
+  name: __CLUSTERPOOL_CLUSTER_CLAIM__
+  namespace: __CLUSTERPOOL_HOST_NAMESPACE__
+spec:
+  clusterPoolName: __CLUSTERPOOL_NAME__
+  subjects:
+    - kind: Group
+      apiGroup: rbac.authorization.k8s.io
+      name: 'system:masters'
