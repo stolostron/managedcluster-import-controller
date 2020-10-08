@@ -14,8 +14,7 @@ set -e
 CURR_FOLDER_PATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 KIND_KUBECONFIG="${CURR_FOLDER_PATH}/../kind_kubeconfig.yaml"
 export KUBECONFIG=${KIND_KUBECONFIG}
-export DOCKER_IMAGE_AND_TAG=${1}
-
+export DOCKER_IMAGE_AND_TAG=${2}
 
 if [ -z $DOCKER_USER ]; then
    echo "DOCKER_USER is not defined!"
@@ -115,12 +114,6 @@ if [ `find $FUNCT_TEST_COVERAGE -prune -empty 2>/dev/null` ]; then
   echo "no coverage files found. skipping"
 else
   echo "merging coverage files"
-  # report coverage if has any coverage files
-  # rm -rf "${FUNCT_TEST_COVERAGE}"
-  # mkdir -p "${FUNCT_TEST_COVERAGE}"
-
-  # cp "$FUNCT_TEST_TMPDIR/output/"* "${FUNCT_TEST_COVERAGE}/"
-  # ls -l "${FUNCT_TEST_COVERAGE}/"
 
   gocovmerge "${FUNCT_TEST_COVERAGE}/"* >> "${FUNCT_TEST_COVERAGE}/cover-functional.out"
   COVERAGE=$(go tool cover -func="${FUNCT_TEST_COVERAGE}/cover-functional.out" | grep "total:" | awk '{ print $3 }' | sed 's/[][()><%]/ /g')
