@@ -5,6 +5,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -20,10 +21,11 @@ func TestRunMain(t *testing.T) {
 		sig := <-signalChannel
 		switch sig {
 		case os.Interrupt:
-			//handle SIGINT
+			fmt.Printf("Signal Interupt: %s", sig.String())
 			return
 		case syscall.SIGTERM:
 			//handle SIGTERM
+			fmt.Printf("Signal SIGTERM: %s", sig.String())
 			return
 		}
 	}()

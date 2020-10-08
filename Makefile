@@ -28,6 +28,8 @@ export KLUSTERLET_CRD_FILE      = $(PROJECT_DIR)/build/resources/agent.open-clus
 
 export COMPONENT_NAME ?= $(shell cat ./COMPONENT_NAME 2> /dev/null)
 export COMPONENT_VERSION ?= $(shell cat ./COMPONENT_VERSION 2> /dev/null)
+export SECURITYSCANS_IMAGE_NAME ?= $(shell cat ./COMPONENT_NAME 2> /dev/null)
+export SECURITYSCANS_IMAGE_VERSION ?= $(shell cat ./COMPONENT_VERSION 2> /dev/null)
 
 ## WARNING: OPERATOR-SDK - IMAGE_DESCRIPTION & DOCKER_BUILD_OPTS MUST NOT CONTAIN ANY SPACES
 export IMAGE_DESCRIPTION ?= RCM_Controller
@@ -35,6 +37,8 @@ export DOCKER_FILE        = $(BUILD_DIR)/Dockerfile
 export DOCKER_REGISTRY   ?= quay.io
 export DOCKER_NAMESPACE  ?= open-cluster-management
 export DOCKER_IMAGE      ?= $(COMPONENT_NAME)
+export DOCKER_IMAGE_COVERAGE_POSTFIX ?= -coverage
+export DOCKER_IMAGE_COVERAGE      ?= $(DOCKER_IMAGE)$(DOCKER_IMAGE_COVERAGE_POSTFIX)
 export DOCKER_BUILD_TAG  ?= latest
 export DOCKER_TAG        ?= $(shell whoami)
 export DOCKER_BUILD_OPTS  = --build-arg VCS_REF=$(VCS_REF) \
@@ -48,9 +52,12 @@ export DOCKER_BUILD_OPTS  = --build-arg VCS_REF=$(VCS_REF) \
 
 BEFORE_SCRIPT := $(shell build/before-make.sh)
 
-USE_VENDORIZED_BUILD_HARNESS ?=
+USE_VENDORIZED_BUILD_HARNESS ?= true
+# export BUILD_HARNESS_EXTENSIONS_ORG ?= itdove
+# export BUILD_HARNESS_EXTENSIONS_BRANCH ?= code_coverage
 
 ifndef USE_VENDORIZED_BUILD_HARNESS
+# -include $(shell curl -s -H 'Authorization: token ${GITHUB_TOKEN}' -H 'Accept: application/vnd.github.v4.raw' -L https://api.github.com/repos/itdove/build-harness-extensions/contents/templates/Makefile.build-harness-bootstrap?branch=code_coverage -o .build-harness-bootstrap; echo .build-harness-bootstrap)
 -include $(shell curl -s -H 'Authorization: token ${GITHUB_TOKEN}' -H 'Accept: application/vnd.github.v4.raw' -L https://api.github.com/repos/open-cluster-management/build-harness-extensions/contents/templates/Makefile.build-harness-bootstrap -o .build-harness-bootstrap; echo .build-harness-bootstrap)
 else
 -include vbh/.build-harness-vendorized
@@ -107,11 +114,11 @@ build: component/build
 
 .PHONY: build-coverage
 build-coverage:
-	$(SELF) component/build COMPONENT_TAG_EXTENSION=-coverage COMPONENT_BUILD_COMMAND=$(PWD)/build/build-coverage.sh 
+	$(SELF) component/build-coverage
 
 .PHONY: build-e2e
 build-e2e:
-	$(SELF) component/build COMPONENT_TAG_EXTENSION=-e2e COMPONENT_BUILD_COMMAND=$(PWD)/build/build-e2e.sh 
+	$(SELF) component/build-e2e
 
 .PHONY: copyright-check
 copyright-check:
@@ -129,9 +136,9 @@ clean::
 ## Run the operator against the kubeconfig targeted cluster
 run: go-bindata
 	@if [[ "$(OPERATOR_SDK_VERSION)" < "v1.0.0" ]]; then \
-       operator-sdk run local  --watch-namespace="" --operator-flags="-v=2"; \
+       operator-sdk run local  --watch-namespace="" --operator-flags="-v=4"; \
     else \
-       go run cmd/manager/main.go -v=2; \
+       go run cmd/manager/main.go -v=4; \
     fi
 
 .PHONY: lint
@@ -174,14 +181,12 @@ kind-cluster-setup: install-fake-crds
 	kubectl apply -f test/functional/resources/fake_infrastructure_cr.yaml
 	kubectl apply -f test/functional/resources/fake_apiserver_cr.yaml
 
-
 .PHONY: functional-test
 functional-test:
 	# ginkgo -tags functional -v --focus="(.*)import-managedcluster(.*)" --slowSpecThreshold=10 test/managedcluster-import-controller-test -- -v=5
 	# ginkgo -tags functional -v --slowSpecThreshold=10 --focus="(.*)approve-csr(.*)" test/functional -- -v=1
-	ginkgo -tags functional -v --slowSpecThreshold=30 test/functional -- -v=1
+	ginkgo -tags functional -v --slowSpecThreshold=30 --focus="import-hub/with-manifestwork" test/functional -- -v=5
 
 .PHONY: functional-test-full
-functional-test-full: 
-	$(SELF) component/build COMPONENT_TAG_EXTENSION=-coverage COMPONENT_BUILD_COMMAND=$(PWD)/build/build-coverage.sh 
-	$(SELF) component/test/functional COMPONENT_TAG_EXTENSION=-coverage
+functional-test-full: component/build 
+	$(SELF) component/test/functional
