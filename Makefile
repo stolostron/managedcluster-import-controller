@@ -52,7 +52,7 @@ export DOCKER_BUILD_OPTS  = --build-arg VCS_REF=$(VCS_REF) \
 
 BEFORE_SCRIPT := $(shell build/before-make.sh)
 
-USE_VENDORIZED_BUILD_HARNESS ?= true
+USE_VENDORIZED_BUILD_HARNESS ?= 
 # export BUILD_HARNESS_EXTENSIONS_ORG ?= itdove
 # export BUILD_HARNESS_EXTENSIONS_BRANCH ?= code_coverage
 
