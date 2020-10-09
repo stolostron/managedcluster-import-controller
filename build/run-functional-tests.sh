@@ -79,8 +79,6 @@ kind get kubeconfig --name functional-test > ${KIND_KUBECONFIG}
 # load image if possible
 kind load docker-image ${DOCKER_IMAGE_AND_TAG} --name=functional-test -v 99 || echo "failed to load image locally, will use imagePullSecret"
 
-# create namespace
-
 echo "install cluster"
 # setup cluster
 make kind-cluster-setup

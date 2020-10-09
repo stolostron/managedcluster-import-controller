@@ -17,7 +17,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 
-	libgooptions "github.com/open-cluster-management/library-e2e-go/pkg/options"
 	libgocrdv1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1/crd"
 	libgodeploymentv1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1/deployment"
 
@@ -26,16 +25,9 @@ import (
 
 var _ = Describe("Import cluster", func() {
 
-	var err error
-	var managedClustersForManualImport map[string]string
 	var wasAlreadyImported bool
 
 	BeforeEach(func() {
-		managedClustersForManualImport, err = libgooptions.GetManagedClusterKubeConfigs(libgooptions.TestOptions.ManagedClusters.ConfigDir, importClusterScenario)
-		Expect(err).To(BeNil())
-		if len(managedClustersForManualImport) == 0 {
-			Skip("Manual import not executed because no managed cluster defined for import")
-		}
 		SetDefaultEventuallyTimeout(15 * time.Minute)
 		SetDefaultEventuallyPollingInterval(10 * time.Second)
 	})
