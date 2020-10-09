@@ -13,23 +13,19 @@ ENV OPERATOR=/usr/local/bin/rcm-controller \
 
 USER root
 # Install unzip
-RUN microdnf -y install unzip
-RUN microdnf -y install procps
 RUN microdnf update
+RUN microdnf -y install unzip
 
 # install operator binary
 RUN cp ${OPERATOR}-coverage ${OPERATOR}
+
 # install aws cli
-RUN	curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.0.30.zip" -o "awscliv2.zip";
-RUN	unzip awscliv2.zip;
-RUN	./aws/install;
-RUN rm awscliv2.zip
-RUN rm -rf aws
+RUN	curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.0.30.zip" -o "awscliv2.zip" && \
+unzip awscliv2.zip && ./aws/install && rm awscliv2.zip && rm -rf aws
 
 # install kubectl
-RUN curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
-RUN chmod +x ./kubectl
-RUN mv ./kubectl /usr/local/bin/kubectl
+RUN curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl" && \
+chmod +x ./kubectl && mv ./kubectl /usr/local/bin/kubectl
 
 USER ${USER_UID}
 
