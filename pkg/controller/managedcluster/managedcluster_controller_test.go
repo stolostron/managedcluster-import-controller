@@ -36,6 +36,12 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 	os.Setenv("DEFAULT_IMAGE_PULL_SECRET", imagePullSecretNameReconcile)
 	os.Setenv("POD_NAMESPACE", managedClusterNameReconcile)
 
+	clusterNamespace := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: managedClusterNameReconcile,
+		},
+	}
+
 	testInfraConfig := &ocinfrav1.Infrastructure{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "cluster",
@@ -139,6 +145,7 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWork{})
 	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWorkList{})
 	testscheme.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{}, &ocinfrav1.APIServer{})
+	testscheme.AddKnownTypes(corev1.SchemeGroupVersion, &corev1.Namespace{})
 
 	req := reconcile.Request{
 		types.NamespacedName{
@@ -174,6 +181,7 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 			name: "success without clusterDeployment",
 			fields: fields{
 				client: fake.NewFakeClientWithScheme(testscheme,
+					clusterNamespace,
 					testManagedCluster,
 					tokenSecret,
 					imagePullSecret,
@@ -193,6 +201,7 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 			name: "success self import",
 			fields: fields{
 				client: fake.NewFakeClientWithScheme(testscheme,
+					clusterNamespace,
 					testManagedClusterHub,
 					tokenSecret,
 					imagePullSecret,
@@ -212,6 +221,7 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 			name: "success without clusterDeployment and online",
 			fields: fields{
 				client: fake.NewFakeClientWithScheme(testscheme,
+					clusterNamespace,
 					testManagedClusterOnLine,
 					tokenSecret,
 					imagePullSecret,
@@ -231,6 +241,7 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 			name: "success with clusterDeployment",
 			fields: fields{
 				client: fake.NewFakeClientWithScheme(testscheme,
+					clusterNamespace,
 					testManagedCluster,
 					tokenSecret,
 					clusterDeployment,
@@ -251,6 +262,7 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 			name: "Error missing imagePullSecret",
 			fields: fields{
 				client: fake.NewFakeClientWithScheme(testscheme,
+					clusterNamespace,
 					testManagedCluster,
 					tokenSecret,
 					testInfraConfig,
@@ -336,6 +348,17 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 				if _, ok := importSecret.Data[crdsYAMLKey]; !ok {
 					t.Error("Import secret doesn't contains a place holder " + crdsYAMLKey)
 				}
+				ns := &corev1.Namespace{}
+				if err := r.client.Get(context.TODO(),
+					types.NamespacedName{
+						Name: testManagedCluster.Name,
+					}, ns); err != nil {
+					t.Error("Namespace not found")
+				}
+				if v, ok := ns.GetLabels()[clusterLabel]; !ok || v != testManagedCluster.Name {
+					t.Error("Cluster label not found in namespace")
+				}
+
 				clusterDeploymentGet := &hivev1.ClusterDeployment{}
 				err = r.client.Get(context.TODO(),
 					types.NamespacedName{
