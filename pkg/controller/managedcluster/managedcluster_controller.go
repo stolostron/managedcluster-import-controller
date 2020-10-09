@@ -42,6 +42,7 @@ const (
 	registrationFinalizer   = "cluster.open-cluster-management.io/api-resource-cleanup"
 )
 
+const clusterLabel = "cluster.open-cluster-management.io/managedCluster"
 const selfManagedLabel = "local-cluster"
 
 var log = logf.Log.WithName("controller_managedcluster")
@@ -249,6 +250,27 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 
 	if err := r.client.Update(context.TODO(), instance); err != nil {
 		return reconcile.Result{}, err
+	}
+
+	//Add clusterLabel on ns if missing
+	ns := &corev1.Namespace{}
+	if err := r.client.Get(
+		context.TODO(),
+		types.NamespacedName{Namespace: "", Name: instance.Name},
+		ns); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	labels := ns.GetLabels()
+	if labels == nil {
+		labels = make(map[string]string)
+	}
+	if _, ok := labels[clusterLabel]; !ok {
+		labels[clusterLabel] = instance.Name
+		ns.SetLabels(labels)
+		if err := r.client.Update(context.TODO(), ns); err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 
 	//Create the values for the yamls
