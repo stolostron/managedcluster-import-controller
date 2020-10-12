@@ -499,7 +499,7 @@ func checkManagedClusterCreation(
 			}
 			klog.V(5).Info("Finalizer not yet added")
 			return false
-		}).Should(BeTrue())
+		}, 20, 4).Should(BeTrue())
 	})
 	When("ManagedCluster created, wait for Cluster role", func() {
 		klog.V(1).Infof("Wait Cluster Role %s", clusterRolePrefix+name)
