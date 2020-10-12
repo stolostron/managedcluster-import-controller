@@ -82,7 +82,6 @@ kind load docker-image ${DOCKER_IMAGE_AND_TAG} --name=functional-test -v 99 || e
 echo "install cluster"
 # setup cluster
 make kind-cluster-setup
-
 for dir in overlays/test/* ; do
   echo ">>>>>>>>>>>>>>>Executing test: $dir"
 
@@ -101,9 +100,11 @@ for dir in overlays/test/* ; do
   make functional-test
 
   echo "remove deployment"
-  kubectl delete -k "$dir"
-
+  kubectl delete --wait=true -k "$dir"
 done;
+
+echo "Wait 10 sec for copy to AWS"
+sleep 10
 
 echo "delete cluster"
 kind delete cluster --name functional-test
