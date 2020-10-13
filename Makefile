@@ -1,8 +1,6 @@
 
 SHELL := /bin/bash
 
-export OPERATOR_SDK_VERSION=$(shell operator-sdk version | cut -d '"'  -f 2)
-
 export BINDATA_TEMP_DIR := $(shell mktemp -d)
 
 export GIT_COMMIT      = $(shell git rev-parse --short HEAD)
@@ -135,7 +133,7 @@ clean::
 .PHONY: run
 ## Run the operator against the kubeconfig targeted cluster
 run: go-bindata
-	@if [[ "$(OPERATOR_SDK_VERSION)" < "v1.0.0" ]]; then \
+	@if [[ "$(shell operator-sdk version | cut -d '"'  -f 2)" < "v1.0.0" ]]; then \
        operator-sdk run local  --watch-namespace="" --operator-flags="-v=4"; \
     else \
        go run cmd/manager/main.go -v=4; \
