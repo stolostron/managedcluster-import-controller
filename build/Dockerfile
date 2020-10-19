@@ -26,6 +26,7 @@ ARG IMAGE_NAME
 ARG IMAGE_DESCRIPTION
 ARG ARCH_TYPE
 ARG REMOTE_SOURCE_DIR
+ARG BUILD_HARNESS_EXTENSIONS_PROJECT
 
 ENV OPERATOR=/usr/local/bin/rcm-controller \
     USER_UID=1001 \
@@ -35,6 +36,9 @@ ENV OPERATOR=/usr/local/bin/rcm-controller \
 # install operator binary
 COPY --from=builder $REMOTE_SOURCE_DIR/app/manager ${OPERATOR}
 COPY --from=builder $REMOTE_SOURCE_DIR/app/manager-coverage ${OPERATOR}-coverage
+COPY --from=builder \
+    $REMOTE_SOURCE_DIR/app/$BUILD_HARNESS_EXTENSIONS_PROJECT/modules/component/bin/component/coverage-entrypoint-func.sh \
+    /usr/local/bin/coverage-entrypoint-func.sh
 COPY --from=builder $REMOTE_SOURCE_DIR/app/build/bin /usr/local/bin
 COPY --from=builder $REMOTE_SOURCE_DIR/app/build/resources /usr/local/resources
 RUN  /usr/local/bin/user_setup

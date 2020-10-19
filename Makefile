@@ -39,18 +39,10 @@ export DOCKER_IMAGE_COVERAGE_POSTFIX ?= -coverage
 export DOCKER_IMAGE_COVERAGE      ?= $(DOCKER_IMAGE)$(DOCKER_IMAGE_COVERAGE_POSTFIX)
 export DOCKER_BUILD_TAG  ?= latest
 export DOCKER_TAG        ?= $(shell whoami)
-export DOCKER_BUILD_OPTS  = --build-arg VCS_REF=$(VCS_REF) \
-	--build-arg VCS_URL=$(GIT_REMOTE_URL) \
-	--build-arg IMAGE_NAME=$(DOCKER_IMAGE) \
-	--build-arg IMAGE_DESCRIPTION=$(IMAGE_DESCRIPTION) \
-	--build-arg ARCH_TYPE=$(ARCH_TYPE) \
-	--build-arg REMOTE_SOURCE=. \
-	--build-arg REMOTE_SOURCE_DIR=/remote-source \
-	--build-arg GITHUB_TOKEN=$(GITHUB_TOKEN)
 
 BEFORE_SCRIPT := $(shell build/before-make.sh)
 
-USE_VENDORIZED_BUILD_HARNESS ?= 
+USE_VENDORIZED_BUILD_HARNESS ?=
 # export BUILD_HARNESS_EXTENSIONS_ORG ?= itdove
 # export BUILD_HARNESS_EXTENSIONS_BRANCH ?= code_coverage
 
@@ -60,6 +52,16 @@ ifndef USE_VENDORIZED_BUILD_HARNESS
 else
 -include vbh/.build-harness-vendorized
 endif
+
+export DOCKER_BUILD_OPTS  = --build-arg VCS_REF=$(VCS_REF) \
+	--build-arg VCS_URL=$(GIT_REMOTE_URL) \
+	--build-arg IMAGE_NAME=$(DOCKER_IMAGE) \
+	--build-arg IMAGE_DESCRIPTION=$(IMAGE_DESCRIPTION) \
+	--build-arg ARCH_TYPE=$(ARCH_TYPE) \
+	--build-arg REMOTE_SOURCE=. \
+	--build-arg REMOTE_SOURCE_DIR=/remote-source \
+	--build-arg BUILD_HARNESS_EXTENSIONS_PROJECT=${BUILD_HARNESS_EXTENSIONS_PROJECT} \
+	--build-arg GITHUB_TOKEN=$(GITHUB_TOKEN)
 
 # Only use git commands if it exists
 ifdef GIT
