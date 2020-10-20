@@ -11,7 +11,7 @@ if ! whoami &>/dev/null; then
   fi
 fi
 
-FILENAME=$HOSTNAME-`date +%s%N`.out
+FILENAME=$HOSTNAME-$(basename $OPERATOR)-`date +%s%N`.out
 FILEPATH=/tmp/coverage/$FILENAME
 mkdir -p /tmp/coverage
 
