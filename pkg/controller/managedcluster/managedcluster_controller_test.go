@@ -333,6 +333,11 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 				if managedCluster.Finalizers[0] != managedClusterFinalizer {
 					t.Errorf("Expects finalizer %s got %s ", managedClusterFinalizer, managedCluster.Finalizers[0])
 				}
+				if v, ok := managedCluster.GetLabels()["name"]; !ok {
+					t.Errorf("Expected to have the label 'name'")
+				} else if v != managedCluster.Name {
+					t.Errorf("Expect label name equal to %s but got %s", managedCluster.Name, v)
+				}
 				importSecret := &corev1.Secret{}
 				err = r.client.Get(context.TODO(),
 					types.NamespacedName{
