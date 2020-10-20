@@ -248,6 +248,16 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 	reqLogger.Info(fmt.Sprintf("AddFinalizer to instance: %s", instance.Name))
 	libgometav1.AddFinalizer(instance, managedClusterFinalizer)
 
+	instanceLabels := instance.GetLabels()
+	if instanceLabels == nil {
+		instanceLabels = make(map[string]string)
+	}
+
+	if _, ok := instanceLabels["name"]; !ok {
+		instanceLabels["name"] = instance.Name
+		instance.SetLabels(instanceLabels)
+	}
+
 	if err := r.client.Update(context.TODO(), instance); err != nil {
 		return reconcile.Result{}, err
 	}
