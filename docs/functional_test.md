@@ -16,7 +16,7 @@
 
 ## Run Functional Test Locally with KinD
 1. Submit your branch changes in a draft PR.  Once travis is done building, you can reference the image.
-2. Lookup the image postfix for rcm-controller image and export it.  This is the suffix value after the version (e.g. `2.1.0`).  If you are pulling the image from quay, the list of images is at https://quay.io/repository/open-cluster-management/rcm-controller?tab=tags:
+2. Lookup the image postfix for rcm-controller image and export it.  This is the suffix value after the version (e.g. `2.2.0`).  If you are pulling the image from quay, the list of images is at https://quay.io/repository/open-cluster-management/rcm-controller?tab=tags:
    ```
     export COMPONENT_TAG_EXTENSION=-SNAPSHOT-2020-04-01-20-49-00
    ```
