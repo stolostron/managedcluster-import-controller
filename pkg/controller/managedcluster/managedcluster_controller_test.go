@@ -740,3 +740,83 @@ func TestReconcileManagedCluster_deleteNamespace(t *testing.T) {
 		})
 	}
 }
+
+func Test_newCustomClient(t *testing.T) {
+	secretA := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-secret",
+			Namespace: "test-namespace",
+		},
+		Data: map[string][]byte{
+			"data": []byte("fake-data-a"),
+		},
+		Type: corev1.SecretTypeOpaque,
+	}
+	secretB := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-secret",
+			Namespace: "test-namespace",
+		},
+		Data: map[string][]byte{
+			"data": []byte("fake-data-b"),
+		},
+		Type: corev1.SecretTypeOpaque,
+	}
+	configmapA := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-configmap",
+			Namespace: "test-namespace",
+		},
+		Data: map[string]string{
+			"data": "fake-cm-data-a",
+		},
+	}
+	configmapB := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "test-configmap",
+			Namespace: "test-namespace",
+		},
+		Data: map[string]string{
+			"data": "fake-cm-data-b",
+		},
+	}
+	fakeClientA := fake.NewFakeClient(secretA, configmapA)
+	fakeClientB := fake.NewFakeClient(secretB, configmapB)
+	testClient := newCustomClient(fakeClientA, fakeClientB)
+
+	t.Run("get secret should use apireader", func(t *testing.T) {
+		gotSecret := &corev1.Secret{}
+		if err := testClient.Get(context.TODO(), types.NamespacedName{
+			Name:      "test-secret",
+			Namespace: "test-namespace",
+		}, gotSecret); err != nil {
+			t.Errorf("custom client Get() got %v but wanted nil", err)
+		} else if !reflect.DeepEqual(gotSecret.Data["data"], []byte("fake-data-b")) {
+			t.Errorf("custom client Get() got %v but wanted %v", gotSecret.Data["data"], []byte("fake-data-b"))
+		}
+	})
+	t.Run("get configmap should use default client", func(t *testing.T) {
+		gotConfigmap := &corev1.ConfigMap{}
+		if err := testClient.Get(context.TODO(), types.NamespacedName{
+			Name:      "test-configmap",
+			Namespace: "test-namespace",
+		}, gotConfigmap); err != nil {
+			t.Errorf("custom client Get() got %v but wanted nil", err)
+		} else if !reflect.DeepEqual(gotConfigmap.Data["data"], "fake-cm-data-a") {
+			t.Errorf("custom client Get() got %v but wanted %v", gotConfigmap.Data["data"], []byte("fake-cm-data-a"))
+		}
+	})
+	t.Run("can still delete (with default client)", func(t *testing.T) {
+		gotSecret := &corev1.Secret{}
+		if err := testClient.Delete(context.TODO(), secretA); err != nil {
+			t.Errorf("custom client Delete() got %v but wanted nil", err)
+		}
+		if err := fakeClientA.Get(context.TODO(), types.NamespacedName{
+			Name:      "test-secret",
+			Namespace: "test-namespace",
+		}, gotSecret); !errors.IsNotFound(err) {
+			t.Errorf("default client Get() got %v but wanted not found", err)
+		}
+	})
+
+}
