@@ -11,4 +11,4 @@ rules:
 - apiGroups: ["cluster.open-cluster-management.io"]
   resources: ["managedclusters"]
   resourceNames: ["{{ .ManagedClusterName }}"]
-  verbs: ["get"]
+  verbs: ["get", "create"]
