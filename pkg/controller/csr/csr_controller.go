@@ -14,16 +14,9 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller"
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	libgoclient "github.com/open-cluster-management/library-go/pkg/client"
 	certificatesv1beta1 "k8s.io/api/certificates/v1beta1"
 )
 
@@ -38,21 +31,6 @@ var log = logf.Log.WithName("controller_csr")
 * USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
 * business logic.  Delete these comments after modifying this file.*
  */
-
-// Add creates a new ManagedCluster Controller and adds it to the Manager. The Manager will set fields on the Controller
-// and Start it when the Manager is Started.
-func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
-}
-
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	kubeClient, err := libgoclient.NewDefaultKubeClient("")
-	if err != nil {
-		kubeClient = nil
-	}
-	return &ReconcileCSR{client: mgr.GetClient(), kubeClient: kubeClient, scheme: mgr.GetScheme()}
-}
 
 func getClusterName(csr *certificatesv1beta1.CertificateSigningRequest) (clusterName string) {
 	for label, v := range csr.GetObjectMeta().GetLabels() {
@@ -84,37 +62,6 @@ func csrPredicate(csr *certificatesv1beta1.CertificateSigningRequest) bool {
 	return clusterName != "" &&
 		getApprovalType(csr) == "" &&
 		validUsername(csr, clusterName)
-}
-
-// add adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
-	// Create a new controller
-	c, err := controller.New("csr-controller", mgr, controller.Options{Reconciler: r})
-	if err != nil {
-		return err
-	}
-
-	csrPredicateFuncs := predicate.Funcs{
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			return csrPredicate(e.ObjectNew.(*certificatesv1beta1.CertificateSigningRequest))
-		},
-		CreateFunc: func(e event.CreateEvent) bool {
-			return csrPredicate(e.Object.(*certificatesv1beta1.CertificateSigningRequest))
-		},
-	}
-
-	// Watch for changes to primary resource ManagedCluster
-	err = c.Watch(
-		&source.Kind{Type: &certificatesv1beta1.CertificateSigningRequest{}},
-		&handler.EnqueueRequestForObject{},
-		csrPredicateFuncs,
-	)
-
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // blank assignment to verify that ReconcileCSR implements reconcile.Reconciler
