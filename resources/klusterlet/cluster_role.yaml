@@ -36,3 +36,7 @@ rules:
 - apiGroups: ["operator.open-cluster-management.io"]
   resources: ["klusterlets/status"]
   verbs: ["update", "patch"]
+# Allow the registration-operator to list/update/patch appliedmanifestworks.
+- apiGroups: ["work.open-cluster-management.io"]
+  resources: ["appliedmanifestworks"]
+  verbs: ["list", "update", "patch"]
