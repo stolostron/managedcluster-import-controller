@@ -1,6 +1,0 @@
-apiVersion: cluster.open-cluster-management.io/v1
-kind: ManagedCluster
-metadata:
-  name: {{ .ManagedClusterName }}
-spec:
-  hubAcceptsClient: true
