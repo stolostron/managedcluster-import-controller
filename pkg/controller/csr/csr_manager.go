@@ -1,3 +1,4 @@
+// Copyright (c) 2020 Red Hat, Inc.
 package csr
 
 import (
@@ -57,4 +58,3 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	return nil
 }
-
