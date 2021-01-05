@@ -116,10 +116,6 @@ build: component/build
 build-coverage:
 	$(SELF) component/build-coverage
 
-.PHONY: build-e2e
-build-e2e:
-	$(SELF) component/build-e2e
-
 .PHONY: copyright-check
 copyright-check:
 	./build/copyright-check.sh $(TRAVIS_BRANCH)

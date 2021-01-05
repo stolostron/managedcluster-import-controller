@@ -53,14 +53,6 @@ jobs:
         - make component/build-coverage
         - make component/push-coverage
       
-    # - stage: build
-    #   name: "build and push e2e image"
-    #   if: type = pull_request
-    #   script:
-    #   - if [ "$TRAVIS_PULL_REQUEST" != "false" ]; then export COMPONENT_TAG_EXTENSION="-PR${TRAVIS_PULL_REQUEST}-${TRAVIS_COMMIT}"; fi;
-    #   - make component/build-e2e
-    #   - make component/push-e2e
-
     - stage: functional-test
       name: "Run functional-test"
       script:
