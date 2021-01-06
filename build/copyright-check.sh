@@ -25,7 +25,7 @@
 #Project start year
 origin_year=2016
 #Back up year if system time is null or incorrect
-back_up_year=2019
+back_up_year=2021
 #Current year
 current_year=$(date +"%Y")
 
@@ -46,7 +46,7 @@ fi
 ADDED_SINCE_1_MAR_2020=$(git log --name-status --pretty=oneline --since "1 Mar 2020" | egrep "^A\t" | awk '{print $2}' | sort | uniq |  grep -v -f <(sed 's/\([.|]\)/\\\1/g; s/\?/./g ; s/\*/.*/g' .copyrightignore))
 MODIFIED_SINCE_1_MAR_2020=$(diff --new-line-format="" --unchanged-line-format="" <(git log --name-status --pretty=oneline --since "1 Mar 2020" | egrep "^A\t|^M\t" | awk '{print $2}' | sort | uniq | grep -v -f <(sed 's/\([.|]\)/\\\1/g; s/\?/./g ; s/\*/.*/g' .copyrightignore)) <(git log --name-status --pretty=oneline --since "1 Mar 2020" | egrep "^A\t" | awk '{print $2}' | sort | uniq | grep -v -f <(sed 's/\([.|]\)/\\\1/g; s/\?/./g ; s/\*/.*/g' .copyrightignore)))
 ADDED_SINCE_1_JAN_2021=$(git log --name-status --pretty=oneline --since "1 JAN 2021" | egrep "^A\t" | awk '{print $2}' | sort | uniq |  grep -v -f <(sed 's/\([.|]\)/\\\1/g; s/\?/./g ; s/\*/.*/g' .copyrightignore))
-OLDER_GIT_FILES=$(git log --name-status --pretty=oneline | egrep "^A\t|^M\t" | awk '{print $2}' | sort | uniq |  grep -v -f <(sed 's/\([.|]\)/\\\1/g; s/\?/./g ; s/\*/.*/g' .copyrightignore))
+ADDED_UNTIL_1_MAR_2020=$(git log --name-status --pretty=oneline --until "1 MAR 2020" | egrep "^A\t" | awk '{print $2}' | sort | uniq |  grep -v -f <(sed 's/\([.|]\)/\\\1/g; s/\?/./g ; s/\*/.*/g' .copyrightignore))
 
 lic_ibm_identifier=" (c) Copyright IBM Corporation"
 lic_redhat_identifier_2020=" Copyright (c) 2020 Red Hat, Inc."
@@ -118,15 +118,11 @@ for f in $FILES_TO_SCAN; do
   elif [[ "${ADDED_SINCE_1_MAR_2020}" == *"$f"* ]]; then
     printf " ---> Added since 01/03/2020\n"
     must_have_redhat_license_2020=true
-    flag_ibm_license=true
-  elif [[ "${MODIFIED_SINCE_1_MAR_2020}" == *"$f"* ]]; then
-    printf " ---> Modified since 01/03/2020\n"
+    flag_ibm_license=false
+  elif [[ "${ADDED_UNTIL_1_MAR_2020}" == *"$f"* ]]; then
+    printf " ---> Add until 01/03/2020\n"
     must_have_redhat_license_2020=true
     must_have_ibm_license=true
-  elif [[ "${OLDER_GIT_FILES}" == *"$f"* ]]; then
-    printf " ---> File older than 01/03/2020\n"
-    must_have_ibm_license=true
-    flag_redhat_license=true
   else
     # Default case, could be new file not yet in git(?) - only expect Red Hat license
     must_have_redhat_license_2020=true

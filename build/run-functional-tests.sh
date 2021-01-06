@@ -89,7 +89,7 @@ for dir in overlays/test/* ; do
 
   # patch image
   echo "Wait rollout"
-  kubectl rollout status -n open-cluster-management deployment managedcluster-import-controller --timeout=90s
+  kubectl rollout status -n open-cluster-management deployment managedcluster-import-controller --timeout=180s
   
   echo "run functional test..."
   make functional-test
