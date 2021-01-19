@@ -5,6 +5,8 @@ package managedcluster
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/base64"
 	"fmt"
 	"os"
@@ -145,6 +147,52 @@ func getImagePullSecret(client client.Client) (*corev1.Secret, error) {
 	return secret, nil
 }
 
+// getValidCertificatesFromURL dial to serverURL and get certificates
+// only will return certificates signed by trusted ca and verified (with verifyOptions)
+// if certificates are all signed by unauthorized party, will return nil
+// rootCAs is for tls handshake verification
+func getValidCertificatesFromURL(serverURL string, rootCAs *x509.CertPool) ([]*x509.Certificate, error) {
+	u, err := url.Parse(serverURL)
+	if err != nil {
+		log.Error(err, "failed to parse url: "+serverURL)
+		return nil, err
+	}
+	log.Info("getting certificate of " + u.Hostname() + ":" + u.Port())
+	conf := &tls.Config{
+		// server should support tls1.2
+		MinVersion: tls.VersionTLS12,
+		ServerName: u.Hostname(),
+	}
+	if rootCAs != nil {
+		conf.RootCAs = rootCAs
+	}
+
+	conn, err := tls.Dial("tcp", u.Hostname()+":"+u.Port(), conf)
+
+	if err != nil {
+		log.Error(err, "failed to dial "+serverURL)
+		// ignore certificate signed by unknown authority error
+		if _, ok := err.(x509.UnknownAuthorityError); ok {
+			return nil, nil
+		}
+		return nil, err
+	}
+	defer conn.Close()
+	certs := conn.ConnectionState().PeerCertificates
+	retCerts := []*x509.Certificate{}
+	opt := x509.VerifyOptions{Roots: rootCAs}
+	// check certificates
+	for _, cert := range certs {
+		if _, err := cert.Verify(opt); err == nil {
+			log.V(2).Info("Adding a valid certificate")
+			retCerts = append(retCerts, cert)
+		} else {
+			log.V(2).Info("Skipping an invalid certificate")
+		}
+	}
+	return retCerts, nil
+}
+
 func createKubeconfigData(client client.Client, bootStrapSecret *corev1.Secret) ([]byte, error) {
 	saToken := bootStrapSecret.Data["token"]
 
@@ -153,7 +201,6 @@ func createKubeconfigData(client client.Client, bootStrapSecret *corev1.Secret) 
 		return nil, err
 	}
 
-	insecureSkipTLSVerify := false
 	var certData []byte
 	if u, err := url.Parse(kubeAPIServer); err == nil {
 		apiServerCertSecretName, err := getKubeAPIServerSecretName(client, u.Hostname())
@@ -168,18 +215,37 @@ func createKubeconfigData(client client.Client, bootStrapSecret *corev1.Secret) 
 			certData = apiServerCert
 		}
 	}
-	if _, ok := bootStrapSecret.Data["ca.crt"]; ok && certData == nil {
-		certData = bootStrapSecret.Data["ca.crt"]
-	}
 	if len(certData) == 0 {
-		insecureSkipTLSVerify = true
+		// fallback to service account token ca.crt
+		if _, ok := bootStrapSecret.Data["ca.crt"]; ok {
+			certData = bootStrapSecret.Data["ca.crt"]
+		}
+		// check if it's roks
+		// if it's ocp && it's on ibm cloud, we treat it as roks
+		isROKS, err := checkIsIBMCloud(client)
+		if err != nil {
+			return nil, err
+		}
+		if isROKS {
+			// ROKS should have a certificate that is signed by trusted CA
+			if certs, err := getValidCertificatesFromURL(kubeAPIServer, nil); err != nil {
+				// should retry if failed to connect to apiserver
+				log.Error(err, fmt.Sprintf("failed to connect to %s", kubeAPIServer))
+				return nil, err
+			} else if len(certs) > 0 {
+				// simply don't give any certs as the apiserver is using certs signed by known CAs
+				certData = nil
+			} else {
+				log.Info("No additional valid certificate found for APIserver. Skipping.")
+			}
+		}
 	}
 
 	bootstrapConfig := clientcmdapi.Config{
 		// Define a cluster stanza based on the bootstrap kubeconfig.
 		Clusters: map[string]*clientcmdapi.Cluster{"default-cluster": {
 			Server:                   kubeAPIServer,
-			InsecureSkipTLSVerify:    insecureSkipTLSVerify,
+			InsecureSkipTLSVerify:    false,
 			CertificateAuthorityData: certData,
 		}},
 		// Define auth based on the obtained client cert.
