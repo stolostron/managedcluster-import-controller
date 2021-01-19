@@ -231,3 +231,55 @@ func Test_getKubeAPIServerCertificate(t *testing.T) {
 		})
 	}
 }
+
+func Test_checkIsIBMCloud(t *testing.T) {
+	s := scheme.Scheme
+	nodeIBM := &corev1.Node{
+		Spec: corev1.NodeSpec{
+			ProviderID: "ibm",
+		},
+	}
+	nodeOther := &corev1.Node{}
+
+	type args struct {
+		client client.Client
+		name   string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    bool
+		wantErr bool
+	}{
+		{
+			name: "is normal ocp",
+			args: args{
+				client: fake.NewFakeClientWithScheme(s, []runtime.Object{nodeOther}...),
+				name:   "test-secret",
+			},
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name: "is ibm",
+			args: args{
+				client: fake.NewFakeClientWithScheme(s, []runtime.Object{nodeIBM}...),
+				name:   "test-secret",
+			},
+			want:    true,
+			wantErr: false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := checkIsIBMCloud(tt.args.client)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("checkIsROKS() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("checkIsROKS() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
