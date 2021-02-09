@@ -1,5 +1,22 @@
 <!-- START doctoc generated TOC please keep comment here to allow auto update -->
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
+# managedcluster import controller
+
+ManagedCluster import controller supports import, detach of ManagedCluster for ACM.
+
+## Community, discussion, contribution, and support
+
+Check the [CONTRIBUTING Doc](CONTRIBUTING.md) for how to contribute to the repo.
+
+Check the [DEVELOPMENT Doc](docs/development.md) for how to build and make changes.
+
+------
+
+## Getting Started
+
+This is a guide on how to build and deploy klusterlet addon controller from code.
+
 **Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
 
 - [managedcluster-import-controller](#managedcluster-import-controller)
@@ -33,11 +50,5 @@ current functionality of `managedcluster-import-controller`
 
 [Run functional test](docs/functional_test.md)
 
-## Community, discussion, contribution, and support
 
-Check the [DEVELOPMENT Doc](docs/development.md) for how to build and make changes.
-
-Check the [CONTRIBUTING Doc](CONTRIBUTING.md) for how to contribute to the repo.
-
-You can reach the maintainers of this by raising issues. Slack communication is coming soon
 
