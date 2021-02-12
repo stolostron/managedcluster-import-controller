@@ -76,7 +76,7 @@ deps: init component/init
 
 .PHONY: check
 ## Runs a set of required checks
-check: copyright-check go-bindata-check
+check: go-bindata-check
 
 .PHONY: test
 ## Runs go unit tests
@@ -115,10 +115,6 @@ build: component/build
 .PHONY: build-coverage
 build-coverage:
 	$(SELF) component/build-coverage
-
-.PHONY: copyright-check
-copyright-check:
-	./build/copyright-check.sh $(TRAVIS_BRANCH)
 
 .PHONY: clean
 ## Clean build-harness and remove Go generated build and test files
