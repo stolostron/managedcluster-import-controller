@@ -15,7 +15,7 @@ COPY $REMOTE_SOURCE $REMOTE_SOURCE_DIR/app/
 WORKDIR $REMOTE_SOURCE_DIR/app
 RUN git config --global url."https://${GITHUB_TOKEN}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
 RUN GOFLAGS="" go build ./cmd/manager
-RUN GOFLAGS="" go test -covermode=atomic -coverpkg=github.com/open-cluster-management/rcm-controller/pkg/... -c -tags testrunmain ./cmd/manager -o manager-coverage
+RUN GOFLAGS="" go test -covermode=atomic -coverpkg=github.com/open-cluster-management/managedcluster-import-controller/pkg/... -c -tags testrunmain ./cmd/manager -o manager-coverage
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 RUN microdnf update
