@@ -52,6 +52,7 @@ USE_VENDORIZED_BUILD_HARNESS ?=
 # else
 # -include vbh/.build-harness-vendorized
 # endif
+-include /opt/build-harness/Makefile.prow
 
 export DOCKER_BUILD_OPTS  = --build-arg VCS_REF=$(VCS_REF) \
 	--build-arg VCS_URL=$(GIT_REMOTE_URL) \
@@ -80,16 +81,12 @@ check: go-bindata-check
 
 .PHONY: test
 ## Runs go unit tests
-test: 
-	@build/run-unit-tests.sh
+test: component/test/unit
 
 .PHONY: go-bindata
 go-bindata:
 	@if which go-bindata > /dev/null; then \
 		echo "##### Updating go-bindata..."; \
-		cd $(mktemp -d) && GOSUMDB=off go get -u github.com/go-bindata/go-bindata/...; \
-	else \
-		echo "##### installing go-bindata..."; \
 		cd $(mktemp -d) && GOSUMDB=off go get -u github.com/go-bindata/go-bindata/...; \
 	fi
 	@go-bindata --version
@@ -99,9 +96,6 @@ go-bindata:
 go-bindata-check:
 	@if which go-bindata > /dev/null; then \
 		echo "##### Updating go-bindata..."; \
-		cd $(mktemp -d) && GOSUMDB=off go get -u github.com/go-bindata/go-bindata/...; \
-	else \
-		echo "##### installing go-bindata..."; \
 		cd $(mktemp -d) && GOSUMDB=off go get -u github.com/go-bindata/go-bindata/...; \
 	fi
 	@go-bindata --version
