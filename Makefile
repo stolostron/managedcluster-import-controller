@@ -43,15 +43,13 @@ export DOCKER_TAG        ?= $(shell whoami)
 BEFORE_SCRIPT := $(shell build/before-make.sh)
 
 USE_VENDORIZED_BUILD_HARNESS ?=
-# export BUILD_HARNESS_EXTENSIONS_ORG ?= itdove
-# export BUILD_HARNESS_EXTENSIONS_BRANCH ?= code_coverage
 
-ifndef USE_VENDORIZED_BUILD_HARNESS
-# -include $(shell curl -s -H 'Authorization: token ${GITHUB_TOKEN}' -H 'Accept: application/vnd.github.v4.raw' -L https://api.github.com/repos/itdove/build-harness-extensions/contents/templates/Makefile.build-harness-bootstrap?branch=code_coverage -o .build-harness-bootstrap; echo .build-harness-bootstrap)
--include $(shell curl -s -H 'Authorization: token ${GITHUB_TOKEN}' -H 'Accept: application/vnd.github.v4.raw' -L https://api.github.com/repos/open-cluster-management/build-harness-extensions/contents/templates/Makefile.build-harness-bootstrap -o .build-harness-bootstrap; echo .build-harness-bootstrap)
-else
--include vbh/.build-harness-vendorized
-endif
+# ifndef USE_VENDORIZED_BUILD_HARNESS
+# # -include $(shell curl -s -H 'Authorization: token ${GITHUB_TOKEN}' -H 'Accept: application/vnd.github.v4.raw' -L https://api.github.com/repos/itdove/build-harness-extensions/contents/templates/Makefile.build-harness-bootstrap?branch=code_coverage -o .build-harness-bootstrap; echo .build-harness-bootstrap)
+# -include $(shell curl -s -H 'Authorization: token ${GITHUB_TOKEN}' -H 'Accept: application/vnd.github.v4.raw' -L https://api.github.com/repos/open-cluster-management/build-harness-extensions/contents/templates/Makefile.build-harness-bootstrap -o .build-harness-bootstrap; echo .build-harness-bootstrap)
+# else
+# -include vbh/.build-harness-vendorized
+# endif
 
 export DOCKER_BUILD_OPTS  = --build-arg VCS_REF=$(VCS_REF) \
 	--build-arg VCS_URL=$(GIT_REMOTE_URL) \
@@ -80,21 +78,28 @@ check: go-bindata-check
 
 .PHONY: test
 ## Runs go unit tests
-test: component/test/unit
+test: 
+	@build/run-unit-tests.sh
 
 .PHONY: go-bindata
 go-bindata:
 	@if which go-bindata > /dev/null; then \
 		echo "##### Updating go-bindata..."; \
 		cd $(mktemp -d) && GOSUMDB=off go get -u github.com/go-bindata/go-bindata/...; \
+	else \
+		echo "##### installing go-bindata..."; \
+		cd $(mktemp -d) && GOSUMDB=off go get -u github.com/go-bindata/go-bindata/...; \
 	fi
 	@go-bindata --version
 	go-bindata -nometadata -pkg bindata -o pkg/bindata/bindata_generated.go -prefix resources/  resources/...
 
-.PHONY: gobindata-check
+.PHONY: go-bindata-check
 go-bindata-check:
 	@if which go-bindata > /dev/null; then \
 		echo "##### Updating go-bindata..."; \
+		cd $(mktemp -d) && GOSUMDB=off go get -u github.com/go-bindata/go-bindata/...; \
+	else \
+		echo "##### installing go-bindata..."; \
 		cd $(mktemp -d) && GOSUMDB=off go get -u github.com/go-bindata/go-bindata/...; \
 	fi
 	@go-bindata --version
@@ -108,17 +113,19 @@ go-bindata-check:
 	fi
 	@echo "##### go-bindata-check #### Success"
 
+## Builds controller binary
 .PHONY: build
-## Builds controller binary inside of an image
-build: component/build
+build:
+	go build -o build/_output/manager -mod=mod ./cmd/manager
 
+## Builds instructed controller binary for coverage report
 .PHONY: build-coverage
 build-coverage:
-	$(SELF) component/build-coverage
+	go test -covermode=atomic -coverpkg=github.com/open-cluster-management/managedcluster-import-controller/pkg/... -c -tags testrunmain ./cmd/manager -o build/_output/manager-coverage
 
 .PHONY: clean
 ## Clean build-harness and remove Go generated build and test files
-clean::
+clean:
 	@rm -rf $(BUILD_DIR)/_output
 	@[ "$(BUILD_HARNESS_PATH)" == '/' ] || \
 	 [ "$(BUILD_HARNESS_PATH)" == '.' ] || \
@@ -127,15 +134,14 @@ clean::
 .PHONY: run
 ## Run the operator against the kubeconfig targeted cluster
 run: go-bindata
-	@if [[ "$(shell operator-sdk version | cut -d '"'  -f 2)" < "v1.0.0" ]]; then \
-       operator-sdk run local  --watch-namespace="" --operator-flags="-v=4"; \
-    else \
-       go run cmd/manager/main.go -v=4; \
-    fi
+	go run cmd/manager/main.go -v=4
 
 .PHONY: lint
 ## Runs linter against go files
 lint:
+	@if ! which golangci-lint > /dev/null; then \
+		curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.23.6; \
+	fi
 	@echo "Running linting tool ..."
 	@GOGC=25 golangci-lint run --timeout 5m
 
