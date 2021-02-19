@@ -1,8 +1,7 @@
-FROM openshift/origin-release:golang-1.13 as builder
+FROM openshift/origin-release:golang-1.15 as builder
 
 ARG REMOTE_SOURCE
 ARG REMOTE_SOURCE_DIR
-ARG GITHUB_TOKEN
 ARG COMPONENT_VERSION
 
 ENV USE_VENDORIZED_BUILD_HARNESS=true
@@ -13,7 +12,6 @@ ENV COMPONENT_TAG_EXTENSION=" "
 
 COPY $REMOTE_SOURCE $REMOTE_SOURCE_DIR/app/
 WORKDIR $REMOTE_SOURCE_DIR/app
-RUN git config --global url."https://${GITHUB_TOKEN}:x-oauth-basic@github.com/".insteadOf "https://github.com/"
 RUN GOFLAGS="" go build ./cmd/manager
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
@@ -25,7 +23,6 @@ ARG IMAGE_NAME
 ARG IMAGE_DESCRIPTION
 ARG ARCH_TYPE
 ARG REMOTE_SOURCE_DIR
-ARG BUILD_HARNESS_EXTENSIONS_PROJECT
 
 ENV OPERATOR=/usr/local/bin/rcm-controller \
     USER_UID=1001 \
