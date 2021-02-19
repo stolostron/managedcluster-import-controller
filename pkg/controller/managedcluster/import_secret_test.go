@@ -18,6 +18,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -213,7 +214,12 @@ func Test_newImportSecret(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Test name: %s", tt.name)
-			got, err := newImportSecret(tt.args.client, tt.args.managedCluster)
+			crds, yamls, err := generateImportYAMLs(tt.args.client, tt.args.managedCluster, []string{})
+			if (err != nil) != tt.wantErr {
+				t.Errorf("generateImportYAMLs error=%v, wantErr %v", err, tt.wantErr)
+			}
+
+			got, err := newImportSecret(tt.args.client, tt.args.managedCluster, crds, yamls)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("newImportSecret() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -295,7 +301,7 @@ func Test_createOrUpdateImportSecret(t *testing.T) {
 
 	s := scheme.Scheme
 	s.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
-	s.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{})
+	s.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{}, &ocinfrav1.APIServer{})
 
 	fakeClient := fake.NewFakeClientWithScheme(s,
 		managedCluster,
@@ -305,7 +311,12 @@ func Test_createOrUpdateImportSecret(t *testing.T) {
 		imagePullSecret,
 	)
 
-	importSecret, err := newImportSecret(fakeClient, managedCluster)
+	crds, yamls, err := generateImportYAMLs(fakeClient, managedCluster, []string{})
+	if err != nil {
+		t.Errorf("generateImportYAMLs error=%v", err)
+	}
+
+	importSecret, err := newImportSecret(fakeClient, managedCluster, crds, yamls)
 	if err != nil {
 		t.Errorf("fail to initialize import secret, error = %v", err)
 	}
@@ -318,7 +329,12 @@ func Test_createOrUpdateImportSecret(t *testing.T) {
 		imagePullSecret,
 	)
 
-	importSecretUpdate, err := newImportSecret(fakeClientUpdate, managedCluster)
+	crdsUpdate, yamlsUpdate, err := generateImportYAMLs(fakeClient, managedCluster, []string{})
+	if err != nil {
+		t.Errorf("generateImportYAMLs error=%v", err)
+	}
+
+	importSecretUpdate, err := newImportSecret(fakeClientUpdate, managedCluster, crdsUpdate, yamlsUpdate)
 	if err != nil {
 		t.Errorf("fail to initialize import secret, error = %v", err)
 	}
@@ -335,6 +351,8 @@ func Test_createOrUpdateImportSecret(t *testing.T) {
 		client         client.Client
 		scheme         *runtime.Scheme
 		managedCluster *clusterv1.ManagedCluster
+		crds           []*unstructured.Unstructured
+		yamls          []*unstructured.Unstructured
 	}
 
 	tests := []struct {
@@ -355,6 +373,8 @@ func Test_createOrUpdateImportSecret(t *testing.T) {
 				),
 				scheme:         s,
 				managedCluster: managedCluster,
+				crds:           crds,
+				yamls:          yamls,
 			},
 			want:    importSecret,
 			wantErr: false,
@@ -372,6 +392,8 @@ func Test_createOrUpdateImportSecret(t *testing.T) {
 				),
 				scheme:         s,
 				managedCluster: managedCluster,
+				crds:           crds,
+				yamls:          yamls,
 			},
 			want:    nil,
 			wantErr: false,
@@ -389,6 +411,8 @@ func Test_createOrUpdateImportSecret(t *testing.T) {
 				),
 				scheme:         s,
 				managedCluster: managedCluster,
+				crds:           crdsUpdate,
+				yamls:          yamlsUpdate,
 			},
 			want:    nil,
 			wantErr: false,
@@ -398,7 +422,11 @@ func Test_createOrUpdateImportSecret(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Test name: %s", tt.name)
-			got, err := createOrUpdateImportSecret(tt.args.client, tt.args.scheme, tt.args.managedCluster)
+			got, err := createOrUpdateImportSecret(tt.args.client,
+				tt.args.scheme,
+				tt.args.managedCluster,
+				tt.args.crds,
+				tt.args.yamls)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createImportSecret() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -473,7 +501,7 @@ func TestTemplating(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	results, err := tp.TemplateAssets([]string{"klusterlet/cluster_role_binding.yaml",
+	results, err := tp.TemplateResources([]string{"klusterlet/cluster_role_binding.yaml",
 		"klusterlet/operator.yaml"}, config)
 	if err != nil {
 		t.Error(err)
@@ -513,7 +541,7 @@ func newBootstrapServiceAccount(managedCluster *clusterv1.ManagedCluster) (*core
 	if err != nil {
 		return nil, err
 	}
-	result, err := tp.TemplateAsset("hub/managedcluster/manifests/managedcluster-service-account.yaml", config)
+	result, err := tp.TemplateResource("hub/managedcluster/manifests/managedcluster-service-account.yaml", config)
 	if err != nil {
 		return nil, err
 	}

@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -25,18 +26,19 @@ import (
 
 	libgometav1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1"
 	"github.com/open-cluster-management/library-go/pkg/applier"
-	"github.com/open-cluster-management/library-go/pkg/templateprocessor"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/bindata"
 )
 
 // constants for delete work and finalizer
 const (
-	managedClusterFinalizer = "managedcluster-import-controller.open-cluster-management.io/cleanup"
-	registrationFinalizer   = "cluster.open-cluster-management.io/api-resource-cleanup"
+	managedClusterFinalizer string = "managedcluster-import-controller.open-cluster-management.io/cleanup"
+	registrationFinalizer   string = "cluster.open-cluster-management.io/api-resource-cleanup"
 )
 
-const clusterLabel = "cluster.open-cluster-management.io/managedCluster"
-const selfManagedLabel = "local-cluster"
+const clusterLabel string = "cluster.open-cluster-management.io/managedCluster"
+const selfManagedLabel string = "local-cluster"
+const autoImportRetryLabel string = "autoImportRetry"
+const autoImportSecretName string = "auto-import-secret"
 
 var log = logf.Log.WithName("controller_managedcluster")
 
@@ -239,26 +241,19 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, err
 	}
 
+	crds, yamls, err := generateImportYAMLs(r.client, instance, []string{})
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	reqLogger.Info(fmt.Sprintf("createOrUpdateImportSecret: %s", instance.Name))
-	_, err = createOrUpdateImportSecret(r.client, r.scheme, instance)
+	_, err = createOrUpdateImportSecret(r.client, r.scheme, instance, crds, yamls)
 	if err != nil {
 		reqLogger.Error(err, "create ManagedCluster Import Secret")
 		return reconcile.Result{}, err
 	}
 
-	//If self managed then apply the crds/yamls
-	if v, ok := instance.GetLabels()[selfManagedLabel]; ok {
-		managed, err := strconv.ParseBool(v)
-		if err != nil {
-			managed = false
-		}
-		if managed {
-			if err := r.selfManaged(instance); err != nil {
-				return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
-			}
-		}
-	}
-
+	toImport := false
 	clusterDeployment := &hivev1.ClusterDeployment{}
 	err = r.client.Get(context.TODO(),
 		types.NamespacedName{
@@ -267,87 +262,49 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		clusterDeployment)
 	if err == nil {
 		reqLogger.Info(fmt.Sprintf("createOrUpdateSyncSets: %s", instance.Name))
-		_, _, err := createOrUpdateSyncSets(r.client, r.scheme, instance)
+		_, _, err := createOrUpdateSyncSets(r.client, r.scheme, instance, crds, yamls)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 	} else {
+		if !errors.IsNotFound(err) {
+			return reconcile.Result{}, err
+		}
+		clusterDeployment = nil
 		if !checkOffLine(instance) {
 			reqLogger.Info(fmt.Sprintf("createOrUpdateManifestWorks: %s", instance.Name))
-			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance)
+			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, crds, yamls)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
 		}
 	}
-	return reconcile.Result{}, nil
-}
 
-func (r *ReconcileManagedCluster) managedClusterDeletion(instance *clusterv1.ManagedCluster) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Instance.Namespace", instance.Namespace, "Instance.Name", instance.Name)
-	reqLogger.Info(fmt.Sprintf("Instance in Terminating: %s", instance.Name))
-	if len(filterFinalizers(instance, []string{managedClusterFinalizer, registrationFinalizer})) != 0 {
-		return reconcile.Result{Requeue: true}, nil
-	}
-
-	offLine := checkOffLine(instance)
-	reqLogger.Info(fmt.Sprintf("deleteAllOtherManifestWork: %s", instance.Name))
-	err := deleteAllOtherManifestWork(r.client, instance)
-	if err != nil {
-		if !offLine {
-			return reconcile.Result{}, err
-		}
-	}
-
-	if offLine {
-		reqLogger.Info(fmt.Sprintf("evictAllOtherManifestWork: %s", instance.Name))
-		err = evictAllOtherManifestWork(r.client, instance)
+	//Check self managed
+	if v, ok := instance.GetLabels()[selfManagedLabel]; ok {
+		toImport, err = strconv.ParseBool(v)
 		if err != nil {
-			return reconcile.Result{}, err
+			toImport = false
 		}
 	}
 
-	clusterDeployment := &hivev1.ClusterDeployment{}
-	err = r.client.Get(context.TODO(),
-		types.NamespacedName{
-			Name:      instance.Name,
-			Namespace: instance.Name},
-		clusterDeployment)
-	if err == nil {
-		reqLogger.Info(fmt.Sprintf("deleteKlusterletSyncSets: %s", instance.Name))
-		err = deleteKlusterletSyncSets(r.client, instance)
-		if err != nil {
-			return reconcile.Result{}, err
+	//Check auto-import
+	if v, ok := instance.GetLabels()[autoImportRetryLabel]; ok {
+		autoImportRetry, err := strconv.ParseInt(v, 10, 0)
+		if err != nil || autoImportRetry < 0 {
+			toImport = false
 		}
-	} else {
-		if errors.IsNotFound(err) {
-			reqLogger.Info(fmt.Sprintf("deleteKlusterletManifestWorks: %s", instance.Name))
-			err = deleteKlusterletManifestWorks(r.client, instance)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-		} else {
-			return reconcile.Result{}, err
-		}
+		toImport = true
 	}
 
-	if !offLine {
-		return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
+	//Stop here if no auto-import
+	if !toImport {
+		klog.Infof("Do not auto-import cluster: %s", instance.Name)
+		return reconcile.Result{}, nil
 	}
 
-	reqLogger.Info(fmt.Sprintf("evictKlusterletManifestWorks: %s", instance.Name))
-	err = evictKlusterletManifestWorks(r.client, instance)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	reqLogger.Info(fmt.Sprintf("Remove all finalizer: %s", instance.Name))
-	instance.ObjectMeta.Finalizers = nil
-	if err := r.client.Update(context.TODO(), instance); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	return reconcile.Result{Requeue: true, RequeueAfter: 5 * time.Second}, nil
+	//Import the cluster
+	return r.importCluster(clusterDeployment, instance)
 }
 
 func filterFinalizers(managedCluster *clusterv1.ManagedCluster, finalizers []string) []string {
@@ -431,77 +388,5 @@ func (r *ReconcileManagedCluster) deleteNamespace(namespaceName string) error {
 		}
 	}
 
-	return nil
-}
-
-func (r *ReconcileManagedCluster) selfManaged(managedCluster *clusterv1.ManagedCluster) error {
-	mwNSN, err := manifestWorkNsN(managedCluster)
-	if err != nil {
-		return err
-	}
-	mw := &workv1.ManifestWork{}
-	err = r.client.Get(context.TODO(), mwNSN, mw)
-	if err == nil {
-		return nil
-	}
-	if !errors.IsNotFound(err) {
-		return err
-	}
-
-	yamlSecret := &corev1.Secret{}
-	err = r.client.Get(context.TODO(),
-		types.NamespacedName{Namespace: managedCluster.Name, Name: managedCluster.Name + "-import"},
-		yamlSecret)
-	if err != nil {
-		return err
-	}
-	excluded := make([]string, 0)
-	sa := &corev1.ServiceAccount{}
-	if err := r.client.Get(context.TODO(),
-		types.NamespacedName{
-			Name:      "klusterlet",
-			Namespace: klusterletNamespace,
-		}, sa); err == nil {
-		excluded = append(excluded, "klusterlet/service_account.yaml")
-	}
-	crds, yamls, err := generateImportYAMLs(r.client, managedCluster, excluded)
-	if err != nil {
-		return err
-	}
-
-	a, err := applier.NewApplier(
-		templateprocessor.NewYamlStringReader(templateprocessor.ConvertArrayOfBytesToString(crds),
-			templateprocessor.KubernetesYamlsDelimiter),
-		nil,
-		r.client,
-		nil,
-		nil,
-		applier.DefaultKubernetesMerger, nil)
-	if err != nil {
-		return err
-	}
-
-	err = a.CreateOrUpdateInPath(".", nil, false, nil)
-	if err != nil {
-		return err
-	}
-
-	a, err = applier.NewApplier(
-		templateprocessor.NewYamlStringReader(templateprocessor.ConvertArrayOfBytesToString(yamls),
-			templateprocessor.KubernetesYamlsDelimiter),
-		nil,
-		r.client,
-		nil,
-		nil,
-		applier.DefaultKubernetesMerger,
-		nil)
-	if err != nil {
-		return err
-	}
-
-	err = a.CreateOrUpdateInPath(".", excluded, false, nil)
-	if err != nil {
-		return err
-	}
 	return nil
 }

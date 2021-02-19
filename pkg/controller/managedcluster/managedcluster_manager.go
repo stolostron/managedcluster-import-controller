@@ -101,18 +101,6 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	err = c.Watch(
-		&source.Kind{Type: &hivev1.SyncSet{}},
-		&handler.EnqueueRequestForOwner{
-			IsController: true,
-			OwnerType:    &clusterv1.ManagedCluster{},
-		},
-	)
-	if err != nil {
-		log.Error(err, "Fail to add Watch for SyncSet to controller")
-		return err
-	}
-
-	err = c.Watch(
 		&source.Kind{Type: &workv1.ManifestWork{}},
 		&handler.EnqueueRequestForOwner{
 			IsController: true,

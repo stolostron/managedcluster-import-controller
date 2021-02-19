@@ -185,7 +185,11 @@ func Test_newManifestWorks(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Test name: %s", tt.name)
-			gotCRDs, gotYAMLs, err := newManifestWorks(testClient, tt.args.managedCluster)
+			crds, yamls, err := generateImportYAMLs(testClient, tt.args.managedCluster, []string{})
+			if (err != nil) != tt.wantErr {
+				t.Errorf("generateImportYAMLs error=%v, wantErr %v", err, tt.wantErr)
+			}
+			gotCRDs, gotYAMLs, err := newManifestWorks(testClient, tt.args.managedCluster, crds, yamls)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("newManifestWork() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -440,7 +444,11 @@ func Test_createOrUpdateManifestWork(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Test name: %s", tt.name)
-			gotCRDs, gotYAMLs, err := createOrUpdateManifestWorks(tt.args.client, testScheme, tt.args.managedCluster)
+			crds, yamls, err := generateImportYAMLs(tt.args.client, tt.args.managedCluster, []string{})
+			if (err != nil) != tt.wantErr {
+				t.Errorf("generateImportYAMLs error=%v, wantErr %v", err, tt.wantErr)
+			}
+			gotCRDs, gotYAMLs, err := createOrUpdateManifestWorks(tt.args.client, testScheme, tt.args.managedCluster, crds, yamls)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createManifestWork() error = %v, wantErr %v", err, tt.wantErr)
 				return

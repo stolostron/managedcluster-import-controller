@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/ghodss/yaml"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -36,12 +36,14 @@ func manifestWorkNsN(managedCluster *clusterv1.ManagedCluster) (types.Namespaced
 func newManifestWorks(
 	client client.Client,
 	managedCluster *clusterv1.ManagedCluster,
+	crds []*unstructured.Unstructured,
+	yamls []*unstructured.Unstructured,
 ) (*workv1.ManifestWork, *workv1.ManifestWork, error) {
 
-	crds, yamls, err := generateImportYAMLs(client, managedCluster, []string{})
-	if err != nil {
-		return nil, nil, err
-	}
+	// crds, yamls, err := generateImportYAMLs(client, managedCluster, []string{})
+	// if err != nil {
+	// 	return nil, nil, err
+	// }
 
 	manifestCRDs, err := convertToManifests(crds)
 	if err != nil {
@@ -85,14 +87,14 @@ func newManifestWorks(
 	return crdsManifestWork, yamlsManifestWork, nil
 }
 
-func convertToManifests(data [][]byte) (manifests []workv1.Manifest, err error) {
-	for _, d := range data {
-		j, err := yaml.YAMLToJSON(d)
+func convertToManifests(us []*unstructured.Unstructured) (manifests []workv1.Manifest, err error) {
+	for _, u := range us {
+		d, err := u.MarshalJSON()
 		if err != nil {
 			return nil, err
 		}
 		manifest := workv1.Manifest{
-			runtime.RawExtension{Raw: j},
+			runtime.RawExtension{Raw: d},
 		}
 		manifests = append(manifests, manifest)
 	}
@@ -104,23 +106,25 @@ func createOrUpdateManifestWorks(
 	client client.Client,
 	scheme *runtime.Scheme,
 	managedCluster *clusterv1.ManagedCluster,
+	ucrds []*unstructured.Unstructured,
+	uyamls []*unstructured.Unstructured,
 ) (*workv1.ManifestWork, *workv1.ManifestWork, error) {
-	crds, yamls, err := newManifestWorks(client, managedCluster)
+	crds, yamls, err := newManifestWorks(client, managedCluster, ucrds, uyamls)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	crds, err = createOrUpdateManifestWork(client, scheme, managedCluster, crds)
+	mwcrds, err := createOrUpdateManifestWork(client, scheme, managedCluster, crds)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	yamls, err = createOrUpdateManifestWork(client, scheme, managedCluster, yamls)
+	mwyamls, err := createOrUpdateManifestWork(client, scheme, managedCluster, yamls)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return crds, yamls, nil
+	return mwcrds, mwyamls, nil
 }
 
 func createOrUpdateManifestWork(
@@ -171,8 +175,9 @@ func deleteKlusterletManifestWorks(
 		return err
 	}
 
+	return nil
 	//Delete the YAML manifestWork
-	return deleteManifestWork(client, mwNsN.Name, mwNsN.Namespace)
+	// return deleteManifestWork(client, mwNsN.Name, mwNsN.Namespace)
 }
 
 func deleteManifestWork(client client.Client, name, namespace string) error {

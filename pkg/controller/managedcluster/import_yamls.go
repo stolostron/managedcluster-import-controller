@@ -16,6 +16,7 @@ import (
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	"github.com/open-cluster-management/library-go/pkg/templateprocessor"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/bindata"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -36,13 +37,13 @@ func generateImportYAMLs(
 	client client.Client,
 	managedCluster *clusterv1.ManagedCluster,
 	excluded []string,
-) (yamls [][]byte, crds [][]byte, err error) {
+) (yamls []*unstructured.Unstructured, crds []*unstructured.Unstructured, err error) {
 
 	tp, err := templateprocessor.NewTemplateProcessor(bindata.NewBindataReader(), &templateprocessor.Options{})
 	if err != nil {
 		return nil, nil, err
 	}
-	crds, err = tp.Assets("klusterlet/crds", nil, true)
+	crds, err = tp.TemplateResourcesInPathUnstructured("klusterlet/crds", nil, true, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -114,7 +115,7 @@ func generateImportYAMLs(
 	if !useImagePullSecret {
 		excluded = append(excluded, "klusterlet/image_pull_secret.yaml")
 	}
-	klusterletYAMLs, err := tp.TemplateAssetsInPathYaml(
+	klusterletYAMLs, err := tp.TemplateResourcesInPathUnstructured(
 		"klusterlet",
 		excluded,
 		false,

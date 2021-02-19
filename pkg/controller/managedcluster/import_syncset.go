@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"reflect"
 
-	"github.com/ghodss/yaml"
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,12 +37,14 @@ func syncSetNsN(managedCluster *clusterv1.ManagedCluster) (types.NamespacedName,
 func newSyncSets(
 	client client.Client,
 	managedCluster *clusterv1.ManagedCluster,
+	crds []*unstructured.Unstructured,
+	yamls []*unstructured.Unstructured,
 ) (*hivev1.SyncSet, *hivev1.SyncSet, error) {
 
-	crds, yamls, err := generateImportYAMLs(client, managedCluster, []string{})
-	if err != nil {
-		return nil, nil, err
-	}
+	// crds, yamls, err := generateImportYAMLs(client, managedCluster, []string{})
+	// if err != nil {
+	// 	return nil, nil, err
+	// }
 
 	runtimeRawExtensionsCRDs, err := convertToRawExtensions(crds)
 	if err != nil {
@@ -98,13 +100,13 @@ func newSyncSets(
 	return crdsSyncSet, yamlsSyncSet, nil
 }
 
-func convertToRawExtensions(data [][]byte) (runtimeRawExtensions []runtime.RawExtension, err error) {
-	for _, d := range data {
-		j, err := yaml.YAMLToJSON(d)
+func convertToRawExtensions(us []*unstructured.Unstructured) (runtimeRawExtensions []runtime.RawExtension, err error) {
+	for _, u := range us {
+		d, err := u.MarshalJSON()
 		if err != nil {
 			return nil, err
 		}
-		runtimeRawExtensions = append(runtimeRawExtensions, runtime.RawExtension{Raw: j})
+		runtimeRawExtensions = append(runtimeRawExtensions, runtime.RawExtension{Raw: d})
 	}
 	return runtimeRawExtensions, nil
 }
@@ -114,23 +116,25 @@ func createOrUpdateSyncSets(
 	client client.Client,
 	scheme *runtime.Scheme,
 	managedCluster *clusterv1.ManagedCluster,
+	ucrds []*unstructured.Unstructured,
+	uyamls []*unstructured.Unstructured,
 ) (*hivev1.SyncSet, *hivev1.SyncSet, error) {
-	crds, yamls, err := newSyncSets(client, managedCluster)
+	crds, yamls, err := newSyncSets(client, managedCluster, ucrds, uyamls)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	crds, err = createOrUpdateSyncSet(client, scheme, managedCluster, crds)
+	sscrds, err := createOrUpdateSyncSet(client, scheme, managedCluster, crds)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	yamls, err = createOrUpdateSyncSet(client, scheme, managedCluster, yamls)
+	ssyamls, err := createOrUpdateSyncSet(client, scheme, managedCluster, yamls)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return crds, yamls, nil
+	return sscrds, ssyamls, nil
 }
 
 func createOrUpdateSyncSet(

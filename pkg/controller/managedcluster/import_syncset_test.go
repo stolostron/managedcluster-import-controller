@@ -98,7 +98,7 @@ func Test_newSyncSets(t *testing.T) {
 	testscheme := scheme.Scheme
 
 	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &hivev1.SyncSet{})
-	testscheme.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{})
+	testscheme.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{}, &ocinfrav1.APIServer{})
 
 	testSA := &corev1.ServiceAccount{
 		TypeMeta: metav1.TypeMeta{
@@ -181,7 +181,11 @@ func Test_newSyncSets(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Test name: %s", tt.name)
-			gotCRDs, gotYAMLs, err := newSyncSets(testClient, tt.args.managedCluster)
+			crds, yamls, err := generateImportYAMLs(testClient, tt.args.managedCluster, []string{})
+			if (err != nil) != tt.wantErr {
+				t.Errorf("generateImportYAMLs error=%v, wantErr %v", err, tt.wantErr)
+			}
+			gotCRDs, gotYAMLs, err := newSyncSets(testClient, tt.args.managedCluster, crds, yamls)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("newSyncSet() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -224,7 +228,7 @@ func Test_createOrUpdateSyncSets(t *testing.T) {
 
 	testScheme.AddKnownTypes(hivev1.SchemeGroupVersion, &hivev1.SyncSet{})
 	testScheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
-	testScheme.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{})
+	testScheme.AddKnownTypes(ocinfrav1.SchemeGroupVersion, &ocinfrav1.Infrastructure{}, &ocinfrav1.APIServer{})
 
 	testInfraConfig := &ocinfrav1.Infrastructure{
 		ObjectMeta: metav1.ObjectMeta{
@@ -439,7 +443,11 @@ func Test_createOrUpdateSyncSets(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Test name: %s", tt.name)
-			gotCRDs, gotYAMLs, err := createOrUpdateSyncSets(tt.args.client, testScheme, tt.args.managedCluster)
+			crds, yamls, err := generateImportYAMLs(tt.args.client, tt.args.managedCluster, []string{})
+			if (err != nil) != tt.wantErr {
+				t.Errorf("generateImportYAMLs error=%v, wantErr %v", err, tt.wantErr)
+			}
+			gotCRDs, gotYAMLs, err := createOrUpdateSyncSets(tt.args.client, testScheme, tt.args.managedCluster, crds, yamls)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createSyncSet() error = %v, wantErr %v", err, tt.wantErr)
 				return
