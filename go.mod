@@ -1,6 +1,6 @@
 module github.com/open-cluster-management/managedcluster-import-controller
 
-go 1.13
+go 1.15
 
 require (
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
@@ -8,7 +8,7 @@ require (
 	github.com/onsi/ginkgo v1.12.1
 	github.com/onsi/gomega v1.10.1
 	github.com/open-cluster-management/api v0.0.0-20200602195039-a516cac2e038
-	github.com/open-cluster-management/library-go v0.0.0-20200828173847-299c21e6c3fc
+	github.com/open-cluster-management/library-go v0.0.0-20210208174614-f3ad264f145a
 	github.com/openshift/api v3.9.1-0.20191112184635-86def77f6f90+incompatible
 	github.com/openshift/hive v0.0.0-20200318152403-0c1ea8babb4e
 	github.com/operator-framework/operator-sdk v0.18.1
@@ -21,6 +21,10 @@ require (
 	k8s.io/klog v1.0.0
 	k8s.io/kubernetes v1.18.8
 	sigs.k8s.io/controller-runtime v0.6.2
+)
+
+replace (
+github.com/open-cluster-management/library-go => /Users/dvernier/go-modules/library-go
 )
 
 replace (

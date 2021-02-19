@@ -366,36 +366,18 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 					t.Error("Cluster label not found in namespace")
 				}
 
-				clusterDeploymentGet := &hivev1.ClusterDeployment{}
+				manifestwork := &workv1.ManifestWork{}
 				err = r.client.Get(context.TODO(),
 					types.NamespacedName{
-						Name:      clusterDeployment.Name,
-						Namespace: clusterDeployment.Namespace,
-					},
-					clusterDeploymentGet)
-				if err == nil {
-					syncset := &hivev1.SyncSet{}
-					err := r.client.Get(context.TODO(),
-						types.NamespacedName{
-							Name:      testManagedCluster.Name + syncsetNamePostfix,
-							Namespace: testManagedCluster.Name,
-						}, syncset)
-					if err != nil {
-						t.Errorf("SyncSet doesn't exist Error: %s", err.Error())
-					}
-				} else {
-					manifestwork := &workv1.ManifestWork{}
-					err := r.client.Get(context.TODO(),
-						types.NamespacedName{
-							Name:      testManagedCluster.Name + manifestWorkNamePostfix,
-							Namespace: testManagedCluster.Name,
-						}, manifestwork)
-					if err == nil && checkOffLine(managedCluster) {
-						t.Error("Manifestwork exist with a offline cluster")
-					} else if err != nil && !checkOffLine(managedCluster) {
-						t.Error("Manifestwork doesn't exist with an online cluster")
-					}
+						Name:      testManagedCluster.Name + manifestWorkNamePostfix,
+						Namespace: testManagedCluster.Name,
+					}, manifestwork)
+				if err == nil && checkOffLine(managedCluster) {
+					t.Error("Manifestwork exist with a offline cluster")
+				} else if err != nil && !checkOffLine(managedCluster) {
+					t.Error("Manifestwork doesn't exist with an online cluster")
 				}
+
 				if v, ok := managedCluster.GetLabels()["local-cluster"]; ok {
 					b, err := strconv.ParseBool(v)
 					if err != nil {
