@@ -3,7 +3,7 @@
 package controller
 
 import (
-	"github.com/open-cluster-management/rcm-controller/pkg/controller/csr"
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/csr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 

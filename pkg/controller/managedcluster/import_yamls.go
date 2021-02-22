@@ -17,7 +17,7 @@ import (
 
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	"github.com/open-cluster-management/library-go/pkg/templateprocessor"
-	"github.com/open-cluster-management/rcm-controller/pkg/bindata"
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/bindata"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"

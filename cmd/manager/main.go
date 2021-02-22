@@ -41,7 +41,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	"github.com/open-cluster-management/rcm-controller/pkg/controller"
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller"
 )
 
 // Change below variables to serve metrics on different host or port.

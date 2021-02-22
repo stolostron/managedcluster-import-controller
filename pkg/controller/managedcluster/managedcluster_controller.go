@@ -28,7 +28,7 @@ import (
 	libgometav1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1"
 	"github.com/open-cluster-management/library-go/pkg/applier"
 	"github.com/open-cluster-management/library-go/pkg/templateprocessor"
-	"github.com/open-cluster-management/rcm-controller/pkg/bindata"
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/bindata"
 )
 
 // constants for delete work and finalizer
