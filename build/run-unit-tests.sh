@@ -6,6 +6,7 @@
 # Contract with IBM Corp.
 # Licensed Materials - Property of IBM
 # Copyright (c) Red Hat, Inc.
+# Copyright Contributors to the Open Cluster Management project
 ###############################################################################
 
 _script_dir=$(dirname "$0")

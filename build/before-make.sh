@@ -6,6 +6,7 @@
 # Contract with IBM Corp.
 # Licensed Materials - Property of IBM
 # Copyright (c) Red Hat, Inc.
+# Copyright Contributors to the Open Cluster Management project
 ###############################################################################
 
 ln -sf ../../build/git-hooks/pre-commit .git/hooks/pre-commit
