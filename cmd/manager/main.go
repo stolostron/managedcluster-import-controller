@@ -1,3 +1,11 @@
+// (c) Copyright IBM Corporation 2019, 2020. All Rights Reserved.
+// Note to U.S. Government Users Restricted Rights:
+// U.S. Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule
+// Contract with IBM Corp.
+// Licensed Materials - Property of IBM
+//
+// Copyright (c) 2020 Red Hat, Inc.
+
 package main
 
 import (
@@ -33,7 +41,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller"
+	"github.com/open-cluster-management/rcm-controller/pkg/controller"
 )
 
 // Change below variables to serve metrics on different host or port.
