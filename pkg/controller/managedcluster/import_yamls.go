@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Red Hat, Inc.
+// Copyright (c) Red Hat, Inc.
 
 //Package managedcluster ...
 package managedcluster

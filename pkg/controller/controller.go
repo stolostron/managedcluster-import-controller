@@ -4,7 +4,7 @@
 // Contract with IBM Corp.
 // Licensed Materials - Property of IBM
 //
-// Copyright (c) 2020 Red Hat, Inc.
+// Copyright (c) Red Hat, Inc.
 
 package controller
 
