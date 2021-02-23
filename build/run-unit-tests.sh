@@ -1,4 +1,12 @@
 #!/bin/bash -e
+###############################################################################
+# (c) Copyright IBM Corporation 2019, 2020. All Rights Reserved.
+# Note to U.S. Government Users Restricted Rights:
+# U.S. Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule
+# Contract with IBM Corp.
+# Copyright (c) Red Hat, Inc.
+# Copyright Contributors to the Open Cluster Management project
+###############################################################################
 
 _script_dir=$(dirname "$0")
 if ! which gocovmerge > /dev/null; then  echo "Installing gocovmerge..."; go get -u github.com/wadey/gocovmerge; fi
