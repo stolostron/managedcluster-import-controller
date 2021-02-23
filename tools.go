@@ -2,9 +2,9 @@
 // Note to U.S. Government Users Restricted Rights:
 // U.S. Government Users Restricted Rights - Use, duplication or disclosure restricted by GSA ADP Schedule
 // Contract with IBM Corp.
-// Licensed Materials - Property of IBM
 //
-// Copyright (c) 2020 Red Hat, Inc.
+// Copyright (c) Red Hat, Inc.
+// Copyright Contributors to the Open Cluster Management project
 
 
 // +build tools
