@@ -1,3 +1,0 @@
-FROM quay.io/open-cluster-management/multiclusterhub-operator:%%MCHO_INPUT_TAG%%
-
-COPY %%MANIFEST%%.json /image-manifests/%%Z_RELEASE_VERSION%%.json
