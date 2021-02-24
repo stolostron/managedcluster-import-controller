@@ -29,5 +29,6 @@ go-bindata.diff
 test/functional/tmp
 test/functional/coverage
 kind_kubeconfig.yaml
+kind_kubeconfig_mc.yaml
 
 report.json

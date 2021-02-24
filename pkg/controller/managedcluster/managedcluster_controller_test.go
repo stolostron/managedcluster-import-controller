@@ -77,7 +77,7 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 		},
 		Spec: clusterv1.ManagedClusterSpec{},
 		Status: clusterv1.ManagedClusterStatus{
-			Conditions: []clusterv1.StatusCondition{
+			Conditions: []metav1.Condition{
 				{
 					Type:   clusterv1.ManagedClusterConditionAvailable,
 					Status: metav1.ConditionTrue,
@@ -94,7 +94,7 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 		},
 		Spec: clusterv1.ManagedClusterSpec{},
 		Status: clusterv1.ManagedClusterStatus{
-			Conditions: []clusterv1.StatusCondition{
+			Conditions: []metav1.Condition{
 				{
 					Type:   clusterv1.ManagedClusterConditionAvailable,
 					Status: metav1.ConditionUnknown,
@@ -111,7 +111,7 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 		},
 		Spec: clusterv1.ManagedClusterSpec{},
 		Status: clusterv1.ManagedClusterStatus{
-			Conditions: []clusterv1.StatusCondition{
+			Conditions: []metav1.Condition{
 				{
 					Type:   clusterv1.ManagedClusterConditionAvailable,
 					Status: metav1.ConditionTrue,
@@ -515,7 +515,7 @@ func Test_checkOffLine(t *testing.T) {
 					},
 					Spec: clusterv1.ManagedClusterSpec{},
 					Status: clusterv1.ManagedClusterStatus{
-						Conditions: []clusterv1.StatusCondition{
+						Conditions: []metav1.Condition{
 							{
 								Type:   clusterv1.ManagedClusterConditionAvailable,
 								Status: metav1.ConditionTrue,
@@ -536,7 +536,7 @@ func Test_checkOffLine(t *testing.T) {
 					},
 					Spec: clusterv1.ManagedClusterSpec{},
 					Status: clusterv1.ManagedClusterStatus{
-						Conditions: []clusterv1.StatusCondition{
+						Conditions: []metav1.Condition{
 							{
 								Type:   clusterv1.ManagedClusterConditionAvailable,
 								Status: metav1.ConditionFalse,
@@ -557,7 +557,7 @@ func Test_checkOffLine(t *testing.T) {
 					},
 					Spec: clusterv1.ManagedClusterSpec{},
 					Status: clusterv1.ManagedClusterStatus{
-						Conditions: []clusterv1.StatusCondition{
+						Conditions: []metav1.Condition{
 							{
 								Type:   clusterv1.ManagedClusterConditionAvailable,
 								Status: metav1.ConditionUnknown,

@@ -14,11 +14,13 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 	libgoclient "github.com/open-cluster-management/library-go/pkg/client"
+	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -105,6 +107,23 @@ func newClusterdeployment(name string) *unstructured.Unstructured {
 			},
 		},
 	}
+}
+
+func newAutoImportSecret(clusterName string) (*corev1.Secret, error) {
+	kubeconfig, err := ioutil.ReadFile("../kind_kubeconfig_mc.yaml")
+	if err != nil {
+		return nil, err
+	}
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "auto-import-secret",
+			Namespace: clusterName,
+		},
+		StringData: map[string]string{
+			"autoImportRetry": "5",
+			"kubeconfig:":     string(kubeconfig),
+		},
+	}, nil
 }
 
 // deleteIfExists deletes resources by using gvr & name & namespace, will wait for deletion to complete by using eventually

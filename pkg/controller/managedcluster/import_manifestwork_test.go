@@ -14,6 +14,7 @@ import (
 	workv1 "github.com/open-cluster-management/api/work/v1"
 	ocinfrav1 "github.com/openshift/api/config/v1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -293,7 +294,7 @@ func Test_createOrUpdateManifestWork(t *testing.T) {
 			Namespace: "createmanifestwork",
 		},
 		Status: workv1.ManifestWorkStatus{
-			Conditions: []workv1.StatusCondition{
+			Conditions: []metav1.Condition{
 				{Type: string(workv1.WorkApplied)},
 			},
 		},
@@ -308,7 +309,7 @@ func Test_createOrUpdateManifestWork(t *testing.T) {
 			Namespace: "createmanifestwork",
 		},
 		Status: workv1.ManifestWorkStatus{
-			Conditions: []workv1.StatusCondition{
+			Conditions: []metav1.Condition{
 				{Type: string(workv1.WorkApplied)},
 			},
 		},
@@ -563,6 +564,7 @@ func Test_deleteManifestWorks(t *testing.T) {
 				t.Errorf("deleteManifestWorks() error = %v, wantErr %v", err, tt.wantErr)
 			}
 			if !tt.wantErr {
+				//The manifestworks crd is the only one we delete.
 				crds := &workv1.ManifestWork{}
 				err := tt.args.client.Get(context.TODO(),
 					types.NamespacedName{
@@ -572,14 +574,20 @@ func Test_deleteManifestWorks(t *testing.T) {
 				if err == nil {
 					t.Error("deleteManifestWorks crds manifest not deleted")
 				}
+				//The manifestworks yamls should not be deleted otherwize
+				//The agent is deleted before removing the finalizer.
 				yamls := &workv1.ManifestWork{}
 				err = tt.args.client.Get(context.TODO(),
 					types.NamespacedName{
 						Name:      "deletemanifestwork" + manifestWorkNamePostfix,
 						Namespace: "deletemanifestwork",
 					}, yamls)
-				if err == nil {
-					t.Error("deleteManifestWorks yamls manifest not deleted")
+				if err != nil {
+					if errors.IsNotFound(err) {
+						t.Error("deleteManifestWorks yamls manifest is deleted")
+					} else {
+						t.Error("While getting yamls deleteManifestWorks")
+					}
 				}
 			}
 		})
@@ -688,4 +696,109 @@ func Test_evictManifestWorks(t *testing.T) {
 		})
 	}
 
+}
+
+func Test_evictAllOtherManifestWork(t *testing.T) {
+	os.Setenv("DEFAULT_IMAGE_PULL_SECRET", imagePullSecretNameSecret)
+	os.Setenv("POD_NAMESPACE", managedClusterNameSecret)
+	imagePullSecret := newFakeImagePullSecret()
+
+	testManagedCluster := &clusterv1.ManagedCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "evictmanifestwork",
+		},
+	}
+	testScheme := scheme.Scheme
+
+	testScheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWork{}, &workv1.ManifestWorkList{})
+	testScheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
+
+	crds := &workv1.ManifestWork{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: workv1.SchemeGroupVersion.String(),
+			Kind:       "ManifestWork",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "evictmanifestwork" + manifestWorkNamePostfix + manifestWorkCRDSPostfix,
+			Namespace:  "evictmanifestwork",
+			Finalizers: []string{"evict-finalizer"},
+		},
+	}
+	yamls := &workv1.ManifestWork{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: workv1.SchemeGroupVersion.String(),
+			Kind:       "ManifestWork",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "evictmanifestwork" + manifestWorkNamePostfix,
+			Namespace:  "evictmanifestwork",
+			Finalizers: []string{"evict-finalizer"},
+		},
+	}
+
+	extra := &workv1.ManifestWork{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: workv1.SchemeGroupVersion.String(),
+			Kind:       "ManifestWork",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "extra" + manifestWorkNamePostfix,
+			Namespace:  "evictmanifestwork",
+			Finalizers: []string{"evict-finalizer"},
+		},
+	}
+
+	type args struct {
+		c        client.Client
+		instance *clusterv1.ManagedCluster
+	}
+	tests := []struct {
+		name    string
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "evictAllOthers",
+			args: args{
+				c: fake.NewFakeClientWithScheme(testScheme, []runtime.Object{
+					crds, yamls, extra, imagePullSecret,
+				}...),
+				instance: testManagedCluster,
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errTest := evictAllOtherManifestWork(tt.args.c, tt.args.instance)
+			if (errTest != nil) != tt.wantErr {
+				t.Errorf("evictAllOtherManifestWork() error = %v, wantErr %v", errTest, tt.wantErr)
+			}
+			if errTest == nil {
+				crdsGet := &workv1.ManifestWork{}
+				err := tt.args.c.Get(context.TODO(), client.ObjectKey{Name: crds.Name, Namespace: crds.Namespace}, crdsGet)
+				if err != nil {
+					t.Errorf("Manifestwork %s in %s shouldn't have been deleted", crds.Name, crds.Namespace)
+				}
+				if len(crdsGet.GetFinalizers()) == 0 {
+					t.Errorf("Finalizers should not have been removed for Manifestwork %s in %s", crdsGet.Name, crdsGet.Namespace)
+				}
+				yamlsGet := &workv1.ManifestWork{}
+				err = tt.args.c.Get(context.TODO(), client.ObjectKey{Name: yamls.Name, Namespace: yamls.Namespace}, yamlsGet)
+				if err != nil {
+					t.Errorf("Manifestwork %s in %s shouldn't have been deleted", yamls.Name, yamls.Namespace)
+				}
+				if len(yamlsGet.GetFinalizers()) == 0 {
+					t.Errorf("Finalizers should not have been removed for Manifestwork %s in %s", yamlsGet.Name, yamlsGet.Namespace)
+				}
+				extraGet := &workv1.ManifestWork{}
+				err = tt.args.c.Get(context.TODO(), client.ObjectKey{Name: extra.Name, Namespace: extra.Namespace}, extraGet)
+				if err != nil {
+					t.Errorf("Manifestwork %s in %s shouldn't have been deleted", extra.Name, extra.Namespace)
+				}
+				if len(extraGet.GetFinalizers()) != 0 {
+					t.Errorf("Finalizers should not have been removed for Manifestwork %s in %s", extraGet.Name, extraGet.Namespace)
+				}
+			}
+		})
+	}
 }

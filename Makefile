@@ -17,7 +17,7 @@ export CGO_ENABLED  = 0
 export GO111MODULE := on
 export GOOS         = $(shell go env GOOS)
 export GOARCH       = $(ARCH_TYPE)
-export GOPACKAGES   = $(shell go list ./... | grep -v /vendor | grep -v /internal | grep -v /build | grep -v /test)
+export GOPACKAGES   = $(shell go list ./... | grep -v /manager | grep -v /bindata  | grep -v /vendor | grep -v /internal | grep -v /build | grep -v /test )
 
 export PROJECT_DIR            = $(shell 'pwd')
 export BUILD_DIR              = $(PROJECT_DIR)/build

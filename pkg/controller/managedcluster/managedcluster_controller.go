@@ -12,6 +12,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -40,8 +41,9 @@ const (
 
 const clusterLabel string = "cluster.open-cluster-management.io/managedCluster"
 const selfManagedLabel string = "local-cluster"
-const autoImportRetryLabel string = "autoImportRetry"
+const autoImportRetryName string = "autoImportRetry"
 const autoImportSecretName string = "auto-import-secret"
+const ManagedClusterImportSucceeded string = "ManagedClusterImportSucceeded"
 
 var log = logf.Log.WithName("controller_managedcluster")
 
@@ -256,7 +258,6 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, err
 	}
 
-	toImport := false
 	clusterDeployment := &hivev1.ClusterDeployment{}
 	err = r.client.Get(context.TODO(),
 		types.NamespacedName{
@@ -283,21 +284,9 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		}
 	}
 
-	//Check self managed
-	if v, ok := instance.GetLabels()[selfManagedLabel]; ok {
-		toImport, err = strconv.ParseBool(v)
-		if err != nil {
-			toImport = false
-		}
-	}
-
-	//Check auto-import
-	if v, ok := instance.GetLabels()[autoImportRetryLabel]; ok {
-		autoImportRetry, err := strconv.ParseInt(v, 10, 0)
-		if err != nil || autoImportRetry < 0 {
-			toImport = false
-		}
-		toImport = true
+	autoImportSecret, toImport, err := r.toBeImported(instance)
+	if err != nil {
+		return reconcile.Result{}, err
 	}
 
 	//Stop here if no auto-import
@@ -307,7 +296,63 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 	}
 
 	//Import the cluster
-	return r.importCluster(clusterDeployment, instance)
+	result, err := r.importCluster(clusterDeployment, instance, autoImportSecret)
+	errCond := r.setConditionImport(instance, err, fmt.Sprintf("Unable to import %s", instance.Name))
+	if errCond != nil {
+		klog.Error(errCond)
+	}
+	return result, err
+}
+
+func (r *ReconcileManagedCluster) toBeImported(managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, bool, error) {
+	//Check self managed
+	if v, ok := managedCluster.GetLabels()[selfManagedLabel]; ok {
+		toImport, err := strconv.ParseBool(v)
+		return nil, toImport, err
+	} else {
+		//Check auto-import
+		klog.V(2).Info("Check autoImportRetry")
+		autoImportSecret := &corev1.Secret{}
+		err := r.client.Get(context.TODO(), types.NamespacedName{
+			Name:      autoImportSecretName,
+			Namespace: managedCluster.Name,
+		},
+			autoImportSecret)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				klog.Infof("Will not retry as autoImportSecret not found for %s", managedCluster.Name)
+				return nil, false, nil
+			}
+			klog.Errorf("Unable to read the autoImportSecret Error: %s", err.Error())
+			return nil, false, err
+		}
+		klog.Infof("Will retry as autoImportSecret is found for %s and counter still present", managedCluster.Name)
+		return autoImportSecret, true, nil
+	}
+}
+
+func (r *ReconcileManagedCluster) setConditionImport(managedCluster *clusterv1.ManagedCluster, errIn error, reason string) error {
+	newCondition := metav1.Condition{
+		Type:    ManagedClusterImportSucceeded,
+		Status:  metav1.ConditionTrue,
+		Message: "Import succeeded",
+		Reason:  "ManagedClusterImported",
+	}
+	if errIn != nil {
+		newCondition.Status = metav1.ConditionFalse
+		newCondition.Message = errIn.Error()
+		newCondition.Reason = "ManagedClusterNotImported"
+		if reason != "" {
+			newCondition.Message += ": " + reason
+		}
+	}
+	patch := client.MergeFrom(managedCluster.DeepCopy())
+	meta.SetStatusCondition(&managedCluster.Status.Conditions, newCondition)
+	err := r.client.Status().Patch(context.TODO(), managedCluster, patch)
+	if err != nil {
+		return err
+	}
+	return errIn
 }
 
 func filterFinalizers(managedCluster *clusterv1.ManagedCluster, finalizers []string) []string {

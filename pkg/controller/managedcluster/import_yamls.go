@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"os"
 
+	"k8s.io/klog"
+
 	"net/url"
 
 	corev1 "k8s.io/api/core/v1"
@@ -42,20 +44,25 @@ func generateImportYAMLs(
 	excluded []string,
 ) (yamls []*unstructured.Unstructured, crds []*unstructured.Unstructured, err error) {
 
+	klog.V(4).Info("Create templateProcessor")
 	tp, err := templateprocessor.NewTemplateProcessor(bindata.NewBindataReader(), &templateprocessor.Options{})
 	if err != nil {
 		return nil, nil, err
 	}
+
+	klog.V(4).Info("TemplateResources klusterlet/crds")
 	crds, err = tp.TemplateResourcesInPathUnstructured("klusterlet/crds", nil, true, nil)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	// klog.V(4).Infof("getBootstrapSecret for %s ", managedCluster.Name)
 	bootStrapSecret, err := getBootstrapSecret(client, managedCluster)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	klog.V(4).Infof("createKubeconfigData for bootsrapSecret %s", bootStrapSecret.Name)
 	bootstrapKubeconfigData, err := createKubeconfigData(client, bootStrapSecret)
 	if err != nil {
 		return nil, nil, err

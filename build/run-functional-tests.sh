@@ -9,6 +9,7 @@ set -e
 
 CURR_FOLDER_PATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 KIND_KUBECONFIG="${CURR_FOLDER_PATH}/../kind_kubeconfig.yaml"
+KIND_MANAGED_KUBECONFIG="${CURR_FOLDER_PATH}/../kind_kubeconfig_mc.yaml"
 export KUBECONFIG=${KIND_KUBECONFIG}
 export DOCKER_IMAGE_AND_TAG=${1}
 
@@ -66,7 +67,36 @@ nodes:
     containerPath: /tmp/coverage
 EOF
 
-echo "creating cluster"
+cat << EOF > "${FUNCT_TEST_TMPDIR}/kind-config/kind-managed-config.yaml"
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  extraPortMappings:
+  - containerPort: 80
+    hostPort: 80
+    listenAddress: "0.0.0.0"
+  - containerPort: 443
+    hostPort: 443
+    listenAddress: "0.0.0.0"
+  - containerPort: 6443
+    hostPort: 32806
+    listenAddress: "0.0.0.0"
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration #for worker use JoinConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        system-reserved: memory=2Gi
+EOF
+
+
+echo "creating managed cluster"
+kind create cluster --name functional-test-managed --config "${FUNCT_TEST_TMPDIR}/kind-config/kind-managed-config.yaml"
+# setup kubeconfig
+kind get kubeconfig --name functional-test-managed > ${KIND_MANAGED_KUBECONFIG}
+
+echo "creating hub cluster"
 kind create cluster --name functional-test --config "${FUNCT_TEST_TMPDIR}/kind-config/kind-config.yaml"
 
 # setup kubeconfig
@@ -102,8 +132,9 @@ done;
 echo "Wait 10 sec for copy to AWS"
 sleep 10
 
-echo "delete cluster"
+echo "delete clusters"
 kind delete cluster --name functional-test
+kind delete cluster --name functional-test-managed
 
 if [ `find $FUNCT_TEST_COVERAGE -prune -empty 2>/dev/null` ]; then
   echo "no coverage files found. skipping"
@@ -118,3 +149,4 @@ else
 
   go tool cover -html "${FUNCT_TEST_COVERAGE}/cover-functional.out" -o ${PROJECT_DIR}/test/functional/coverage/cover-functional.html
 fi
+

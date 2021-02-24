@@ -3,6 +3,7 @@ package managedcluster
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -25,149 +26,56 @@ import (
 
 func (r *ReconcileManagedCluster) importCluster(
 	clusterDeployment *hivev1.ClusterDeployment,
-	managedCluster *clusterv1.ManagedCluster) (reconcile.Result, error) {
-	klog.Infof("Auto import cluster: %s", managedCluster.Name)
-
-	mwNSN, err := manifestWorkNsN(managedCluster)
-	if err != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
-	}
-	mw := &workv1.ManifestWork{}
-	err = r.client.Get(context.TODO(), mwNSN, mw)
-	//import already done as mw already created
-	if err == nil {
-		return reconcile.Result{}, nil
-	}
-	if !errors.IsNotFound(err) {
-		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
-	}
-
-	yamlSecret := &corev1.Secret{}
-	err = r.client.Get(context.TODO(),
-		types.NamespacedName{Namespace: managedCluster.Name, Name: managedCluster.Name + "-import"},
-		yamlSecret)
-	if err != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
-	}
-
+	managedCluster *clusterv1.ManagedCluster,
+	autoImportSecret *corev1.Secret) (reconcile.Result, error) {
 	var client client.Client
-
-	if clusterDeployment != nil {
-		if !clusterDeployment.Spec.Installed {
-			return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
-		}
-		klog.Infof("Use hive client to import cluster %s", managedCluster.Name)
-		client, err = r.getManagedClusterClientFromHive(clusterDeployment, managedCluster)
+	var err error
+	// if clusterDeployment != nil {
+	// 	// This code is not currently used as we use syncset for the time being.
+	// 	if !clusterDeployment.Spec.Installed {
+	// 		return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
+	// 	}
+	// 	klog.Infof("Use hive client to import cluster %s", managedCluster.Name)
+	// 	client, err = r.getManagedClusterClientFromHive(clusterDeployment, managedCluster)
+	// 	if err != nil {
+	// 		return reconcile.Result{}, err
+	// 	}
+	// } else
+	if autoImportSecret != nil {
+		klog.Infof("Use autoImportSecret to import cluster %s", managedCluster.Name)
+		client, err = r.getManagedClusterClientFromAutoImportSecret(managedCluster, autoImportSecret)
 		if err != nil {
-			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
-		}
-	} else if _, ok := managedCluster.GetLabels()[autoImportRetryLabel]; ok {
-		client, err = r.getManagedClusterClientFromAutoImportSecret(managedCluster)
-		if err != nil {
-			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
+			return reconcile.Result{}, err
 		}
 	} else {
 		klog.Infof("Use local client to import cluster %s", managedCluster.Name)
 		client = r.client
 	}
-
-	//Do not create SA if already exists
-	excluded := make([]string, 0)
-	sa := &corev1.ServiceAccount{}
-	if err := client.Get(context.TODO(),
-		types.NamespacedName{
-			Name:      "klusterlet",
-			Namespace: klusterletNamespace,
-		}, sa); err == nil {
-		excluded = append(excluded, "klusterlet/service_account.yaml")
-	}
-	//Generate crds and yamls
-	crds, yamls, err := generateImportYAMLs(r.client, managedCluster, excluded)
-	if err != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
-	}
-
-	//Convert to Yaml
-	bb, err := templateprocessor.ToYAMLsUnstructured(crds)
-	if err != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
-	}
-	//Apply it
-	a, err := applier.NewApplier(
-		templateprocessor.NewYamlStringReader(templateprocessor.ConvertArrayOfBytesToString(bb),
-			templateprocessor.KubernetesYamlsDelimiter),
-		nil,
-		client,
-		nil,
-		nil,
-		applier.DefaultKubernetesMerger, nil)
-	if err != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
-	}
-
-	err = a.CreateOrUpdateInPath(".", nil, false, nil)
-	if err != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
-	}
-
-	//Convert to yamls
-	bb, err = templateprocessor.ToYAMLsUnstructured(yamls)
-	if err != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
-	}
-	//Apply it
-	a, err = applier.NewApplier(
-		templateprocessor.NewYamlStringReader(templateprocessor.ConvertArrayOfBytesToString(bb),
-			templateprocessor.KubernetesYamlsDelimiter),
-		nil,
-		client,
-		nil,
-		nil,
-		applier.DefaultKubernetesMerger,
-		nil)
-	if err != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
-	}
-
-	err = a.CreateOrUpdateInPath(".", excluded, false, nil)
-	if err != nil {
-		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
-	}
-
-	return reconcile.Result{}, nil
+	return r.importClusterWithClient(clusterDeployment, managedCluster, autoImportSecret, client)
 }
 
 //get the client from hive clusterDeployment credentials secret
-func (r *ReconcileManagedCluster) getManagedClusterClientFromHive(
-	clusterDeployment *hivev1.ClusterDeployment,
-	managedCluster *clusterv1.ManagedCluster) (client.Client, error) {
-	managedClusterKubeSecret := &corev1.Secret{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{
-		Name:      clusterDeployment.Spec.ClusterMetadata.AdminKubeconfigSecretRef.Name,
-		Namespace: managedCluster.Name,
-	},
-		managedClusterKubeSecret)
-	if err != nil {
-		return nil, err
-	}
+// func (r *ReconcileManagedCluster) getManagedClusterClientFromHive(
+// 	clusterDeployment *hivev1.ClusterDeployment,
+// 	managedCluster *clusterv1.ManagedCluster) (client.Client, error) {
+// 	managedClusterKubeSecret := &corev1.Secret{}
+// 	err := r.client.Get(context.TODO(), types.NamespacedName{
+// 		Name:      clusterDeployment.Spec.ClusterMetadata.AdminKubeconfigSecretRef.Name,
+// 		Namespace: managedCluster.Name,
+// 	},
+// 		managedClusterKubeSecret)
+// 	if err != nil {
+// 		return nil, err
+// 	}
 
-	return getClientFromKubeConfig(managedClusterKubeSecret.Data["kubeconfig"])
+// 	return getClientFromKubeConfig(managedClusterKubeSecret.Data["kubeconfig"])
 
-}
+// }
 
 //Get the client from the auto-import-secret
 func (r *ReconcileManagedCluster) getManagedClusterClientFromAutoImportSecret(
-	managedCluster *clusterv1.ManagedCluster) (client.Client, error) {
-	autoImportSecret := &corev1.Secret{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{
-		Name:      autoImportSecretName,
-		Namespace: managedCluster.Name,
-	},
-		autoImportSecret)
-	if err != nil {
-		return nil, err
-	}
-
+	managedCluster *clusterv1.ManagedCluster,
+	autoImportSecret *corev1.Secret) (client.Client, error) {
 	return getClientFromKubeConfig(autoImportSecret.Data["kubeconfig"])
 }
 
@@ -190,7 +98,137 @@ func getClientFromKubeConfig(kubeconfig []byte) (client.Client, error) {
 	}
 
 	return client, nil
+}
 
+//importCluster import a cluster if autoImportRetry > 0
+func (r *ReconcileManagedCluster) importClusterWithClient(
+	clusterDeployment *hivev1.ClusterDeployment,
+	managedCluster *clusterv1.ManagedCluster,
+	autoImportSecret *corev1.Secret,
+	managedClusterClient client.Client) (reconcile.Result, error) {
+
+	klog.Infof("Importing cluster: %s", managedCluster.Name)
+
+	mwNSN, err := manifestWorkNsN(managedCluster)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	mw := &workv1.ManifestWork{}
+	err = r.client.Get(context.TODO(), mwNSN, mw)
+	// import already done as mw already created
+	if err == nil {
+		return reconcile.Result{}, nil
+	}
+	if !errors.IsNotFound(err) {
+		return reconcile.Result{}, err
+	}
+
+	// yamlSecret := &corev1.Secret{}
+	// err = r.client.Get(context.TODO(),
+	// 	types.NamespacedName{Namespace: managedCluster.Name, Name: managedCluster.Name + "-import"},
+	// 	yamlSecret)
+	// if err != nil {
+	// 	return reconcile.Result{}, err
+	// }
+
+	if autoImportSecret != nil {
+		//Decrement the autoImportRetry
+		autoImportRetry, err := strconv.Atoi(string(autoImportSecret.Data[autoImportRetryName]))
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		klog.Infof("Retry left to import %s: %d", managedCluster.Name, autoImportRetry)
+		autoImportRetry--
+		//Remove if negatif as a label can not start with "-", should start by a char
+		if autoImportRetry < 0 {
+			err = r.client.Delete(context.TODO(), autoImportSecret)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+			autoImportSecret = nil
+		} else {
+			v := []byte(strconv.Itoa(autoImportRetry))
+			autoImportSecret.Data[autoImportRetryName] = v
+			err := r.client.Update(context.TODO(), autoImportSecret)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+	}
+
+	//Do not create SA if already exists
+	excluded := make([]string, 0)
+	sa := &corev1.ServiceAccount{}
+	if err := managedClusterClient.Get(context.TODO(),
+		types.NamespacedName{
+			Name:      "klusterlet",
+			Namespace: klusterletNamespace,
+		}, sa); err == nil {
+		excluded = append(excluded, "klusterlet/service_account.yaml")
+	}
+	//Generate crds and yamls
+	crds, yamls, err := generateImportYAMLs(r.client, managedCluster, excluded)
+	if err != nil {
+		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
+	}
+
+	//Convert crds to Yaml
+	bb, err := templateprocessor.ToYAMLsUnstructured(crds)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	//create applier for crds
+	a, err := applier.NewApplier(
+		templateprocessor.NewYamlStringReader(templateprocessor.ConvertArrayOfBytesToString(bb),
+			templateprocessor.KubernetesYamlsDelimiter),
+		nil,
+		managedClusterClient,
+		nil,
+		nil,
+		applier.DefaultKubernetesMerger, nil)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	//Create the crds resources
+	err = a.CreateOrUpdateInPath(".", nil, false, nil)
+	if err != nil {
+		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
+	}
+
+	//Convert yamls to yaml
+	bb, err = templateprocessor.ToYAMLsUnstructured(yamls)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	//Create applier for yamls
+	a, err = applier.NewApplier(
+		templateprocessor.NewYamlStringReader(templateprocessor.ConvertArrayOfBytesToString(bb),
+			templateprocessor.KubernetesYamlsDelimiter),
+		nil,
+		managedClusterClient,
+		nil,
+		nil,
+		applier.DefaultKubernetesMerger,
+		nil)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	//Create the yamls resources
+	err = a.CreateOrUpdateInPath(".", excluded, false, nil)
+	if err != nil {
+		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
+	}
+
+	//Succeeded do not retry, then remove the autoImportRetryLabel
+	if autoImportSecret != nil {
+		if err := r.client.Delete(context.TODO(), autoImportSecret); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+	klog.Infof("Successfully imported %s", managedCluster.Name)
+	return reconcile.Result{}, nil
 }
 
 func (r *ReconcileManagedCluster) managedClusterDeletion(instance *clusterv1.ManagedCluster) (reconcile.Result, error) {

@@ -43,11 +43,6 @@ func newManifestWorks(
 	yamls []*unstructured.Unstructured,
 ) (*workv1.ManifestWork, *workv1.ManifestWork, error) {
 
-	// crds, yamls, err := generateImportYAMLs(client, managedCluster, []string{})
-	// if err != nil {
-	// 	return nil, nil, err
-	// }
-
 	manifestCRDs, err := convertToManifests(crds)
 	if err != nil {
 		return nil, nil, err
@@ -179,6 +174,9 @@ func deleteKlusterletManifestWorks(
 	}
 
 	return nil
+	//The manifestworks yamls should not be deleted otherwize
+	//The agent is deleted before removing the finalizer.
+
 	//Delete the YAML manifestWork
 	// return deleteManifestWork(client, mwNsN.Name, mwNsN.Namespace)
 }
