@@ -185,3 +185,11 @@ functional-test:
 .PHONY: functional-test-full
 functional-test-full: component/build-coverage
 	$(SELF) component/test/functional
+
+# download script for coverage entrypoint. 
+.PHONY: sync-coverage-entrypoint
+sync-coverage-entrypoint:
+	@echo downloading coverage entrypoint file
+	@tmp_dir=$$(mktemp -d); \
+	curl  --fail -H 'Accept: application/vnd.github.v4.raw' -L https://api.github.com/repos/open-cluster-management/build-harness-extensions/contents/modules/component/bin/component/coverage-entrypoint-func.sh > "$$tmp_dir/coverage-entrypoint-func.sh" \
+	&& mv "$$tmp_dir/coverage-entrypoint-func.sh" build/bin/;
