@@ -64,7 +64,7 @@ func Test_createKubeconfigData(t *testing.T) {
 		Spec: ocinfrav1.APIServerSpec{
 			ServingCerts: ocinfrav1.APIServerServingCerts{
 				NamedCertificates: []ocinfrav1.APIServerNamedServingCert{
-					ocinfrav1.APIServerNamedServingCert{
+					{
 						Names:              []string{"my-dns-name.com"},
 						ServingCertificate: ocinfrav1.SecretNameReference{Name: "test-secret"},
 					},

@@ -23,6 +23,7 @@ import (
 )
 
 const (
+	/* #nosec */
 	imagePullSecretNameSyncSet = "my-image-pul-secret-syncset"
 	managedClusterNameSyncSet  = "cluster-syncseet"
 )

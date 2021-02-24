@@ -33,7 +33,6 @@ import (
 	sdkVersion "github.com/operator-framework/operator-sdk/version"
 	"github.com/spf13/pflag"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	_ "k8s.io/client-go/plugin/pkg/client/auth" // Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.
 	"k8s.io/client-go/rest"
 	rbacv1 "k8s.io/kubernetes/pkg/apis/rbac/v1"
@@ -216,11 +215,11 @@ func addMetrics(ctx context.Context, cfg *rest.Config, namespace string) {
 	}
 
 	// Add to the below struct any other metrics ports you want to expose.
-	servicePorts := []v1.ServicePort{
+	servicePorts := []corev1.ServicePort{
 		{
 			Port:     metricsPort,
 			Name:     metrics.OperatorPortName,
-			Protocol: v1.ProtocolTCP,
+			Protocol: corev1.ProtocolTCP,
 			TargetPort: intstr.IntOrString{
 				Type:   intstr.Int,
 				IntVal: metricsPort,
@@ -229,7 +228,7 @@ func addMetrics(ctx context.Context, cfg *rest.Config, namespace string) {
 		{
 			Port:     operatorMetricsPort,
 			Name:     metrics.CRPortName,
-			Protocol: v1.ProtocolTCP,
+			Protocol: corev1.ProtocolTCP,
 			TargetPort: intstr.IntOrString{
 				Type:   intstr.Int,
 				IntVal: operatorMetricsPort,
@@ -245,7 +244,7 @@ func addMetrics(ctx context.Context, cfg *rest.Config, namespace string) {
 
 	// CreateServiceMonitors will automatically create the prometheus-operator ServiceMonitor resources
 	// necessary to configure Prometheus to scrape metrics from this operator.
-	services := []*v1.Service{service}
+	services := []*corev1.Service{service}
 	_, err = metrics.CreateServiceMonitors(cfg, namespace, services)
 	if err != nil {
 		log.Info("Could not create ServiceMonitor object", "error", err.Error())
