@@ -3,8 +3,6 @@ FROM openshift/origin-release:golang-1.15 as builder
 ENV REMOTE_SOURCE='.'
 ENV REMOTE_SOURCE_DIR='/remote-source'
 
-RUN ls -l /opt/build-harness
-
 COPY $REMOTE_SOURCE $REMOTE_SOURCE_DIR/app/
 WORKDIR $REMOTE_SOURCE_DIR/app
 RUN GOFLAGS="" go build ./cmd/manager
@@ -24,8 +22,6 @@ COPY --from=builder $REMOTE_SOURCE_DIR/app/manager ${OPERATOR}
 COPY --from=builder $REMOTE_SOURCE_DIR/app/build/bin /usr/local/bin
 COPY --from=builder $REMOTE_SOURCE_DIR/app/build/resources /usr/local/resources
 
-RUN cp /opt/build-harness/modules/component/bin/component/coverage-entrypoint-func.sh \
-    /usr/local/bin/coverage-entrypoint-func.sh
 RUN  /usr/local/bin/user_setup
 
 ENTRYPOINT ["/usr/local/bin/entrypoint"]
