@@ -117,7 +117,7 @@ func generateImportYAMLs(
 	if !useImagePullSecret {
 		excluded = append(excluded, "klusterlet/image_pull_secret.yaml")
 	}
-	klusterletYAMLs, err := tp.TemplateAssetsInPathYaml(
+	klusterletYAMLs, err := tp.TemplateResourcesInPathYaml(
 		"klusterlet",
 		excluded,
 		false,
