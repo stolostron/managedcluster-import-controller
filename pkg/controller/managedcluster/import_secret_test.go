@@ -29,8 +29,10 @@ import (
 )
 
 const (
+	/* #nosec */
 	imagePullSecretNameSecret = "my-image-pul-secret-secret"
-	managedClusterNameSecret  = "cluster-secret"
+	/* #nosec */
+	managedClusterNameSecret = "cluster-secret"
 )
 
 func init() {
@@ -476,7 +478,7 @@ func TestTemplating(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	results, err := tp.TemplateAssets([]string{"klusterlet/cluster_role_binding.yaml",
+	results, err := tp.TemplateResources([]string{"klusterlet/cluster_role_binding.yaml",
 		"klusterlet/operator.yaml"}, config)
 	if err != nil {
 		t.Error(err)
@@ -516,7 +518,7 @@ func newBootstrapServiceAccount(managedCluster *clusterv1.ManagedCluster) (*core
 	if err != nil {
 		return nil, err
 	}
-	result, err := tp.TemplateAsset("hub/managedcluster/manifests/managedcluster-service-account.yaml", config)
+	result, err := tp.TemplateResource("hub/managedcluster/manifests/managedcluster-service-account.yaml", config)
 	if err != nil {
 		return nil, err
 	}

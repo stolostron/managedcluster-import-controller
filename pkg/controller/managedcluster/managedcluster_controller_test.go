@@ -28,6 +28,7 @@ import (
 )
 
 const (
+	/* #nosec */
 	imagePullSecretNameReconcile = "my-image-pul-secret"
 	managedClusterNameReconcile  = "cluster-reconcile"
 )

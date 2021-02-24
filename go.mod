@@ -13,6 +13,7 @@ require (
 	github.com/openshift/hive v0.0.0-20200318152403-0c1ea8babb4e
 	github.com/operator-framework/operator-sdk v0.18.1
 	github.com/spf13/pflag v1.0.5
+	golang.org/x/tools v0.1.0 // indirect
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	k8s.io/api v0.18.8
 	k8s.io/apimachinery v0.18.8
