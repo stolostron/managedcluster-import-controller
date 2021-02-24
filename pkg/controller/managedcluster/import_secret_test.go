@@ -29,8 +29,10 @@ import (
 )
 
 const (
+	/* #nosec */
 	imagePullSecretNameSecret = "my-image-pul-secret-secret"
-	managedClusterNameSecret  = "cluster-secret"
+	/* #nosec */
+	managedClusterNameSecret = "cluster-secret"
 )
 
 func init() {

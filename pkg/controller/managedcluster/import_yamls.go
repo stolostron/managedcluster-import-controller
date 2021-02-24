@@ -31,7 +31,7 @@ const (
 	registrationImageEnvVarName         = "REGISTRATION_IMAGE"
 	workImageEnvVarName                 = "WORK_IMAGE"
 	klusterletNamespace                 = "open-cluster-management-agent"
-	envVarNotDefined                    = "Environment variable %s not defined"
+	envVarNotDefined                    = "environment variable %s not defined"
 	managedClusterImagePullSecretName   = "open-cluster-management-image-pull-credentials"
 )
 

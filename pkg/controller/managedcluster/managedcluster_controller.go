@@ -274,15 +274,14 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		if err != nil {
 			return reconcile.Result{}, err
 		}
-	} else {
-		if !checkOffLine(instance) {
-			reqLogger.Info(fmt.Sprintf("createOrUpdateManifestWorks: %s", instance.Name))
-			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
+	} else if !checkOffLine(instance) {
+		reqLogger.Info(fmt.Sprintf("createOrUpdateManifestWorks: %s", instance.Name))
+		_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance)
+		if err != nil {
+			return reconcile.Result{}, err
 		}
 	}
+
 	return reconcile.Result{}, nil
 }
 

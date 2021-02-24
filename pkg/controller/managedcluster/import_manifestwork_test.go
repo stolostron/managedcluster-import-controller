@@ -22,11 +22,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-const (
-	imagePullSecretNameMW = "my-image-pul-secret-mw"
-	managedClusterNameMW  = "cluster-mw"
-)
-
 func init() {
 	os.Setenv(registrationImageEnvVarName, "quay.io/open-cluster-management/registration:latest")
 }

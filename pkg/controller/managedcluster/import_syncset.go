@@ -166,7 +166,7 @@ func createOrUpdateSyncSet(
 				return nil, err
 			}
 		} else {
-			log.Info("Synset indentical then no update", "name", ss.Name, "namespace", ss.Namespace)
+			log.Info("Synset identical then no update", "name", ss.Name, "namespace", ss.Namespace)
 		}
 	}
 	return ss, nil
