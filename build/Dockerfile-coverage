@@ -22,22 +22,4 @@ RUN cp ${OPERATOR}-coverage ${OPERATOR}
 
 USER ${USER_UID}
 
-ENTRYPOINT ["/usr/local/bin/entrypoint-coverage"]
-
-ARG VCS_REF
-ARG VCS_URL
-ARG IMAGE_NAME
-ARG IMAGE_DESCRIPTION
-ARG ARCH_TYPE
-ARG REMOTE_SOURCE_DIR
-
-LABEL com.redhat.component="rcm-controller-container" \
-      name="rhacm1-tech-preview/rcm-controller-rhel8" \
-      version="${CI_CONTAINER_VERSION}" \
-      release="${CI_CONTAINER_RELEASE}" \
-      summary="rcm-controller" \
-      io.openshift.expose-services="" \
-      io.openshift.tags="data,images" \
-      io.k8s.display-name="rcm-controller" \
-      maintainer="['eisraeli@redhat.com', 'jbieren@redhat.com']" \
-      description="rcm-controller"
+ENTRYPOINT ["/usr/local/bin/entrypoint"]

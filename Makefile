@@ -39,17 +39,9 @@ export DOCKER_IMAGE_COVERAGE_POSTFIX ?= -coverage
 export DOCKER_IMAGE_COVERAGE      ?= $(DOCKER_IMAGE)$(DOCKER_IMAGE_COVERAGE_POSTFIX)
 export DOCKER_BUILD_TAG  ?= latest
 export DOCKER_TAG        ?= $(shell whoami)
+export DOCKER_BUILDER    ?= docker
 
 BEFORE_SCRIPT := $(shell build/before-make.sh)
-
-USE_VENDORIZED_BUILD_HARNESS ?=
-
-# ifndef USE_VENDORIZED_BUILD_HARNESS
-# # -include $(shell curl -s -H 'Authorization: token ${GITHUB_TOKEN}' -H 'Accept: application/vnd.github.v4.raw' -L https://api.github.com/repos/itdove/build-harness-extensions/contents/templates/Makefile.build-harness-bootstrap?branch=code_coverage -o .build-harness-bootstrap; echo .build-harness-bootstrap)
-# -include $(shell curl -s -H 'Authorization: token ${GITHUB_TOKEN}' -H 'Accept: application/vnd.github.v4.raw' -L https://api.github.com/repos/open-cluster-management/build-harness-extensions/contents/templates/Makefile.build-harness-bootstrap -o .build-harness-bootstrap; echo .build-harness-bootstrap)
-# else
-# -include vbh/.build-harness-vendorized
-# endif
 
 export DOCKER_BUILD_OPTS  = --build-arg VCS_REF=$(VCS_REF) \
 	--build-arg VCS_URL=$(GIT_REMOTE_URL) \
@@ -123,6 +115,14 @@ build:
 build-coverage:
 	go test -covermode=atomic -coverpkg=github.com/open-cluster-management/managedcluster-import-controller/pkg/... -c -tags testrunmain ./cmd/manager -o build/_output/manager-coverage
 
+.PHONY: build-image
+build-image:
+	$(DOCKER_BUILDER) build -f $(DOCKER_FILE) . -t $(DOCKER_IMAGE) 
+
+.PHONY: build-image-coverage
+build-image-coverage: build-image
+	$(DOCKER_BUILDER) build -f $(DOCKER_FILE)-coverage . -t $(DOCKER_IMAGE_COVERAGE) --build-arg DOCKER_BASE_IMAGE=$(DOCKER_IMAGE)
+
 .PHONY: clean
 ## Clean build-harness and remove Go generated build and test files
 clean:
@@ -183,8 +183,8 @@ functional-test:
 	ginkgo -tags functional -v --slowSpecThreshold=30 test/functional -- -v=5
 
 .PHONY: functional-test-full
-functional-test-full: component/build-coverage
-	$(SELF) component/test/functional
+functional-test-full: build-image-coverage
+	build/run-functional-tests.sh $(DOCKER_IMAGE_COVERAGE)
 
 # download script for coverage entrypoint. 
 .PHONY: sync-coverage-entrypoint
@@ -192,4 +192,4 @@ sync-coverage-entrypoint:
 	@echo downloading coverage entrypoint file
 	@tmp_dir=$$(mktemp -d); \
 	curl  --fail -H 'Accept: application/vnd.github.v4.raw' -L https://api.github.com/repos/open-cluster-management/build-harness-extensions/contents/modules/component/bin/component/coverage-entrypoint-func.sh > "$$tmp_dir/coverage-entrypoint-func.sh" \
-	&& mv "$$tmp_dir/coverage-entrypoint-func.sh" build/bin/;
+	&& mv "$$tmp_dir/coverage-entrypoint-func.sh" build/bin/ && chmod +x build/bin/coverage-entrypoint-func.sh ;
