@@ -30,5 +30,7 @@ test/functional/tmp
 test/functional/coverage
 kind_kubeconfig.yaml
 kind_kubeconfig_mc.yaml
+kind_kubeconfig_internal.yaml
+kind_kubeconfig_internal_mc.yaml
 
 report.json

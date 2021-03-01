@@ -15,6 +15,7 @@ import (
 	"flag"
 	"fmt"
 	"io/ioutil"
+	"os"
 	"testing"
 
 	. "github.com/onsi/ginkgo"
@@ -109,9 +110,12 @@ func newClusterdeployment(name string) *unstructured.Unstructured {
 	}
 }
 
-func newAutoImportSecret(clusterName string) (*corev1.Secret, error) {
-	kubeconfig, err := ioutil.ReadFile("../kind_kubeconfig_mc.yaml")
+func newAutoImportSecretWithKubeConfig(clusterName string) (*corev1.Secret, error) {
+	dir, _ := os.Getwd()
+	klog.V(5).Infof("Current Directory: %s", dir)
+	kubeconfig, err := ioutil.ReadFile("../../kind_kubeconfig_internal_mc.yaml")
 	if err != nil {
+		klog.Error(err)
 		return nil, err
 	}
 	return &corev1.Secret{
@@ -121,7 +125,29 @@ func newAutoImportSecret(clusterName string) (*corev1.Secret, error) {
 		},
 		StringData: map[string]string{
 			"autoImportRetry": "5",
-			"kubeconfig:":     string(kubeconfig),
+			"kubeconfig":      string(kubeconfig),
+		},
+	}, nil
+}
+
+func newAutoImportSecretWithToken(clusterName string) (*corev1.Secret, error) {
+	token := os.Getenv("MANAGED_CLUSTER_TOKEN")
+	apiURL := os.Getenv("MANAGED_CLUSTER_API_SERVER_URL")
+	if len(token) == 0 || len(apiURL) == 0 {
+		return nil, fmt.Errorf(
+			`MANAGED_CLUSTER_TOKEN and/or 
+			MANAGED_CLUSTER_API_SERVER_URL are not set for cluster: %s`,
+			clusterName)
+	}
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "auto-import-secret",
+			Namespace: clusterName,
+		},
+		StringData: map[string]string{
+			"autoImportRetry": "5",
+			"token":           token,
+			"server":          apiURL,
 		},
 	}, nil
 }

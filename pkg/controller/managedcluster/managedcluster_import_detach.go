@@ -19,6 +19,7 @@ import (
 	workv1 "github.com/open-cluster-management/api/work/v1"
 
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/open-cluster-management/library-go/pkg/applier"
 	"github.com/open-cluster-management/library-go/pkg/templateprocessor"
@@ -76,9 +77,20 @@ func (r *ReconcileManagedCluster) importCluster(
 func (r *ReconcileManagedCluster) getManagedClusterClientFromAutoImportSecret(
 	managedCluster *clusterv1.ManagedCluster,
 	autoImportSecret *corev1.Secret) (client.Client, error) {
-	return getClientFromKubeConfig(autoImportSecret.Data["kubeconfig"])
+	//generate client using kubeconfig
+	if k, ok := autoImportSecret.Data["kubeconfig"]; ok {
+		return getClientFromKubeConfig(k)
+	} else {
+		token, tok := autoImportSecret.Data["token"]
+		server, sok := autoImportSecret.Data["server"]
+		if tok && sok {
+			return getClientFromToken(string(token), string(server))
+		}
+	}
+	return nil, fmt.Errorf("kubeconfig or token and server are missing")
 }
 
+//Create client from kubeconfig
 func getClientFromKubeConfig(kubeconfig []byte) (client.Client, error) {
 	config, err := clientcmd.Load(kubeconfig)
 	if err != nil {
@@ -98,6 +110,35 @@ func getClientFromKubeConfig(kubeconfig []byte) (client.Client, error) {
 	}
 
 	return client, nil
+}
+
+//Create client from token and server
+func getClientFromToken(token, server string) (client.Client, error) {
+	//Create config
+	config := clientcmdapi.NewConfig()
+	config.Clusters["default"] = &clientcmdapi.Cluster{
+		Server:                server,
+		InsecureSkipTLSVerify: true,
+	}
+	config.AuthInfos["default"] = &clientcmdapi.AuthInfo{
+		Token: token,
+	}
+	config.Contexts["default"] = &clientcmdapi.Context{
+		Cluster:  "default",
+		AuthInfo: "default",
+	}
+	config.CurrentContext = "default"
+
+	clientConfig := clientcmd.NewDefaultClientConfig(*config, &clientcmd.ConfigOverrides{})
+	restConfig, err := clientConfig.ClientConfig()
+	if err != nil {
+		return nil, err
+	}
+	clientClient, err := client.New(restConfig, client.Options{})
+	if err != nil {
+		return nil, err
+	}
+	return clientClient, nil
 }
 
 //importCluster import a cluster if autoImportRetry > 0

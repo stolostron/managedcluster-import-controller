@@ -172,14 +172,14 @@ install-fake-crds:
 .PHONY: kind-cluster-setup
 kind-cluster-setup: install-fake-crds
 	@echo installing fake infrastructure resource
-	kubectl apply -f test/functional/resources/fake_infrastructure_cr.yaml
+	# kubectl apply -f test/functional/resources/fake_infrastructure_cr.yaml
 	kubectl apply -f test/functional/resources/fake_apiserver_cr.yaml
 
 .PHONY: functional-test
 functional-test:
 	# ginkgo -tags functional -v --focus="(.*)import-managedcluster(.*)" --slowSpecThreshold=10 test/managedcluster-import-controller-test -- -v=5
 	# ginkgo -tags functional -v --slowSpecThreshold=10 --focus="(.*)approve-csr(.*)" test/functional -- -v=1
-	# ginkgo -tags functional -v --slowSpecThreshold=30 --focus="import-hub/with-manifestwork" test/functional -- -v=5
+	# ginkgo -tags functional -v --slowSpecThreshold=30 --focus="import-managedcluster/with-auto-import-token" test/functional -- -v=5
 	ginkgo -tags functional -v --slowSpecThreshold=30 test/functional -- -v=5
 
 .PHONY: functional-test-full

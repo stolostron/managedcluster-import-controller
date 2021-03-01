@@ -1,5 +1,6 @@
 # Importing an Hive provisioned OpenShift cluster
 
+You can use the scripts available at [applier-samples-for-acm](https://github.com/open-cluster-management/applier-samples-for-acm) to ease the import process.
 ## Prereq
 
 ### Creating a Hive ClusterDeployment

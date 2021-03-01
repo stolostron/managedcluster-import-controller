@@ -271,6 +271,7 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 			return reconcile.Result{}, err
 		}
 	} else {
+		reqLogger.Info(fmt.Sprintf("Get clusterDeployment error: %s", err.Error()))
 		if !errors.IsNotFound(err) {
 			return reconcile.Result{}, err
 		}
@@ -291,7 +292,10 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 
 	//Stop here if no auto-import
 	if !toImport {
-		klog.Infof("Do not auto-import cluster: %s", instance.Name)
+		klog.Infof(`Not importing auto-import cluster: %s as either 
+no auto-import-secret is present, 
+syncset is created or 
+already imported`, instance.Name)
 		return reconcile.Result{}, nil
 	}
 

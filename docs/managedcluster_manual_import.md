@@ -1,5 +1,9 @@
 # Manual importing of an existing cluster
 
+The manual import process has 2 phases, first create the necessary resources on the hub, and then deploy the agent on the managed cluster.
+
+You can use the scripts available at [applier-samples-for-acm](https://github.com/open-cluster-management/applier-samples-for-acm) to ease the import process.
+
 ## Creating a namespace in which the cluster will get imported
 On the Hub cluster:
 - Create a namespace

@@ -5,11 +5,12 @@
 ###############################################################################
 
 set -e
-#set -x
+# set -x
 
 CURR_FOLDER_PATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 KIND_KUBECONFIG="${CURR_FOLDER_PATH}/../kind_kubeconfig.yaml"
-KIND_MANAGED_KUBECONFIG="${CURR_FOLDER_PATH}/../kind_kubeconfig_mc.yaml"
+KIND_KUBECONFIG_INTERNAL="${CURR_FOLDER_PATH}/../kind_kubeconfig_internal.yaml"
+KIND_MANAGED_KUBECONFIG_INTERNAL="${CURR_FOLDER_PATH}/../kind_kubeconfig_internal_mc.yaml"
 export KUBECONFIG=${KIND_KUBECONFIG}
 export DOCKER_IMAGE_AND_TAG=${1}
 
@@ -51,6 +52,7 @@ echo "setting up test tmp folder"
 mkdir -p "$FUNCT_TEST_TMPDIR"
 # mkdir -p "$FUNCT_TEST_TMPDIR/output"
 mkdir -p "$FUNCT_TEST_TMPDIR/kind-config"
+mkdir -p "$FUNCT_TEST_TMPDIR/CR"
 
 echo "setting up test coverage folder"
 [ -d "$FUNCT_TEST_COVERAGE" ] && rm -r "$FUNCT_TEST_COVERAGE"
@@ -58,16 +60,6 @@ mkdir -p "${FUNCT_TEST_COVERAGE}"
 
 echo "generating kind configfile"
 cat << EOF > "${FUNCT_TEST_TMPDIR}/kind-config/kind-config.yaml"
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-nodes:
-- role: control-plane
-  extraMounts:
-  - hostPath: "${FUNCT_TEST_COVERAGE}"
-    containerPath: /tmp/coverage
-EOF
-
-cat << EOF > "${FUNCT_TEST_TMPDIR}/kind-config/kind-managed-config.yaml"
 kind: Cluster
 apiVersion: kind.x-k8s.io/v1alpha4
 nodes:
@@ -80,7 +72,7 @@ nodes:
     hostPort: 443
     listenAddress: "0.0.0.0"
   - containerPort: 6443
-    hostPort: 32806
+    hostPort: 32800
     listenAddress: "0.0.0.0"
   kubeadmConfigPatches:
   - |
@@ -88,19 +80,66 @@ nodes:
     nodeRegistration:
       kubeletExtraArgs:
         system-reserved: memory=2Gi
+  extraMounts:
+  - hostPath: "${FUNCT_TEST_COVERAGE}"
+    containerPath: /tmp/coverage
+networking:
+  apiServerPort: 6443
 EOF
 
+#not used as we need to find a way to use token with kind.
+export MANAGED_CLUSTER_API_SERVER_URL=$(cat ${KIND_MANAGED_KUBECONFIG_INTERNAL}| grep "server:" |cut -d ":" -f2 -f3 -f4 | sed 's/^ //')
+export MANAGED_CLUSTER_TOKEN="itdove.thisisafaketoken"
+
+cat << EOF > "${FUNCT_TEST_TMPDIR}/kind-config/kind-managed-config.yaml"
+kind: Cluster
+apiVersion: kind.x-k8s.io/v1alpha4
+nodes:
+- role: control-plane
+  extraPortMappings:
+  - containerPort: 81
+    hostPort: 81
+    listenAddress: "0.0.0.0"
+  - containerPort: 444
+    hostPort: 444
+    listenAddress: "0.0.0.0"
+  - containerPort: 6444
+    hostPort: 32801
+    listenAddress: "0.0.0.0"
+  kubeadmConfigPatches:
+  - |
+    kind: InitConfiguration #for worker use JoinConfiguration
+    nodeRegistration:
+      kubeletExtraArgs:
+        system-reserved: memory=2Gi
+networking:
+  apiServerPort: 6444
+EOF
+
+cat << EOF > "${FUNCT_TEST_TMPDIR}/CR/fake_infrastructure_cr.yaml"
+apiVersion: config.openshift.io/v1
+kind: Infrastructure
+metadata:
+  name: cluster
+spec:
+  cloudConfig:
+    name: ""
+status:
+  apiServerInternalURI: API_SERVER_URL
+  apiServerURL: API_SERVER_URL
+EOF
 
 echo "creating managed cluster"
 kind create cluster --name functional-test-managed --config "${FUNCT_TEST_TMPDIR}/kind-config/kind-managed-config.yaml"
 # setup kubeconfig
-kind get kubeconfig --name functional-test-managed > ${KIND_MANAGED_KUBECONFIG}
-
+kind get kubeconfig --name functional-test-managed --internal > ${KIND_MANAGED_KUBECONFIG_INTERNAL}
 echo "creating hub cluster"
 kind create cluster --name functional-test --config "${FUNCT_TEST_TMPDIR}/kind-config/kind-config.yaml"
 
 # setup kubeconfig
 kind get kubeconfig --name functional-test > ${KIND_KUBECONFIG}
+kind get kubeconfig --name functional-test --internal > ${KIND_KUBECONFIG_INTERNAL}
+API_SERVER_URL=$(cat ${KIND_KUBECONFIG_INTERNAL}| grep "server:" |cut -d ":" -f2 -f3 -f4 | sed 's/^ //')
 
 # load image if possible
 kind load docker-image ${DOCKER_IMAGE_AND_TAG} --name=functional-test -v 99 || echo "failed to load image locally, will use imagePullSecret"
@@ -117,6 +156,9 @@ for dir in overlays/test/* ; do
 
   echo "install imagePullSecret"
   kubectl create secret -n open-cluster-management docker-registry multiclusterhub-operator-pull-secret --docker-server=quay.io --docker-username=${DOCKER_USER} --docker-password=${DOCKER_PASS}
+
+  echo "Create the cluster infrastructure"
+  sed "s|API_SERVER_URL|${API_SERVER_URL}|g" ${FUNCT_TEST_TMPDIR}/CR/fake_infrastructure_cr.yaml | kubectl apply -f -
 
   # patch image
   echo "Wait rollout"
