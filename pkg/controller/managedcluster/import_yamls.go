@@ -12,6 +12,8 @@ import (
 	"fmt"
 	"os"
 
+	"k8s.io/klog"
+
 	"net/url"
 
 	corev1 "k8s.io/api/core/v1"
@@ -19,6 +21,7 @@ import (
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	"github.com/open-cluster-management/library-go/pkg/templateprocessor"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/bindata"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -39,22 +42,27 @@ func generateImportYAMLs(
 	client client.Client,
 	managedCluster *clusterv1.ManagedCluster,
 	excluded []string,
-) (yamls [][]byte, crds [][]byte, err error) {
+) (yamls []*unstructured.Unstructured, crds []*unstructured.Unstructured, err error) {
 
+	klog.V(4).Info("Create templateProcessor")
 	tp, err := templateprocessor.NewTemplateProcessor(bindata.NewBindataReader(), &templateprocessor.Options{})
 	if err != nil {
 		return nil, nil, err
 	}
-	crds, err = tp.Assets("klusterlet/crds", nil, true)
+
+	klog.V(4).Info("TemplateResources klusterlet/crds")
+	crds, err = tp.TemplateResourcesInPathUnstructured("klusterlet/crds", nil, true, nil)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	// klog.V(4).Infof("getBootstrapSecret for %s ", managedCluster.Name)
 	bootStrapSecret, err := getBootstrapSecret(client, managedCluster)
 	if err != nil {
 		return nil, nil, err
 	}
 
+	klog.V(4).Infof("createKubeconfigData for bootsrapSecret %s", bootStrapSecret.Name)
 	bootstrapKubeconfigData, err := createKubeconfigData(client, bootStrapSecret)
 	if err != nil {
 		return nil, nil, err
@@ -117,7 +125,7 @@ func generateImportYAMLs(
 	if !useImagePullSecret {
 		excluded = append(excluded, "klusterlet/image_pull_secret.yaml")
 	}
-	klusterletYAMLs, err := tp.TemplateResourcesInPathYaml(
+	klusterletYAMLs, err := tp.TemplateResourcesInPathUnstructured(
 		"klusterlet",
 		excluded,
 		false,

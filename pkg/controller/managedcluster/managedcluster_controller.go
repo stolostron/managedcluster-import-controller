@@ -12,9 +12,11 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -28,18 +30,20 @@ import (
 
 	libgometav1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1"
 	"github.com/open-cluster-management/library-go/pkg/applier"
-	"github.com/open-cluster-management/library-go/pkg/templateprocessor"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/bindata"
 )
 
 // constants for delete work and finalizer
 const (
-	managedClusterFinalizer = "managedcluster-import-controller.open-cluster-management.io/cleanup"
-	registrationFinalizer   = "cluster.open-cluster-management.io/api-resource-cleanup"
+	managedClusterFinalizer string = "managedcluster-import-controller.open-cluster-management.io/cleanup"
+	registrationFinalizer   string = "cluster.open-cluster-management.io/api-resource-cleanup"
 )
 
-const clusterLabel = "cluster.open-cluster-management.io/managedCluster"
-const selfManagedLabel = "local-cluster"
+const clusterLabel string = "cluster.open-cluster-management.io/managedCluster"
+const selfManagedLabel string = "local-cluster"
+const autoImportRetryName string = "autoImportRetry"
+const autoImportSecretName string = "auto-import-secret"
+const ManagedClusterImportSucceeded string = "ManagedClusterImportSucceeded"
 
 var log = logf.Log.WithName("controller_managedcluster")
 
@@ -242,24 +246,16 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, err
 	}
 
-	reqLogger.Info(fmt.Sprintf("createOrUpdateImportSecret: %s", instance.Name))
-	_, err = createOrUpdateImportSecret(r.client, r.scheme, instance)
+	crds, yamls, err := generateImportYAMLs(r.client, instance, []string{})
 	if err != nil {
-		reqLogger.Error(err, "create ManagedCluster Import Secret")
 		return reconcile.Result{}, err
 	}
 
-	//If self managed then apply the crds/yamls
-	if v, ok := instance.GetLabels()[selfManagedLabel]; ok {
-		managed, err := strconv.ParseBool(v)
-		if err != nil {
-			managed = false
-		}
-		if managed {
-			if err := r.selfManaged(instance); err != nil {
-				return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
-			}
-		}
+	reqLogger.Info(fmt.Sprintf("createOrUpdateImportSecret: %s", instance.Name))
+	_, err = createOrUpdateImportSecret(r.client, r.scheme, instance, crds, yamls)
+	if err != nil {
+		reqLogger.Error(err, "create ManagedCluster Import Secret")
+		return reconcile.Result{}, err
 	}
 
 	clusterDeployment := &hivev1.ClusterDeployment{}
@@ -270,86 +266,97 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		clusterDeployment)
 	if err == nil {
 		reqLogger.Info(fmt.Sprintf("createOrUpdateSyncSets: %s", instance.Name))
-		_, _, err := createOrUpdateSyncSets(r.client, r.scheme, instance)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-	} else if !checkOffLine(instance) {
-		reqLogger.Info(fmt.Sprintf("createOrUpdateManifestWorks: %s", instance.Name))
-		_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-	}
-
-	return reconcile.Result{}, nil
-}
-
-func (r *ReconcileManagedCluster) managedClusterDeletion(instance *clusterv1.ManagedCluster) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Instance.Namespace", instance.Namespace, "Instance.Name", instance.Name)
-	reqLogger.Info(fmt.Sprintf("Instance in Terminating: %s", instance.Name))
-	if len(filterFinalizers(instance, []string{managedClusterFinalizer, registrationFinalizer})) != 0 {
-		return reconcile.Result{Requeue: true}, nil
-	}
-
-	offLine := checkOffLine(instance)
-	reqLogger.Info(fmt.Sprintf("deleteAllOtherManifestWork: %s", instance.Name))
-	err := deleteAllOtherManifestWork(r.client, instance)
-	if err != nil {
-		if !offLine {
-			return reconcile.Result{}, err
-		}
-	}
-
-	if offLine {
-		reqLogger.Info(fmt.Sprintf("evictAllOtherManifestWork: %s", instance.Name))
-		err = evictAllOtherManifestWork(r.client, instance)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-	}
-
-	clusterDeployment := &hivev1.ClusterDeployment{}
-	err = r.client.Get(context.TODO(),
-		types.NamespacedName{
-			Name:      instance.Name,
-			Namespace: instance.Name},
-		clusterDeployment)
-	if err == nil {
-		reqLogger.Info(fmt.Sprintf("deleteKlusterletSyncSets: %s", instance.Name))
-		err = deleteKlusterletSyncSets(r.client, instance)
+		_, _, err := createOrUpdateSyncSets(r.client, r.scheme, instance, crds, yamls)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 	} else {
-		if errors.IsNotFound(err) {
-			reqLogger.Info(fmt.Sprintf("deleteKlusterletManifestWorks: %s", instance.Name))
-			err = deleteKlusterletManifestWorks(r.client, instance)
+		reqLogger.Info(fmt.Sprintf("Get clusterDeployment error: %s", err.Error()))
+		if !errors.IsNotFound(err) {
+			return reconcile.Result{}, err
+		}
+		clusterDeployment = nil
+		if !checkOffLine(instance) {
+			reqLogger.Info(fmt.Sprintf("createOrUpdateManifestWorks: %s", instance.Name))
+			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, crds, yamls)
 			if err != nil {
 				return reconcile.Result{}, err
 			}
-		} else {
-			return reconcile.Result{}, err
 		}
 	}
 
-	if !offLine {
-		return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
-	}
-
-	reqLogger.Info(fmt.Sprintf("evictKlusterletManifestWorks: %s", instance.Name))
-	err = evictKlusterletManifestWorks(r.client, instance)
+	autoImportSecret, toImport, err := r.toBeImported(instance)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	reqLogger.Info(fmt.Sprintf("Remove all finalizer: %s", instance.Name))
-	instance.ObjectMeta.Finalizers = nil
-	if err := r.client.Update(context.TODO(), instance); err != nil {
-		return reconcile.Result{}, err
+	//Stop here if no auto-import
+	if !toImport {
+		klog.Infof(`Not importing auto-import cluster: %s as either 
+no auto-import-secret is present, 
+syncset is created or 
+already imported`, instance.Name)
+		return reconcile.Result{}, nil
 	}
 
-	return reconcile.Result{Requeue: true, RequeueAfter: 5 * time.Second}, nil
+	//Import the cluster
+	result, err := r.importCluster(clusterDeployment, instance, autoImportSecret)
+	errCond := r.setConditionImport(instance, err, fmt.Sprintf("Unable to import %s", instance.Name))
+	if errCond != nil {
+		klog.Error(errCond)
+	}
+	return result, err
+}
+
+func (r *ReconcileManagedCluster) toBeImported(managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, bool, error) {
+	//Check self managed
+	if v, ok := managedCluster.GetLabels()[selfManagedLabel]; ok {
+		toImport, err := strconv.ParseBool(v)
+		return nil, toImport, err
+	} else {
+		//Check auto-import
+		klog.V(2).Info("Check autoImportRetry")
+		autoImportSecret := &corev1.Secret{}
+		err := r.client.Get(context.TODO(), types.NamespacedName{
+			Name:      autoImportSecretName,
+			Namespace: managedCluster.Name,
+		},
+			autoImportSecret)
+		if err != nil {
+			if errors.IsNotFound(err) {
+				klog.Infof("Will not retry as autoImportSecret not found for %s", managedCluster.Name)
+				return nil, false, nil
+			}
+			klog.Errorf("Unable to read the autoImportSecret Error: %s", err.Error())
+			return nil, false, err
+		}
+		klog.Infof("Will retry as autoImportSecret is found for %s and counter still present", managedCluster.Name)
+		return autoImportSecret, true, nil
+	}
+}
+
+func (r *ReconcileManagedCluster) setConditionImport(managedCluster *clusterv1.ManagedCluster, errIn error, reason string) error {
+	newCondition := metav1.Condition{
+		Type:    ManagedClusterImportSucceeded,
+		Status:  metav1.ConditionTrue,
+		Message: "Import succeeded",
+		Reason:  "ManagedClusterImported",
+	}
+	if errIn != nil {
+		newCondition.Status = metav1.ConditionFalse
+		newCondition.Message = errIn.Error()
+		newCondition.Reason = "ManagedClusterNotImported"
+		if reason != "" {
+			newCondition.Message += ": " + reason
+		}
+	}
+	patch := client.MergeFrom(managedCluster.DeepCopy())
+	meta.SetStatusCondition(&managedCluster.Status.Conditions, newCondition)
+	err := r.client.Status().Patch(context.TODO(), managedCluster, patch)
+	if err != nil {
+		return err
+	}
+	return errIn
 }
 
 func filterFinalizers(managedCluster *clusterv1.ManagedCluster, finalizers []string) []string {
@@ -433,77 +440,5 @@ func (r *ReconcileManagedCluster) deleteNamespace(namespaceName string) error {
 		}
 	}
 
-	return nil
-}
-
-func (r *ReconcileManagedCluster) selfManaged(managedCluster *clusterv1.ManagedCluster) error {
-	mwNSN, err := manifestWorkNsN(managedCluster)
-	if err != nil {
-		return err
-	}
-	mw := &workv1.ManifestWork{}
-	err = r.client.Get(context.TODO(), mwNSN, mw)
-	if err == nil {
-		return nil
-	}
-	if !errors.IsNotFound(err) {
-		return err
-	}
-
-	yamlSecret := &corev1.Secret{}
-	err = r.client.Get(context.TODO(),
-		types.NamespacedName{Namespace: managedCluster.Name, Name: managedCluster.Name + "-import"},
-		yamlSecret)
-	if err != nil {
-		return err
-	}
-	excluded := make([]string, 0)
-	sa := &corev1.ServiceAccount{}
-	if err := r.client.Get(context.TODO(),
-		types.NamespacedName{
-			Name:      "klusterlet",
-			Namespace: klusterletNamespace,
-		}, sa); err == nil {
-		excluded = append(excluded, "klusterlet/service_account.yaml")
-	}
-	crds, yamls, err := generateImportYAMLs(r.client, managedCluster, excluded)
-	if err != nil {
-		return err
-	}
-
-	a, err := applier.NewApplier(
-		templateprocessor.NewYamlStringReader(templateprocessor.ConvertArrayOfBytesToString(crds),
-			templateprocessor.KubernetesYamlsDelimiter),
-		nil,
-		r.client,
-		nil,
-		nil,
-		applier.DefaultKubernetesMerger, nil)
-	if err != nil {
-		return err
-	}
-
-	err = a.CreateOrUpdateInPath(".", nil, false, nil)
-	if err != nil {
-		return err
-	}
-
-	a, err = applier.NewApplier(
-		templateprocessor.NewYamlStringReader(templateprocessor.ConvertArrayOfBytesToString(yamls),
-			templateprocessor.KubernetesYamlsDelimiter),
-		nil,
-		r.client,
-		nil,
-		nil,
-		applier.DefaultKubernetesMerger,
-		nil)
-	if err != nil {
-		return err
-	}
-
-	err = a.CreateOrUpdateInPath(".", excluded, false, nil)
-	if err != nil {
-		return err
-	}
 	return nil
 }
