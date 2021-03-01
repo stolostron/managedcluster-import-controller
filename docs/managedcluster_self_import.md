@@ -1,3 +1,5 @@
+[comment]: # ( Copyright Contributors to the Open Cluster Management project )
+
 # Self importing the hub
 
 The hub is automatically self imported at startup as the rcm-chart creates the namespace, managedcluster and klusterletaddonconfig resources. Follow the steps below to re-import it if needed.

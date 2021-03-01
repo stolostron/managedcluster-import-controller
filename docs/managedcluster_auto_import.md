@@ -1,3 +1,5 @@
+[comment]: # ( Copyright Contributors to the Open Cluster Management project )
+
 # Auto import a managed cluster
 
 The hub is automatically importing a managed cluster when a secret called `auto-import-secret` is placed in a namespace named as the cluster name. The namespace will also needs to contain the managedcluster and the kubeaddonconfig CR. The `auto-import-secret` will be automatically deleted when the import is completed (sucessfully on not).
