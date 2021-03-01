@@ -30,3 +30,4 @@ test/functional/tmp
 test/functional/coverage
 kind_kubeconfig.yaml
 
+report.json
