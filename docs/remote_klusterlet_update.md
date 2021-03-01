@@ -1,3 +1,5 @@
+[comment]: # ( Copyright Contributors to the Open Cluster Management project )
+
 # Updating Klusterlet-addons on a managed cluster
 
 ## User action

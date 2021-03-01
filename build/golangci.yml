@@ -1,3 +1,5 @@
+# Copyright Contributors to the Open Cluster Management project
+
 run:
   # default concurrency is a available CPU number
   concurrency: 10

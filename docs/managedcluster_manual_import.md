@@ -1,3 +1,5 @@
+[comment]: # ( Copyright Contributors to the Open Cluster Management project )
+
 # Manual importing of an existing cluster
 
 The manual import process has 2 phases, first create the necessary resources on the hub, and then deploy the agent on the managed cluster.

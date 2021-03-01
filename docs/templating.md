@@ -1,3 +1,5 @@
+[comment]: # ( Copyright Contributors to the Open Cluster Management project )
+
 # Using templating to deploy resources
 
 The templating uses applier ....
