@@ -23,6 +23,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/klog"
 
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller"
 	ocinfrav1 "github.com/openshift/api/config/v1"
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
@@ -39,8 +40,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller"
 )
 
 // Change below variables to serve metrics on different host or port.

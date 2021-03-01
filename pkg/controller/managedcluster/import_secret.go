@@ -8,9 +8,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/open-cluster-management/library-go/pkg/templateprocessor"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -37,7 +39,11 @@ func importSecretNsN(managedCluster *clusterv1.ManagedCluster) (types.Namespaced
 	}, nil
 }
 
-func newImportSecret(client client.Client, managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, error) {
+func newImportSecret(client client.Client,
+	managedCluster *clusterv1.ManagedCluster,
+	crds []*unstructured.Unstructured,
+	yamls []*unstructured.Unstructured,
+) (*corev1.Secret, error) {
 	importYAML := new(bytes.Buffer)
 	crdsYAML := new(bytes.Buffer)
 
@@ -46,17 +52,25 @@ func newImportSecret(client client.Client, managedCluster *clusterv1.ManagedClus
 		return nil, err
 	}
 
-	crds, yamls, err := generateImportYAMLs(client, managedCluster, []string{})
-	if err != nil {
-		return nil, err
-	}
+	// crds, yamls, err := generateImportYAMLs(client, managedCluster, []string{})
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	for _, crd := range crds {
-		crdsYAML.WriteString(fmt.Sprintf("\n---\n%s", string(crd)))
+		b, err := templateprocessor.ToYAMLUnstructured(crd)
+		if err != nil {
+			return nil, err
+		}
+		crdsYAML.WriteString(fmt.Sprintf("\n---\n%s", string(b)))
 	}
 
 	for _, y := range yamls {
-		importYAML.WriteString(fmt.Sprintf("\n---\n%s", string(y)))
+		b, err := templateprocessor.ToYAMLUnstructured(y)
+		if err != nil {
+			return nil, err
+		}
+		importYAML.WriteString(fmt.Sprintf("\n---\n%s", string(b)))
 	}
 
 	secret := &corev1.Secret{
@@ -78,8 +92,10 @@ func createOrUpdateImportSecret(
 	client client.Client,
 	scheme *runtime.Scheme,
 	managedCluster *clusterv1.ManagedCluster,
+	crds []*unstructured.Unstructured,
+	yamls []*unstructured.Unstructured,
 ) (*corev1.Secret, error) {
-	secret, err := newImportSecret(client, managedCluster)
+	secret, err := newImportSecret(client, managedCluster, crds, yamls)
 	if err != nil {
 		return nil, err
 	}

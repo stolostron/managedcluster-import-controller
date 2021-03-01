@@ -77,7 +77,7 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 		},
 		Spec: clusterv1.ManagedClusterSpec{},
 		Status: clusterv1.ManagedClusterStatus{
-			Conditions: []clusterv1.StatusCondition{
+			Conditions: []metav1.Condition{
 				{
 					Type:   clusterv1.ManagedClusterConditionAvailable,
 					Status: metav1.ConditionTrue,
@@ -94,7 +94,7 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 		},
 		Spec: clusterv1.ManagedClusterSpec{},
 		Status: clusterv1.ManagedClusterStatus{
-			Conditions: []clusterv1.StatusCondition{
+			Conditions: []metav1.Condition{
 				{
 					Type:   clusterv1.ManagedClusterConditionAvailable,
 					Status: metav1.ConditionUnknown,
@@ -111,7 +111,7 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 		},
 		Spec: clusterv1.ManagedClusterSpec{},
 		Status: clusterv1.ManagedClusterStatus{
-			Conditions: []clusterv1.StatusCondition{
+			Conditions: []metav1.Condition{
 				{
 					Type:   clusterv1.ManagedClusterConditionAvailable,
 					Status: metav1.ConditionTrue,
@@ -366,36 +366,18 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 					t.Error("Cluster label not found in namespace")
 				}
 
-				clusterDeploymentGet := &hivev1.ClusterDeployment{}
+				manifestwork := &workv1.ManifestWork{}
 				err = r.client.Get(context.TODO(),
 					types.NamespacedName{
-						Name:      clusterDeployment.Name,
-						Namespace: clusterDeployment.Namespace,
-					},
-					clusterDeploymentGet)
-				if err == nil {
-					syncset := &hivev1.SyncSet{}
-					err := r.client.Get(context.TODO(),
-						types.NamespacedName{
-							Name:      testManagedCluster.Name + syncsetNamePostfix,
-							Namespace: testManagedCluster.Name,
-						}, syncset)
-					if err != nil {
-						t.Errorf("SyncSet doesn't exist Error: %s", err.Error())
-					}
-				} else {
-					manifestwork := &workv1.ManifestWork{}
-					err := r.client.Get(context.TODO(),
-						types.NamespacedName{
-							Name:      testManagedCluster.Name + manifestWorkNamePostfix,
-							Namespace: testManagedCluster.Name,
-						}, manifestwork)
-					if err == nil && checkOffLine(managedCluster) {
-						t.Error("Manifestwork exist with a offline cluster")
-					} else if err != nil && !checkOffLine(managedCluster) {
-						t.Error("Manifestwork doesn't exist with an online cluster")
-					}
+						Name:      testManagedCluster.Name + manifestWorkNamePostfix,
+						Namespace: testManagedCluster.Name,
+					}, manifestwork)
+				if err == nil && checkOffLine(managedCluster) {
+					t.Error("Manifestwork exist with a offline cluster")
+				} else if err != nil && !checkOffLine(managedCluster) {
+					t.Error("Manifestwork doesn't exist with an online cluster")
 				}
+
 				if v, ok := managedCluster.GetLabels()["local-cluster"]; ok {
 					b, err := strconv.ParseBool(v)
 					if err != nil {
@@ -533,7 +515,7 @@ func Test_checkOffLine(t *testing.T) {
 					},
 					Spec: clusterv1.ManagedClusterSpec{},
 					Status: clusterv1.ManagedClusterStatus{
-						Conditions: []clusterv1.StatusCondition{
+						Conditions: []metav1.Condition{
 							{
 								Type:   clusterv1.ManagedClusterConditionAvailable,
 								Status: metav1.ConditionTrue,
@@ -554,7 +536,7 @@ func Test_checkOffLine(t *testing.T) {
 					},
 					Spec: clusterv1.ManagedClusterSpec{},
 					Status: clusterv1.ManagedClusterStatus{
-						Conditions: []clusterv1.StatusCondition{
+						Conditions: []metav1.Condition{
 							{
 								Type:   clusterv1.ManagedClusterConditionAvailable,
 								Status: metav1.ConditionFalse,
@@ -575,7 +557,7 @@ func Test_checkOffLine(t *testing.T) {
 					},
 					Spec: clusterv1.ManagedClusterSpec{},
 					Status: clusterv1.ManagedClusterStatus{
-						Conditions: []clusterv1.StatusCondition{
+						Conditions: []metav1.Condition{
 							{
 								Type:   clusterv1.ManagedClusterConditionAvailable,
 								Status: metav1.ConditionUnknown,
