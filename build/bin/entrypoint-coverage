@@ -1,0 +1,22 @@
+#!/bin/sh -e
+# set -x
+# This is documented here:
+# https://docs.openshift.com/container-platform/3.11/creating_images/guidelines.html#openshift-specific-guidelines
+
+. coverage-entrypoint-func.sh
+
+if ! whoami &>/dev/null; then
+  if [ -w /etc/passwd ]; then
+    echo "${USER_NAME:-rcm-controller}:x:$(id -u):$(id -g):${USER_NAME:-rcm-controller} user:${HOME}:/sbin/nologin" >> /etc/passwd
+  fi
+fi
+
+FILENAME=$HOSTNAME-$(basename $OPERATOR)-`date +%s%N`.out
+FILEPATH=/tmp/coverage/$FILENAME
+mkdir -p /tmp/coverage
+
+${OPERATOR} -test.run "^TestRunMain$" -test.coverprofile=$FILEPATH $@ & PID=$!
+
+trap_with_arg func_trap 15 $PID $FILENAME $FILEPATH
+
+wait $PID

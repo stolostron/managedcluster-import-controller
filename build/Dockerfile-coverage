@@ -1,0 +1,26 @@
+ARG DOCKER_BASE_IMAGE
+
+FROM $DOCKER_BASE_IMAGE
+
+ARG REMOTE_SOURCE
+ARG REMOTE_SOURCE_DIR
+ARG GITHUB_TOKEN
+
+ENV OPERATOR=/usr/local/bin/rcm-controller \
+    USER_UID=1001 \
+    USER_NAME=rcm-controller \
+    KLUSTERLET_CRD_FILE=/usr/local/resources/agent.open-cluster-management.io_v1beta1_klusterlet_crd.yaml
+
+USER root
+# Install unzip
+RUN microdnf update
+RUN microdnf install -y --nodocs jq
+RUN microdnf install -y --nodocs openssl
+
+# install operator binary
+RUN cp ${OPERATOR}-coverage ${OPERATOR}
+
+USER ${USER_UID}
+
+ENTRYPOINT ["/usr/local/bin/entrypoint-coverage"]
+
