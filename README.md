@@ -13,6 +13,8 @@ Check the [CONTRIBUTING Doc](CONTRIBUTING.md) for how to contribute to the repo.
 
 Check the [DEVELOPMENT Doc](docs/development.md) for how to build and make changes.
 
+Check the [Run functional test](docs/functional_test.md) for how to run functional tests.
+
 ------
 
 ## Getting Started
@@ -50,7 +52,7 @@ current functionality of `managedcluster-import-controller`
 
 [Selective initilization of controllers](docs/selective_controller_init.md)
 
-[Run functional test](docs/functional_test.md)
+
 
 
 

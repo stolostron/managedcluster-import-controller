@@ -62,10 +62,6 @@ GIT_REMOTE_URL  = $(shell git config --get remote.origin.url)
 VCS_REF     = $(if $(shell git status --porcelain),$(GIT_COMMIT)-$(BUILD_DATE),$(GIT_COMMIT))
 endif
 
-.PHONY: deps
-## Download all project dependencies
-deps: init component/init
-
 .PHONY: check
 ## Runs a set of required checks
 check: go-bindata-check
