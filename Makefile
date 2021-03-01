@@ -66,7 +66,7 @@ deps: init component/init
 
 .PHONY: check
 ## Runs a set of required checks
-check: go-bindata-check lint
+check: go-bindata-check
 
 .PHONY: test
 ## Runs go unit tests
