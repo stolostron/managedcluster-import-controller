@@ -38,16 +38,10 @@ func syncSetNsN(managedCluster *clusterv1.ManagedCluster) (types.NamespacedName,
 }
 
 func newSyncSets(
-	client client.Client,
 	managedCluster *clusterv1.ManagedCluster,
 	crds []*unstructured.Unstructured,
 	yamls []*unstructured.Unstructured,
 ) (*hivev1.SyncSet, *hivev1.SyncSet, error) {
-
-	// crds, yamls, err := generateImportYAMLs(client, managedCluster, []string{})
-	// if err != nil {
-	// 	return nil, nil, err
-	// }
 
 	runtimeRawExtensionsCRDs, err := convertToRawExtensions(crds)
 	if err != nil {
@@ -122,7 +116,7 @@ func createOrUpdateSyncSets(
 	ucrds []*unstructured.Unstructured,
 	uyamls []*unstructured.Unstructured,
 ) (*hivev1.SyncSet, *hivev1.SyncSet, error) {
-	crds, yamls, err := newSyncSets(client, managedCluster, ucrds, uyamls)
+	crds, yamls, err := newSyncSets(managedCluster, ucrds, uyamls)
 	if err != nil {
 		return nil, nil, err
 	}

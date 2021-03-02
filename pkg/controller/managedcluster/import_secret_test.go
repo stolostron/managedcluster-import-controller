@@ -224,7 +224,7 @@ func Test_newImportSecret(t *testing.T) {
 				t.Errorf("generateImportYAMLs error=%v, wantErr %v", err, tt.wantErr)
 			}
 
-			got, err := newImportSecret(tt.args.client, tt.args.managedCluster, crds, yamls)
+			got, err := newImportSecret(tt.args.managedCluster, crds, yamls)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("newImportSecret() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -321,25 +321,17 @@ func Test_createOrUpdateImportSecret(t *testing.T) {
 		t.Errorf("generateImportYAMLs error=%v", err)
 	}
 
-	importSecret, err := newImportSecret(fakeClient, managedCluster, crds, yamls)
+	importSecret, err := newImportSecret(managedCluster, crds, yamls)
 	if err != nil {
 		t.Errorf("fail to initialize import secret, error = %v", err)
 	}
-
-	fakeClientUpdate := fake.NewFakeClientWithScheme(s,
-		managedCluster,
-		serviceAccount,
-		tokenSecret,
-		infraConfig,
-		imagePullSecret,
-	)
 
 	crdsUpdate, yamlsUpdate, err := generateImportYAMLs(fakeClient, managedCluster, []string{})
 	if err != nil {
 		t.Errorf("generateImportYAMLs error=%v", err)
 	}
 
-	importSecretUpdate, err := newImportSecret(fakeClientUpdate, managedCluster, crdsUpdate, yamlsUpdate)
+	importSecretUpdate, err := newImportSecret(managedCluster, crdsUpdate, yamlsUpdate)
 	if err != nil {
 		t.Errorf("fail to initialize import secret, error = %v", err)
 	}

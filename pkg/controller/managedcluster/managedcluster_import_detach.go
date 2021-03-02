@@ -28,7 +28,6 @@ import (
 )
 
 func (r *ReconcileManagedCluster) importCluster(
-	clusterDeployment *hivev1.ClusterDeployment,
 	managedCluster *clusterv1.ManagedCluster,
 	autoImportSecret *corev1.Secret) (reconcile.Result, error) {
 	var client client.Client
@@ -46,7 +45,7 @@ func (r *ReconcileManagedCluster) importCluster(
 	// } else
 	if autoImportSecret != nil {
 		klog.Infof("Use autoImportSecret to import cluster %s", managedCluster.Name)
-		client, err = r.getManagedClusterClientFromAutoImportSecret(managedCluster, autoImportSecret)
+		client, err = r.getManagedClusterClientFromAutoImportSecret(autoImportSecret)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -54,7 +53,7 @@ func (r *ReconcileManagedCluster) importCluster(
 		klog.Infof("Use local client to import cluster %s", managedCluster.Name)
 		client = r.client
 	}
-	return r.importClusterWithClient(clusterDeployment, managedCluster, autoImportSecret, client)
+	return r.importClusterWithClient(managedCluster, autoImportSecret, client)
 }
 
 //get the client from hive clusterDeployment credentials secret
@@ -77,18 +76,17 @@ func (r *ReconcileManagedCluster) importCluster(
 
 //Get the client from the auto-import-secret
 func (r *ReconcileManagedCluster) getManagedClusterClientFromAutoImportSecret(
-	managedCluster *clusterv1.ManagedCluster,
 	autoImportSecret *corev1.Secret) (client.Client, error) {
 	//generate client using kubeconfig
 	if k, ok := autoImportSecret.Data["kubeconfig"]; ok {
 		return getClientFromKubeConfig(k)
-	} else {
-		token, tok := autoImportSecret.Data["token"]
-		server, sok := autoImportSecret.Data["server"]
-		if tok && sok {
-			return getClientFromToken(string(token), string(server))
-		}
 	}
+	token, tok := autoImportSecret.Data["token"]
+	server, sok := autoImportSecret.Data["server"]
+	if tok && sok {
+		return getClientFromToken(string(token), string(server))
+	}
+
 	return nil, fmt.Errorf("kubeconfig or token and server are missing")
 }
 
@@ -145,7 +143,6 @@ func getClientFromToken(token, server string) (client.Client, error) {
 
 //importCluster import a cluster if autoImportRetry > 0
 func (r *ReconcileManagedCluster) importClusterWithClient(
-	clusterDeployment *hivev1.ClusterDeployment,
 	managedCluster *clusterv1.ManagedCluster,
 	autoImportSecret *corev1.Secret,
 	managedClusterClient client.Client) (reconcile.Result, error) {
@@ -165,14 +162,6 @@ func (r *ReconcileManagedCluster) importClusterWithClient(
 	if !errors.IsNotFound(err) {
 		return reconcile.Result{}, err
 	}
-
-	// yamlSecret := &corev1.Secret{}
-	// err = r.client.Get(context.TODO(),
-	// 	types.NamespacedName{Namespace: managedCluster.Name, Name: managedCluster.Name + "-import"},
-	// 	yamlSecret)
-	// if err != nil {
-	// 	return reconcile.Result{}, err
-	// }
 
 	if autoImportSecret != nil {
 		//Decrement the autoImportRetry
