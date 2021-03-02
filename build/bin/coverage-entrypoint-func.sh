@@ -1,6 +1,6 @@
+#!/bin/bash
 # Copyright Contributors to the Open Cluster Management project
 
-#!/bin/bash
 # These functions help to trap a signal, kill the child process and post the code coverage files to an AWS bucket.
 # These functions are intended to run in a POD.
 
