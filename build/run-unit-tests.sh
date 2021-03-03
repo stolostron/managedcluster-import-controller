@@ -9,8 +9,8 @@
 ###############################################################################
 
 _script_dir=$(dirname "$0")
-if ! which gocovmerge > /dev/null; then  echo "Installing gocovmerge..."; go get -u github.com/wadey/gocovmerge; fi
-if ! which patter > /dev/null; then      echo "Installing patter ..."; go get -u github.com/apg/patter; fi
+if ! which patter > /dev/null; then      echo "Installing patter ..."; pushd $(mktemp -d) && GOSUMDB=off go get -u github.com/apg/patter && popd; fi
+if ! which gocovmerge > /dev/null; then  echo "Installing gocovmerge..."; pushd $(mktemp -d) && GOSUMDB=off go get -u github.com/wadey/gocovmerge && popd; fi
 
 export GOFLAGS=""
 mkdir -p test/unit/coverage

@@ -1,6 +1,6 @@
 # Copyright Contributors to the Open Cluster Management project
 
-FROM openshift/origin-release:golang-1.15 as builder
+FROM registry.ci.openshift.org/open-cluster-management/builder:go1.15-linux-amd64 AS builder
 
 ENV REMOTE_SOURCE='.'
 ENV REMOTE_SOURCE_DIR='/remote-source'
