@@ -37,7 +37,6 @@ func manifestWorkNsN(managedCluster *clusterv1.ManagedCluster) (types.Namespaced
 }
 
 func newManifestWorks(
-	client client.Client,
 	managedCluster *clusterv1.ManagedCluster,
 	crds []*unstructured.Unstructured,
 	yamls []*unstructured.Unstructured,
@@ -107,7 +106,7 @@ func createOrUpdateManifestWorks(
 	ucrds []*unstructured.Unstructured,
 	uyamls []*unstructured.Unstructured,
 ) (*workv1.ManifestWork, *workv1.ManifestWork, error) {
-	crds, yamls, err := newManifestWorks(client, managedCluster, ucrds, uyamls)
+	crds, yamls, err := newManifestWorks(managedCluster, ucrds, uyamls)
 	if err != nil {
 		return nil, nil, err
 	}

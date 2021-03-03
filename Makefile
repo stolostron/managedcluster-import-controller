@@ -64,7 +64,7 @@ endif
 
 .PHONY: check
 ## Runs a set of required checks
-check: go-bindata-check
+check: go-bindata-check lint
 
 .PHONY: test
 ## Runs go unit tests

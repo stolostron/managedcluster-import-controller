@@ -42,6 +42,8 @@ const (
 const clusterLabel string = "cluster.open-cluster-management.io/managedCluster"
 const selfManagedLabel string = "local-cluster"
 const autoImportRetryName string = "autoImportRetry"
+
+/* #nosec */
 const autoImportSecretName string = "auto-import-secret"
 const ManagedClusterImportSucceeded string = "ManagedClusterImportSucceeded"
 
@@ -275,7 +277,6 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		if !errors.IsNotFound(err) {
 			return reconcile.Result{}, err
 		}
-		clusterDeployment = nil
 		if !checkOffLine(instance) {
 			reqLogger.Info(fmt.Sprintf("createOrUpdateManifestWorks: %s", instance.Name))
 			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, crds, yamls)
@@ -300,7 +301,7 @@ already imported`, instance.Name)
 	}
 
 	//Import the cluster
-	result, err := r.importCluster(clusterDeployment, instance, autoImportSecret)
+	result, err := r.importCluster(instance, autoImportSecret)
 	errCond := r.setConditionImport(instance, err, fmt.Sprintf("Unable to import %s", instance.Name))
 	if errCond != nil {
 		klog.Error(errCond)
@@ -313,26 +314,25 @@ func (r *ReconcileManagedCluster) toBeImported(managedCluster *clusterv1.Managed
 	if v, ok := managedCluster.GetLabels()[selfManagedLabel]; ok {
 		toImport, err := strconv.ParseBool(v)
 		return nil, toImport, err
-	} else {
-		//Check auto-import
-		klog.V(2).Info("Check autoImportRetry")
-		autoImportSecret := &corev1.Secret{}
-		err := r.client.Get(context.TODO(), types.NamespacedName{
-			Name:      autoImportSecretName,
-			Namespace: managedCluster.Name,
-		},
-			autoImportSecret)
-		if err != nil {
-			if errors.IsNotFound(err) {
-				klog.Infof("Will not retry as autoImportSecret not found for %s", managedCluster.Name)
-				return nil, false, nil
-			}
-			klog.Errorf("Unable to read the autoImportSecret Error: %s", err.Error())
-			return nil, false, err
-		}
-		klog.Infof("Will retry as autoImportSecret is found for %s and counter still present", managedCluster.Name)
-		return autoImportSecret, true, nil
 	}
+	//Check auto-import
+	klog.V(2).Info("Check autoImportRetry")
+	autoImportSecret := &corev1.Secret{}
+	err := r.client.Get(context.TODO(), types.NamespacedName{
+		Name:      autoImportSecretName,
+		Namespace: managedCluster.Name,
+	},
+		autoImportSecret)
+	if err != nil {
+		if errors.IsNotFound(err) {
+			klog.Infof("Will not retry as autoImportSecret not found for %s", managedCluster.Name)
+			return nil, false, nil
+		}
+		klog.Errorf("Unable to read the autoImportSecret Error: %s", err.Error())
+		return nil, false, err
+	}
+	klog.Infof("Will retry as autoImportSecret is found for %s and counter still present", managedCluster.Name)
+	return autoImportSecret, true, nil
 }
 
 func (r *ReconcileManagedCluster) setConditionImport(managedCluster *clusterv1.ManagedCluster, errIn error, reason string) error {

@@ -189,7 +189,7 @@ func Test_newSyncSets(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("generateImportYAMLs error=%v, wantErr %v", err, tt.wantErr)
 			}
-			gotCRDs, gotYAMLs, err := newSyncSets(testClient, tt.args.managedCluster, crds, yamls)
+			gotCRDs, gotYAMLs, err := newSyncSets(tt.args.managedCluster, crds, yamls)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("newSyncSet() error = %v, wantErr %v", err, tt.wantErr)
 				return

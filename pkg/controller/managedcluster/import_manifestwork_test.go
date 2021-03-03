@@ -188,7 +188,7 @@ func Test_newManifestWorks(t *testing.T) {
 			if (err != nil) != tt.wantErr {
 				t.Errorf("generateImportYAMLs error=%v, wantErr %v", err, tt.wantErr)
 			}
-			gotCRDs, gotYAMLs, err := newManifestWorks(testClient, tt.args.managedCluster, crds, yamls)
+			gotCRDs, gotYAMLs, err := newManifestWorks(tt.args.managedCluster, crds, yamls)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("newManifestWork() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -295,7 +295,7 @@ func Test_createOrUpdateManifestWork(t *testing.T) {
 		},
 		Status: workv1.ManifestWorkStatus{
 			Conditions: []metav1.Condition{
-				{Type: string(workv1.WorkApplied)},
+				{Type: workv1.WorkApplied},
 			},
 		},
 	}
@@ -310,7 +310,7 @@ func Test_createOrUpdateManifestWork(t *testing.T) {
 		},
 		Status: workv1.ManifestWorkStatus{
 			Conditions: []metav1.Condition{
-				{Type: string(workv1.WorkApplied)},
+				{Type: workv1.WorkApplied},
 			},
 		},
 	}

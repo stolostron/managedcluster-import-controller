@@ -12,7 +12,6 @@ import (
 	workv1 "github.com/open-cluster-management/api/work/v1"
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
-	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -110,7 +109,6 @@ func TestReconcileManagedCluster_importClusterWithClient(t *testing.T) {
 		scheme *runtime.Scheme
 	}
 	type args struct {
-		clusterDeployment    *hivev1.ClusterDeployment
 		managedCluster       *clusterv1.ManagedCluster
 		autoImportSecret     *corev1.Secret
 		managedClusterClient client.Client
@@ -157,7 +155,7 @@ func TestReconcileManagedCluster_importClusterWithClient(t *testing.T) {
 				client: tt.fields.client,
 				scheme: tt.fields.scheme,
 			}
-			got, errTest := r.importClusterWithClient(tt.args.clusterDeployment,
+			got, errTest := r.importClusterWithClient(
 				tt.args.managedCluster,
 				tt.args.autoImportSecret,
 				tt.args.managedClusterClient)

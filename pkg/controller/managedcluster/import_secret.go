@@ -39,7 +39,7 @@ func importSecretNsN(managedCluster *clusterv1.ManagedCluster) (types.Namespaced
 	}, nil
 }
 
-func newImportSecret(client client.Client,
+func newImportSecret(
 	managedCluster *clusterv1.ManagedCluster,
 	crds []*unstructured.Unstructured,
 	yamls []*unstructured.Unstructured,
@@ -51,11 +51,6 @@ func newImportSecret(client client.Client,
 	if err != nil {
 		return nil, err
 	}
-
-	// crds, yamls, err := generateImportYAMLs(client, managedCluster, []string{})
-	// if err != nil {
-	// 	return nil, err
-	// }
 
 	for _, crd := range crds {
 		b, err := templateprocessor.ToYAMLUnstructured(crd)
@@ -95,7 +90,7 @@ func createOrUpdateImportSecret(
 	crds []*unstructured.Unstructured,
 	yamls []*unstructured.Unstructured,
 ) (*corev1.Secret, error) {
-	secret, err := newImportSecret(client, managedCluster, crds, yamls)
+	secret, err := newImportSecret(managedCluster, crds, yamls)
 	if err != nil {
 		return nil, err
 	}

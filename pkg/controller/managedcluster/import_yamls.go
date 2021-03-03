@@ -56,7 +56,6 @@ func generateImportYAMLs(
 		return nil, nil, err
 	}
 
-	// klog.V(4).Infof("getBootstrapSecret for %s ", managedCluster.Name)
 	bootStrapSecret, err := getBootstrapSecret(client, managedCluster)
 	if err != nil {
 		return nil, nil, err
