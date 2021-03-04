@@ -80,8 +80,8 @@ go-bindata:
 		echo "##### installing go-bindata..."; \
 		cd $(mktemp -d) && GOSUMDB=off go get -u github.com/go-bindata/go-bindata/...; \
 	fi
-	@go-bindata --version
-	go-bindata -nometadata -pkg bindata -o pkg/bindata/bindata_generated.go -prefix resources/  resources/...
+	@$(GOPATH)/bin/go-bindata --version
+	$(GOPATH)/bin/go-bindata -nometadata -pkg bindata -o pkg/bindata/bindata_generated.go -prefix resources/  resources/...
 
 .PHONY: go-bindata-check
 go-bindata-check:
@@ -92,9 +92,9 @@ go-bindata-check:
 		echo "##### installing go-bindata..."; \
 		cd $(mktemp -d) && GOSUMDB=off go get -u github.com/go-bindata/go-bindata/...; \
 	fi
-	@go-bindata --version
+	@$(GOPATH)/bin/go-bindata --version
 	@echo "##### go-bindata-check ####"
-	@go-bindata -nometadata -pkg bindata -o $(BINDATA_TEMP_DIR)/bindata_generated.go -prefix resources/  resources/...; \
+	@$(GOPATH)/bin/go-bindata -nometadata -pkg bindata -o $(BINDATA_TEMP_DIR)/bindata_generated.go -prefix resources/  resources/...; \
 	diff $(BINDATA_TEMP_DIR)/bindata_generated.go pkg/bindata/bindata_generated.go > go-bindata.diff; \
 	if [ $$? != 0 ]; then \
 	  echo "#### Difference detected and saved in go-bindata.diff, run 'make go-bindata' to regenerate the bindata_generated.go"; \
