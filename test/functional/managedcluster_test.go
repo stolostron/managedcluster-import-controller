@@ -541,6 +541,16 @@ var _ = Describe("Managedcluster", func() {
 				}, 20, 4).Should(BeNil())
 			})
 
+			By("Checking if the auto-import-secret is deleted", func() {
+				klog.V(5).Infof("Check auto import secret is deleted in %s", myTestNameSpace)
+				ss := clientHub.CoreV1().Secrets(myTestNameSpace)
+				Eventually(func() error {
+					klog.V(1).Infof("Retrieving auto-import-secret in %s", myTestNameSpace)
+					_, err := ss.Get(context.TODO(), "auto-import-secret", metav1.GetOptions{})
+					return err
+				}).ShouldNot(BeNil())
+			})
+
 			By("Deleting the ManagedCluster", func() {
 				Expect(clientHubDynamic.Resource(gvrManagedcluster).Delete(context.TODO(), myTestNameSpace, metav1.DeleteOptions{})).Should(BeNil())
 				checkManagedClusterDeletion(clientHubDynamic, clientHub, myTestNameSpace, myTestNameSpace, gvrManagedcluster)
