@@ -293,10 +293,7 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 
 	//Stop here if no auto-import
 	if !toImport {
-		klog.Infof(`Not importing auto-import cluster: %s as either 
-no auto-import-secret is present, 
-syncset is created or 
-already imported`, instance.Name)
+		klog.Infof("Not importing auto-import cluster: %s", instance.Name)
 		return reconcile.Result{}, nil
 	}
 

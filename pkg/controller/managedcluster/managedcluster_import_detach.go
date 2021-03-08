@@ -29,50 +29,28 @@ import (
 
 func (r *ReconcileManagedCluster) importCluster(
 	managedCluster *clusterv1.ManagedCluster,
-	autoImportSecret *corev1.Secret) (reconcile.Result, error) {
+	autoImportSecret *corev1.Secret) (res reconcile.Result, err error) {
+	res = reconcile.Result{}
 	var client client.Client
-	var err error
-	// if clusterDeployment != nil {
-	// 	// This code is not currently used as we use syncset for the time being.
-	// 	if !clusterDeployment.Spec.Installed {
-	// 		return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
-	// 	}
-	// 	klog.Infof("Use hive client to import cluster %s", managedCluster.Name)
-	// 	client, err = r.getManagedClusterClientFromHive(clusterDeployment, managedCluster)
-	// 	if err != nil {
-	// 		return reconcile.Result{}, err
-	// 	}
-	// } else
 	if autoImportSecret != nil {
 		klog.Infof("Use autoImportSecret to import cluster %s", managedCluster.Name)
 		client, err = r.getManagedClusterClientFromAutoImportSecret(autoImportSecret)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
 	} else {
 		klog.Infof("Use local client to import cluster %s", managedCluster.Name)
 		client = r.client
 	}
-	return r.importClusterWithClient(managedCluster, autoImportSecret, client)
+	if err == nil {
+		res, err = r.importClusterWithClient(managedCluster, autoImportSecret, client)
+	}
+	if err != nil {
+		errUpdate := r.updateAutoImportRetry(managedCluster, autoImportSecret)
+		if errUpdate != nil {
+			return res, errUpdate
+		}
+	}
+	return res, err
+
 }
-
-//get the client from hive clusterDeployment credentials secret
-// func (r *ReconcileManagedCluster) getManagedClusterClientFromHive(
-// 	clusterDeployment *hivev1.ClusterDeployment,
-// 	managedCluster *clusterv1.ManagedCluster) (client.Client, error) {
-// 	managedClusterKubeSecret := &corev1.Secret{}
-// 	err := r.client.Get(context.TODO(), types.NamespacedName{
-// 		Name:      clusterDeployment.Spec.ClusterMetadata.AdminKubeconfigSecretRef.Name,
-// 		Namespace: managedCluster.Name,
-// 	},
-// 		managedClusterKubeSecret)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	return getClientFromKubeConfig(managedClusterKubeSecret.Data["kubeconfig"])
-
-// }
 
 //Get the client from the auto-import-secret
 func (r *ReconcileManagedCluster) getManagedClusterClientFromAutoImportSecret(
@@ -141,6 +119,36 @@ func getClientFromToken(token, server string) (client.Client, error) {
 	return clientClient, nil
 }
 
+func (r *ReconcileManagedCluster) updateAutoImportRetry(
+	managedCluster *clusterv1.ManagedCluster,
+	autoImportSecret *corev1.Secret) error {
+	if autoImportSecret != nil {
+		//Decrement the autoImportRetry
+		autoImportRetry, err := strconv.Atoi(string(autoImportSecret.Data[autoImportRetryName]))
+		if err != nil {
+			return err
+		}
+		klog.Infof("Retry left to import %s: %d", managedCluster.Name, autoImportRetry)
+		autoImportRetry--
+		//Remove if negatif as a label can not start with "-", should start by a char
+		if autoImportRetry < 0 {
+			err = r.client.Delete(context.TODO(), autoImportSecret)
+			if err != nil {
+				return err
+			}
+			autoImportSecret = nil
+		} else {
+			v := []byte(strconv.Itoa(autoImportRetry))
+			autoImportSecret.Data[autoImportRetryName] = v
+			err := r.client.Update(context.TODO(), autoImportSecret)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 //importCluster import a cluster if autoImportRetry > 0
 func (r *ReconcileManagedCluster) importClusterWithClient(
 	managedCluster *clusterv1.ManagedCluster,
@@ -161,31 +169,6 @@ func (r *ReconcileManagedCluster) importClusterWithClient(
 	}
 	if !errors.IsNotFound(err) {
 		return reconcile.Result{}, err
-	}
-
-	if autoImportSecret != nil {
-		//Decrement the autoImportRetry
-		autoImportRetry, err := strconv.Atoi(string(autoImportSecret.Data[autoImportRetryName]))
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-		klog.Infof("Retry left to import %s: %d", managedCluster.Name, autoImportRetry)
-		autoImportRetry--
-		//Remove if negatif as a label can not start with "-", should start by a char
-		if autoImportRetry < 0 {
-			err = r.client.Delete(context.TODO(), autoImportSecret)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-			autoImportSecret = nil
-		} else {
-			v := []byte(strconv.Itoa(autoImportRetry))
-			autoImportSecret.Data[autoImportRetryName] = v
-			err := r.client.Update(context.TODO(), autoImportSecret)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-		}
 	}
 
 	//Do not create SA if already exists
