@@ -15,11 +15,10 @@ export KUBECONFIG=${KIND_KUBECONFIG}
 export DOCKER_IMAGE_AND_TAG=${1}
 
 if [ -z $DOCKER_USER ]; then
-   echo "DOCKER_USER is not defined!"
-   exit 1
+   echo "DOCKER_USER is not defined! will only use local images"
 fi
 if [ -z $DOCKER_PASS ]; then
-   echo "DOCKER_PASS is not defined!"
+   echo "DOCKER_PASS is not defined! will only use local images"
    exit 1
 fi
 
@@ -153,9 +152,11 @@ for dir in overlays/test/* ; do
   # install rcm-controller
   echo "install managedcluster-import-controller"
   kubectl apply -k "$dir" --dry-run=true -o yaml | sed "s|REPLACE_IMAGE|${DOCKER_IMAGE_AND_TAG}|g" | kubectl apply -f -
-
-  echo "install imagePullSecret"
-  kubectl create secret -n open-cluster-management docker-registry multiclusterhub-operator-pull-secret --docker-server=quay.io --docker-username=${DOCKER_USER} --docker-password=${DOCKER_PASS}
+  
+  if [ ! -z $DOCKER_USER ] && [ ! -z $DOCKER_PASS ]; then
+    echo "install imagePullSecret"
+    kubectl create secret -n open-cluster-management docker-registry multiclusterhub-operator-pull-secret --docker-server=quay.io --docker-username=${DOCKER_USER} --docker-password=${DOCKER_PASS}
+  fi
 
   echo "Create the cluster infrastructure"
   sed "s|API_SERVER_URL|${API_SERVER_URL}|g" ${FUNCT_TEST_TMPDIR}/CR/fake_infrastructure_cr.yaml | kubectl apply -f -
