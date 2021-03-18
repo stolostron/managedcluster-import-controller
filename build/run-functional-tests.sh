@@ -14,15 +14,6 @@ KIND_MANAGED_KUBECONFIG_INTERNAL="${CURR_FOLDER_PATH}/../kind_kubeconfig_interna
 export KUBECONFIG=${KIND_KUBECONFIG}
 export DOCKER_IMAGE_AND_TAG=${1}
 
-if [ -z $DOCKER_USER ]; then
-   echo "DOCKER_USER is not defined!"
-   exit 1
-fi
-if [ -z $DOCKER_PASS ]; then
-   echo "DOCKER_PASS is not defined!"
-   exit 1
-fi
-
 export FUNCT_TEST_TMPDIR="${CURR_FOLDER_PATH}/../test/functional/tmp"
 export FUNCT_TEST_COVERAGE="${CURR_FOLDER_PATH}/../test/functional/coverage"
 
@@ -37,14 +28,17 @@ if ! which kind > /dev/null; then
     sudo mv ./kind /usr/local/bin/kind
 fi
 if ! which ginkgo > /dev/null; then
-    export GO111MODULE=off
     echo "Installing ginkgo ..."
-    go get github.com/onsi/ginkgo/ginkgo
-    go get github.com/onsi/gomega/...
+    pushd $(mktemp -d) 
+    GOSUMDB=off go get github.com/onsi/ginkgo/ginkgo
+    GOSUMDB=off go get github.com/onsi/gomega/...
+    popd
 fi
 if ! which gocovmerge > /dev/null; then
   echo "Installing gocovmerge..."
-  go get -u github.com/wadey/gocovmerge
+  pushd $(mktemp -d) 
+  GOSUMDB=off go get -u github.com/wadey/gocovmerge
+  popd
 fi
 
 echo "setting up test tmp folder"
@@ -153,9 +147,6 @@ for dir in overlays/test/* ; do
   # install rcm-controller
   echo "install managedcluster-import-controller"
   kubectl apply -k "$dir" --dry-run=true -o yaml | sed "s|REPLACE_IMAGE|${DOCKER_IMAGE_AND_TAG}|g" | kubectl apply -f -
-
-  echo "install imagePullSecret"
-  kubectl create secret -n open-cluster-management docker-registry multiclusterhub-operator-pull-secret --docker-server=quay.io --docker-username=${DOCKER_USER} --docker-password=${DOCKER_PASS}
 
   echo "Create the cluster infrastructure"
   sed "s|API_SERVER_URL|${API_SERVER_URL}|g" ${FUNCT_TEST_TMPDIR}/CR/fake_infrastructure_cr.yaml | kubectl apply -f -

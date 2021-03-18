@@ -25,8 +25,6 @@ spec:
           value: "quay.io/open-cluster-management/registration:latest"
         - name: WORK_IMAGE
           value: "quay.io/open-cluster-management/work:latest"
-        - name: IMAGE_TAG_POSTFIX
-          value: ""
       volumes:
         - name: coverage-dir
           hostPath:
