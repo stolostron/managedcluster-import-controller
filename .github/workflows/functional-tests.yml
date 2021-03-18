@@ -19,3 +19,7 @@ jobs:
 
     - name: Functional Tests
       run: make functional-test-full
+  
+    - if:  ${{ failure() }}
+      name: Logs after Tests Failed
+      run: KUBECONFIG=kind_kubeconfig.yaml kubectl logs  -n open-cluster-management `KUBECONFIG=kind_kubeconfig.yaml kubectl get po -n open-cluster-management -oname | grep managedcluster-import`
