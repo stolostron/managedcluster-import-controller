@@ -19,7 +19,6 @@ if [ -z $DOCKER_USER ]; then
 fi
 if [ -z $DOCKER_PASS ]; then
    echo "DOCKER_PASS is not defined! will only use local images"
-   exit 1
 fi
 
 export FUNCT_TEST_TMPDIR="${CURR_FOLDER_PATH}/../test/functional/tmp"
