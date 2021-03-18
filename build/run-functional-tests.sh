@@ -28,14 +28,17 @@ if ! which kind > /dev/null; then
     sudo mv ./kind /usr/local/bin/kind
 fi
 if ! which ginkgo > /dev/null; then
-    export GO111MODULE=off
     echo "Installing ginkgo ..."
-    go get github.com/onsi/ginkgo/ginkgo
-    go get github.com/onsi/gomega/...
+    pushd $(mktemp -d) 
+    GOSUMDB=off go get github.com/onsi/ginkgo/ginkgo
+    GOSUMDB=off go get github.com/onsi/gomega/...
+    popd
 fi
 if ! which gocovmerge > /dev/null; then
   echo "Installing gocovmerge..."
-  go get -u github.com/wadey/gocovmerge
+  pushd $(mktemp -d) 
+  GOSUMDB=off go get -u github.com/wadey/gocovmerge
+  popd
 fi
 
 echo "setting up test tmp folder"
