@@ -4,3 +4,5 @@ bases:
 - ../../../deploy
 patchesStrategicMerge:
 - deployment.yaml
+resources:
+- fake_secret.yaml
