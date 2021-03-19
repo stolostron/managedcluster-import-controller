@@ -64,12 +64,12 @@ endif
 
 .PHONY: check
 ## Runs a set of required checks
-check: go-bindata-check lint
+check: check-copyright go-bindata-check lint
 
 .PHONY: check-copyright
 check-copyright:
 	@build/check-copyright.sh
-	
+
 .PHONY: test
 ## Runs go unit tests
 test: 
