@@ -64,8 +64,6 @@ do
             || $FILE == *".tsx"   \
             || $FILE == *"Dockerfile" \
             || $FILE == *"Makefile"  \
-            || $FILE == *"Dockerfile.prow" \
-            || $FILE == *"Makefile.prow"  \
             || $FILE == *".gitignore"  \
             || $FILE == *".md"  ]]; then
 
