@@ -22,6 +22,8 @@ export GOARCH       = $(ARCH_TYPE)
 export GOPACKAGES   = $(shell go list ./... | grep -v /manager | grep -v /bindata  | grep -v /vendor | grep -v /internal | grep -v /build | grep -v /test )
 
 export PROJECT_DIR            = $(shell 'pwd')
+export PROJECT_NAME			  = mci
+
 export BUILD_DIR              = $(PROJECT_DIR)/build
 export COMPONENT_SCRIPTS_PATH = $(BUILD_DIR)
 export KLUSTERLET_CRD_FILE      = $(PROJECT_DIR)/build/resources/agent.open-cluster-management.io_v1beta1_klusterlet_crd.yaml
@@ -127,7 +129,7 @@ build-image-coverage: build-image
 
 .PHONY: clean
 ## Clean build-harness and remove Go generated build and test files
-clean:
+clean: clean-functional-test-full
 	@rm -rf $(BUILD_DIR)/_output
 	@[ "$(BUILD_HARNESS_PATH)" == '/' ] || \
 	 [ "$(BUILD_HARNESS_PATH)" == '.' ] || \
@@ -164,7 +166,6 @@ deploy:
 install-fake-crds:
 	@echo installing crds
 	kubectl apply -f test/functional/resources/hive_v1_clusterdeployment_crd.yaml
-	kubectl apply -f test/functional/resources/hive_v1_syncset.yaml 
 	kubectl apply -f test/functional/resources/infrastructure_crd.yaml 
 	kubectl apply -f test/functional/resources/apiserver_crd.yaml 
 	kubectl apply -f test/functional/resources/0000_00_clusters.open-cluster-management.io_managedclusters.crd.yaml
@@ -181,12 +182,16 @@ kind-cluster-setup: install-fake-crds
 functional-test:
 	# ginkgo -tags functional -v --focus="(.*)import-managedcluster(.*)" --slowSpecThreshold=10 test/managedcluster-import-controller-test -- -v=5
 	# ginkgo -tags functional -v --slowSpecThreshold=10 --focus="(.*)approve-csr(.*)" test/functional -- -v=1
-	# ginkgo -tags functional -v --slowSpecThreshold=30 --focus="import-managedcluster/with-auto-import-token" test/functional -- -v=5
+	# ginkgo -tags functional -v --slowSpecThreshold=30 --focus="import-managedcluster/with-clusterDeployment" test/functional -- -v=5
 	ginkgo -tags functional -v --slowSpecThreshold=30 test/functional -- -v=5
 
 .PHONY: functional-test-full
 functional-test-full: build-image-coverage
 	build/run-functional-tests.sh $(DOCKER_IMAGE_COVERAGE)
+
+.PHONY: clean-functional-test-full
+clean-functional-test-full: 
+	@build/run-functional-tests-clean.sh
 
 # download script for coverage entrypoint. 
 .PHONY: sync-coverage-entrypoint

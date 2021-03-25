@@ -8,7 +8,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/open-cluster-management/library-go/pkg/templateprocessor"
+	"github.com/open-cluster-management/applier/pkg/templateprocessor"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

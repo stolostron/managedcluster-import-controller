@@ -28,8 +28,8 @@ import (
 
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 
+	"github.com/open-cluster-management/applier/pkg/applier"
 	libgometav1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1"
-	"github.com/open-cluster-management/library-go/pkg/applier"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/bindata"
 )
 
@@ -260,33 +260,15 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, err
 	}
 
-	clusterDeployment := &hivev1.ClusterDeployment{}
-	err = r.client.Get(context.TODO(),
-		types.NamespacedName{
-			Name:      instance.Name,
-			Namespace: instance.Name},
-		clusterDeployment)
-	if err == nil {
-		reqLogger.Info(fmt.Sprintf("createOrUpdateSyncSets: %s", instance.Name))
-		_, _, err := createOrUpdateSyncSets(r.client, r.scheme, instance, crds, yamls)
+	if !checkOffLine(instance) {
+		reqLogger.Info(fmt.Sprintf("createOrUpdateManifestWorks: %s", instance.Name))
+		_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, crds, yamls)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
-	} else {
-		reqLogger.Info(fmt.Sprintf("Get clusterDeployment error: %s", err.Error()))
-		if !errors.IsNotFound(err) {
-			return reconcile.Result{}, err
-		}
-		if !checkOffLine(instance) {
-			reqLogger.Info(fmt.Sprintf("createOrUpdateManifestWorks: %s", instance.Name))
-			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, crds, yamls)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-		}
 	}
 
-	autoImportSecret, toImport, err := r.toBeImported(instance)
+	autoImportSecret, clusterDeployment, toImport, err := r.toBeImported(instance)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -298,7 +280,7 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 	}
 
 	//Import the cluster
-	result, err := r.importCluster(instance, autoImportSecret)
+	result, err := r.importCluster(instance, clusterDeployment, autoImportSecret)
 	errCond := r.setConditionImport(instance, err, fmt.Sprintf("Unable to import %s", instance.Name))
 	if errCond != nil {
 		klog.Error(errCond)
@@ -306,16 +288,33 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 	return result, err
 }
 
-func (r *ReconcileManagedCluster) toBeImported(managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, bool, error) {
+func (r *ReconcileManagedCluster) toBeImported(managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, *hivev1.ClusterDeployment, bool, error) {
 	//Check self managed
 	if v, ok := managedCluster.GetLabels()[selfManagedLabel]; ok {
 		toImport, err := strconv.ParseBool(v)
-		return nil, toImport, err
+		return nil, nil, toImport, err
+	}
+	//Check if hive cluster and get client from clusterDeployment
+	clusterDeployment := &hivev1.ClusterDeployment{}
+	err := r.client.Get(
+		context.TODO(),
+		types.NamespacedName{
+			Name:      managedCluster.Name,
+			Namespace: managedCluster.Name,
+		},
+		clusterDeployment,
+	)
+	if err == nil {
+		//clusterDeployment found and so need to be imported
+		return nil, clusterDeployment, true, nil
+	} else if !errors.IsNotFound(err) {
+		//Error
+		return nil, nil, false, err
 	}
 	//Check auto-import
 	klog.V(2).Info("Check autoImportRetry")
 	autoImportSecret := &corev1.Secret{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{
+	err = r.client.Get(context.TODO(), types.NamespacedName{
 		Name:      autoImportSecretName,
 		Namespace: managedCluster.Name,
 	},
@@ -323,13 +322,13 @@ func (r *ReconcileManagedCluster) toBeImported(managedCluster *clusterv1.Managed
 	if err != nil {
 		if errors.IsNotFound(err) {
 			klog.Infof("Will not retry as autoImportSecret not found for %s", managedCluster.Name)
-			return nil, false, nil
+			return nil, nil, false, nil
 		}
 		klog.Errorf("Unable to read the autoImportSecret Error: %s", err.Error())
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	klog.Infof("Will retry as autoImportSecret is found for %s and counter still present", managedCluster.Name)
-	return autoImportSecret, true, nil
+	return autoImportSecret, nil, true, nil
 }
 
 func (r *ReconcileManagedCluster) setConditionImport(managedCluster *clusterv1.ManagedCluster, errIn error, reason string) error {

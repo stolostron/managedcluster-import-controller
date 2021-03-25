@@ -23,32 +23,66 @@ import (
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
-	"github.com/open-cluster-management/library-go/pkg/applier"
-	"github.com/open-cluster-management/library-go/pkg/templateprocessor"
+	"github.com/open-cluster-management/applier/pkg/applier"
+	"github.com/open-cluster-management/applier/pkg/templateprocessor"
 )
 
 func (r *ReconcileManagedCluster) importCluster(
 	managedCluster *clusterv1.ManagedCluster,
+	clusterDeployment *hivev1.ClusterDeployment,
 	autoImportSecret *corev1.Secret) (res reconcile.Result, err error) {
 	res = reconcile.Result{}
-	var client client.Client
+
+	//Assuming that is a local import
+	client := r.client
+
+	//A clusterDeployment exist then get the client
+	if clusterDeployment != nil {
+		if !clusterDeployment.Spec.Installed {
+			return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
+		}
+		klog.Infof("Use hive client to import cluster %s", managedCluster.Name)
+		client, err = r.getManagedClusterClientFromHive(clusterDeployment, managedCluster)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
+	//Check if auto-import and get client from the importSecret
 	if autoImportSecret != nil {
 		klog.Infof("Use autoImportSecret to import cluster %s", managedCluster.Name)
 		client, err = r.getManagedClusterClientFromAutoImportSecret(autoImportSecret)
-	} else {
-		klog.Infof("Use local client to import cluster %s", managedCluster.Name)
-		client = r.client
 	}
+
 	if err == nil {
 		res, err = r.importClusterWithClient(managedCluster, autoImportSecret, client)
 	}
-	if err != nil {
+	if err != nil && autoImportSecret != nil {
 		errUpdate := r.updateAutoImportRetry(managedCluster, autoImportSecret)
 		if errUpdate != nil {
 			return res, errUpdate
 		}
 	}
+
 	return res, err
+
+}
+
+//get the client from hive clusterDeployment credentials secret
+func (r *ReconcileManagedCluster) getManagedClusterClientFromHive(
+	clusterDeployment *hivev1.ClusterDeployment,
+	managedCluster *clusterv1.ManagedCluster) (client.Client, error) {
+	managedClusterKubeSecret := &corev1.Secret{}
+	err := r.client.Get(context.TODO(), types.NamespacedName{
+		Name:      clusterDeployment.Spec.ClusterMetadata.AdminKubeconfigSecretRef.Name,
+		Namespace: managedCluster.Name,
+	},
+		managedClusterKubeSecret)
+	if err != nil {
+		return nil, err
+	}
+
+	return getClientFromKubeConfig(managedClusterKubeSecret.Data["kubeconfig"])
 
 }
 
@@ -270,28 +304,10 @@ func (r *ReconcileManagedCluster) managedClusterDeletion(instance *clusterv1.Man
 		}
 	}
 
-	clusterDeployment := &hivev1.ClusterDeployment{}
-	err = r.client.Get(context.TODO(),
-		types.NamespacedName{
-			Name:      instance.Name,
-			Namespace: instance.Name},
-		clusterDeployment)
-	if err == nil {
-		reqLogger.Info(fmt.Sprintf("deleteKlusterletSyncSets: %s", instance.Name))
-		err = deleteKlusterletSyncSets(r.client, instance)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-	} else {
-		if errors.IsNotFound(err) {
-			reqLogger.Info(fmt.Sprintf("deleteKlusterletManifestWorks: %s", instance.Name))
-			err = deleteKlusterletManifestWorks(r.client, instance)
-			if err != nil {
-				return reconcile.Result{}, err
-			}
-		} else {
-			return reconcile.Result{}, err
-		}
+	reqLogger.Info(fmt.Sprintf("deleteKlusterletManifestWorks: %s", instance.Name))
+	err = deleteKlusterletManifestWorks(r.client, instance)
+	if err != nil {
+		return reconcile.Result{}, err
 	}
 
 	if !offLine {

@@ -7,13 +7,14 @@ require (
 	github.com/onsi/ginkgo v1.14.1
 	github.com/onsi/gomega v1.10.2
 	github.com/open-cluster-management/api v0.0.0-20201210143210-581cab55c797
+	github.com/open-cluster-management/applier v0.0.0-20210323134919-2b85eca20f76
 	github.com/open-cluster-management/library-go v0.0.0-20210224140722-b5437fe91e2c
 	github.com/openshift/api v3.9.1-0.20191112184635-86def77f6f90+incompatible
 	github.com/openshift/hive v1.0.18
 	github.com/operator-framework/operator-sdk v0.18.1
 	github.com/spf13/pflag v1.0.5
-	k8s.io/api v0.20.4
-	k8s.io/apimachinery v0.20.4
+	k8s.io/api v0.20.5
+	k8s.io/apimachinery v0.20.5
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/klog v1.0.0
 	k8s.io/kubernetes v1.20.4

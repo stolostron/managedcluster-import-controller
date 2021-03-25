@@ -37,7 +37,7 @@ This is a guide on how to build and deploy klusterlet addon controller from code
 `managedcluster-import-controller` is the controller that handles functionalities that's related to the managedcluster  resource.
 
 current functionality of `managedcluster-import-controller`
-- installing klusterlet on cluster created by hive via syncset
+- installing klusterlet on cluster created by hive via the applier
 - triggering the remote deletion of klusterlet on managed cluster
 
 ## How to's

@@ -131,7 +131,7 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 		},
 	}
 
-	clusterDeployment := &hivev1.ClusterDeployment{
+	clusterDeploymentNotYetInstalled := &hivev1.ClusterDeployment{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      managedClusterNameReconcile,
 			Namespace: managedClusterNameReconcile,
@@ -141,7 +141,6 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 	imagePullSecret := newFakeImagePullSecret()
 	testscheme := scheme.Scheme
 
-	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &hivev1.SyncSet{})
 	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &hivev1.ClusterDeployment{})
 	testscheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
 	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWork{})
@@ -240,13 +239,13 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "success with clusterDeployment",
+			name: "success with clusterDeployment not yet installed",
 			fields: fields{
 				client: fake.NewFakeClientWithScheme(testscheme,
 					clusterNamespace,
 					testManagedCluster,
 					tokenSecret,
-					clusterDeployment,
+					clusterDeploymentNotYetInstalled,
 					imagePullSecret,
 					testInfraConfig,
 				),
@@ -256,7 +255,8 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 				request: req,
 			},
 			want: reconcile.Result{
-				Requeue: false,
+				Requeue:      true,
+				RequeueAfter: 1 * time.Minute,
 			},
 			wantErr: false,
 		},
