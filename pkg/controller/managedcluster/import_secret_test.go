@@ -14,7 +14,7 @@ import (
 	"github.com/ghodss/yaml"
 	. "github.com/onsi/gomega"
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
-	"github.com/open-cluster-management/library-go/pkg/templateprocessor"
+	"github.com/open-cluster-management/applier/pkg/templateprocessor"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/bindata"
 	ocinfrav1 "github.com/openshift/api/config/v1"
 	appsv1 "k8s.io/api/apps/v1"

@@ -11,6 +11,8 @@ CURR_FOLDER_PATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 KIND_KUBECONFIG="${CURR_FOLDER_PATH}/../kind_kubeconfig.yaml"
 KIND_KUBECONFIG_INTERNAL="${CURR_FOLDER_PATH}/../kind_kubeconfig_internal.yaml"
 KIND_MANAGED_KUBECONFIG_INTERNAL="${CURR_FOLDER_PATH}/../kind_kubeconfig_internal_mc.yaml"
+CLUSTER_NAME=$PROJECT_NAME-functional-test
+
 export KUBECONFIG=${KIND_KUBECONFIG}
 export DOCKER_IMAGE_AND_TAG=${1}
 
@@ -124,19 +126,19 @@ status:
 EOF
 
 echo "creating managed cluster"
-kind create cluster --name functional-test-managed --config "${FUNCT_TEST_TMPDIR}/kind-config/kind-managed-config.yaml"
+kind create cluster --name ${CLUSTER_NAME}-managed --config "${FUNCT_TEST_TMPDIR}/kind-config/kind-managed-config.yaml"
 # setup kubeconfig
-kind get kubeconfig --name functional-test-managed --internal > ${KIND_MANAGED_KUBECONFIG_INTERNAL}
+kind get kubeconfig --name ${CLUSTER_NAME}-managed --internal > ${KIND_MANAGED_KUBECONFIG_INTERNAL}
 echo "creating hub cluster"
-kind create cluster --name functional-test --config "${FUNCT_TEST_TMPDIR}/kind-config/kind-config.yaml"
+kind create cluster --name ${CLUSTER_NAME} --config "${FUNCT_TEST_TMPDIR}/kind-config/kind-config.yaml"
 
 # setup kubeconfig
-kind get kubeconfig --name functional-test > ${KIND_KUBECONFIG}
-kind get kubeconfig --name functional-test --internal > ${KIND_KUBECONFIG_INTERNAL}
+kind get kubeconfig --name ${CLUSTER_NAME} > ${KIND_KUBECONFIG}
+kind get kubeconfig --name ${CLUSTER_NAME} --internal > ${KIND_KUBECONFIG_INTERNAL}
 API_SERVER_URL=$(cat ${KIND_KUBECONFIG_INTERNAL}| grep "server:" |cut -d ":" -f2 -f3 -f4 | sed 's/^ //')
 
 # load image if possible
-kind load docker-image ${DOCKER_IMAGE_AND_TAG} --name=functional-test -v 99 || echo "failed to load image locally, will use imagePullSecret"
+kind load docker-image ${DOCKER_IMAGE_AND_TAG} --name=${CLUSTER_NAME} -v 99 || echo "failed to load image locally, will use imagePullSecret"
 
 echo "install cluster"
 # setup cluster
@@ -166,8 +168,8 @@ echo "Wait 10 sec for copy to AWS"
 sleep 10
 
 echo "delete clusters"
-kind delete cluster --name functional-test
-kind delete cluster --name functional-test-managed
+kind delete cluster --name ${CLUSTER_NAME}
+kind delete cluster --name ${CLUSTER_NAME}-managed
 
 if [ `find $FUNCT_TEST_COVERAGE -prune -empty 2>/dev/null` ]; then
   echo "no coverage files found. skipping"

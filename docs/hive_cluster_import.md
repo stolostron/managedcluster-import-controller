@@ -14,7 +14,7 @@ You can use the scripts available at [applier-samples-for-acm](https://github.co
 
 ### ManagedCluster Import Controller
 
-- When the first ClusterDeployment is created along with managedcluster and klusterletaddonconfig, the controller will create an SyncSet to deploy the common parts of the klusterlet install manifest. This includes the namespace, service account and cluster role binding that is needed by the klusterlet operator. The SyncSet will apply these configuration to all the Hive provisioned clusters.
+- When the first ClusterDeployment is created along with managedcluster and klusterletaddonconfig, the controller will call the applier to deploy the common parts of the klusterlet install manifest. This includes the namespace, service account and cluster role binding that is needed by the klusterlet operator.
 
 - When managedcluster is created, the controller will create klusterlet on the managedcluster. 
 
@@ -22,7 +22,3 @@ You can use the scripts available at [applier-samples-for-acm](https://github.co
 
 - When klusterletaddonconfig is created, klusterlet-addon-controller will create klusterlet addon on the corresponding Hive ClusterDeployment.
 
-
-### (external) Hive SyncSet Controller
-
-- Once the cluster provision is completed Hive will apply the resources defined in the SyncSet to install the klusterlet.

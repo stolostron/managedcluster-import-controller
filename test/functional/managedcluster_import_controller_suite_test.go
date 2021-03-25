@@ -37,7 +37,6 @@ var (
 	clientHub            kubernetes.Interface
 	clientHubDynamic     dynamic.Interface
 	gvrClusterdeployment schema.GroupVersionResource
-	gvrSyncset           schema.GroupVersionResource
 	gvrSecret            schema.GroupVersionResource
 	gvrServiceaccount    schema.GroupVersionResource
 	gvrManagedcluster    schema.GroupVersionResource
@@ -85,7 +84,7 @@ func newClusterdeployment(name string) *unstructured.Unstructured {
 			"spec": map[string]interface{}{
 				"baseDomain":  "fake-domain.red-chesterfield.com",
 				"clusterName": name,
-				"installed":   false,
+				"installed":   true,
 				"platform": map[string]interface{}{
 					"aws": map[string]interface{}{
 						"credentialsSecretRef": map[string]interface{}{
@@ -257,7 +256,6 @@ func init() {
 var _ = BeforeSuite(func() {
 	By("Setup Hub client")
 	gvrClusterdeployment = schema.GroupVersionResource{Group: "hive.openshift.io", Version: "v1", Resource: "clusterdeployments"}
-	gvrSyncset = schema.GroupVersionResource{Group: "hive.openshift.io", Version: "v1", Resource: "syncsets"}
 	gvrSecret = schema.GroupVersionResource{Version: "v1", Resource: "secrets"}
 	gvrServiceaccount = schema.GroupVersionResource{Version: "v1", Resource: "serviceaccounts"}
 	gvrManagedcluster = schema.GroupVersionResource{Group: "cluster.open-cluster-management.io", Version: "v1", Resource: "managedclusters"}
