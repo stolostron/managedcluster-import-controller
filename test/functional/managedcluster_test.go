@@ -32,7 +32,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -126,7 +125,7 @@ var _ = Describe("Managedcluster", func() {
 					_, err := ns.Get(context.TODO(), myTestNameSpace+manifestWorkNamePostfix, metav1.GetOptions{})
 					return err
 				}, 20, 4).ShouldNot(BeNil())
-				managedCluster = setManagedClusterConditionAvailable(myTestNameSpace, true)
+				managedCluster = setManagedClusterConditionAvailable(myTestNameSpace, true, false)
 				Eventually(func() error {
 					klog.V(1).Infof("Wait ManifestWork %s", myTestNameSpace+manifestWorkNamePostfix+"-crds")
 					ns := clientHubDynamic.Resource(gvrManifestwork).Namespace(myTestNameSpace)
@@ -226,7 +225,7 @@ var _ = Describe("Managedcluster", func() {
 			})
 
 			By("Deleting the ManagedCluster", func() {
-				_ = setManagedClusterConditionAvailable(myTestNameSpace, false)
+				_ = setManagedClusterConditionAvailable(myTestNameSpace, false, false)
 				Expect(clientHubDynamic.Resource(gvrManagedcluster).Delete(context.TODO(), myTestNameSpace, metav1.DeleteOptions{})).Should(BeNil())
 				checkManagedClusterDeletion(clientHubDynamic, clientHub, myTestNameSpace, myTestNameSpace, gvrManagedcluster)
 			})
@@ -280,7 +279,7 @@ var _ = Describe("Managedcluster", func() {
 					_, err := ns.Get(context.TODO(), myTestNameSpace+manifestWorkNamePostfix, metav1.GetOptions{})
 					return err
 				}, 20, 4).ShouldNot(BeNil())
-				managedCluster = setManagedClusterConditionAvailable(myTestNameSpace, true)
+				managedCluster = setManagedClusterConditionAvailable(myTestNameSpace, true, true)
 				Eventually(func() error {
 					klog.V(1).Infof("Wait ManifestWork %s", myTestNameSpace+manifestWorkNamePostfix+"-crds")
 					ns := clientHubDynamic.Resource(gvrManifestwork).Namespace(myTestNameSpace)
@@ -301,7 +300,7 @@ var _ = Describe("Managedcluster", func() {
 			})
 
 			By("Deleting the ManagedCluster", func() {
-				_ = setManagedClusterConditionAvailable(myTestNameSpace, false)
+				_ = setManagedClusterConditionAvailable(myTestNameSpace, false, true)
 				Expect(clientHubDynamic.Resource(gvrManagedcluster).Delete(context.TODO(), myTestNameSpace, metav1.DeleteOptions{})).Should(BeNil())
 				checkManagedClusterDeletion(clientHubDynamic, clientHub, myTestNameSpace, myTestNameSpace, gvrManagedcluster)
 			})
@@ -332,6 +331,22 @@ var _ = Describe("Managedcluster", func() {
 					},
 				}, metav1.CreateOptions{})).NotTo(BeNil())
 			})
+			By("Creating clusterDeployment secret with kubeconfig", func() {
+				klog.V(5).Infof("Create auto import secret in %s", myTestNameSpace)
+				ss := clientHub.CoreV1().Secrets(myTestNameSpace)
+				klog.V(5).Info("Create new auto-import-secret")
+				s, err := newClusterDeploymentSecretWithKubeConfig(myTestNameSpace)
+				if err != nil {
+					klog.V(5).Infof("%v", err)
+				}
+				Expect(err).To(BeNil())
+				klog.V(5).Info("Create clusterdeployment-secret")
+				_, err = ss.Create(context.TODO(), s, metav1.CreateOptions{})
+				if err != nil {
+					klog.V(5).Infof("%v", err)
+				}
+				Expect(err).To(BeNil())
+			})
 			By("Creating the Cluster", func() {
 				clusterdeployment := newClusterdeployment(myTestNameSpace)
 				createNewUnstructured(clientHubDynamic, gvrClusterdeployment,
@@ -339,23 +354,40 @@ var _ = Describe("Managedcluster", func() {
 				managedCluster := newManagedcluster((myTestNameSpace))
 				createNewUnstructuredClusterScoped(clientHubDynamic, gvrManagedcluster, managedCluster, myTestNameSpace)
 				checkManagedClusterCreation(clientHubDynamic, clientHub, myTestNameSpace, myTestNameSpace, gvrManagedcluster, gvrServiceaccount, gvrSecret)
-				managedCluster = setManagedClusterConditionAvailable(myTestNameSpace, true)
+				managedCluster = setManagedClusterConditionAvailable(myTestNameSpace, true, true)
 				Eventually(func() error {
 					klog.V(1).Infof("Wait ManifestWork %s", myTestNameSpace+manifestWorkNamePostfix+"-crds")
 					ns := clientHubDynamic.Resource(gvrManifestwork).Namespace(myTestNameSpace)
 					_, err := ns.Get(context.TODO(), myTestNameSpace+manifestWorkNamePostfix+"-crds", metav1.GetOptions{})
 					return err
-				}).Should(BeNil())
+				}, 120, 5).Should(BeNil())
 				Eventually(func() error {
 					klog.V(1).Infof("Wait ManifestWork %s", myTestNameSpace+manifestWorkNamePostfix)
 					ns := clientHubDynamic.Resource(gvrManifestwork).Namespace(myTestNameSpace)
 					_, err := ns.Get(context.TODO(), myTestNameSpace+manifestWorkNamePostfix, metav1.GetOptions{})
 					return err
+				}, 120, 5).Should(BeNil())
+			})
+			By("Checking clusterDeployment Finalizer added", func() {
+				Eventually(func() error {
+					klog.V(1).Infof("Wait clusterDeployment Finalizer %s being added %s", managedClusterFinalizer, myTestNameSpace)
+					ns := clientHubDynamic.Resource(gvrClusterdeployment).Namespace(myTestNameSpace)
+					cd, err := ns.Get(context.TODO(), myTestNameSpace, metav1.GetOptions{})
+					if err != nil {
+						return err
+					}
+					for _, f := range cd.GetFinalizers() {
+						if f == managedClusterFinalizer {
+							return nil
+						}
+					}
+					return fmt.Errorf("Finalizer %s not found in clusterDeployment %s", managedClusterFinalizer, cd.GetName())
 				}).Should(BeNil())
+
 			})
 
 			By("Deleting the ManagedCluster", func() {
-				_ = setManagedClusterConditionAvailable(myTestNameSpace, false)
+				_ = setManagedClusterConditionAvailable(myTestNameSpace, false, true)
 				Expect(clientHubDynamic.Resource(gvrManagedcluster).Delete(context.TODO(), myTestNameSpace, metav1.DeleteOptions{})).Should(BeNil())
 				checkManagedClusterDeletion(clientHubDynamic, clientHub, myTestNameSpace, myTestNameSpace, gvrManagedcluster)
 			})
@@ -373,6 +405,24 @@ var _ = Describe("Managedcluster", func() {
 					_, err := ns.Get(context.TODO(), myTestNameSpace+manifestWorkNamePostfix, metav1.GetOptions{})
 					return err
 				}).ShouldNot(BeNil())
+			})
+
+			By("Checking clusterDeployment Finalizer deleted", func() {
+				Eventually(func() error {
+					klog.V(1).Infof("Wait clusterDeployment Finalizer %s being deleted %s", managedClusterFinalizer, myTestNameSpace)
+					ns := clientHubDynamic.Resource(gvrClusterdeployment).Namespace(myTestNameSpace)
+					cd, err := ns.Get(context.TODO(), myTestNameSpace, metav1.GetOptions{})
+					if err != nil {
+						return err
+					}
+					for _, f := range cd.GetFinalizers() {
+						if f == managedClusterFinalizer {
+							return fmt.Errorf("Finalizer %s still present in clusterDeployment %s", managedClusterFinalizer, cd.GetName())
+						}
+					}
+					return nil
+				}).Should(BeNil())
+
 			})
 
 		})
@@ -409,34 +459,7 @@ var _ = Describe("Managedcluster", func() {
 
 				By("checking ManagedCluster Creation")
 				checkManagedClusterCreation(clientHubDynamic, clientHub, myTestNameSpace, myTestNameSpace, gvrManagedcluster, gvrServiceaccount, gvrSecret)
-				managedCluster = setManagedClusterConditionAvailable(myTestNameSpace, true)
-				Eventually(func() error {
-					klog.V(1).Info("Waiting managedCluster auto import condition")
-					ns := clientHubDynamic.Resource(gvrManagedcluster)
-					mc, err := ns.Get(context.TODO(), managedCluster.GetName(), metav1.GetOptions{})
-					if err != nil {
-						return err
-					}
-					status, _, _ := unstructured.NestedMap(mc.Object, "status")
-					conds, _, _ := unstructured.NestedSlice(status, "conditions")
-					klog.V(5).Infof("conds: %v", conds)
-					conditions := make([]metav1.Condition, len(conds))
-					for i, c := range conds {
-						klog.V(5).Infof("Assigned %v at postion %d", c, i)
-						t, _, _ := unstructured.NestedString(c.(map[string]interface{}), "type")
-						conditions[i].Type = t
-						s, _, _ := unstructured.NestedString(c.(map[string]interface{}), "status")
-						conditions[i].Status = metav1.ConditionStatus(s)
-					}
-					c := meta.FindStatusCondition(conditions, "ManagedClusterImportSucceeded")
-					if c == nil {
-						return fmt.Errorf("Condition not found in mc: %s", mc.GetName())
-					}
-					if c.Status == metav1.ConditionFalse {
-						return fmt.Errorf("ManagedCluster %s not yet imported", mc.GetName())
-					}
-					return nil
-				}, 20, 4).Should(BeNil())
+				managedCluster = setManagedClusterConditionAvailable(myTestNameSpace, true, true)
 			})
 
 			By("Checking if the auto-import-secret is deleted", func() {
@@ -449,26 +472,26 @@ var _ = Describe("Managedcluster", func() {
 				}).ShouldNot(BeNil())
 			})
 
-			By("Deleting the ManagedCluster", func() {
-				_ = setManagedClusterConditionAvailable(myTestNameSpace, false)
-				Expect(clientHubDynamic.Resource(gvrManagedcluster).Delete(context.TODO(), myTestNameSpace, metav1.DeleteOptions{})).Should(BeNil())
-				checkManagedClusterDeletion(clientHubDynamic, clientHub, myTestNameSpace, myTestNameSpace, gvrManagedcluster)
-			})
+			// By("Deleting the ManagedCluster", func() {
+			// 	_ = setManagedClusterConditionAvailable(myTestNameSpace, false, true)
+			// 	Expect(clientHubDynamic.Resource(gvrManagedcluster).Delete(context.TODO(), myTestNameSpace, metav1.DeleteOptions{})).Should(BeNil())
+			// 	checkManagedClusterDeletion(clientHubDynamic, clientHub, myTestNameSpace, myTestNameSpace, gvrManagedcluster)
+			// })
 
-			By("Check if manifestWork deleted", func() {
-				Eventually(func() error {
-					klog.V(1).Infof("Wait delete ManifestWork CRDs %s", myTestNameSpace+manifestWorkNamePostfix+"-crds")
-					ns := clientHubDynamic.Resource(gvrManifestwork).Namespace(myTestNameSpace)
-					_, err := ns.Get(context.TODO(), myTestNameSpace+manifestWorkNamePostfix+"-crds", metav1.GetOptions{})
-					return err
-				}).ShouldNot(BeNil())
-				Eventually(func() error {
-					klog.V(1).Infof("Wait delete ManifestWork %s", myTestNameSpace+manifestWorkNamePostfix)
-					ns := clientHubDynamic.Resource(gvrManifestwork).Namespace(myTestNameSpace)
-					_, err := ns.Get(context.TODO(), myTestNameSpace+manifestWorkNamePostfix, metav1.GetOptions{})
-					return err
-				}).ShouldNot(BeNil())
-			})
+			// By("Check if manifestWork deleted", func() {
+			// 	Eventually(func() error {
+			// 		klog.V(1).Infof("Wait delete ManifestWork CRDs %s", myTestNameSpace+manifestWorkNamePostfix+"-crds")
+			// 		ns := clientHubDynamic.Resource(gvrManifestwork).Namespace(myTestNameSpace)
+			// 		_, err := ns.Get(context.TODO(), myTestNameSpace+manifestWorkNamePostfix+"-crds", metav1.GetOptions{})
+			// 		return err
+			// 	}).ShouldNot(BeNil())
+			// 	Eventually(func() error {
+			// 		klog.V(1).Infof("Wait delete ManifestWork %s", myTestNameSpace+manifestWorkNamePostfix)
+			// 		ns := clientHubDynamic.Resource(gvrManifestwork).Namespace(myTestNameSpace)
+			// 		_, err := ns.Get(context.TODO(), myTestNameSpace+manifestWorkNamePostfix, metav1.GetOptions{})
+			// 		return err
+			// 	}).ShouldNot(BeNil())
+			// })
 		})
 
 		// Not working as we need to find a way to create a token for kind cluster.
@@ -610,19 +633,45 @@ func checkManagedClusterCreation(
 	})
 }
 
-func setManagedClusterConditionAvailable(clusterName string, available bool) *unstructured.Unstructured {
+func setManagedClusterConditionAvailable(clusterName string, available, autoImport bool) *unstructured.Unstructured {
+	ns := clientHubDynamic.Resource(gvrManagedcluster)
 	a := "False"
 	r := "ManagedClusterNotAvailable"
+	var ManagedClusterImportSucceededCond string
 	if available {
 		a = "True"
 		r = "ManagedClusterJoined"
+		if autoImport {
+			//The cluster must be imported before setting to available true
+			Eventually(func() bool {
+				mc, err := ns.Get(context.TODO(), clusterName, metav1.GetOptions{})
+				if err != nil {
+					klog.Infof("Error retreiving managecluster status: %s", err.Error())
+					return false
+				}
+				cond, err := libgounstructuredv1.GetConditionByType(mc, "ManagedClusterImportSucceeded")
+				if err != nil {
+					klog.Infof("Error retreiving managecluster conditions ManagedClusterImportSucceeded: %s", err.Error())
+					return false
+				}
+				if cond["status"] != "True" {
+					return false
+				}
+				return true
+			}).Should(BeTrue())
+			ManagedClusterImportSucceededCond = `{"type":"ManagedClusterImportSucceeded","lastTransitionTime":"2020-01-01T01:01:01Z","message":"Managed cluster imported","status": "True","reason":"ManagedClusterImported"}`
+		}
 	}
-	status := `{"status":` +
-		`{"conditions":[` +
-		`{"type":"ManagedClusterConditionAvailable","lastTransitionTime":"2020-01-01T01:01:01Z","message":"Managed cluster joined","status":"` + a + `","reason":"` + r + `"}` +
-		`]}}`
+	ManagedClusterConditionAvailableCond := `{"type":"ManagedClusterConditionAvailable","lastTransitionTime":"2020-01-01T01:01:01Z","message":"Managed cluster joined","status":"` + a + `","reason":"` + r + `"}`
+	var status string
+	if ManagedClusterImportSucceededCond == "" {
+		status = `{"status":` +
+			`{"conditions":[` + ManagedClusterConditionAvailableCond + `]}}`
+	} else {
+		status = `{"status":` +
+			`{"conditions":[` + ManagedClusterConditionAvailableCond + `,` + ManagedClusterImportSucceededCond + `]}}`
+	}
 	By("Set status ManagedClusterConditionAvailable to " + a)
-	ns := clientHubDynamic.Resource(gvrManagedcluster)
 	managedCluster, err := ns.Patch(context.TODO(), clusterName, types.MergePatchType, []byte(status), metav1.PatchOptions{}, "status")
 	Expect(err).Should(BeNil())
 	return managedCluster

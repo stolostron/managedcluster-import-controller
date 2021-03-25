@@ -281,6 +281,9 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 
 	//Import the cluster
 	result, err := r.importCluster(instance, clusterDeployment, autoImportSecret)
+	if err != nil {
+		return result, err
+	}
 	errCond := r.setConditionImport(instance, err, fmt.Sprintf("Unable to import %s", instance.Name))
 	if errCond != nil {
 		klog.Error(errCond)
@@ -422,6 +425,11 @@ func (r *ReconcileManagedCluster) deleteNamespace(namespaceName string) error {
 			return err
 		}
 	} else {
+		libgometav1.RemoveFinalizer(clusterDeployment, managedClusterFinalizer)
+		err = r.client.Update(context.TODO(), clusterDeployment)
+		if err != nil {
+			return err
+		}
 		return fmt.Errorf(
 			"can not delete namespace %s as ClusterDeployment %s still exist",
 			namespaceName,
