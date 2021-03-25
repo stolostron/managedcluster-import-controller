@@ -258,7 +258,7 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 				Requeue:      true,
 				RequeueAfter: 1 * time.Minute,
 			},
-			wantErr: false,
+			wantErr: true,
 		},
 		{
 			name: "Error missing imagePullSecret",
