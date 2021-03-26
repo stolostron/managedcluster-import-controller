@@ -104,6 +104,11 @@ func newClusterdeployment(name string) *unstructured.Unstructured {
 						"name": "fake-hive-ssh-private-key",
 					},
 				},
+				"clusterMetadata": map[string]interface{}{
+					"adminKubeconfigSecretRef": map[string]interface{}{
+						"name": "clusterdeployment-secret",
+					},
+				},
 			},
 		},
 	}
@@ -125,6 +130,25 @@ func newAutoImportSecretWithKubeConfig(clusterName string) (*corev1.Secret, erro
 		StringData: map[string]string{
 			"autoImportRetry": "5",
 			"kubeconfig":      string(kubeconfig),
+		},
+	}, nil
+}
+
+func newClusterDeploymentSecretWithKubeConfig(clusterName string) (*corev1.Secret, error) {
+	dir, _ := os.Getwd()
+	klog.V(5).Infof("Current Directory: %s", dir)
+	kubeconfig, err := ioutil.ReadFile("../../kind_kubeconfig_internal_mc.yaml")
+	if err != nil {
+		klog.Error(err)
+		return nil, err
+	}
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "clusterdeployment-secret",
+			Namespace: clusterName,
+		},
+		StringData: map[string]string{
+			"kubeconfig": string(kubeconfig),
 		},
 	}, nil
 }

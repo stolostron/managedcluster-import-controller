@@ -10,6 +10,7 @@ set -e
 CURR_FOLDER_PATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 KIND_KUBECONFIG="${CURR_FOLDER_PATH}/../kind_kubeconfig.yaml"
 KIND_KUBECONFIG_INTERNAL="${CURR_FOLDER_PATH}/../kind_kubeconfig_internal.yaml"
+KIND_MANAGED_KUBECONFIG="${CURR_FOLDER_PATH}/../kind_kubeconfig_mc.yaml"
 KIND_MANAGED_KUBECONFIG_INTERNAL="${CURR_FOLDER_PATH}/../kind_kubeconfig_internal_mc.yaml"
 CLUSTER_NAME=$PROJECT_NAME-functional-test
 
@@ -128,6 +129,7 @@ EOF
 echo "creating managed cluster"
 kind create cluster --name ${CLUSTER_NAME}-managed --config "${FUNCT_TEST_TMPDIR}/kind-config/kind-managed-config.yaml"
 # setup kubeconfig
+kind get kubeconfig --name ${CLUSTER_NAME}-managed > ${KIND_MANAGED_KUBECONFIG}
 kind get kubeconfig --name ${CLUSTER_NAME}-managed --internal > ${KIND_MANAGED_KUBECONFIG_INTERNAL}
 echo "creating hub cluster"
 kind create cluster --name ${CLUSTER_NAME} --config "${FUNCT_TEST_TMPDIR}/kind-config/kind-config.yaml"

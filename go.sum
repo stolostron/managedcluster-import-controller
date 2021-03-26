@@ -1278,8 +1278,8 @@ github.com/open-cluster-management/api v0.0.0-20201210143210-581cab55c797 h1:rXu
 github.com/open-cluster-management/api v0.0.0-20201210143210-581cab55c797/go.mod h1:F1hDJHtWuV7BAUtfL4XRS9GZjUpksleLgEcisNXvQEw=
 github.com/open-cluster-management/applier v0.0.0-20210323134919-2b85eca20f76 h1:y+8nD64oTRp71bw794wtovA8DNnnbCoxpv6FCUr2Beg=
 github.com/open-cluster-management/applier v0.0.0-20210323134919-2b85eca20f76/go.mod h1:F2t4tTJeDGWOGepcRt46YVKbf+IMS7huFQ3JjvlxkOc=
-github.com/open-cluster-management/library-go v0.0.0-20210224140722-b5437fe91e2c h1:rmqiPhYtAPIErjLwnluHZpolAGdRvhtKDWjCZdMpVp4=
-github.com/open-cluster-management/library-go v0.0.0-20210224140722-b5437fe91e2c/go.mod h1:RhY6657pNHHwNE3RCZDWighYV/kZc7dV/IgxyiyjJas=
+github.com/open-cluster-management/library-go v0.0.0-20210325215722-d989f79194f6 h1:p5yldyIj5Yng9t6o4jIQFbGmZIRgzczcAJLdyyfYK54=
+github.com/open-cluster-management/library-go v0.0.0-20210325215722-d989f79194f6/go.mod h1:N7Mi4eqvPUnCQqbZ1OAzceZ+2aHpixG3tMRwSHfLBCg=
 github.com/opencontainers/go-digest v0.0.0-20170106003457-a6d0ee40d420/go.mod h1:cMLVZDEM3+U2I4VmLI6N8jQYUd2OVphdqWwCJHrFt2s=
 github.com/opencontainers/go-digest v0.0.0-20180430190053-c9281466c8b2/go.mod h1:cMLVZDEM3+U2I4VmLI6N8jQYUd2OVphdqWwCJHrFt2s=
 github.com/opencontainers/go-digest v1.0.0-rc1/go.mod h1:cMLVZDEM3+U2I4VmLI6N8jQYUd2OVphdqWwCJHrFt2s=

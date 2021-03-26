@@ -19,6 +19,7 @@ import (
 
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	workv1 "github.com/open-cluster-management/api/work/v1"
+	libgometav1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1"
 
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -39,12 +40,23 @@ func (r *ReconcileManagedCluster) importCluster(
 	//A clusterDeployment exist then get the client
 	if clusterDeployment != nil {
 		if !clusterDeployment.Spec.Installed {
-			return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
+			klog.Infof("cluster %s not yet installed", clusterDeployment.Name)
+			return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Minute},
+				nil
 		}
 		klog.Infof("Use hive client to import cluster %s", managedCluster.Name)
 		client, err = r.getManagedClusterClientFromHive(clusterDeployment, managedCluster)
 		if err != nil {
 			return reconcile.Result{}, err
+		}
+		//Testing to avoid update which will generate roundtrip as the clusterDeployment is watched
+		if !libgometav1.HasFinalizer(clusterDeployment, managedClusterFinalizer) {
+			klog.Info("Add finalizer in clusterDeployment")
+			libgometav1.AddFinalizer(clusterDeployment, managedClusterFinalizer)
+			err = r.client.Update(context.TODO(), clusterDeployment)
+			if err != nil {
+				return reconcile.Result{}, err
+			}
 		}
 	}
 
