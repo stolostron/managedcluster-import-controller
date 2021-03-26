@@ -281,7 +281,7 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 
 	//Import the cluster
 	result, err := r.importCluster(instance, clusterDeployment, autoImportSecret)
-	if err != nil {
+	if result.Requeue || err != nil {
 		return result, err
 	}
 	errCond := r.setConditionImport(instance, err, fmt.Sprintf("Unable to import %s", instance.Name))

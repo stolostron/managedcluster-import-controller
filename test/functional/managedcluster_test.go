@@ -472,26 +472,26 @@ var _ = Describe("Managedcluster", func() {
 				}).ShouldNot(BeNil())
 			})
 
-			// By("Deleting the ManagedCluster", func() {
-			// 	_ = setManagedClusterConditionAvailable(myTestNameSpace, false, true)
-			// 	Expect(clientHubDynamic.Resource(gvrManagedcluster).Delete(context.TODO(), myTestNameSpace, metav1.DeleteOptions{})).Should(BeNil())
-			// 	checkManagedClusterDeletion(clientHubDynamic, clientHub, myTestNameSpace, myTestNameSpace, gvrManagedcluster)
-			// })
+			By("Deleting the ManagedCluster", func() {
+				_ = setManagedClusterConditionAvailable(myTestNameSpace, false, true)
+				Expect(clientHubDynamic.Resource(gvrManagedcluster).Delete(context.TODO(), myTestNameSpace, metav1.DeleteOptions{})).Should(BeNil())
+				checkManagedClusterDeletion(clientHubDynamic, clientHub, myTestNameSpace, myTestNameSpace, gvrManagedcluster)
+			})
 
-			// By("Check if manifestWork deleted", func() {
-			// 	Eventually(func() error {
-			// 		klog.V(1).Infof("Wait delete ManifestWork CRDs %s", myTestNameSpace+manifestWorkNamePostfix+"-crds")
-			// 		ns := clientHubDynamic.Resource(gvrManifestwork).Namespace(myTestNameSpace)
-			// 		_, err := ns.Get(context.TODO(), myTestNameSpace+manifestWorkNamePostfix+"-crds", metav1.GetOptions{})
-			// 		return err
-			// 	}).ShouldNot(BeNil())
-			// 	Eventually(func() error {
-			// 		klog.V(1).Infof("Wait delete ManifestWork %s", myTestNameSpace+manifestWorkNamePostfix)
-			// 		ns := clientHubDynamic.Resource(gvrManifestwork).Namespace(myTestNameSpace)
-			// 		_, err := ns.Get(context.TODO(), myTestNameSpace+manifestWorkNamePostfix, metav1.GetOptions{})
-			// 		return err
-			// 	}).ShouldNot(BeNil())
-			// })
+			By("Check if manifestWork deleted", func() {
+				Eventually(func() error {
+					klog.V(1).Infof("Wait delete ManifestWork CRDs %s", myTestNameSpace+manifestWorkNamePostfix+"-crds")
+					ns := clientHubDynamic.Resource(gvrManifestwork).Namespace(myTestNameSpace)
+					_, err := ns.Get(context.TODO(), myTestNameSpace+manifestWorkNamePostfix+"-crds", metav1.GetOptions{})
+					return err
+				}).ShouldNot(BeNil())
+				Eventually(func() error {
+					klog.V(1).Infof("Wait delete ManifestWork %s", myTestNameSpace+manifestWorkNamePostfix)
+					ns := clientHubDynamic.Resource(gvrManifestwork).Namespace(myTestNameSpace)
+					_, err := ns.Get(context.TODO(), myTestNameSpace+manifestWorkNamePostfix, metav1.GetOptions{})
+					return err
+				}).ShouldNot(BeNil())
+			})
 		})
 
 		// Not working as we need to find a way to create a token for kind cluster.

@@ -40,8 +40,9 @@ func (r *ReconcileManagedCluster) importCluster(
 	//A clusterDeployment exist then get the client
 	if clusterDeployment != nil {
 		if !clusterDeployment.Spec.Installed {
+			klog.Infof("cluster %s not yet installed", clusterDeployment.Name)
 			return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Minute},
-				fmt.Errorf("cluster %s not yet installed", clusterDeployment.Name)
+				nil
 		}
 		klog.Infof("Use hive client to import cluster %s", managedCluster.Name)
 		client, err = r.getManagedClusterClientFromHive(clusterDeployment, managedCluster)
