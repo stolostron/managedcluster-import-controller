@@ -261,6 +261,12 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 	}
 
 	if !checkOffLine(instance) {
+		//Remove syncset if exists as we are now using manifestworks
+		err = deleteKlusterletSyncSets(r.client, instance)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
 		reqLogger.Info(fmt.Sprintf("createOrUpdateManifestWorks: %s", instance.Name))
 		_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, crds, yamls)
 		if err != nil {
