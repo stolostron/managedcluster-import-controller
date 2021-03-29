@@ -9,7 +9,6 @@ import (
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
@@ -18,7 +17,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
-	workv1 "github.com/open-cluster-management/api/work/v1"
 	libgometav1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1"
 
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
@@ -202,20 +200,6 @@ func (r *ReconcileManagedCluster) importClusterWithClient(
 	managedClusterClient client.Client) (reconcile.Result, error) {
 
 	klog.Infof("Importing cluster: %s", managedCluster.Name)
-
-	mwNSN, err := manifestWorkNsN(managedCluster)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-	mw := &workv1.ManifestWork{}
-	err = r.client.Get(context.TODO(), mwNSN, mw)
-	// import already done as mw already created
-	if err == nil {
-		return reconcile.Result{}, nil
-	}
-	if !errors.IsNotFound(err) {
-		return reconcile.Result{}, err
-	}
 
 	//Do not create SA if already exists
 	excluded := make([]string, 0)

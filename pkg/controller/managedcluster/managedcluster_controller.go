@@ -260,41 +260,43 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, err
 	}
 
-	if !checkOffLine(instance) {
-		//Remove syncset if exists as we are now using manifestworks
-		err = deleteKlusterletSyncSets(r.client, instance)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-
-		reqLogger.Info(fmt.Sprintf("createOrUpdateManifestWorks: %s", instance.Name))
-		_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, crds, yamls)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-	}
-
-	autoImportSecret, clusterDeployment, toImport, err := r.toBeImported(instance)
+	//Remove syncset if exists as we are now using manifestworks
+	err = deleteKlusterletSyncSets(r.client, instance)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	//Stop here if no auto-import
-	if !toImport {
-		klog.Infof("Not importing auto-import cluster: %s", instance.Name)
-		return reconcile.Result{}, nil
-	}
+	if !checkOffLine(instance) {
+		reqLogger.Info(fmt.Sprintf("createOrUpdateManifestWorks: %s", instance.Name))
+		_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, crds, yamls)
+		if err != nil {
+			reqLogger.Error(err, "Error while creating mw")
+			return reconcile.Result{}, err
+		}
+	} else {
+		autoImportSecret, clusterDeployment, toImport, err := r.toBeImported(instance)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
 
-	//Import the cluster
-	result, err := r.importCluster(instance, clusterDeployment, autoImportSecret)
-	if result.Requeue || err != nil {
+		//Stop here if no auto-import
+		if !toImport {
+			klog.Infof("Not importing auto-import cluster: %s", instance.Name)
+			return reconcile.Result{}, nil
+		}
+
+		//Import the cluster
+		result, err := r.importCluster(instance, clusterDeployment, autoImportSecret)
+		if result.Requeue || err != nil {
+			return result, err
+		}
+		errCond := r.setConditionImport(instance, err, fmt.Sprintf("Unable to import %s", instance.Name))
+		if errCond != nil {
+			klog.Error(errCond)
+		}
 		return result, err
 	}
-	errCond := r.setConditionImport(instance, err, fmt.Sprintf("Unable to import %s", instance.Name))
-	if errCond != nil {
-		klog.Error(errCond)
-	}
-	return result, err
+	return reconcile.Result{}, nil
 }
 
 func (r *ReconcileManagedCluster) toBeImported(managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, *hivev1.ClusterDeployment, bool, error) {
