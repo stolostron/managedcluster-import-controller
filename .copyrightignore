@@ -1,0 +1,3 @@
+#file extensions to ignore on top of .gitignore
+.copyrightignore
+_generated.go
