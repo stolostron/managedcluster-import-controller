@@ -280,7 +280,7 @@ func (r *ReconcileManagedCluster) managedClusterDeletion(instance *clusterv1.Man
 	reqLogger := log.WithValues("Instance.Namespace", instance.Namespace, "Instance.Name", instance.Name)
 	reqLogger.Info(fmt.Sprintf("Instance in Terminating: %s", instance.Name))
 	if len(filterFinalizers(instance, []string{managedClusterFinalizer, registrationFinalizer})) != 0 {
-		return reconcile.Result{Requeue: true}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
 	}
 
 	offLine := checkOffLine(instance)

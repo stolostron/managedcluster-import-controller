@@ -261,9 +261,9 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 	}
 
 	//Remove syncset if exists as we are now using manifestworks
-	err = deleteKlusterletSyncSets(r.client, instance)
+	result, err := deleteKlusterletSyncSets(r.client, instance)
 	if err != nil {
-		return reconcile.Result{}, err
+		return result, err
 	}
 
 	if !checkOffLine(instance) {
