@@ -10,5 +10,5 @@ roleRef:
   name: system:open-cluster-management:managedcluster:bootstrap:{{ .ManagedClusterName }}
 subjects:
 - kind: ServiceAccount
-  name: {{ .BootstrapServiceAccountName }}
-  namespace: {{ .ManagedClusterNamespace }}
+  name: "{{ .BootstrapServiceAccountName }}"
+  namespace: "{{ .ManagedClusterNamespace }}"

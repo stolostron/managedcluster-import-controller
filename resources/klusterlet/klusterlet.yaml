@@ -5,10 +5,10 @@ kind: Klusterlet
 metadata:
   name: klusterlet
 spec:
-  registrationImagePullSpec: {{ .RegistrationImageName }}
-  workImagePullSpec: {{ .WorkImageName }}
-  clusterName: {{ .ManagedClusterNamespace }}
-  namespace: {{ .KlusterletNamespace }}
+  registrationImagePullSpec: "{{ .RegistrationImageName }}"
+  workImagePullSpec: "{{ .WorkImageName }}"
+  clusterName: "{{ .ManagedClusterNamespace }}"
+  namespace: "{{ .KlusterletNamespace }}"
   {{- if .UseImagePullSecret }}
-  imagePullSecret: {{ .ImagePullSecretName }}
+  imagePullSecret: "{{ .ImagePullSecretName }}"
   {{- end }}
