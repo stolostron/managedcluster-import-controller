@@ -7,8 +7,8 @@ metadata:
 spec:
   registrationImagePullSpec: {{ .RegistrationImageName }}
   workImagePullSpec: {{ .WorkImageName }}
-  clusterName: {{ .ManagedClusterNamespace }}
-  namespace: {{ .KlusterletNamespace }}
+  clusterName: "{{ .ManagedClusterNamespace }}"
+  namespace: "{{ .KlusterletNamespace }}"
   {{- if .UseImagePullSecret }}
-  imagePullSecret: {{ .ImagePullSecretName }}
+  imagePullSecret: "{{ .ImagePullSecretName }}"
   {{- end }}
