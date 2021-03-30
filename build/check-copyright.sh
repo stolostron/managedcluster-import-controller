@@ -9,7 +9,8 @@
 # set -x
 TMP_FILE="tmp_file"
 
-ALL_FILES=$(git ls-files | grep -v _generated )
+ALL_FILES=$(git ls-files | \
+ grep -v -f <(sed 's/\([.|]\)/\\\1/g; s/\?/./g ; s/\*/.*/g' .copyrightignore))
 
 COMMUNITY_COPY_HEADER_FILE="$PWD/build/copyright-header.txt"
 
@@ -64,6 +65,8 @@ do
             || $FILE == *".tsx"   \
             || $FILE == *"Dockerfile" \
             || $FILE == *"Makefile"  \
+            || $FILE == *"Dockerfile.prow" \
+            || $FILE == *"Makefile.prow"  \
             || $FILE == *".gitignore"  \
             || $FILE == *".md"  ]]; then
 
