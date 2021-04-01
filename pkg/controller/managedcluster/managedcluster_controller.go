@@ -444,6 +444,19 @@ func (r *ReconcileManagedCluster) deleteNamespace(namespaceName string) error {
 			namespaceName,
 		)
 	}
+
+	if tobeDeleted {
+		pods := &corev1.PodList{}
+		err = r.client.List(context.TODO(), pods, client.InNamespace(namespaceName))
+		if err != nil {
+			return err
+		}
+		if len(pods.Items) != 0 {
+			log.Info("Detected pods, the namespace will be not deleted")
+			tobeDeleted = false
+		}
+	}
+
 	if tobeDeleted {
 		err = r.client.Delete(context.TODO(), ns)
 		if err != nil && !errors.IsNotFound(err) {
