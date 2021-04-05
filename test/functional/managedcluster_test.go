@@ -665,11 +665,13 @@ func setManagedClusterConditionAvailable(clusterName string, available, autoImpo
 	ManagedClusterConditionAvailableCond := `{"type":"ManagedClusterConditionAvailable","lastTransitionTime":"2020-01-01T01:01:01Z","message":"Managed cluster joined","status":"` + a + `","reason":"` + r + `"}`
 	var status string
 	if ManagedClusterImportSucceededCond == "" {
-		status = `{"status":` +
-			`{"conditions":[` + ManagedClusterConditionAvailableCond + `]}}`
+		status = `{"status":{` +
+			`"version":{"kubernetes":"1.17.0"},` +
+			`"conditions":[` + ManagedClusterConditionAvailableCond + `]}}`
 	} else {
-		status = `{"status":` +
-			`{"conditions":[` + ManagedClusterConditionAvailableCond + `,` + ManagedClusterImportSucceededCond + `]}}`
+		status = `{"status":{` +
+			`"version":{"kubernetes":"1.17.0"},` +
+			`"conditions":[` + ManagedClusterConditionAvailableCond + `,` + ManagedClusterImportSucceededCond + `]}}`
 	}
 	By("Set status ManagedClusterConditionAvailable to " + a)
 	managedCluster, err := ns.Patch(context.TODO(), clusterName, types.MergePatchType, []byte(status), metav1.PatchOptions{}, "status")

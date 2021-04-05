@@ -16,9 +16,8 @@ ENV REMOTE_SOURCE_DIR='/remote-source'
 
 ENV OPERATOR=/usr/local/bin/rcm-controller \
     USER_UID=1001 \
-    USER_NAME=rcm-controller \
-    KLUSTERLET_CRD_FILE=/usr/local/resources/agent.open-cluster-management.io_v1beta1_klusterlet_crd.yaml
-
+    USER_NAME=rcm-controller
+    
 # install operator binary
 COPY --from=builder $REMOTE_SOURCE_DIR/app/manager ${OPERATOR}
 COPY --from=builder $REMOTE_SOURCE_DIR/app/manager-coverage ${OPERATOR}-coverage

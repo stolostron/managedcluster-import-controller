@@ -42,7 +42,7 @@ func generateImportYAMLs(
 	client client.Client,
 	managedCluster *clusterv1.ManagedCluster,
 	excluded []string,
-) (yamls []*unstructured.Unstructured, crds []*unstructured.Unstructured, err error) {
+) (crds map[string][]*unstructured.Unstructured, yamls []*unstructured.Unstructured, err error) {
 
 	klog.V(4).Info("Create templateProcessor")
 	tp, err := templateprocessor.NewTemplateProcessor(bindata.NewBindataReader(), &templateprocessor.Options{})
@@ -50,8 +50,15 @@ func generateImportYAMLs(
 		return nil, nil, err
 	}
 
-	klog.V(4).Info("TemplateResources klusterlet/crds")
-	crds, err = tp.TemplateResourcesInPathUnstructured("klusterlet/crds", nil, true, nil)
+	crds = make(map[string][]*unstructured.Unstructured)
+	klog.V(4).Info("TemplateResources klusterlet/crds/v1beta1/")
+	crds["v1beta1"], err = tp.TemplateResourcesInPathUnstructured("klusterlet/crds/v1beta1/", nil, true, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	klog.V(4).Info("TemplateResources klusterlet/crds/v1/")
+	crds["v1"], err = tp.TemplateResourcesInPathUnstructured("klusterlet/crds/v1/", nil, true, nil)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -83,6 +83,9 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 					Status: metav1.ConditionTrue,
 				},
 			},
+			Version: clusterv1.ManagedClusterVersion{
+				Kubernetes: "1.17.0",
+			},
 		},
 	}
 
@@ -352,8 +355,8 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 				if _, ok := importSecret.Data[importYAMLKey]; !ok {
 					t.Error("Import secret doesn't contains a place holder " + importYAMLKey)
 				}
-				if _, ok := importSecret.Data[crdsYAMLKey]; !ok {
-					t.Error("Import secret doesn't contains a place holder " + crdsYAMLKey)
+				if _, ok := importSecret.Data[crdsV1YAMLKey]; !ok {
+					t.Error("Import secret doesn't contains a place holder " + crdsV1YAMLKey)
 				}
 				ns := &corev1.Namespace{}
 				if err := r.client.Get(context.TODO(),
