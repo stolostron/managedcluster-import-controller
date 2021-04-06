@@ -161,7 +161,7 @@ for dir in overlays/test/* ; do
   
   echo "run functional test..."
   make functional-test
-
+  # exit 1
   echo "remove deployment"
   kubectl delete --wait=true -k "$dir"
 done;
