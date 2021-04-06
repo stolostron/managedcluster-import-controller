@@ -29,4 +29,5 @@ resources:
 - ./namespace.yaml
 - ./service_account.yaml
 - ./role_binding.yaml
+- ./role.yaml
 - ./deployment.yaml

@@ -10,5 +10,5 @@ subjects:
   namespace: open-cluster-management
 roleRef:
   kind: ClusterRole
-  name: cluster-admin
+  name: managedcluster-import-controller
   apiGroup: rbac.authorization.k8s.io

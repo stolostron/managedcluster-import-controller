@@ -293,6 +293,7 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		errCond := r.setConditionImport(instance, err, fmt.Sprintf("Unable to import %s", instance.Name))
 		if errCond != nil {
 			klog.Error(errCond)
+			return reconcile.Result{}, errCond
 		}
 		return result, err
 	}

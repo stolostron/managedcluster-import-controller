@@ -188,7 +188,7 @@ kind-cluster-setup: install-fake-crds
 functional-test:
 	# ginkgo -tags functional -v --focus="(.*)import-managedcluster(.*)" --slowSpecThreshold=10 test/managedcluster-import-controller-test -- -v=5
 	# ginkgo -tags functional -v --slowSpecThreshold=10 --focus="(.*)approve-csr(.*)" test/functional -- -v=1
-	# ginkgo -tags functional -v --slowSpecThreshold=30 --focus="import-managedcluster/with-clusterDeployment" test/functional -- -v=5
+	# ginkgo -tags functional -v --slowSpecThreshold=30 --focus="import-managedcluster/with-manifestwork" test/functional -- -v=5
 	# ginkgo -tags functional -v --slowSpecThreshold=30 --focus="import-managedcluster/with-auto-import-kubeconfig" test/functional -- -v=5
 	ginkgo -tags functional -v --slowSpecThreshold=30 test/functional -- -v=5
 
