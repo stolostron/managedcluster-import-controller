@@ -270,7 +270,9 @@ func evictAllOtherManifestWork(c client.Client, instance *clusterv1.ManagedClust
 	}
 
 	mws := &workv1.ManifestWorkList{}
-	err = c.List(context.TODO(), mws)
+	err = c.List(context.TODO(), mws, &client.ListOptions{
+		Namespace: mwNsN.Namespace,
+	})
 	if err != nil {
 		return err
 	}
