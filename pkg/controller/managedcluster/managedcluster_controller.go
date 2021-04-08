@@ -156,6 +156,12 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		return r.managedClusterDeletion(instance)
 	}
 
+	//Wait a number of conditions before starting to process a managedcluster.
+	clusterDeployment, ready, err := r.isReadyToReconcile(instance)
+	if err != nil || !ready {
+		return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Minute},
+			nil
+	}
 	reqLogger.Info(fmt.Sprintf("AddFinalizer to instance: %s", instance.Name))
 	libgometav1.AddFinalizer(instance, managedClusterFinalizer)
 
@@ -274,7 +280,7 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 			return reconcile.Result{}, err
 		}
 	} else {
-		autoImportSecret, clusterDeployment, toImport, err := r.toBeImported(instance)
+		autoImportSecret, toImport, err := r.toBeImported(instance, clusterDeployment)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -300,12 +306,7 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileManagedCluster) toBeImported(managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, *hivev1.ClusterDeployment, bool, error) {
-	//Check self managed
-	if v, ok := managedCluster.GetLabels()[selfManagedLabel]; ok {
-		toImport, err := strconv.ParseBool(v)
-		return nil, nil, toImport, err
-	}
+func (r *ReconcileManagedCluster) isReadyToReconcile(managedCluster *clusterv1.ManagedCluster) (*hivev1.ClusterDeployment, bool, error) {
 	//Check if hive cluster and get client from clusterDeployment
 	clusterDeployment := &hivev1.ClusterDeployment{}
 	err := r.client.Get(
@@ -316,17 +317,37 @@ func (r *ReconcileManagedCluster) toBeImported(managedCluster *clusterv1.Managed
 		},
 		clusterDeployment,
 	)
-	if err == nil {
+	if err != nil {
+		if errors.IsNotFound(err) {
+			klog.Infof("ready to reconcile, cluster %s has no clusterdeployment", clusterDeployment.Name)
+			return nil, true, nil
+		}
+		return nil, false, err
+	}
+	if !clusterDeployment.Spec.Installed {
+		klog.Infof("not ready to reconcile, cluster %s not yet installed", clusterDeployment.Name)
+		return clusterDeployment, false, nil
+	}
+	klog.Infof("ready to reconcile, cluster %s installed", clusterDeployment.Name)
+	return clusterDeployment, true, nil
+}
+
+func (r *ReconcileManagedCluster) toBeImported(managedCluster *clusterv1.ManagedCluster,
+	clusterDeployment *hivev1.ClusterDeployment) (*corev1.Secret, bool, error) {
+	//Check self managed
+	if v, ok := managedCluster.GetLabels()[selfManagedLabel]; ok {
+		toImport, err := strconv.ParseBool(v)
+		return nil, toImport, err
+	}
+	//Check if hive cluster and get client from clusterDeployment
+	if clusterDeployment != nil {
 		//clusterDeployment found and so need to be imported
-		return nil, clusterDeployment, true, nil
-	} else if !errors.IsNotFound(err) {
-		//Error
-		return nil, nil, false, err
+		return nil, true, nil
 	}
 	//Check auto-import
 	klog.V(2).Info("Check autoImportRetry")
 	autoImportSecret := &corev1.Secret{}
-	err = r.client.Get(context.TODO(), types.NamespacedName{
+	err := r.client.Get(context.TODO(), types.NamespacedName{
 		Name:      autoImportSecretName,
 		Namespace: managedCluster.Name,
 	},
@@ -334,13 +355,13 @@ func (r *ReconcileManagedCluster) toBeImported(managedCluster *clusterv1.Managed
 	if err != nil {
 		if errors.IsNotFound(err) {
 			klog.Infof("Will not retry as autoImportSecret not found for %s", managedCluster.Name)
-			return nil, nil, false, nil
+			return nil, false, nil
 		}
 		klog.Errorf("Unable to read the autoImportSecret Error: %s", err.Error())
-		return nil, nil, false, err
+		return nil, false, err
 	}
 	klog.Infof("Will retry as autoImportSecret is found for %s and counter still present", managedCluster.Name)
-	return autoImportSecret, nil, true, nil
+	return autoImportSecret, true, nil
 }
 
 func (r *ReconcileManagedCluster) setConditionImport(managedCluster *clusterv1.ManagedCluster, errIn error, reason string) error {
