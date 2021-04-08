@@ -91,6 +91,7 @@ func (r *ReconcileCSR) Reconcile(request reconcile.Request) (reconcile.Result, e
 
 	if err := r.client.Get(context.TODO(), request.NamespacedName, instance); err != nil {
 		if errors.IsNotFound(err) {
+			reqLogger.Info("CSR ", instance.Name, " not found")
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
@@ -101,6 +102,7 @@ func (r *ReconcileCSR) Reconcile(request reconcile.Request) (reconcile.Result, e
 	}
 
 	if instance.DeletionTimestamp != nil {
+		reqLogger.Info("CSR ", instance.Name, " has deletiontimestamp set")
 		return reconcile.Result{}, nil
 	}
 

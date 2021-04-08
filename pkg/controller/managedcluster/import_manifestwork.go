@@ -270,13 +270,15 @@ func evictAllOtherManifestWork(c client.Client, instance *clusterv1.ManagedClust
 	}
 
 	mws := &workv1.ManifestWorkList{}
-	err = c.List(context.TODO(), mws)
+	err = c.List(context.TODO(), mws, &client.ListOptions{
+		Namespace: mwNsN.Namespace,
+	})
 	if err != nil {
 		return err
 	}
 	for _, mw := range mws.Items {
-		if (mw.GetName() == mwNsN.Name || mw.GetName() == mwNsN.Name+manifestWorkCRDSPostfix) &&
-			mw.GetNamespace() == mwNsN.Namespace {
+		if mw.GetName() == mwNsN.Name ||
+			mw.GetName() == mwNsN.Name+manifestWorkCRDSPostfix {
 			continue
 		}
 		err := evictManifestWork(c, mw.GetName(), mw.GetNamespace())
