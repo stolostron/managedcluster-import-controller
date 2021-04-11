@@ -22,8 +22,6 @@ spec:
         - name: managedcluster-import-controller
           image: REPLACE_IMAGE
           imagePullPolicy: Always
-          command: 
-          - managedcluster-import-controller
           env:
             - name: WATCH_NAMESPACE
             - name: POD_NAME
@@ -32,8 +30,6 @@ spec:
                   fieldPath: metadata.name
             - name: OPERATOR_NAME
               value: "managedcluster-import-controller"
-            - name: DEFAULT_IMAGE_PULL_SECRET
-              value: multiclusterhub-operator-pull-secret
             - name: DEFAULT_IMAGE_REGISTRY
               value: quay.io/open-cluster-management
             - name: REGISTRATION_OPERATOR_IMAGE
