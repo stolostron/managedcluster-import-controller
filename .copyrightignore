@@ -1,3 +1,8 @@
 #file extensions to ignore on top of .gitignore
 .copyrightignore
 _generated.go
+test/functional/resources/0000_00_clusters.open-cluster-management.io_managedclusters.crd.yaml
+test/functional/resources/0000_00_work.open-cluster-management.io_manifestworks.crd.yaml
+test/functional/resources/hive_v1_clusterdeployment_crd.yaml
+resources/klusterlet/crds/v1/0000_00_operator.open-cluster-management.io_klusterlets.crd.yaml
+resources/klusterlet/crds/v1beta1/0000_00_operator.open-cluster-management.io_klusterlets.crd.yaml

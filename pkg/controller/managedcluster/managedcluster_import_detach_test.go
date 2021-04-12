@@ -109,9 +109,10 @@ func TestReconcileManagedCluster_importClusterWithClient(t *testing.T) {
 		scheme *runtime.Scheme
 	}
 	type args struct {
-		managedCluster       *clusterv1.ManagedCluster
-		autoImportSecret     *corev1.Secret
-		managedClusterClient client.Client
+		managedCluster            *clusterv1.ManagedCluster
+		autoImportSecret          *corev1.Secret
+		managedClusterClient      client.Client
+		managedClusterKubeVersion string
 	}
 	tests := []struct {
 		name    string
@@ -127,8 +128,9 @@ func TestReconcileManagedCluster_importClusterWithClient(t *testing.T) {
 				scheme: schemeHub,
 			},
 			args: args{
-				managedCluster:       managedCluster,
-				managedClusterClient: clientManaged,
+				managedCluster:            managedCluster,
+				managedClusterClient:      clientManaged,
+				managedClusterKubeVersion: "v1.15.0",
 			},
 			want:    reconcile.Result{},
 			wantErr: false,
@@ -140,9 +142,10 @@ func TestReconcileManagedCluster_importClusterWithClient(t *testing.T) {
 				scheme: schemeHub,
 			},
 			args: args{
-				managedCluster:       managedCluster,
-				autoImportSecret:     autoImportSecret,
-				managedClusterClient: clientManaged,
+				managedCluster:            managedCluster,
+				autoImportSecret:          autoImportSecret,
+				managedClusterClient:      clientManaged,
+				managedClusterKubeVersion: "v1.15.0",
 			},
 			want:    reconcile.Result{},
 			wantErr: false,
@@ -158,7 +161,8 @@ func TestReconcileManagedCluster_importClusterWithClient(t *testing.T) {
 			got, errTest := r.importClusterWithClient(
 				tt.args.managedCluster,
 				tt.args.autoImportSecret,
-				tt.args.managedClusterClient)
+				tt.args.managedClusterClient,
+				tt.args.managedClusterKubeVersion)
 			if (errTest != nil) != tt.wantErr {
 				t.Errorf("ReconcileManagedCluster.importClusterWithClient() error = %v, wantErr %v", err, tt.wantErr)
 				return

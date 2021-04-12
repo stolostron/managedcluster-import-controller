@@ -25,6 +25,8 @@ const (
 	importSecretNamePostfix = "-import"
 	importYAMLKey           = "import.yaml"
 	crdsYAMLKey             = "crds.yaml"
+	crdsV1YAMLKey           = "crdsv1.yaml"
+	crdsV1beta1YAMLKey      = "crdsv1beta1.yaml"
 )
 
 func importSecretNsN(managedCluster *clusterv1.ManagedCluster) (types.NamespacedName, error) {
@@ -41,23 +43,32 @@ func importSecretNsN(managedCluster *clusterv1.ManagedCluster) (types.Namespaced
 
 func newImportSecret(
 	managedCluster *clusterv1.ManagedCluster,
-	crds []*unstructured.Unstructured,
+	crds map[string][]*unstructured.Unstructured,
 	yamls []*unstructured.Unstructured,
 ) (*corev1.Secret, error) {
 	importYAML := new(bytes.Buffer)
-	crdsYAML := new(bytes.Buffer)
+	crdsV1YAML := new(bytes.Buffer)
+	crdsV1beta1YAML := new(bytes.Buffer)
 
 	secretNsN, err := importSecretNsN(managedCluster)
 	if err != nil {
 		return nil, err
 	}
 
-	for _, crd := range crds {
+	for _, crd := range crds["v1"] {
 		b, err := templateprocessor.ToYAMLUnstructured(crd)
 		if err != nil {
 			return nil, err
 		}
-		crdsYAML.WriteString(fmt.Sprintf("\n---\n%s", string(b)))
+		crdsV1YAML.WriteString(fmt.Sprintf("\n---\n%s", string(b)))
+	}
+
+	for _, crd := range crds["v1beta1"] {
+		b, err := templateprocessor.ToYAMLUnstructured(crd)
+		if err != nil {
+			return nil, err
+		}
+		crdsV1beta1YAML.WriteString(fmt.Sprintf("\n---\n%s", string(b)))
 	}
 
 	for _, y := range yamls {
@@ -75,8 +86,10 @@ func newImportSecret(
 			Namespace: secretNsN.Namespace,
 		},
 		Data: map[string][]byte{
-			importYAMLKey: importYAML.Bytes(),
-			crdsYAMLKey:   crdsYAML.Bytes(),
+			importYAMLKey:      importYAML.Bytes(),
+			crdsYAMLKey:        crdsV1beta1YAML.Bytes(),
+			crdsV1YAMLKey:      crdsV1YAML.Bytes(),
+			crdsV1beta1YAMLKey: crdsV1beta1YAML.Bytes(),
 		},
 	}
 
@@ -87,7 +100,7 @@ func createOrUpdateImportSecret(
 	client client.Client,
 	scheme *runtime.Scheme,
 	managedCluster *clusterv1.ManagedCluster,
-	crds []*unstructured.Unstructured,
+	crds map[string][]*unstructured.Unstructured,
 	yamls []*unstructured.Unstructured,
 ) (*corev1.Secret, error) {
 	secret, err := newImportSecret(managedCluster, crds, yamls)
@@ -112,7 +125,7 @@ func createOrUpdateImportSecret(
 		}
 	} else {
 		if !bytes.Equal(oldImportSecret.Data[importYAMLKey], secret.Data[importYAMLKey]) ||
-			!bytes.Equal(oldImportSecret.Data[crdsYAMLKey], secret.Data[crdsYAMLKey]) {
+			!bytes.Equal(oldImportSecret.Data[crdsV1YAMLKey], secret.Data[crdsV1YAMLKey]) {
 			oldImportSecret.Data = secret.Data
 			if err := client.Update(context.TODO(), oldImportSecret); err != nil {
 				return nil, err

@@ -108,6 +108,11 @@ func newClusterdeployment(name string) *unstructured.Unstructured {
 					"adminKubeconfigSecretRef": map[string]interface{}{
 						"name": "clusterdeployment-secret",
 					},
+					"adminPasswordSecretRef": map[string]interface{}{
+						"name": "clusterdeployment-secret",
+					},
+					"clusterID": "my-cluster-id",
+					"infraID":   "my-infra-id",
 				},
 			},
 		},

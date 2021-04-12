@@ -26,7 +26,6 @@ export PROJECT_NAME			  = mci
 
 export BUILD_DIR              = $(PROJECT_DIR)/build
 export COMPONENT_SCRIPTS_PATH = $(BUILD_DIR)
-export KLUSTERLET_CRD_FILE      = $(PROJECT_DIR)/build/resources/agent.open-cluster-management.io_v1beta1_klusterlet_crd.yaml
 
 export COMPONENT_NAME ?= $(shell cat ./COMPONENT_NAME 2> /dev/null)
 export COMPONENT_VERSION ?= $(shell cat ./COMPONENT_VERSION 2> /dev/null)

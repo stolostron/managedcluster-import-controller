@@ -37,7 +37,6 @@ const (
 )
 
 func init() {
-	os.Setenv("KLUSTERLET_CRD_FILE", "../../../build/resources/agent.open-cluster-management.io_v1beta1_klusterlet_crd.yaml")
 	os.Setenv(registrationOperatorImageEnvVarName, "quay.io/open-cluster-management/registration-operator:latest")
 	os.Setenv(workImageEnvVarName, "quay.io/open-cluster-management/work:latest")
 	os.Setenv(registrationImageEnvVarName, "quay.io/open-cluster-management/registration:latest")
@@ -249,12 +248,12 @@ func Test_newImportSecret(t *testing.T) {
 					t.Errorf(importYAMLKey + " should not be empty")
 					return
 				}
-				if _, ok := got.Data[crdsYAMLKey]; !ok {
-					t.Error("Data " + crdsYAMLKey + " not found")
+				if _, ok := got.Data[crdsV1YAMLKey]; !ok {
+					t.Error("Data " + crdsV1YAMLKey + " not found")
 				}
 				t.Log("got.Data[crdsYAMLKey] exists")
-				if len(got.Data[crdsYAMLKey]) == 0 {
-					t.Errorf(crdsYAMLKey + " should not be empty")
+				if len(got.Data[crdsV1YAMLKey]) == 0 {
+					t.Errorf(crdsV1YAMLKey + " should not be empty")
 					return
 				}
 			}
@@ -348,7 +347,7 @@ func Test_createOrUpdateImportSecret(t *testing.T) {
 		client         client.Client
 		scheme         *runtime.Scheme
 		managedCluster *clusterv1.ManagedCluster
-		crds           []*unstructured.Unstructured
+		crds           map[string][]*unstructured.Unstructured
 		yamls          []*unstructured.Unstructured
 	}
 
@@ -440,10 +439,10 @@ func Test_createOrUpdateImportSecret(t *testing.T) {
 						t.Errorf("importYAML = %v, want %v", importYAML, tt.want.Data[importYAMLKey])
 					}
 				}
-				if crdsYAML, ok := got.Data[crdsYAMLKey]; !ok {
-					t.Error("Data " + crdsYAMLKey + "not found")
-					if !reflect.DeepEqual(crdsYAML, tt.want.Data[crdsYAMLKey]) {
-						t.Errorf("crdsYAML = %v, want %v", crdsYAML, tt.want.Data[crdsYAMLKey])
+				if crdsYAML, ok := got.Data[crdsV1YAMLKey]; !ok {
+					t.Error("Data " + crdsV1YAMLKey + "not found")
+					if !reflect.DeepEqual(crdsYAML, tt.want.Data[crdsV1YAMLKey]) {
+						t.Errorf("crdsYAML = %v, want %v", crdsYAML, tt.want.Data[crdsV1YAMLKey])
 					}
 				}
 			}

@@ -274,7 +274,15 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 
 	if !checkOffLine(instance) {
 		reqLogger.Info(fmt.Sprintf("createOrUpdateManifestWorks: %s", instance.Name))
-		_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, crds, yamls)
+		isV1, err := isAPIExtensionV1(nil, instance, "")
+		if err != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
+		}
+		if isV1 {
+			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, crds["v1"], yamls)
+		} else {
+			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, crds["v1beta1"], yamls)
+		}
 		if err != nil {
 			reqLogger.Error(err, "Error while creating mw")
 			return reconcile.Result{}, err
@@ -488,4 +496,34 @@ func (r *ReconcileManagedCluster) deleteNamespace(namespaceName string) error {
 	}
 
 	return nil
+}
+
+//TODO add logic
+//the client is nil when we create the manifestwork,
+//at that time the managedcluster is already on line and
+//we can check the managedcluster to get the kubeversion
+//
+//the client is not nill when the cluster will be auto-imported and
+//we can check the managed cluster to find out the kubeversion version
+func isAPIExtensionV1(managedClusterClient client.Client,
+	managedCluster *clusterv1.ManagedCluster,
+	managedClusterKubeVersion string) (bool, error) {
+	var actualVersion string
+	//Search kubernetes version for creating manifestwork
+	if managedClusterClient == nil {
+		if managedCluster.Status.Version.Kubernetes == "" {
+			return false, fmt.Errorf("kubernetes version not yet available for managed cluster %s", managedCluster.GetName())
+		}
+		actualVersion = managedCluster.Status.Version.Kubernetes
+	} else {
+		actualVersion = managedClusterKubeVersion
+	}
+	klog.V(4).Infof("actual kubernetes version is %s", actualVersion)
+	isV1, err := v1APIExtensionMinVersion.Compare(actualVersion)
+	if err != nil {
+		return false, err
+	}
+	klog.V(4).Infof("isV1: %t", isV1 == -1)
+	return isV1 == -1, nil
+
 }

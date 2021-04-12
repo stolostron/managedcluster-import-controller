@@ -10,6 +10,8 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog"
 
@@ -18,6 +20,7 @@ import (
 
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	libgometav1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1"
+	libgoconfig "github.com/open-cluster-management/library-go/pkg/config"
 
 	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -35,10 +38,15 @@ func (r *ReconcileManagedCluster) importCluster(
 	//Assuming that is a local import
 	client := r.client
 
+	rConfig, err := libgoconfig.LoadConfig("", "", "")
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	//A clusterDeployment exist then get the client
 	if clusterDeployment != nil {
 		klog.Infof("Use hive client to import cluster %s", managedCluster.Name)
-		client, err = r.getManagedClusterClientFromHive(clusterDeployment, managedCluster)
+		client, rConfig, err = r.getManagedClusterClientFromHive(clusterDeployment, managedCluster)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -56,11 +64,16 @@ func (r *ReconcileManagedCluster) importCluster(
 	//Check if auto-import and get client from the importSecret
 	if autoImportSecret != nil {
 		klog.Infof("Use autoImportSecret to import cluster %s", managedCluster.Name)
-		client, err = r.getManagedClusterClientFromAutoImportSecret(autoImportSecret)
+		client, rConfig, err = r.getManagedClusterClientFromAutoImportSecret(autoImportSecret)
 	}
 
 	if err == nil {
-		res, err = r.importClusterWithClient(managedCluster, autoImportSecret, client)
+		var managedClusterKubeVersion string
+		managedClusterKubeVersion, err = getManagedClusterKubeVersion(rConfig)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		res, err = r.importClusterWithClient(managedCluster, autoImportSecret, client, managedClusterKubeVersion)
 	}
 	if err != nil && autoImportSecret != nil {
 		errUpdate := r.updateAutoImportRetry(managedCluster, autoImportSecret)
@@ -76,7 +89,7 @@ func (r *ReconcileManagedCluster) importCluster(
 //get the client from hive clusterDeployment credentials secret
 func (r *ReconcileManagedCluster) getManagedClusterClientFromHive(
 	clusterDeployment *hivev1.ClusterDeployment,
-	managedCluster *clusterv1.ManagedCluster) (client.Client, error) {
+	managedCluster *clusterv1.ManagedCluster) (client.Client, *rest.Config, error) {
 	managedClusterKubeSecret := &corev1.Secret{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{
 		Name:      clusterDeployment.Spec.ClusterMetadata.AdminKubeconfigSecretRef.Name,
@@ -84,16 +97,15 @@ func (r *ReconcileManagedCluster) getManagedClusterClientFromHive(
 	},
 		managedClusterKubeSecret)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
 	return getClientFromKubeConfig(managedClusterKubeSecret.Data["kubeconfig"])
 
 }
 
 //Get the client from the auto-import-secret
 func (r *ReconcileManagedCluster) getManagedClusterClientFromAutoImportSecret(
-	autoImportSecret *corev1.Secret) (client.Client, error) {
+	autoImportSecret *corev1.Secret) (client.Client, *rest.Config, error) {
 	//generate client using kubeconfig
 	if k, ok := autoImportSecret.Data["kubeconfig"]; ok {
 		return getClientFromKubeConfig(k)
@@ -104,33 +116,33 @@ func (r *ReconcileManagedCluster) getManagedClusterClientFromAutoImportSecret(
 		return getClientFromToken(string(token), string(server))
 	}
 
-	return nil, fmt.Errorf("kubeconfig or token and server are missing")
+	return nil, nil, fmt.Errorf("kubeconfig or token and server are missing")
 }
 
 //Create client from kubeconfig
-func getClientFromKubeConfig(kubeconfig []byte) (client.Client, error) {
+func getClientFromKubeConfig(kubeconfig []byte) (client.Client, *rest.Config, error) {
 	config, err := clientcmd.Load(kubeconfig)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	rconfig, err := clientcmd.NewDefaultClientConfig(
 		*config,
 		&clientcmd.ConfigOverrides{}).ClientConfig()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	client, err := client.New(rconfig, client.Options{})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return client, nil
+	return client, rconfig, nil
 }
 
 //Create client from token and server
-func getClientFromToken(token, server string) (client.Client, error) {
+func getClientFromToken(token, server string) (client.Client, *rest.Config, error) {
 	//Create config
 	config := clientcmdapi.NewConfig()
 	config.Clusters["default"] = &clientcmdapi.Cluster{
@@ -149,13 +161,28 @@ func getClientFromToken(token, server string) (client.Client, error) {
 	clientConfig := clientcmd.NewDefaultClientConfig(*config, &clientcmd.ConfigOverrides{})
 	restConfig, err := clientConfig.ClientConfig()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	clientClient, err := client.New(restConfig, client.Options{})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return clientClient, nil
+
+	return clientClient, restConfig, nil
+}
+
+func getManagedClusterKubeVersion(rConfig *rest.Config) (string, error) {
+	kubeClient, err := kubernetes.NewForConfig(rConfig)
+	if err != nil {
+		return "", err
+	}
+
+	//Search the kubernestes version by connecting to the managed cluster
+	kubeVersion, err := kubeClient.ServerVersion()
+	if err != nil {
+		return "", err
+	}
+	return kubeVersion.String(), nil
 }
 
 func (r *ReconcileManagedCluster) updateAutoImportRetry(
@@ -192,7 +219,8 @@ func (r *ReconcileManagedCluster) updateAutoImportRetry(
 func (r *ReconcileManagedCluster) importClusterWithClient(
 	managedCluster *clusterv1.ManagedCluster,
 	autoImportSecret *corev1.Secret,
-	managedClusterClient client.Client) (reconcile.Result, error) {
+	managedClusterClient client.Client,
+	managedClusterKubeVersion string) (reconcile.Result, error) {
 
 	klog.Infof("Importing cluster: %s", managedCluster.Name)
 
@@ -212,8 +240,17 @@ func (r *ReconcileManagedCluster) importClusterWithClient(
 		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 	}
 
+	var bb [][]byte
 	//Convert crds to Yaml
-	bb, err := templateprocessor.ToYAMLsUnstructured(crds)
+	isV1, err := isAPIExtensionV1(managedClusterClient, managedCluster, managedClusterKubeVersion)
+	if err != nil {
+		return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
+	}
+	if isV1 {
+		bb, err = templateprocessor.ToYAMLsUnstructured(crds["v1"])
+	} else {
+		bb, err = templateprocessor.ToYAMLsUnstructured(crds["v1beta1"])
+	}
 	if err != nil {
 		return reconcile.Result{}, err
 	}
