@@ -162,11 +162,7 @@ endif
 ############################################################
 
 deploy:
-	mkdir -p overlays/deploy
-	cp overlays/template/kustomization.yaml overlays/deploy
-	cd overlays/deploy
-	kustomize build overlays/deploy | kubectl apply -f -
-	rm -rf overlays/deploy
+	kubectl apply -k overlays/community
 
 .PHONY: install-fake-crds
 install-fake-crds:
