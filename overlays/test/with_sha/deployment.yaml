@@ -13,12 +13,13 @@ spec:
       - name: multiclusterhub-operator-pull-secret
       containers:
       - name: managedcluster-import-controller
-        command:
         imagePullPolicy: IfNotPresent
         volumeMounts:
           - mountPath: /tmp/coverage
             name: coverage-dir  
         env:
+        - name: DEFAULT_IMAGE_PULL_SECRET
+          value: multiclusterhub-operator-pull-secret
         - name: REGISTRATION_OPERATOR_IMAGE
           value: "quay.io/open-cluster-management/registration-operator:latest"
         - name: REGISTRATION_IMAGE
