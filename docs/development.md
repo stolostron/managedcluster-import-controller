@@ -6,6 +6,8 @@
 
 - git
 - go version v1.12+
+- [kind](https://kind.sigs.k8s.io/), used for functional-test
+- kubectl, used for functional-test
 
 ## Developer quick start
 - Run the unit test before building the binary.
@@ -20,3 +22,6 @@ make build
 ```bash
 make run
 ```
+
+- Run functional-test
+[here](functional_test.md)
