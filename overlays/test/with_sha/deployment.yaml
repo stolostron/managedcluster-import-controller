@@ -4,6 +4,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: managedcluster-import-controller
+  namespace: open-cluster-management
 spec:
   template:
     spec:
