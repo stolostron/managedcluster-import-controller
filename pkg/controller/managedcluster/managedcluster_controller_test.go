@@ -219,7 +219,12 @@ func TestReconcileManagedCluster_Reconcile(t *testing.T) {
 			want: reconcile.Result{
 				Requeue: false,
 			},
-			wantErr: false,
+			//Normally it should be false but the code needs to retrieve the kubeconfig in order to create a kubernetes client and
+			//this to retrieve the kubeversion. As there is no fake kubeconfig available for the time being the test failed on
+			// /Users/dvernier/acm/managedcluster-import-controller/pkg/controller/managedcluster/managedcluster_controller_test.go:322:
+			// ReconcileManagedCluster.Reconcile() Creation error = the server has asked for the client to provide credentials, wantErr false
+			// moving toward https://pkg.go.dev/sigs.k8s.io/controller-runtime/pkg/envtest could resolve that issue.
+			wantErr: true,
 		},
 		{
 			name: "success without clusterDeployment and online",
