@@ -138,7 +138,7 @@ linters-settings:
       - captLocal
       - caseOrder
       - codegenComment
-      - commentedOutCode
+      # - commentedOutCode
       - commentedOutImport
       - defaultCaseOrder
       - deprecatedComment

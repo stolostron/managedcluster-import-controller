@@ -137,12 +137,12 @@ clean: clean-functional-test-full
 .PHONY: run
 ## Run the operator against the kubeconfig targeted cluster
 run: go-bindata
-	DEFAULT_IMAGE_PULL_SECRET=multiclusterhub-operator-pull-secret
-	POD_NAMESPACE=open-cluster-management
-	REGISTRATION_OPERATOR_IMAGE=quay.io/open-cluster-management/registration-operator:latest
-	REGISTRATION_IMAGE=quay.io/open-cluster-management/registration:latest
-	WORK_IMAGE=quay.io/open-cluster-management/work:latest
-	WATCH_NAMESPACE=""
+	DEFAULT_IMAGE_PULL_SECRET=multiclusterhub-operator-pull-secret \
+	POD_NAMESPACE=open-cluster-management \
+	REGISTRATION_OPERATOR_IMAGE=quay.io/open-cluster-management/registration-operator:latest \
+	REGISTRATION_IMAGE=quay.io/open-cluster-management/registration:latest \
+	WORK_IMAGE=quay.io/open-cluster-management/work:latest \
+	WATCH_NAMESPACE="" \
 	go run cmd/manager/main.go -v=4
 
 .PHONY: lint
