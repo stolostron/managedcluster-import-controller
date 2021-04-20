@@ -31,6 +31,7 @@ go-bindata.diff
 test/functional/tmp
 test/functional/coverage
 test/functional/functional.test
+test/unit/tmp
 kind_kubeconfig.yaml
 kind_kubeconfig_mc.yaml
 kind_kubeconfig_internal.yaml
