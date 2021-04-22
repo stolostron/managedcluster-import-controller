@@ -22,7 +22,7 @@ import (
 	libgometav1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1"
 	libgoconfig "github.com/open-cluster-management/library-go/pkg/config"
 
-	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 
 	"github.com/open-cluster-management/applier/pkg/applier"
@@ -36,7 +36,7 @@ func (r *ReconcileManagedCluster) importCluster(
 	res = reconcile.Result{}
 
 	//Assuming that is a local import
-	client := r.client
+	managedClusterClient := r.client
 
 	rConfig, err := libgoconfig.LoadConfig("", "", "")
 	if err != nil {
@@ -46,7 +46,7 @@ func (r *ReconcileManagedCluster) importCluster(
 	//A clusterDeployment exist then get the client
 	if clusterDeployment != nil {
 		klog.Infof("Use hive client to import cluster %s", managedCluster.Name)
-		client, rConfig, err = r.getManagedClusterClientFromHive(clusterDeployment, managedCluster)
+		managedClusterClient, rConfig, err = r.getManagedClusterClientFromHive(clusterDeployment, managedCluster)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -54,6 +54,12 @@ func (r *ReconcileManagedCluster) importCluster(
 		if !libgometav1.HasFinalizer(clusterDeployment, managedClusterFinalizer) {
 			klog.Info("Add finalizer in clusterDeployment")
 			libgometav1.AddFinalizer(clusterDeployment, managedClusterFinalizer)
+			// patchValue, err := json.Marshal(clusterDeployment.Finalizers)
+			// if err != nil {
+			// 	return reconcile.Result{}, err
+			// }
+			// patch := client.RawPatch(types.JSONPatchType, patchValue)
+			// err = r.client.Patch(context.TODO(), clusterDeployment, patch)
 			err = r.client.Update(context.TODO(), clusterDeployment)
 			if err != nil {
 				return reconcile.Result{}, err
@@ -64,7 +70,7 @@ func (r *ReconcileManagedCluster) importCluster(
 	//Check if auto-import and get client from the importSecret
 	if autoImportSecret != nil {
 		klog.Infof("Use autoImportSecret to import cluster %s", managedCluster.Name)
-		client, rConfig, err = r.getManagedClusterClientFromAutoImportSecret(autoImportSecret)
+		managedClusterClient, rConfig, err = r.getManagedClusterClientFromAutoImportSecret(autoImportSecret)
 	}
 
 	if err == nil {
@@ -73,7 +79,7 @@ func (r *ReconcileManagedCluster) importCluster(
 		if err != nil {
 			return reconcile.Result{}, err
 		}
-		res, err = r.importClusterWithClient(managedCluster, autoImportSecret, client, managedClusterKubeVersion)
+		res, err = r.importClusterWithClient(managedCluster, autoImportSecret, managedClusterClient, managedClusterKubeVersion)
 	}
 	if err != nil && autoImportSecret != nil {
 		errUpdate := r.updateAutoImportRetry(managedCluster, autoImportSecret)
