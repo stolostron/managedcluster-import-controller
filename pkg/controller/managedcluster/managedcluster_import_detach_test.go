@@ -12,7 +12,7 @@ import (
 	operatorv1 "github.com/open-cluster-management/api/operator/v1"
 	workv1 "github.com/open-cluster-management/api/work/v1"
 	ocinfrav1 "github.com/openshift/api/config/v1"
-	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"

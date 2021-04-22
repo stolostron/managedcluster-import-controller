@@ -26,7 +26,7 @@ import (
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	workv1 "github.com/open-cluster-management/api/work/v1"
 
-	hivev1 "github.com/openshift/hive/pkg/apis/hive/v1"
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
 
 	"github.com/open-cluster-management/applier/pkg/applier"
 	libgometav1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1"
