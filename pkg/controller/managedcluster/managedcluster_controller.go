@@ -217,7 +217,6 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		r.client,
 		instance,
 		r.scheme,
-		applier.DefaultKubernetesMerger,
 		nil)
 	if err != nil {
 		return reconcile.Result{}, err

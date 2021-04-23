@@ -7,10 +7,9 @@ require (
 	github.com/onsi/ginkgo v1.14.1
 	github.com/onsi/gomega v1.10.2
 	github.com/open-cluster-management/api v0.0.0-20201210143210-581cab55c797
-	github.com/open-cluster-management/applier v0.0.0-20210323134919-2b85eca20f76
+	github.com/open-cluster-management/applier v0.0.0-20210422205113-6c10f923726b
 	github.com/open-cluster-management/library-go v0.0.0-20210325215722-d989f79194f6
 	github.com/openshift/api v3.9.1-0.20191112184635-86def77f6f90+incompatible
-	// github.com/openshift/hive v1.1.1
 	github.com/openshift/hive/apis v0.0.0-20210415080537-ea6f0a2dd76c
 	github.com/operator-framework/operator-sdk v0.18.1
 	github.com/spf13/pflag v1.0.5

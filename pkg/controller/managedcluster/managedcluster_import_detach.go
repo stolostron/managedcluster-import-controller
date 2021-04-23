@@ -268,7 +268,7 @@ func (r *ReconcileManagedCluster) importClusterWithClient(
 		managedClusterClient,
 		nil,
 		nil,
-		applier.DefaultKubernetesMerger, nil)
+		nil)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -292,7 +292,6 @@ func (r *ReconcileManagedCluster) importClusterWithClient(
 		managedClusterClient,
 		nil,
 		nil,
-		applier.DefaultKubernetesMerger,
 		nil)
 	if err != nil {
 		return reconcile.Result{}, err

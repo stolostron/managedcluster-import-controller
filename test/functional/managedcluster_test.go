@@ -16,21 +16,18 @@ import (
 	"math/rand"
 	"net"
 	"reflect"
+	"testing"
 	"time"
 
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
 	libgoapplier "github.com/open-cluster-management/applier/pkg/applier"
 	"github.com/open-cluster-management/applier/pkg/templateprocessor"
 	libgounstructuredv1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1/unstructured"
 	libgoclient "github.com/open-cluster-management/library-go/pkg/client"
 	libgoconfig "github.com/open-cluster-management/library-go/pkg/config"
-
 	certificatesv1beta1 "k8s.io/api/certificates/v1beta1"
 	corev1 "k8s.io/api/core/v1"
-
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -39,6 +36,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
@@ -819,7 +817,6 @@ var _ = Describe("CSR Approval", func() {
 				hubClientClient,
 				nil,
 				nil,
-				nil,
 				nil)
 			Expect(err).To(BeNil())
 			values := struct {
@@ -972,4 +969,26 @@ func cleanCSR(myTestNameSpace string) {
 		_, err := ns.Get(context.TODO(), myTestNameSpace, metav1.GetOptions{})
 		return err
 	}).ShouldNot(BeNil())
+}
+
+func Test_setManagedClusterConditionAvailable(t *testing.T) {
+	type args struct {
+		clusterName string
+		available   bool
+		autoImport  bool
+	}
+	tests := []struct {
+		name string
+		args args
+		want *unstructured.Unstructured
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := setManagedClusterConditionAvailable(tt.args.clusterName, tt.args.available, tt.args.autoImport); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("setManagedClusterConditionAvailable() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
