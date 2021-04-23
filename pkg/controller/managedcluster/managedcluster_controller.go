@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -480,9 +481,12 @@ func (r *ReconcileManagedCluster) deleteNamespace(namespaceName string) error {
 		if err != nil {
 			return err
 		}
-		if len(pods.Items) != 0 {
-			log.Info("Detected pods, the namespace will be not deleted")
-			tobeDeleted = false
+		for _, pod := range pods.Items {
+			if !strings.HasPrefix(pod.Name, "curator-job") {
+				tobeDeleted = false
+				log.Info("Detected pods that are not belong to ACM, the namespace will be not deleted")
+				break
+			}
 		}
 	}
 
