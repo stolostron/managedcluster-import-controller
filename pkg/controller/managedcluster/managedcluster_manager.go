@@ -4,6 +4,10 @@
 package managedcluster
 
 import (
+	"fmt"
+	"os"
+	"strconv"
+
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	workv1 "github.com/open-cluster-management/api/work/v1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
@@ -38,8 +42,22 @@ func newReconciler(mgr manager.Manager) reconcile.Reconciler {
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
+	maxConcurrentReconciles := 1
+	if os.Getenv("MAX_CONCURRENT_RECONCILES") != "" {
+		var err error
+		maxConcurrentReconciles, err = strconv.Atoi(os.Getenv("MAX_CONCURRENT_RECONCILES"))
+		log.Info(fmt.Sprintf("MAX_CONCURRENT_RECONCILES=%d", maxConcurrentReconciles))
+		if err != nil {
+			return err
+		}
+	}
+
 	// Create a new controller
-	c, err := controller.New("managedcluster-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New("managedcluster-controller",
+		mgr,
+		controller.Options{Reconciler: r,
+			MaxConcurrentReconciles: maxConcurrentReconciles,
+		})
 	if err != nil {
 		return err
 	}
