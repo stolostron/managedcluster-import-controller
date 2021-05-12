@@ -75,6 +75,41 @@ func (cc customClient) Get(ctx context.Context, key client.ObjectKey, obj runtim
 	return cc.Client.Get(ctx, key, obj)
 }
 
+func newManagedClusterSpecPredicate() predicate.Predicate {
+	return predicate.Predicate(predicate.Funcs{
+		GenericFunc: func(e event.GenericEvent) bool { return false },
+		CreateFunc:  func(e event.CreateEvent) bool { return true },
+		DeleteFunc:  func(e event.DeleteEvent) bool { return true },
+		UpdateFunc: func(e event.UpdateEvent) bool {
+			if e.MetaOld == nil {
+				log.Error(nil, "Update event has no old metadata", "event", e)
+				return false
+			}
+			if e.ObjectOld == nil {
+				log.Error(nil, "Update event has no old runtime object to update", "event", e)
+				return false
+			}
+			if e.ObjectNew == nil {
+				log.Error(nil, "Update event has no new runtime object for update", "event", e)
+				return false
+			}
+			if e.MetaNew == nil {
+				log.Error(nil, "Update event has no new metadata", "event", e)
+				return false
+			}
+			newManagedCluster, okNew := e.ObjectNew.(*clusterv1.ManagedCluster)
+			oldManagedCluster, okOld := e.ObjectOld.(*clusterv1.ManagedCluster)
+			if okNew && okOld {
+				return !reflect.DeepEqual(newManagedCluster.Spec, oldManagedCluster.Spec) ||
+					checkOffLine(newManagedCluster) != checkOffLine(oldManagedCluster) ||
+					newManagedCluster.DeletionTimestamp != nil
+				// !reflect.DeepEqual(newManagedCluster.Status.Conditions, oldManagedCluster.Status.Conditions)
+			}
+			return false
+		},
+	})
+}
+
 func newManifestWorkSpecPredicate() predicate.Predicate {
 	return predicate.Predicate(predicate.Funcs{
 		GenericFunc: func(e event.GenericEvent) bool { return false },
@@ -176,7 +211,8 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 	}
 
 	if err := r.client.Update(context.TODO(), instance); err != nil {
-		return reconcile.Result{}, err
+		reqLogger.Error(err, "Error while updating labels")
+		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 	}
 
 	//Add clusterLabel on ns if missing
@@ -185,7 +221,8 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		context.TODO(),
 		types.NamespacedName{Namespace: "", Name: instance.Name},
 		ns); err != nil {
-		return reconcile.Result{}, err
+		reqLogger.Error(err, "Error while getting ns", "namespace", instance.Name)
+		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 	}
 
 	labels := ns.GetLabels()
@@ -196,7 +233,8 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		labels[clusterLabel] = instance.Name
 		ns.SetLabels(labels)
 		if err := r.client.Update(context.TODO(), ns); err != nil {
-			return reconcile.Result{}, err
+			reqLogger.Error(err, "Error while updating ns", "namespace", instance.Name)
+			return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
 		}
 	}
 
@@ -219,6 +257,7 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		r.scheme,
 		nil)
 	if err != nil {
+		reqLogger.Error(err, "Error while creating applier", "namespace", instance.Name)
 		return reconcile.Result{}, err
 	}
 
@@ -237,6 +276,7 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 			config,
 		)
 		if err != nil {
+			reqLogger.Error(err, "Error while applying service account", "sa", instance.Name+bootstrapServiceAccountNamePostfix)
 			return reconcile.Result{}, err
 		}
 	}
@@ -250,6 +290,7 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 	)
 
 	if err != nil {
+		reqLogger.Error(err, "Error while applying manifest", "cluster", instance.Name)
 		return reconcile.Result{}, err
 	}
 

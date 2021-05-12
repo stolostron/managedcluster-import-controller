@@ -66,6 +66,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	err = c.Watch(
 		&source.Kind{Type: &clusterv1.ManagedCluster{}},
 		&handler.EnqueueRequestForObject{},
+		newManagedClusterSpecPredicate(),
 	)
 	if err != nil {
 		return err
