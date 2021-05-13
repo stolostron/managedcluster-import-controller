@@ -87,7 +87,7 @@ func newImportSecret(
 		},
 		Data: map[string][]byte{
 			importYAMLKey:      importYAML.Bytes(),
-			crdsYAMLKey:        crdsV1beta1YAML.Bytes(),
+			crdsYAMLKey:        crdsV1YAML.Bytes(),
 			crdsV1YAMLKey:      crdsV1YAML.Bytes(),
 			crdsV1beta1YAMLKey: crdsV1beta1YAML.Bytes(),
 		},
