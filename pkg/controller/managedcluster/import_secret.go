@@ -87,7 +87,7 @@ func newImportSecret(
 		},
 		Data: map[string][]byte{
 			importYAMLKey:      importYAML.Bytes(),
-			crdsYAMLKey:        crdsV1YAML.Bytes(),
+			crdsYAMLKey:        crdsV1beta1YAML.Bytes(),
 			crdsV1YAMLKey:      crdsV1YAML.Bytes(),
 			crdsV1beta1YAMLKey: crdsV1beta1YAML.Bytes(),
 		},
@@ -125,6 +125,7 @@ func createOrUpdateImportSecret(
 		}
 	} else {
 		if !bytes.Equal(oldImportSecret.Data[importYAMLKey], secret.Data[importYAMLKey]) ||
+			!bytes.Equal(oldImportSecret.Data[crdsV1beta1YAMLKey], secret.Data[crdsV1beta1YAMLKey]) ||
 			!bytes.Equal(oldImportSecret.Data[crdsV1YAMLKey], secret.Data[crdsV1YAMLKey]) {
 			oldImportSecret.Data = secret.Data
 			if err := client.Update(context.TODO(), oldImportSecret); err != nil {
