@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -46,6 +47,8 @@ const autoImportRetryName string = "autoImportRetry"
 /* #nosec */
 const autoImportSecretName string = "auto-import-secret"
 const ManagedClusterImportSucceeded string = "ManagedClusterImportSucceeded"
+
+const curatorJobPrefix string = "curator-job"
 
 var log = logf.Log.WithName("controller_managedcluster")
 
@@ -521,9 +524,12 @@ func (r *ReconcileManagedCluster) deleteNamespace(namespaceName string) error {
 		if err != nil {
 			return err
 		}
-		if len(pods.Items) != 0 {
-			log.Info("Detected pods, the namespace will be not deleted")
-			tobeDeleted = false
+		for _, pod := range pods.Items {
+			if !strings.HasPrefix(pod.Name, curatorJobPrefix) {
+				log.Info("Detected non curator pods, the namespace will be not deleted")
+				tobeDeleted = false
+				break
+			}
 		}
 	}
 
