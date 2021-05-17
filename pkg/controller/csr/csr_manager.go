@@ -38,6 +38,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	csrPredicateFuncs := predicate.Funcs{
+		GenericFunc: func(e event.GenericEvent) bool { return false },
+		DeleteFunc:  func(e event.DeleteEvent) bool { return false },
 		UpdateFunc: func(e event.UpdateEvent) bool {
 			return csrPredicate(e.ObjectNew.(*certificatesv1beta1.CertificateSigningRequest))
 		},
