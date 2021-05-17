@@ -125,6 +125,7 @@ func createOrUpdateImportSecret(
 		}
 	} else {
 		if !bytes.Equal(oldImportSecret.Data[importYAMLKey], secret.Data[importYAMLKey]) ||
+			!bytes.Equal(oldImportSecret.Data[crdsYAMLKey], secret.Data[crdsYAMLKey]) ||
 			!bytes.Equal(oldImportSecret.Data[crdsV1beta1YAMLKey], secret.Data[crdsV1beta1YAMLKey]) ||
 			!bytes.Equal(oldImportSecret.Data[crdsV1YAMLKey], secret.Data[crdsV1YAMLKey]) {
 			oldImportSecret.Data = secret.Data
