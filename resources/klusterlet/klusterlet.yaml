@@ -9,6 +9,3 @@ spec:
   workImagePullSpec: {{ .WorkImageName }}
   clusterName: "{{ .ManagedClusterNamespace }}"
   namespace: "{{ .KlusterletNamespace }}"
-  {{- if .UseImagePullSecret }}
-  imagePullSecret: "{{ .ImagePullSecretName }}"
-  {{- end }}
