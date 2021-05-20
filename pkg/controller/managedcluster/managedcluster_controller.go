@@ -215,7 +215,7 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 
 	if err := r.client.Update(context.TODO(), instance); err != nil {
 		reqLogger.Error(err, "Error while updating labels")
-		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Second}, nil
 	}
 
 	//Add clusterLabel on ns if missing
@@ -225,7 +225,7 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		types.NamespacedName{Namespace: "", Name: instance.Name},
 		ns); err != nil {
 		reqLogger.Error(err, "Error while getting ns", "namespace", instance.Name)
-		return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+		return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Second}, nil
 	}
 
 	labels := ns.GetLabels()
@@ -237,7 +237,7 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		ns.SetLabels(labels)
 		if err := r.client.Update(context.TODO(), ns); err != nil {
 			reqLogger.Error(err, "Error while updating ns", "namespace", instance.Name)
-			return reconcile.Result{Requeue: true, RequeueAfter: 10 * time.Second}, nil
+			return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Second}, nil
 		}
 	}
 
