@@ -201,6 +201,7 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 			nil
 	}
 	reqLogger.Info(fmt.Sprintf("AddFinalizer to instance: %s", instance.Name))
+	patch := client.MergeFrom(instance.DeepCopy())
 	libgometav1.AddFinalizer(instance, managedClusterFinalizer)
 
 	instanceLabels := instance.GetLabels()
@@ -212,9 +213,9 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		instanceLabels["name"] = instance.Name
 		instance.SetLabels(instanceLabels)
 	}
-
-	if err := r.client.Update(context.TODO(), instance); err != nil {
-		reqLogger.Error(err, "Error while updating labels")
+	if err := r.client.Patch(context.TODO(), instance, patch); err != nil {
+		// if err := r.client.Update(context.TODO(), instance); err != nil {
+		reqLogger.Error(err, "Error while patching labels and finalizers")
 		return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Second}, nil
 	}
 
