@@ -14,9 +14,9 @@ FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 RUN microdnf update
 ENV REMOTE_SOURCE_DIR='/remote-source'
 
-ENV OPERATOR=/usr/local/bin/rcm-controller \
+ENV OPERATOR=/usr/local/bin/managedcluster-import-controller \
     USER_UID=1001 \
-    USER_NAME=rcm-controller
+    USER_NAME=managedcluster-import-controller
     
 # install operator binary
 COPY --from=builder $REMOTE_SOURCE_DIR/app/manager ${OPERATOR}
