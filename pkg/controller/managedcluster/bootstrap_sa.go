@@ -50,7 +50,11 @@ func getBootstrapSecret(
 		if objectRef.Namespace != "" && objectRef.Namespace != managedCluster.Namespace {
 			continue
 		}
-		if strings.HasPrefix(objectRef.Name, saNsN.Name) {
+		prefix := saNsN.Name
+		if len(prefix) > 63 {
+			prefix = prefix[:37]
+		}
+		if strings.HasPrefix(objectRef.Name, prefix) {
 			secret = &corev1.Secret{}
 			err = client.Get(context.TODO(), types.NamespacedName{Name: objectRef.Name, Namespace: managedCluster.Name}, secret)
 			if err != nil {
