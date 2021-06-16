@@ -50,6 +50,14 @@ const ManagedClusterImportSucceeded string = "ManagedClusterImportSucceeded"
 
 const curatorJobPrefix string = "curator-job"
 
+const (
+	createdViaAnnotation          = "open-cluster-management/created-via"
+	createdViaAnnotationDiscovery = "discovery"
+	createdViaAnnotationAI        = "assisted-installer"
+	createdViaAnnotationHive      = "hive"
+	createdViaAnnotationOther     = "other"
+)
+
 var log = logf.Log.WithName("controller_managedcluster")
 
 /**
@@ -213,6 +221,10 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		instanceLabels["name"] = instance.Name
 		instance.SetLabels(instanceLabels)
 	}
+	//set the created_via annotation
+	r.setCreatedViaAnnotation(instance, clusterDeployment)
+
+	//Patch the managedcluster
 	if err := r.client.Patch(context.TODO(), instance, patch); err != nil {
 		// if err := r.client.Update(context.TODO(), instance); err != nil {
 		reqLogger.Error(err, "Error while patching labels and finalizers")
@@ -382,6 +394,47 @@ func (r *ReconcileManagedCluster) isReadyToReconcile(managedCluster *clusterv1.M
 	}
 	klog.Infof("ready to reconcile, cluster %s installed", clusterDeployment.Name)
 	return clusterDeployment, true, nil
+}
+
+func (r *ReconcileManagedCluster) setCreatedViaAnnotation(managedCluster *clusterv1.ManagedCluster, clusterDeployment *hivev1.ClusterDeployment) {
+	if isDiscovery(managedCluster) {
+		updateCreatedViaAnnotation(managedCluster, createdViaAnnotationDiscovery)
+		return
+	}
+	if isAI(clusterDeployment) {
+		updateCreatedViaAnnotation(managedCluster, createdViaAnnotationAI)
+		return
+	}
+	if isHive(clusterDeployment) {
+		updateCreatedViaAnnotation(managedCluster, createdViaAnnotationHive)
+		return
+	}
+	updateCreatedViaAnnotation(managedCluster, createdViaAnnotationOther)
+}
+
+func updateCreatedViaAnnotation(managedCluster *clusterv1.ManagedCluster, createdVia string) {
+	if managedCluster.GetAnnotations() == nil {
+		managedCluster.Annotations = make(map[string]string)
+	}
+	managedCluster.GetAnnotations()[createdViaAnnotation] = createdVia
+}
+
+func isAI(clusterDeployment *hivev1.ClusterDeployment) bool {
+	return clusterDeployment != nil && clusterDeployment.Spec.Platform.AgentBareMetal != nil
+}
+
+func isDiscovery(managedCluster *clusterv1.ManagedCluster) bool {
+	if managedCluster.GetAnnotations() == nil {
+		return false
+	}
+	if annotation, ok := managedCluster.GetAnnotations()[createdViaAnnotation]; ok {
+		return annotation == createdViaAnnotationDiscovery
+	}
+	return false
+}
+
+func isHive(clusterDeployment *hivev1.ClusterDeployment) bool {
+	return clusterDeployment != nil
 }
 
 func (r *ReconcileManagedCluster) toBeImported(managedCluster *clusterv1.ManagedCluster,

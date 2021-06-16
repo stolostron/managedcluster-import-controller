@@ -51,6 +51,12 @@ const (
 )
 
 const (
+	createdViaAnnotation      = "open-cluster-management/created-via"
+	createdViaAnnotationHive  = "hive"
+	createdViaAnnotationOther = "other"
+)
+
+const (
 	managedClusterFinalizer = "managedcluster-import-controller.open-cluster-management.io/cleanup"
 	registrationFinalizer   = "cluster.open-cluster-management.io/api-resource-cleanup"
 )
@@ -110,7 +116,7 @@ var _ = Describe("Managedcluster", func() {
 				createNewUnstructuredClusterScoped(clientHubDynamic, gvrManagedcluster, managedCluster, myTestNameSpace)
 
 				By("checking ManagedCluster Creation")
-				checkManagedClusterCreation(clientHubDynamic, clientHub, myTestNameSpace, myTestNameSpace, gvrManagedcluster, gvrServiceaccount, gvrSecret)
+				checkManagedClusterCreation(clientHubDynamic, clientHub, myTestNameSpace, myTestNameSpace, gvrManagedcluster, gvrServiceaccount, gvrSecret, createdViaAnnotationOther)
 				Consistently(func() error {
 					klog.V(1).Infof("Make sure ManifestWork %s is not created", myTestNameSpace+manifestWorkNamePostfix+"-crds")
 					ns := clientHubDynamic.Resource(gvrManifestwork).Namespace(myTestNameSpace)
@@ -264,7 +270,7 @@ var _ = Describe("Managedcluster", func() {
 				createNewUnstructuredClusterScoped(clientHubDynamic, gvrManagedcluster, managedCluster, myTestNameSpace)
 
 				By("checking ManagedCluster Creation")
-				checkManagedClusterCreation(clientHubDynamic, clientHub, myTestNameSpace, myTestNameSpace, gvrManagedcluster, gvrServiceaccount, gvrSecret)
+				checkManagedClusterCreation(clientHubDynamic, clientHub, myTestNameSpace, myTestNameSpace, gvrManagedcluster, gvrServiceaccount, gvrSecret, createdViaAnnotationOther)
 				Consistently(func() error {
 					klog.V(1).Infof("Make sure ManifestWork %s is not created", myTestNameSpace+manifestWorkNamePostfix+"-crds")
 					ns := clientHubDynamic.Resource(gvrManifestwork).Namespace(myTestNameSpace)
@@ -351,7 +357,7 @@ var _ = Describe("Managedcluster", func() {
 					clusterdeployment, myTestNameSpace, myTestNameSpace)
 				managedCluster := newManagedcluster((myTestNameSpace))
 				createNewUnstructuredClusterScoped(clientHubDynamic, gvrManagedcluster, managedCluster, myTestNameSpace)
-				checkManagedClusterCreation(clientHubDynamic, clientHub, myTestNameSpace, myTestNameSpace, gvrManagedcluster, gvrServiceaccount, gvrSecret)
+				checkManagedClusterCreation(clientHubDynamic, clientHub, myTestNameSpace, myTestNameSpace, gvrManagedcluster, gvrServiceaccount, gvrSecret, createdViaAnnotationHive)
 				managedCluster = setManagedClusterConditionAvailable(myTestNameSpace, true, true)
 				Eventually(func() error {
 					klog.V(1).Infof("Wait ManifestWork %s", myTestNameSpace+manifestWorkNamePostfix+"-crds")
@@ -456,7 +462,7 @@ var _ = Describe("Managedcluster", func() {
 				createNewUnstructuredClusterScoped(clientHubDynamic, gvrManagedcluster, managedCluster, myTestNameSpace)
 
 				By("checking ManagedCluster Creation")
-				checkManagedClusterCreation(clientHubDynamic, clientHub, myTestNameSpace, myTestNameSpace, gvrManagedcluster, gvrServiceaccount, gvrSecret)
+				checkManagedClusterCreation(clientHubDynamic, clientHub, myTestNameSpace, myTestNameSpace, gvrManagedcluster, gvrServiceaccount, gvrSecret, createdViaAnnotationOther)
 				managedCluster = setManagedClusterConditionAvailable(myTestNameSpace, true, true)
 			})
 
@@ -580,7 +586,7 @@ var _ = Describe("Managedcluster", func() {
 func checkManagedClusterCreation(
 	clientHubDynamic dynamic.Interface,
 	clientHub kubernetes.Interface,
-	name, namespace string, gvrManagedcluster, gvrServiceaccount, gvrSecret schema.GroupVersionResource) {
+	name, namespace string, gvrManagedcluster, gvrServiceaccount, gvrSecret schema.GroupVersionResource, createdVia string) {
 	klog.V(1).Infof("checkManagedClusterCreation with %s/%s", name, namespace)
 	When("ManagedCluster created, wait finalizer", func() {
 		klog.V(1).Infof("checks Finalizer")
@@ -596,6 +602,21 @@ func checkManagedClusterCreation(
 				}
 			}
 			klog.V(5).Info("Finalizer not yet added")
+			return false
+		}, 20, 4).Should(BeTrue())
+		Eventually(func() bool {
+			ns := clientHubDynamic.Resource(gvrManagedcluster)
+			sc, err := ns.Get(context.TODO(), name, metav1.GetOptions{})
+			Expect(err).To(BeNil())
+
+			for k, a := range sc.GetAnnotations() {
+				klog.V(5).Infof("Checking annotation %s=%s expecting to be %s", k, a, createdVia)
+				if k == createdViaAnnotation && a == createdVia {
+					klog.V(5).Info("Annotation created_via added")
+					return true
+				}
+			}
+			klog.V(5).Infof("Annotation created_via=%s not yet added", createdVia)
 			return false
 		}, 20, 4).Should(BeTrue())
 	})
