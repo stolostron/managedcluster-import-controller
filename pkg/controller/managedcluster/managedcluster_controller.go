@@ -335,7 +335,8 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 		}
 		if isV1 {
-			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, crds["v1"], yamls)
+			ucrds := append(crds["v1"], crds["v1beta1"]...)
+			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, ucrds, yamls)
 		} else {
 			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, crds["v1beta1"], yamls)
 		}
