@@ -335,7 +335,11 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 		}
 		if isV1 {
-			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, crds["v1"], yamls)
+			// The 2 versions of the crd are added to avoid the unexpected removal during the work-agent upgrade.
+			// We will remove the v1beta1 in a future z-release.
+			// see: https://github.com/open-cluster-management/backlog/issues/13631
+			ucrds := append(crds["v1"], crds["v1beta1"]...)
+			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, ucrds, yamls)
 		} else {
 			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, crds["v1beta1"], yamls)
 		}
