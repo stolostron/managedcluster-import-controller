@@ -51,7 +51,7 @@ const ManagedClusterImportSucceeded string = "ManagedClusterImportSucceeded"
 const (
 	curatorJobPrefix  string = "curator-job"
 	postHookJobPrefix string = "posthookjob"
-	preHookJobPrefix  string = "posthookjob"
+	preHookJobPrefix  string = "prehookjob"
 )
 
 const (
