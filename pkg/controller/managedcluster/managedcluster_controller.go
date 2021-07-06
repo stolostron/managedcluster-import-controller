@@ -48,7 +48,11 @@ const autoImportRetryName string = "autoImportRetry"
 const autoImportSecretName string = "auto-import-secret"
 const ManagedClusterImportSucceeded string = "ManagedClusterImportSucceeded"
 
-const curatorJobPrefix string = "curator-job"
+const (
+	curatorJobPrefix  string = "curator-job"
+	postHookJobPrefix string = "posthookjob"
+	preHookJobPrefix  string = "posthookjob"
+)
 
 const (
 	createdViaAnnotation          = "open-cluster-management/created-via"
@@ -583,7 +587,9 @@ func (r *ReconcileManagedCluster) deleteNamespace(namespaceName string) error {
 			return err
 		}
 		for _, pod := range pods.Items {
-			if !strings.HasPrefix(pod.Name, curatorJobPrefix) {
+			if !strings.HasPrefix(pod.Name, curatorJobPrefix) &&
+				!strings.HasPrefix(pod.Name, postHookJobPrefix) &&
+				!strings.HasPrefix(pod.Name, preHookJobPrefix) {
 				log.Info("Detected non curator pods, the namespace will be not deleted")
 				tobeDeleted = false
 				break
