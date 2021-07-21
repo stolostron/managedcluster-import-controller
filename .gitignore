@@ -11,6 +11,8 @@ vendor
 test/unit/coverage
 test/out
 overlays/deploy
+.idea
+
 
 # Files
 .build-harness
