@@ -10,7 +10,7 @@ require (
 	github.com/open-cluster-management/applier v0.0.0-20210422205113-6c10f923726b
 	github.com/open-cluster-management/library-go v0.0.0-20210325215722-d989f79194f6
 	github.com/openshift/api v3.9.1-0.20191112184635-86def77f6f90+incompatible
-	github.com/openshift/hive/apis v0.0.0-20210506000654-5c038fb05190
+	github.com/openshift/hive/apis v0.0.0-20210802140536-4d8d83dcd464
 	github.com/operator-framework/operator-sdk v0.18.1
 	github.com/spf13/pflag v1.0.5
 	k8s.io/api v0.20.5
