@@ -770,8 +770,8 @@ github.com/openshift/api v3.9.1-0.20191112184635-86def77f6f90+incompatible h1:4b
 github.com/openshift/api v3.9.1-0.20191112184635-86def77f6f90+incompatible/go.mod h1:dh9o4Fs58gpFXGSYfnVxGR9PnV53I8TW84pQaJDdGiY=
 github.com/openshift/build-machinery-go v0.0.0-20200819073603-48aa266c95f7/go.mod h1:b1BuldmJlbA/xYtdZvKi+7j5YGB44qJUJDZ9zwiNCfE=
 github.com/openshift/build-machinery-go v0.0.0-20200917070002-f171684f77ab/go.mod h1:b1BuldmJlbA/xYtdZvKi+7j5YGB44qJUJDZ9zwiNCfE=
-github.com/openshift/hive/apis v0.0.0-20210506000654-5c038fb05190 h1:8eShHtqtKwgJWdJh/H0ytAsAblDCA1bAjvokIfuU2jM=
-github.com/openshift/hive/apis v0.0.0-20210506000654-5c038fb05190/go.mod h1:Ujw9ImzSYvo9VlUX6Gjy7zPFP7xYUAU50tdf1wPpN6c=
+github.com/openshift/hive/apis v0.0.0-20210802140536-4d8d83dcd464 h1:KcRAAtyf1LE7ltSo+laqSDoKGl0CNDkXLNfdiIzeLIM=
+github.com/openshift/hive/apis v0.0.0-20210802140536-4d8d83dcd464/go.mod h1:77ODrnaHiDlfbqQgvk5nUWuqf2AsGY/99QlfNTiqHwI=
 github.com/openshift/origin v0.0.0-20160503220234-8f127d736703/go.mod h1:0Rox5r9C8aQn6j1oAOQ0c1uC86mYbUFObzjBRvUKHII=
 github.com/openshift/prom-label-proxy v0.1.1-0.20191016113035-b8153a7f39f1/go.mod h1:p5MuxzsYP1JPsNGwtjtcgRHHlGziCJJfztff91nNixw=
 github.com/opentracing-contrib/go-stdlib v0.0.0-20190519235532-cf7a6c988dc9/go.mod h1:PLldrQSroqzH70Xl+1DQcGnefIbqsKR7UDaiux3zV+w=
