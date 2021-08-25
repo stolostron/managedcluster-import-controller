@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
-	certificatesv1beta1 "k8s.io/api/certificates/v1beta1"
+	certificatesv1 "k8s.io/api/certificates/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -28,14 +28,14 @@ const (
 
 func TestReconcileCSR_Reconcile(t *testing.T) {
 
-	testCSR := &certificatesv1beta1.CertificateSigningRequest{
+	testCSR := &certificatesv1.CertificateSigningRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: csrNameReconcile,
 			Labels: map[string]string{
 				clusterLabel: clusterName,
 			},
 		},
-		Spec: certificatesv1beta1.CertificateSigningRequestSpec{
+		Spec: certificatesv1.CertificateSigningRequestSpec{
 			Username: fmt.Sprintf(userNameSignature, clusterName, clusterName),
 		},
 	}
@@ -49,7 +49,7 @@ func TestReconcileCSR_Reconcile(t *testing.T) {
 
 	testscheme := scheme.Scheme
 
-	testscheme.AddKnownTypes(certificatesv1beta1.SchemeGroupVersion, &certificatesv1beta1.CertificateSigningRequest{})
+	testscheme.AddKnownTypes(certificatesv1.SchemeGroupVersion, &certificatesv1.CertificateSigningRequest{})
 	testscheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
 
 	req := reconcile.Request{
@@ -126,13 +126,13 @@ func TestReconcileCSR_Reconcile(t *testing.T) {
 				t.Errorf("ReconcileCSR.Reconcile() Creation= %v, want %v", got, tt.want)
 			}
 			if !tt.wantErr && !got.Requeue {
-				csr, err := r.kubeClient.CertificatesV1beta1().CertificateSigningRequests().Get(context.TODO(), csrNameReconcile, metav1.GetOptions{})
+				csr, err := r.kubeClient.CertificatesV1().CertificateSigningRequests().Get(context.TODO(), csrNameReconcile, metav1.GetOptions{})
 				if err != nil {
 					t.Error("CSR not found")
 				}
 				switch tt.name {
 				case "testCSR":
-					if csr.Status.Conditions[0].Type != certificatesv1beta1.CertificateApproved {
+					if csr.Status.Conditions[0].Type != certificatesv1.CertificateApproved {
 						t.Error("CSR not approved")
 					}
 				case "testCSRClusterNotFound":
@@ -149,41 +149,41 @@ func TestReconcileCSR_Reconcile(t *testing.T) {
 }
 
 func Test_getClusterName(t *testing.T) {
-	testCSR := &certificatesv1beta1.CertificateSigningRequest{
+	testCSR := &certificatesv1.CertificateSigningRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: csrNameReconcile,
 			Labels: map[string]string{
 				clusterLabel: clusterName,
 			},
 		},
-		Spec: certificatesv1beta1.CertificateSigningRequestSpec{
+		Spec: certificatesv1.CertificateSigningRequestSpec{
 			Username: fmt.Sprintf(userNameSignature, clusterName, clusterName),
 		},
 	}
 
-	testCSRBadLabel := &certificatesv1beta1.CertificateSigningRequest{
+	testCSRBadLabel := &certificatesv1.CertificateSigningRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: csrNameReconcile,
 			Labels: map[string]string{
 				"badLabel": clusterName,
 			},
 		},
-		Spec: certificatesv1beta1.CertificateSigningRequestSpec{
+		Spec: certificatesv1.CertificateSigningRequestSpec{
 			Username: fmt.Sprintf(userNameSignature, clusterName, clusterName),
 		},
 	}
 
-	testCSRNoLabel := &certificatesv1beta1.CertificateSigningRequest{
+	testCSRNoLabel := &certificatesv1.CertificateSigningRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: csrNameReconcile,
 		},
-		Spec: certificatesv1beta1.CertificateSigningRequestSpec{
+		Spec: certificatesv1.CertificateSigningRequestSpec{
 			Username: fmt.Sprintf(userNameSignature, clusterName, clusterName),
 		},
 	}
 
 	type args struct {
-		csr *certificatesv1beta1.CertificateSigningRequest
+		csr *certificatesv1.CertificateSigningRequest
 	}
 	tests := []struct {
 		name            string
@@ -222,54 +222,54 @@ func Test_getClusterName(t *testing.T) {
 }
 
 func Test_getApproval(t *testing.T) {
-	testCSRNoApproval := &certificatesv1beta1.CertificateSigningRequest{
+	testCSRNoApproval := &certificatesv1.CertificateSigningRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: csrNameReconcile,
 			Labels: map[string]string{
 				clusterLabel: clusterName,
 			},
 		},
-		Spec: certificatesv1beta1.CertificateSigningRequestSpec{
+		Spec: certificatesv1.CertificateSigningRequestSpec{
 			Username: fmt.Sprintf(userNameSignature, clusterName, clusterName),
 		},
 	}
 
-	testCSRApproved := &certificatesv1beta1.CertificateSigningRequest{
+	testCSRApproved := &certificatesv1.CertificateSigningRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: csrNameReconcile,
 			Labels: map[string]string{
 				clusterLabel: clusterName,
 			},
 		},
-		Spec: certificatesv1beta1.CertificateSigningRequestSpec{
+		Spec: certificatesv1.CertificateSigningRequestSpec{
 			Username: fmt.Sprintf(userNameSignature, clusterName, clusterName),
 		},
-		Status: certificatesv1beta1.CertificateSigningRequestStatus{
-			Conditions: []certificatesv1beta1.CertificateSigningRequestCondition{
-				{Type: certificatesv1beta1.CertificateApproved},
+		Status: certificatesv1.CertificateSigningRequestStatus{
+			Conditions: []certificatesv1.CertificateSigningRequestCondition{
+				{Type: certificatesv1.CertificateApproved},
 			},
 		},
 	}
 
-	testCSRDenied := &certificatesv1beta1.CertificateSigningRequest{
+	testCSRDenied := &certificatesv1.CertificateSigningRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: csrNameReconcile,
 			Labels: map[string]string{
 				clusterLabel: clusterName,
 			},
 		},
-		Spec: certificatesv1beta1.CertificateSigningRequestSpec{
+		Spec: certificatesv1.CertificateSigningRequestSpec{
 			Username: fmt.Sprintf(userNameSignature, clusterName, clusterName),
 		},
-		Status: certificatesv1beta1.CertificateSigningRequestStatus{
-			Conditions: []certificatesv1beta1.CertificateSigningRequestCondition{
-				{Type: certificatesv1beta1.CertificateDenied},
+		Status: certificatesv1.CertificateSigningRequestStatus{
+			Conditions: []certificatesv1.CertificateSigningRequestCondition{
+				{Type: certificatesv1.CertificateDenied},
 			},
 		},
 	}
 
 	type args struct {
-		csr *certificatesv1beta1.CertificateSigningRequest
+		csr *certificatesv1.CertificateSigningRequest
 	}
 	tests := []struct {
 		name string
@@ -288,14 +288,14 @@ func Test_getApproval(t *testing.T) {
 			args: args{
 				csr: testCSRApproved,
 			},
-			want: string(certificatesv1beta1.CertificateApproved),
+			want: string(certificatesv1.CertificateApproved),
 		},
 		{
 			name: "testCSRDenied",
 			args: args{
 				csr: testCSRDenied,
 			},
-			want: string(certificatesv1beta1.CertificateDenied),
+			want: string(certificatesv1.CertificateDenied),
 		},
 	}
 	for _, tt := range tests {
@@ -308,32 +308,32 @@ func Test_getApproval(t *testing.T) {
 }
 
 func Test_validUsername(t *testing.T) {
-	testCSR := &certificatesv1beta1.CertificateSigningRequest{
+	testCSR := &certificatesv1.CertificateSigningRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: csrNameReconcile,
 			Labels: map[string]string{
 				clusterLabel: clusterName,
 			},
 		},
-		Spec: certificatesv1beta1.CertificateSigningRequestSpec{
+		Spec: certificatesv1.CertificateSigningRequestSpec{
 			Username: fmt.Sprintf(userNameSignature, clusterName, clusterName),
 		},
 	}
 
-	testCSRBadUsername := &certificatesv1beta1.CertificateSigningRequest{
+	testCSRBadUsername := &certificatesv1.CertificateSigningRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: csrNameReconcile,
 			Labels: map[string]string{
 				clusterLabel: clusterName,
 			},
 		},
-		Spec: certificatesv1beta1.CertificateSigningRequestSpec{
+		Spec: certificatesv1.CertificateSigningRequestSpec{
 			Username: "badUserName",
 		},
 	}
 
 	type args struct {
-		csr         *certificatesv1beta1.CertificateSigningRequest
+		csr         *certificatesv1.CertificateSigningRequest
 		clusterName string
 	}
 	tests := []struct {
@@ -368,32 +368,32 @@ func Test_validUsername(t *testing.T) {
 }
 
 func Test_csrPredicate(t *testing.T) {
-	testCSR := &certificatesv1beta1.CertificateSigningRequest{
+	testCSR := &certificatesv1.CertificateSigningRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: csrNameReconcile,
 			Labels: map[string]string{
 				clusterLabel: clusterName,
 			},
 		},
-		Spec: certificatesv1beta1.CertificateSigningRequestSpec{
+		Spec: certificatesv1.CertificateSigningRequestSpec{
 			Username: fmt.Sprintf(userNameSignature, clusterName, clusterName),
 		},
 	}
 
-	testCSRBadLabel := &certificatesv1beta1.CertificateSigningRequest{
+	testCSRBadLabel := &certificatesv1.CertificateSigningRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: csrNameReconcile,
 			Labels: map[string]string{
 				"badLabel": clusterName,
 			},
 		},
-		Spec: certificatesv1beta1.CertificateSigningRequestSpec{
+		Spec: certificatesv1.CertificateSigningRequestSpec{
 			Username: fmt.Sprintf(userNameSignature, clusterName, clusterName),
 		},
 	}
 
 	type args struct {
-		csr *certificatesv1beta1.CertificateSigningRequest
+		csr *certificatesv1.CertificateSigningRequest
 	}
 	tests := []struct {
 		name string

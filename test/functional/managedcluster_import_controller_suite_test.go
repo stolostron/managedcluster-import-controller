@@ -289,7 +289,7 @@ var _ = BeforeSuite(func() {
 	gvrServiceaccount = schema.GroupVersionResource{Version: "v1", Resource: "serviceaccounts"}
 	gvrManagedcluster = schema.GroupVersionResource{Group: "cluster.open-cluster-management.io", Version: "v1", Resource: "managedclusters"}
 	gvrManifestwork = schema.GroupVersionResource{Group: "work.open-cluster-management.io", Version: "v1", Resource: "manifestworks"}
-	gvrCSR = schema.GroupVersionResource{Group: "certificates.k8s.io", Version: "v1beta1", Resource: "certificatesigningrequests"}
+	gvrCSR = schema.GroupVersionResource{Group: "certificates.k8s.io", Version: "v1", Resource: "certificatesigningrequests"}
 
 	var err error
 	clientHub, err = libgoclient.NewDefaultKubeClient("")

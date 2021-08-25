@@ -8,7 +8,7 @@ import (
 	"fmt"
 
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
-
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -18,7 +18,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	certificatesv1beta1 "k8s.io/api/certificates/v1beta1"
+	certificatesv1 "k8s.io/api/certificates/v1"
 )
 
 const (
@@ -33,7 +33,7 @@ var log = logf.Log.WithName("controller_csr")
 * business logic.  Delete these comments after modifying this file.*
  */
 
-func getClusterName(csr *certificatesv1beta1.CertificateSigningRequest) (clusterName string) {
+func getClusterName(csr *certificatesv1.CertificateSigningRequest) (clusterName string) {
 	for label, v := range csr.GetObjectMeta().GetLabels() {
 		if label == clusterLabel {
 			clusterName = v
@@ -42,23 +42,23 @@ func getClusterName(csr *certificatesv1beta1.CertificateSigningRequest) (cluster
 	return clusterName
 }
 
-func getApprovalType(csr *certificatesv1beta1.CertificateSigningRequest) string {
+func getApprovalType(csr *certificatesv1.CertificateSigningRequest) string {
 	if csr.Status.Conditions == nil {
 		return ""
 	}
 	for _, c := range csr.Status.Conditions {
-		if c.Type == certificatesv1beta1.CertificateApproved || c.Type == certificatesv1beta1.CertificateDenied {
+		if c.Type == certificatesv1.CertificateApproved || c.Type == certificatesv1.CertificateDenied {
 			return string(c.Type)
 		}
 	}
 	return ""
 }
 
-func validUsername(csr *certificatesv1beta1.CertificateSigningRequest, clusterName string) bool {
+func validUsername(csr *certificatesv1.CertificateSigningRequest, clusterName string) bool {
 	return csr.Spec.Username == fmt.Sprintf(userNameSignature, clusterName, clusterName)
 }
 
-func csrPredicate(csr *certificatesv1beta1.CertificateSigningRequest) bool {
+func csrPredicate(csr *certificatesv1.CertificateSigningRequest) bool {
 	clusterName := getClusterName(csr)
 	return clusterName != "" &&
 		getApprovalType(csr) == "" &&
@@ -87,7 +87,7 @@ func (r *ReconcileCSR) Reconcile(request reconcile.Request) (reconcile.Result, e
 	reqLogger.Info("Reconciling CSR")
 
 	// Fetch the CertificateSigningRequest instance
-	instance := &certificatesv1beta1.CertificateSigningRequest{}
+	instance := &certificatesv1.CertificateSigningRequest{}
 
 	if err := r.client.Get(context.TODO(), request.NamespacedName, instance); err != nil {
 		if errors.IsNotFound(err) {
@@ -117,18 +117,19 @@ func (r *ReconcileCSR) Reconcile(request reconcile.Request) (reconcile.Result, e
 
 	reqLogger.Info("Approving CSR", "name", instance.Name)
 	if instance.Status.Conditions == nil {
-		instance.Status.Conditions = make([]certificatesv1beta1.CertificateSigningRequestCondition, 0)
+		instance.Status.Conditions = make([]certificatesv1.CertificateSigningRequestCondition, 0)
 	}
 
-	instance.Status.Conditions = append(instance.Status.Conditions, certificatesv1beta1.CertificateSigningRequestCondition{
-		Type:           certificatesv1beta1.CertificateApproved,
+	instance.Status.Conditions = append(instance.Status.Conditions, certificatesv1.CertificateSigningRequestCondition{
+		Type:           certificatesv1.CertificateApproved,
+		Status:         corev1.ConditionTrue,
 		Reason:         "AutoApprovedByCSRController",
 		Message:        "The managedcluster-import-controller auto approval automatically approved this CSR",
 		LastUpdateTime: metav1.Now(),
 	})
 
-	signingRequest := r.kubeClient.CertificatesV1beta1().CertificateSigningRequests()
-	if _, err := signingRequest.UpdateApproval(context.TODO(), instance, metav1.UpdateOptions{}); err != nil {
+	signingRequest := r.kubeClient.CertificatesV1().CertificateSigningRequests()
+	if _, err := signingRequest.UpdateApproval(context.TODO(), instance.Name, instance, metav1.UpdateOptions{}); err != nil {
 		return reconcile.Result{}, err
 	}
 
