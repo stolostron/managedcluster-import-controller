@@ -19,7 +19,7 @@ import (
 
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	workv1 "github.com/open-cluster-management/api/work/v1"
-	certificatesv1beta1 "k8s.io/api/certificates/v1beta1"
+	certificatesv1 "k8s.io/api/certificates/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/klog"
 
@@ -146,7 +146,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err := certificatesv1beta1.AddToScheme(mgr.GetScheme()); err != nil {
+	if err := certificatesv1.AddToScheme(mgr.GetScheme()); err != nil {
 		log.Error(err, "")
 		os.Exit(1)
 	}

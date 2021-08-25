@@ -26,7 +26,7 @@ import (
 	libgounstructuredv1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1/unstructured"
 	libgoclient "github.com/open-cluster-management/library-go/pkg/client"
 	libgoconfig "github.com/open-cluster-management/library-go/pkg/config"
-	certificatesv1beta1 "k8s.io/api/certificates/v1beta1"
+	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -860,17 +860,17 @@ var _ = Describe("CSR Approval", func() {
 				Expect(err).To(BeNil())
 				config.Impersonate.UserName = fmt.Sprintf("system:serviceaccount:%s:%s-bootstrap-sa", myTestNameSpace, myTestNameSpace)
 				clientset, err := kubernetes.NewForConfig(config)
-				signerName := certificatesv1beta1.KubeAPIServerClientSignerName
+				signerName := certificatesv1.KubeAPIServerClientSignerName
 				csr, err := newCSR(myTestNameSpace,
 					map[string]string{"open-cluster-management.io/cluster-name": myTestNameSpace},
-					&signerName,
+					signerName,
 					"redhat",
 					[]string{"RedHat"},
 					"",
 					"CERTIFICATE REQUEST",
 				)
 				Expect(err).To(BeNil())
-				signingRequest := clientset.CertificatesV1beta1().CertificateSigningRequests()
+				signingRequest := clientset.CertificatesV1().CertificateSigningRequests()
 				_, err = signingRequest.Create(context.TODO(), csr, metav1.CreateOptions{})
 				Expect(err).To(BeNil())
 			})
@@ -881,7 +881,7 @@ var _ = Describe("CSR Approval", func() {
 					ns := clientHubDynamic.Resource(gvrCSR)
 					csr, err := ns.Get(context.TODO(), myTestNameSpace, metav1.GetOptions{})
 					Expect(err).To(BeNil())
-					_, err = libgounstructuredv1.GetConditionByType(csr, string(certificatesv1beta1.CertificateApproved))
+					_, err = libgounstructuredv1.GetConditionByType(csr, string(certificatesv1.CertificateApproved))
 					return err
 				}).Should(BeNil())
 			})
@@ -895,17 +895,17 @@ var _ = Describe("CSR Approval", func() {
 				Expect(err).To(BeNil())
 				config.Impersonate.UserName = fmt.Sprintf("system:serviceaccount:%s:%s-bootstrap-sa", myTestNameSpace, myTestNameSpace)
 				clientset, err := kubernetes.NewForConfig(config)
-				signerName := certificatesv1beta1.KubeAPIServerClientSignerName
+				signerName := certificatesv1.KubeAPIServerClientSignerName
 				csr, err := newCSR(myTestNameSpace,
 					map[string]string{"wronglabel": myTestNameSpace},
-					&signerName,
+					signerName,
 					"redhat",
 					[]string{"RedHat"},
 					"",
 					"CERTIFICATE REQUEST",
 				)
 				Expect(err).To(BeNil())
-				signingRequest := clientset.CertificatesV1beta1().CertificateSigningRequests()
+				signingRequest := clientset.CertificatesV1().CertificateSigningRequests()
 				_, err = signingRequest.Create(context.TODO(), csr, metav1.CreateOptions{})
 				Expect(err).To(BeNil())
 			})
@@ -916,7 +916,7 @@ var _ = Describe("CSR Approval", func() {
 					ns := clientHubDynamic.Resource(gvrCSR)
 					csr, err := ns.Get(context.TODO(), myTestNameSpace, metav1.GetOptions{})
 					Expect(err).To(BeNil())
-					_, err = libgounstructuredv1.GetConditionByType(csr, string(certificatesv1beta1.CertificateApproved))
+					_, err = libgounstructuredv1.GetConditionByType(csr, string(certificatesv1.CertificateApproved))
 					return err
 				}).ShouldNot(BeNil())
 			})
@@ -925,7 +925,7 @@ var _ = Describe("CSR Approval", func() {
 
 })
 
-func newCSR(name string, labels map[string]string, signerName *string, cn string, orgs []string, username string, reqBlockType string) (*certificatesv1beta1.CertificateSigningRequest, error) {
+func newCSR(name string, labels map[string]string, signerName string, cn string, orgs []string, username string, reqBlockType string) (*certificatesv1.CertificateSigningRequest, error) {
 	insecureRand := rand.New(rand.NewSource(0))
 	pk, err := ecdsa.GenerateKey(elliptic.P256(), insecureRand)
 	if err != nil {
@@ -943,14 +943,14 @@ func newCSR(name string, labels map[string]string, signerName *string, cn string
 	if err != nil {
 		return nil, err
 	}
-	return &certificatesv1beta1.CertificateSigningRequest{
+	return &certificatesv1.CertificateSigningRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:   name,
 			Labels: labels,
 		},
-		Spec: certificatesv1beta1.CertificateSigningRequestSpec{
+		Spec: certificatesv1.CertificateSigningRequestSpec{
 			Username:   username,
-			Usages:     []certificatesv1beta1.KeyUsage{},
+			Usages:     []certificatesv1.KeyUsage{certificatesv1.UsageDigitalSignature, certificatesv1.UsageClientAuth},
 			SignerName: signerName,
 			Request:    pem.EncodeToMemory(&pem.Block{Type: reqBlockType, Bytes: csrb}),
 		},
