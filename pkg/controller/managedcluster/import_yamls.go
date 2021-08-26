@@ -1,7 +1,7 @@
 // Copyright (c) Red Hat, Inc.
 // Copyright Contributors to the Open Cluster Management project
 
-//Package managedcluster ...
+// Package managedcluster ...
 package managedcluster
 
 import (
@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"strings"
 
 	"k8s.io/klog"
 
@@ -21,6 +22,7 @@ import (
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	"github.com/open-cluster-management/applier/pkg/templateprocessor"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/bindata"
+	"github.com/open-cluster-management/multicloud-operators-foundation/pkg/apis/imageregistry/v1alpha1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -36,6 +38,8 @@ const (
 	klusterletNamespace                 = "open-cluster-management-agent"
 	envVarNotDefined                    = "environment variable %s not defined"
 	managedClusterImagePullSecretName   = "open-cluster-management-image-pull-credentials"
+
+	clusterImageRegistryLabel = "open-cluster-management.io/image-registry"
 )
 
 func generateImportYAMLs(
@@ -74,9 +78,24 @@ func generateImportYAMLs(
 		return nil, nil, err
 	}
 
+	pullSecretNamespace := ""
+	pullSecret := ""
+	registry := ""
+	imageRegistry, err := getImageRegistry(client,
+		managedCluster.Labels[clusterImageRegistryLabel])
+	if err != nil {
+		klog.Errorf("failed to get custom registry and pull secret %v", err)
+	}
+
+	if imageRegistry != nil {
+		pullSecretNamespace = imageRegistry.Namespace
+		pullSecret = imageRegistry.Spec.PullSecret.Name
+		registry = imageRegistry.Spec.Registry
+	}
+
 	useImagePullSecret := false
 	imagePullSecretDataBase64 := ""
-	imagePullSecret, err := getImagePullSecret(client)
+	imagePullSecret, err := getImagePullSecret(pullSecretNamespace, pullSecret, client)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -85,19 +104,19 @@ func generateImportYAMLs(
 		useImagePullSecret = true
 	}
 
-	registrationOperatorImageName := os.Getenv(registrationOperatorImageEnvVarName)
-	if registrationOperatorImageName == "" {
-		return nil, nil, fmt.Errorf(envVarNotDefined, registrationOperatorImageEnvVarName)
+	registrationOperatorImageName, err := getImage(registry, registrationOperatorImageEnvVarName)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	registrationImageName := os.Getenv(registrationImageEnvVarName)
-	if registrationImageName == "" {
-		return nil, nil, fmt.Errorf(envVarNotDefined, registrationImageEnvVarName)
+	registrationImageName, err := getImage(registry, registrationImageEnvVarName)
+	if err != nil {
+		return nil, nil, err
 	}
 
-	workImageName := os.Getenv(workImageEnvVarName)
-	if workImageName == "" {
-		return nil, nil, fmt.Errorf(envVarNotDefined, workImageEnvVarName)
+	workImageName, err := getImage(registry, workImageEnvVarName)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	config := struct {
@@ -147,19 +166,51 @@ func generateImportYAMLs(
 	return crds, yamls, nil
 }
 
-func getImagePullSecret(client client.Client) (*corev1.Secret, error) {
-	if os.Getenv("DEFAULT_IMAGE_PULL_SECRET") == "" {
-		return nil, nil
+func getImagePullSecret(pullSecretNamespace, pullSecret string, client client.Client) (*corev1.Secret, error) {
+	var secretNamespace, secretName string
+	var err error
+
+	if pullSecretNamespace != "" && pullSecret != "" {
+		secretNamespace = pullSecretNamespace
+		secretName = pullSecret
+	} else {
+		secretName = os.Getenv("DEFAULT_IMAGE_PULL_SECRET")
+		secretNamespace = os.Getenv("POD_NAMESPACE")
+		if secretName == "" || secretNamespace == "" {
+			klog.Errorf("the default image pull secret %v/%v in invalid", secretNamespace, secretName)
+			return nil, fmt.Errorf("the default image pull secret %v/%v in invalid", secretNamespace, secretName)
+		}
 	}
+
 	secret := &corev1.Secret{}
-	err := client.Get(context.TODO(), types.NamespacedName{
-		Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
-		Namespace: os.Getenv("POD_NAMESPACE"),
-	}, secret)
+	err = client.Get(context.TODO(), types.NamespacedName{Name: secretName, Namespace: secretNamespace}, secret)
 	if err != nil {
+		klog.Errorf("failed to get image pull secret %v/%v", secretNamespace, secretName)
 		return nil, err
 	}
 	return secret, nil
+}
+
+// getImage returns then image of components
+// if customRegistry is empty, return the default image
+// if customRegistry is not empty, replace the registry address of default image.
+func getImage(customRegistry, envName string) (string, error) {
+	defaultImage := os.Getenv(envName)
+	if defaultImage == "" {
+		klog.Errorf("the default image %v is invalid", envName)
+		return "", fmt.Errorf(envVarNotDefined, registrationImageEnvVarName)
+	}
+	if customRegistry == "" {
+		return defaultImage, nil
+	}
+
+	// image format: registryAddress/imageName@SHA256 or registryAddress/imageName:tag
+	// replace the registryAddress of image with customRegistry
+	customRegistry = strings.TrimSuffix(customRegistry, "/")
+	imageSegments := strings.Split(defaultImage, "/")
+	customImage := customRegistry + "/" + imageSegments[len(imageSegments)-1]
+
+	return customImage, nil
 }
 
 // getValidCertificatesFromURL dial to serverURL and get certificates
@@ -278,4 +329,28 @@ func createKubeconfigData(client client.Client, bootStrapSecret *corev1.Secret) 
 
 	return runtime.Encode(clientcmdlatest.Codec, &bootstrapConfig)
 
+}
+
+// getImageRegistry gets imageRegistry.
+// imageRegistryLabelValue format is namespace.imageRegistry
+func getImageRegistry(client client.Client,
+	imageRegistryLabelValue string) (*v1alpha1.ManagedClusterImageRegistry, error) {
+	if imageRegistryLabelValue == "" {
+		return nil, nil
+	}
+
+	segments := strings.Split(imageRegistryLabelValue, ".")
+	if len(segments) != 2 {
+		klog.Errorf("invalid format of image registry label value %v", imageRegistryLabelValue)
+		return nil, fmt.Errorf("invalid format of image registry label value %v", imageRegistryLabelValue)
+	}
+	namespace := segments[0]
+	imageRegistryName := segments[1]
+	imageRegistry := &v1alpha1.ManagedClusterImageRegistry{}
+	err := client.Get(context.TODO(), types.NamespacedName{Name: imageRegistryName, Namespace: namespace}, imageRegistry)
+	if err != nil {
+		klog.Errorf("failed to get imageregistry %v/%v", namespace, imageRegistryName)
+		return nil, err
+	}
+	return imageRegistry, nil
 }

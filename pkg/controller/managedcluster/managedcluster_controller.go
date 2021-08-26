@@ -117,7 +117,9 @@ func newManagedClusterSpecPredicate() predicate.Predicate {
 			if okNew && okOld {
 				return !reflect.DeepEqual(newManagedCluster.Spec, oldManagedCluster.Spec) ||
 					checkOffLine(newManagedCluster) != checkOffLine(oldManagedCluster) ||
-					newManagedCluster.DeletionTimestamp != nil
+					newManagedCluster.DeletionTimestamp != nil ||
+					newManagedCluster.Labels[clusterImageRegistryLabel] != "" ||
+					oldManagedCluster.Labels[clusterImageRegistryLabel] != ""
 				// !reflect.DeepEqual(newManagedCluster.Status.Conditions, oldManagedCluster.Status.Conditions)
 			}
 			return false
@@ -206,7 +208,7 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		return r.managedClusterDeletion(instance)
 	}
 
-	//Wait a number of conditions before starting to process a managedcluster.
+	// Wait a number of conditions before starting to process a managedcluster.
 	clusterDeployment, ready, err := r.isReadyToReconcile(instance)
 	if err != nil || !ready {
 		return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Minute},
@@ -225,17 +227,17 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		instanceLabels["name"] = instance.Name
 		instance.SetLabels(instanceLabels)
 	}
-	//set the created_via annotation
+	// set the created_via annotation
 	r.setCreatedViaAnnotation(instance, clusterDeployment)
 
-	//Patch the managedcluster
+	// Patch the managedcluster
 	if err := r.client.Patch(context.TODO(), instance, patch); err != nil {
 		// if err := r.client.Update(context.TODO(), instance); err != nil {
 		reqLogger.Error(err, "Error while patching labels and finalizers")
 		return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Second}, nil
 	}
 
-	//Add clusterLabel on ns if missing
+	// Add clusterLabel on ns if missing
 	ns := &corev1.Namespace{}
 	if err := r.client.Get(
 		context.TODO(),
@@ -258,7 +260,7 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		}
 	}
 
-	//Create the values for the yamls
+	// Create the values for the yamls
 	config := struct {
 		ManagedClusterName          string
 		ManagedClusterNamespace     string
@@ -326,7 +328,7 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		return reconcile.Result{}, err
 	}
 
-	//Remove syncset if exists as we are now using manifestworks
+	// Remove syncset if exists as we are now using manifestworks
 	result, err := deleteKlusterletSyncSets(r.client, instance)
 	if err != nil {
 		return result, err
@@ -357,13 +359,13 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 			return reconcile.Result{}, err
 		}
 
-		//Stop here if no auto-import
+		// Stop here if no auto-import
 		if !toImport {
 			klog.Infof("Not importing auto-import cluster: %s", instance.Name)
 			return reconcile.Result{}, nil
 		}
 
-		//Import the cluster
+		// Import the cluster
 		result, err := r.importCluster(instance, clusterDeployment, autoImportSecret)
 		if result.Requeue || err != nil {
 			return result, err
@@ -379,7 +381,7 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 }
 
 func (r *ReconcileManagedCluster) isReadyToReconcile(managedCluster *clusterv1.ManagedCluster) (*hivev1.ClusterDeployment, bool, error) {
-	//Check if hive cluster and get client from clusterDeployment
+	// Check if hive cluster and get client from clusterDeployment
 	clusterDeployment := &hivev1.ClusterDeployment{}
 	err := r.client.Get(
 		context.TODO(),
@@ -447,17 +449,17 @@ func isHive(clusterDeployment *hivev1.ClusterDeployment) bool {
 
 func (r *ReconcileManagedCluster) toBeImported(managedCluster *clusterv1.ManagedCluster,
 	clusterDeployment *hivev1.ClusterDeployment) (*corev1.Secret, bool, error) {
-	//Check self managed
+	// Check self managed
 	if v, ok := managedCluster.GetLabels()[selfManagedLabel]; ok {
 		toImport, err := strconv.ParseBool(v)
 		return nil, toImport, err
 	}
-	//Check if hive cluster and get client from clusterDeployment
+	// Check if hive cluster and get client from clusterDeployment
 	if clusterDeployment != nil {
-		//clusterDeployment found and so need to be imported
+		// clusterDeployment found and so need to be imported
 		return nil, true, nil
 	}
-	//Check auto-import
+	// Check auto-import
 	klog.V(2).Info("Check autoImportRetry")
 	autoImportSecret := &corev1.Secret{}
 	err := r.client.Get(context.TODO(), types.NamespacedName{
@@ -608,18 +610,18 @@ func (r *ReconcileManagedCluster) deleteNamespace(namespaceName string) error {
 	return nil
 }
 
-//TODO add logic
-//the client is nil when we create the manifestwork,
-//at that time the managedcluster is already on line and
-//we can check the managedcluster to get the kubeversion
+// TODO add logic
+// the client is nil when we create the manifestwork,
+// at that time the managedcluster is already on line and
+// we can check the managedcluster to get the kubeversion
 //
-//the client is not nill when the cluster will be auto-imported and
-//we can check the managed cluster to find out the kubeversion version
+// the client is not nill when the cluster will be auto-imported and
+// we can check the managed cluster to find out the kubeversion version
 func isAPIExtensionV1(managedClusterClient client.Client,
 	managedCluster *clusterv1.ManagedCluster,
 	managedClusterKubeVersion string) (bool, error) {
 	var actualVersion string
-	//Search kubernetes version for creating manifestwork
+	// Search kubernetes version for creating manifestwork
 	if managedClusterClient == nil {
 		if managedCluster.Status.Version.Kubernetes == "" {
 			return false, fmt.Errorf("kubernetes version not yet available for managed cluster %s", managedCluster.GetName())
