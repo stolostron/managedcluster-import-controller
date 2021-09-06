@@ -7,16 +7,17 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
 	"text/template"
 
+	operatorclient "github.com/open-cluster-management/api/client/operator/clientset/versioned"
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	operatorv1 "github.com/open-cluster-management/api/operator/v1"
 	workv1 "github.com/open-cluster-management/api/work/v1"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
-	"github.com/operator-framework/operator-sdk/pkg/k8sutil"
 
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/resource/resourceapply"
@@ -72,6 +73,7 @@ func init() {
 type ClientHolder struct {
 	KubeClient          kubernetes.Interface
 	APIExtensionsClient apiextensionsclient.Interface
+	OperatorClient      operatorclient.Interface
 	RuntimeClient       client.Client
 }
 
@@ -157,23 +159,15 @@ func GenerateClientFromSecret(secret *corev1.Secret) (*ClientHolder, meta.RESTMa
 }
 
 // AddManagedClusterFinalizer add a finalizer to a managed cluster
-func AddManagedClusterFinalizer(client client.Client, recorder events.Recorder,
-	managedCluster *clusterv1.ManagedCluster, finalizer string) error {
+func AddManagedClusterFinalizer(modified *bool, managedCluster *clusterv1.ManagedCluster, finalizer string) {
 	for i := range managedCluster.Finalizers {
 		if managedCluster.Finalizers[i] == finalizer {
-			return nil
+			return
 		}
 	}
 
 	managedCluster.Finalizers = append(managedCluster.Finalizers, finalizer)
-	if err := client.Update(context.TODO(), managedCluster); err != nil {
-		return err
-	}
-
-	recorder.Eventf("ManagedClusterFinalizerAdded",
-		"The managed cluster %s finalizer %s is added", managedCluster.Name, finalizer)
-
-	return nil
+	*modified = true
 }
 
 // RemoveManagedClusterFinalizer remove a finalizer from a managed cluster
@@ -356,6 +350,9 @@ func ApplyResources(clientHolder *ClientHolder, recorder events.Recorder,
 		case *corev1.Secret:
 			_, _, err := resourceapply.ApplySecret(clientHolder.KubeClient.CoreV1(), recorder, required)
 			errs = append(errs, err)
+		case *corev1.Namespace:
+			_, _, err := resourceapply.ApplyNamespace(clientHolder.KubeClient.CoreV1(), recorder, required)
+			errs = append(errs, err)
 		case *appsv1.Deployment:
 			errs = append(errs, applyDeployment(clientHolder, recorder, required))
 		case *rbacv1.ClusterRole:
@@ -381,7 +378,7 @@ func ApplyResources(clientHolder *ClientHolder, recorder events.Recorder,
 		case *workv1.ManifestWork:
 			errs = append(errs, applyManifestWork(clientHolder.RuntimeClient, recorder, required))
 		case *operatorv1.Klusterlet:
-			errs = append(errs, applyKlusterlet(clientHolder.RuntimeClient, recorder, required))
+			errs = append(errs, applyKlusterlet(clientHolder.OperatorClient, recorder, required))
 		}
 	}
 
@@ -404,11 +401,10 @@ func applyDeployment(clientHolder *ClientHolder, recorder events.Recorder, requi
 	return err
 }
 
-func applyKlusterlet(client client.Client, recorder events.Recorder, required *operatorv1.Klusterlet) error {
-	existing := &operatorv1.Klusterlet{}
-	err := client.Get(context.TODO(), types.NamespacedName{Name: required.Name}, existing)
+func applyKlusterlet(client operatorclient.Interface, recorder events.Recorder, required *operatorv1.Klusterlet) error {
+	existing, err := client.OperatorV1().Klusterlets().Get(context.TODO(), required.Name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
-		if err := client.Create(context.TODO(), required); err != nil {
+		if _, err := client.OperatorV1().Klusterlets().Create(context.TODO(), required, metav1.CreateOptions{}); err != nil {
 			return err
 		}
 
@@ -423,8 +419,9 @@ func applyKlusterlet(client client.Client, recorder events.Recorder, required *o
 		return nil
 	}
 
+	existing = existing.DeepCopy()
 	existing.Spec = required.Spec
-	if err := client.Update(context.TODO(), existing); err != nil {
+	if _, err := client.OperatorV1().Klusterlets().Update(context.TODO(), existing, metav1.UpdateOptions{}); err != nil {
 		return err
 	}
 	reportEvent(recorder, required, "Klusterlet", "updated")
@@ -477,7 +474,7 @@ func reportEvent(recorder events.Recorder, metaObj metav1.Object, objKind, actio
 }
 
 func NewEventRecorder(kubeClient kubernetes.Interface, controllerName string) events.Recorder {
-	namespace, err := k8sutil.GetOperatorNamespace()
+	namespace, err := GetComponentNamespace()
 	if err != nil {
 		klog.Warningf("unable to identify the current namespace for events: %v", err)
 	}
@@ -489,4 +486,16 @@ func NewEventRecorder(kubeClient kubernetes.Interface, controllerName string) ev
 
 	options := events.RecommendedClusterSingletonCorrelatorOptions()
 	return events.NewKubeRecorderWithOptions(kubeClient.CoreV1().Events(namespace), options, controllerName, controllerRef)
+}
+
+func GetComponentNamespace() (string, error) {
+	namespace := os.Getenv(constants.PodNamespaceEnvVarName)
+	if len(namespace) > 0 {
+		return namespace, nil
+	}
+	nsBytes, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	if err != nil {
+		return "", err
+	}
+	return string(nsBytes), nil
 }

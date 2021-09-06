@@ -5,14 +5,18 @@ package constants
 
 const YamlSperator = "\n---\n"
 
+/* #nosec */
+const AutoImportSecretName string = "auto-import-secret"
+
+const PodNamespaceEnvVarName = "POD_NAMESPACE"
+
+const SelfManagedLabel string = "local-cluster"
+
 const (
 	CreatedViaAnnotation = "open-cluster-management/created-via"
 	CreatedViaAI         = "assisted-installer"
 	CreatedViaHive       = "hive"
 )
-
-/* #nosec */
-const AutoImportSecretName string = "auto-import-secret"
 
 /* #nosec */
 const (
