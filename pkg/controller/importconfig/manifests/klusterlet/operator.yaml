@@ -1,0 +1,40 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: klusterlet
+  namespace: "{{ .KlusterletNamespace }}"
+  labels:
+    app: klusterlet
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: klusterlet
+  template:
+    metadata:
+      annotations:
+        target.workload.openshift.io/management: '{"effect": "PreferredDuringScheduling"}'
+      labels:
+        app: klusterlet
+    spec:
+      serviceAccountName: klusterlet
+      containers:
+      - name: klusterlet
+        image: {{ .RegistrationOperatorImage }}
+        imagePullPolicy: IfNotPresent
+        args:
+          - "/registration-operator"
+          - "klusterlet"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            scheme: HTTPS
+            port: 8443
+          initialDelaySeconds: 2
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            scheme: HTTPS
+            port: 8443
+          initialDelaySeconds: 2

@@ -1,0 +1,9 @@
+apiVersion: operator.open-cluster-management.io/v1
+kind: Klusterlet
+metadata:
+  name: klusterlet
+spec:
+  registrationImagePullSpec: "{{ .RegistrationImageName }}"
+  workImagePullSpec: "{{ .WorkImageName }}"
+  clusterName: "{{ .ManagedClusterNamespace }}"
+  namespace: "{{ .KlusterletNamespace }}"
