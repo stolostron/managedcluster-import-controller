@@ -23,6 +23,8 @@ coverate.out
 gosec.json
 go-bindata.diff
 functional.test
+e2e.test
+e2e-kubeconfig
 
 
 # override build harness vendoring
