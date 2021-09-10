@@ -12,6 +12,8 @@ import (
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
 
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
+
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
 
@@ -185,6 +187,18 @@ func (r *ReconcileManagedCluster) deleteManagedClusterNamespace(
 	if ns.DeletionTimestamp != nil {
 		log.Info(fmt.Sprintf("namespace %s is already in deletion", clusterName))
 		return nil
+	}
+
+	clusterDeployment := &hivev1.ClusterDeployment{}
+	err = r.client.Get(ctx, types.NamespacedName{Namespace: clusterName, Name: clusterName}, clusterDeployment)
+	if err == nil && clusterDeployment.DeletionTimestamp.IsZero() {
+		// there is a clusterdeployment in the managed cluster namespace and the clusterdeployment is not in deletion
+		// the managed cluster is detached, we need to keep the managed cluster namespace
+		r.recorder.Warningf("ManagedClusterNamespaceRemained", "There is a clusterdeployment in namespace %s", clusterName)
+		return nil
+	}
+	if !errors.IsNotFound(err) {
+		return err
 	}
 
 	pods := &corev1.PodList{}

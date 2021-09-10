@@ -9,6 +9,8 @@ import (
 
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
+
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 
 	corev1 "k8s.io/api/core/v1"
@@ -29,6 +31,7 @@ var (
 
 func init() {
 	testscheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
+	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &hivev1.ClusterDeployment{})
 }
 
 func TestReconcile(t *testing.T) {
