@@ -141,6 +141,11 @@ func GenerateClientFromSecret(secret *corev1.Secret) (*ClientHolder, meta.RESTMa
 		return nil, nil, err
 	}
 
+	operatorClient, err := operatorclient.NewForConfig(clientConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	runtimeClient, err := client.New(clientConfig, client.Options{})
 	if err != nil {
 		return nil, nil, err
@@ -154,6 +159,7 @@ func GenerateClientFromSecret(secret *corev1.Secret) (*ClientHolder, meta.RESTMa
 	return &ClientHolder{
 		KubeClient:          kubeClient,
 		APIExtensionsClient: apiExtensionsClient,
+		OperatorClient:      operatorClient,
 		RuntimeClient:       runtimeClient,
 	}, mapper, nil
 }
