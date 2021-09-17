@@ -10,11 +10,11 @@ import (
 	"reflect"
 	"testing"
 
-	operatorfake "github.com/open-cluster-management/api/client/operator/clientset/versioned/fake"
-	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
-	operatorv1 "github.com/open-cluster-management/api/operator/v1"
-	workv1 "github.com/open-cluster-management/api/work/v1"
 	testinghelpers "github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers/testing"
+	operatorfake "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"

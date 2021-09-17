@@ -18,9 +18,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	libgometav1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1"
 	libgoconfig "github.com/open-cluster-management/library-go/pkg/config"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"

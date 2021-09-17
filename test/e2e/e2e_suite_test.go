@@ -13,12 +13,12 @@ import (
 	ginkgo "github.com/onsi/ginkgo"
 	gomega "github.com/onsi/gomega"
 
-	clusterclient "github.com/open-cluster-management/api/client/cluster/clientset/versioned"
-	operatorclient "github.com/open-cluster-management/api/client/operator/clientset/versioned"
-	workclient "github.com/open-cluster-management/api/client/work/clientset/versioned"
-	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
-	workv1 "github.com/open-cluster-management/api/work/v1"
 	"github.com/open-cluster-management/managedcluster-import-controller/test/e2e/util"
+	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
+	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
+	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/apimachinery/pkg/api/errors"

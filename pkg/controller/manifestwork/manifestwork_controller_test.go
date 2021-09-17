@@ -7,10 +7,10 @@ import (
 	"context"
 	"testing"
 
-	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
-	workv1 "github.com/open-cluster-management/api/work/v1"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers/testing"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 

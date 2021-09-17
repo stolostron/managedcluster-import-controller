@@ -13,7 +13,6 @@ import (
 
 	"github.com/ghodss/yaml"
 	. "github.com/onsi/gomega"
-	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	"github.com/open-cluster-management/applier/pkg/templateprocessor"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/bindata"
 	ocinfrav1 "github.com/openshift/api/config/v1"
@@ -25,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
@@ -480,6 +480,7 @@ func TestTemplating(t *testing.T) {
 		HubKubeConfigSecretName   string
 		HubKubeConfigSecret       string
 		RegistrationOperatorImage string
+		NodeSelector              map[string]string
 	}{
 		ClusterName:               "klusterlet",
 		KlusterletNamespace:       "KlusterletNamespace",

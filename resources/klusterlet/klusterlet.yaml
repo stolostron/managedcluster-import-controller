@@ -9,3 +9,12 @@ spec:
   workImagePullSpec: {{ .WorkImageName }}
   clusterName: "{{ .ManagedClusterNamespace }}"
   namespace: "{{ .KlusterletNamespace }}"
+  nodePlacement:
+    nodeSelector:
+    {{- range $key, $value := .NodeSelector }}
+      "{{ $key }}": "{{ $value }}"
+    {{- end }}
+    tolerations:
+    - effect: NoSchedule
+      key: node-role.kubernetes.io/infra
+      operator: Exists

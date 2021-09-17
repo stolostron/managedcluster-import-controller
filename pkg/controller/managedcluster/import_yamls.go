@@ -13,13 +13,13 @@ import (
 	"os"
 	"strings"
 
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
 	"k8s.io/klog"
 
 	"net/url"
 
 	corev1 "k8s.io/api/core/v1"
 
-	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	"github.com/open-cluster-management/applier/pkg/templateprocessor"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/bindata"
 	"github.com/open-cluster-management/multicloud-operators-foundation/pkg/apis/imageregistry/v1alpha1"
@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	clientcmdlatest "k8s.io/client-go/tools/clientcmd/api/latest"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -119,6 +120,10 @@ func generateImportYAMLs(
 		return nil, nil, err
 	}
 
+	nodeSelector, err := helpers.GetNodeSelector(managedCluster)
+	if err != nil {
+		return nil, nil, err
+	}
 	config := struct {
 		KlusterletNamespace       string
 		ManagedClusterNamespace   string
@@ -130,6 +135,7 @@ func generateImportYAMLs(
 		RegistrationOperatorImage string
 		RegistrationImageName     string
 		WorkImageName             string
+		NodeSelector              map[string]string
 	}{
 		ManagedClusterNamespace:   managedCluster.Name,
 		KlusterletNamespace:       klusterletNamespace,
@@ -141,6 +147,7 @@ func generateImportYAMLs(
 		RegistrationOperatorImage: registrationOperatorImageName,
 		RegistrationImageName:     registrationImageName,
 		WorkImageName:             workImageName,
+		NodeSelector:              nodeSelector,
 	}
 
 	tp, err = templateprocessor.NewTemplateProcessor(bindata.NewBindataReader(), &templateprocessor.Options{})

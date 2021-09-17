@@ -6,6 +6,7 @@ package helpers
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"os"
@@ -13,11 +14,11 @@ import (
 	"strings"
 	"text/template"
 
-	operatorclient "github.com/open-cluster-management/api/client/operator/clientset/versioned"
-	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
-	operatorv1 "github.com/open-cluster-management/api/operator/v1"
-	workv1 "github.com/open-cluster-management/api/work/v1"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
+	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/resource/resourceapply"
@@ -50,6 +51,9 @@ import (
 )
 
 const maxConcurrentReconcilesEnvVarName = "MAX_CONCURRENT_RECONCILES"
+
+// AnnotationNodeSelector key name of nodeSelector annotation synced from mch
+const AnnotationNodeSelector = "open-cluster-management/nodeSelector"
 
 var v1APIExtensionMinVersion = version.MustParseGeneric("v1.16.0")
 
@@ -504,4 +508,25 @@ func GetComponentNamespace() (string, error) {
 		return "", err
 	}
 	return string(nsBytes), nil
+}
+
+func GetNodeSelector(cluster *clusterv1.ManagedCluster) (map[string]string, error) {
+	// This part is to support running pods related local-cluster on specified nodes,like infra nodes.
+	nodeSelector := map[string]string{}
+	if cluster.GetName() != "local-cluster" {
+		return nodeSelector, nil
+	}
+
+	annotations := cluster.GetAnnotations()
+	nodeSelectorString, ok := annotations[AnnotationNodeSelector]
+	if !ok {
+		return nodeSelector, nil
+	}
+
+	if err := json.Unmarshal([]byte(nodeSelectorString), &nodeSelector); err != nil {
+		klog.Errorf("failed to unmarshal nodeSelector annotation of cluster %v. err=%v", cluster.GetName(), err)
+		return nodeSelector, err
+	}
+
+	return nodeSelector, nil
 }

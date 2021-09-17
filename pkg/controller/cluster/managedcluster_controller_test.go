@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 

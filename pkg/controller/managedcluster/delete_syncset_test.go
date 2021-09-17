@@ -9,12 +9,12 @@ import (
 	"reflect"
 	"testing"
 
-	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )

@@ -8,9 +8,9 @@ import (
 	"reflect"
 	"testing"
 
-	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 )
 
 func Test_bootstrapServiceAccountNsN(t *testing.T) {

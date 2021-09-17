@@ -18,7 +18,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
-	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 )
 
 const (

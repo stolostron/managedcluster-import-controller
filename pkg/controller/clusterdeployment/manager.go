@@ -6,9 +6,9 @@ package clusterdeployment
 import (
 	"strings"
 
-	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 

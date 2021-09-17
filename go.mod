@@ -6,7 +6,6 @@ require (
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/onsi/ginkgo v1.16.4
 	github.com/onsi/gomega v1.13.0
-	github.com/open-cluster-management/api v0.0.0-20210527013639-a6845f2ebcb1
 	github.com/open-cluster-management/applier v0.0.0-20210422205113-6c10f923726b
 	github.com/open-cluster-management/library-go v0.0.0-20210325215722-d989f79194f6
 	github.com/open-cluster-management/multicloud-operators-foundation v0.0.0-20210824054957-51557a572f11
@@ -23,6 +22,7 @@ require (
 	k8s.io/klog/v2 v2.9.0
 	k8s.io/kubernetes v1.20.4
 	k8s.io/utils v0.0.0-20210527160623-6fdb442a123b
+	open-cluster-management.io/api v0.0.0-20210916013819-2e58cdb938f9
 	sigs.k8s.io/controller-runtime v0.9.3-0.20210709165254-650ea59f19cc
 )
 
