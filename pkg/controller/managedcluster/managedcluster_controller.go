@@ -6,47 +6,34 @@ package managedcluster
 import (
 	"context"
 	"fmt"
-	"reflect"
-	"strconv"
 	"strings"
-	"time"
 
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/klog"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/event"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	workv1 "open-cluster-management.io/api/work/v1"
 
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 
-	"github.com/open-cluster-management/applier/pkg/applier"
-	libgometav1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1"
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/bindata"
+	"github.com/openshift/library-go/pkg/operator/events"
+	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
+
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-// constants for delete work and finalizer
+const clusterNameLabel = "name"
+
+const clusterLabel = "cluster.open-cluster-management.io/managedCluster"
+
 const (
-	managedClusterFinalizer string = "managedcluster-import-controller.open-cluster-management.io/cleanup"
-	registrationFinalizer   string = "cluster.open-cluster-management.io/api-resource-cleanup"
+	createdViaDiscovery = "discovery"
+	createdViaOther     = "other"
 )
-
-const clusterLabel string = "cluster.open-cluster-management.io/managedCluster"
-const selfManagedLabel string = "local-cluster"
-const autoImportRetryName string = "autoImportRetry"
-
-/* #nosec */
-const autoImportSecretName string = "auto-import-secret"
-const ManagedClusterImportSucceeded string = "ManagedClusterImportSucceeded"
 
 const (
 	curatorJobPrefix  string = "curator-job"
@@ -54,588 +41,195 @@ const (
 	preHookJobPrefix  string = "prehookjob"
 )
 
-const (
-	createdViaAnnotation          = "open-cluster-management/created-via"
-	createdViaAnnotationDiscovery = "discovery"
-	createdViaAnnotationAI        = "assisted-installer"
-	createdViaAnnotationHive      = "hive"
-	createdViaAnnotationOther     = "other"
-)
+var log = logf.Log.WithName(controllerName)
 
-var log = logf.Log.WithName("controller_managedcluster")
-
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
-
-// customClient will do get secret without cache, other operations are like normal cache client
-type customClient struct {
-	client.Client
-	APIReader client.Reader
-}
-
-// newCustomClient creates custom client to do get secret without cache
-func newCustomClient(client client.Client, apiReader client.Reader) client.Client {
-	return customClient{
-		Client:    client,
-		APIReader: apiReader,
-	}
-}
-
-func (cc customClient) Get(ctx context.Context, key client.ObjectKey, obj runtime.Object) error {
-	if _, ok := obj.(*corev1.Secret); ok {
-		return cc.APIReader.Get(ctx, key, obj)
-	}
-	return cc.Client.Get(ctx, key, obj)
-}
-
-func newManagedClusterSpecPredicate() predicate.Predicate {
-	return predicate.Predicate(predicate.Funcs{
-		GenericFunc: func(e event.GenericEvent) bool { return false },
-		CreateFunc:  func(e event.CreateEvent) bool { return true },
-		DeleteFunc:  func(e event.DeleteEvent) bool { return true },
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			if e.MetaOld == nil {
-				log.Error(nil, "Update event has no old metadata", "event", e)
-				return false
-			}
-			if e.ObjectOld == nil {
-				log.Error(nil, "Update event has no old runtime object to update", "event", e)
-				return false
-			}
-			if e.ObjectNew == nil {
-				log.Error(nil, "Update event has no new runtime object for update", "event", e)
-				return false
-			}
-			if e.MetaNew == nil {
-				log.Error(nil, "Update event has no new metadata", "event", e)
-				return false
-			}
-			newManagedCluster, okNew := e.ObjectNew.(*clusterv1.ManagedCluster)
-			oldManagedCluster, okOld := e.ObjectOld.(*clusterv1.ManagedCluster)
-			if okNew && okOld {
-				return !reflect.DeepEqual(newManagedCluster.Spec, oldManagedCluster.Spec) ||
-					checkOffLine(newManagedCluster) != checkOffLine(oldManagedCluster) ||
-					newManagedCluster.DeletionTimestamp != nil ||
-					newManagedCluster.Labels[clusterImageRegistryLabel] != "" ||
-					oldManagedCluster.Labels[clusterImageRegistryLabel] != ""
-				// !reflect.DeepEqual(newManagedCluster.Status.Conditions, oldManagedCluster.Status.Conditions)
-			}
-			return false
-		},
-	})
-}
-
-func newManifestWorkSpecPredicate() predicate.Predicate {
-	return predicate.Predicate(predicate.Funcs{
-		GenericFunc: func(e event.GenericEvent) bool { return false },
-		CreateFunc:  func(e event.CreateEvent) bool { return false },
-		DeleteFunc:  func(e event.DeleteEvent) bool { return true },
-		UpdateFunc: func(e event.UpdateEvent) bool {
-			if e.MetaOld == nil {
-				log.Error(nil, "Update event has no old metadata", "event", e)
-				return false
-			}
-			if e.ObjectOld == nil {
-				log.Error(nil, "Update event has no old runtime object to update", "event", e)
-				return false
-			}
-			if e.ObjectNew == nil {
-				log.Error(nil, "Update event has no new runtime object for update", "event", e)
-				return false
-			}
-			if e.MetaNew == nil {
-				log.Error(nil, "Update event has no new metadata", "event", e)
-				return false
-			}
-			newManifestWork, okNew := e.ObjectNew.(*workv1.ManifestWork)
-			oldManifestWork, okOld := e.ObjectOld.(*workv1.ManifestWork)
-			if okNew && okOld {
-				return !reflect.DeepEqual(newManifestWork.Spec, oldManifestWork.Spec)
-			}
-			return false
-		},
-	})
+// ReconcileManagedCluster reconciles a ManagedCluster object
+type ReconcileManagedCluster struct {
+	client   client.Client
+	recorder events.Recorder
 }
 
 // blank assignment to verify that ReconcileManagedCluster implements reconcile.Reconciler
 var _ reconcile.Reconciler = &ReconcileManagedCluster{}
 
-// ReconcileManagedCluster reconciles a ManagedCluster object
-type ReconcileManagedCluster struct {
-	// This client, initialized using mgr.Client() above, is a split client
-	// that reads objects from the cache and writes to the apiserver
-	client client.Client
-	scheme *runtime.Scheme
-}
-
-// Reconcile reads that state of the cluster for a ManagedCluster object and makes changes based on the state read
-// and what is in the ManagedCluster.Spec
-// Note:
-// The Controller will requeue the Request to be processed again if the returned error is non-nil or
+// Reconcile the ManagedCluster.
+// - When a new managed cluster is created, we will add the required meta data to the managed cluster
+// - When a managed cluster is deleting, we will wait the other components to delete their finalizers, after
+//   there is only the import finalizer on managed cluster, we will delete the managed cluster namespace.
+//
+// Note: The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
-	reqLogger.Info("Reconciling ManagedCluster")
+func (r *ReconcileManagedCluster) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	reqLogger := log.WithValues("Request.Name", request.Name)
+	reqLogger.Info("Reconciling managed cluster meta object")
 
-	// Fetch the ManagedCluster instance
-	instance := &clusterv1.ManagedCluster{}
+	managedCluster := &clusterv1.ManagedCluster{}
+	err := r.client.Get(ctx, types.NamespacedName{Name: request.Name}, managedCluster)
+	if errors.IsNotFound(err) {
+		// the managed cluster could have been deleted, do nothing
+		return reconcile.Result{}, nil
+	}
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 
-	if err := r.client.Get(
-		context.TODO(),
-		types.NamespacedName{Namespace: "", Name: request.Name},
-		instance,
-	); err != nil {
+	if managedCluster.DeletionTimestamp.IsZero() {
+		if err := r.ensureManagedClusterMetaObj(ctx, managedCluster); err != nil {
+			return reconcile.Result{}, err
+		}
+
+		// set cluster label on the managed cluster namespace
+		ns := &corev1.Namespace{}
+		err := r.client.Get(ctx, types.NamespacedName{Name: managedCluster.Name}, ns)
 		if errors.IsNotFound(err) {
-			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
-			// Return and don't requeue
-			reqLogger.Info(fmt.Sprintf("deleteNamespace: %s", request.Name))
-			err = r.deleteNamespace(request.Name)
-			if err != nil {
-				reqLogger.Error(err, "Failed to delete namespace")
-				return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Minute}, nil
-			}
-
 			return reconcile.Result{}, nil
 		}
-		// Error reading the object - requeue the request.
-		return reconcile.Result{}, err
-	}
-
-	if instance.DeletionTimestamp != nil {
-		return r.managedClusterDeletion(instance)
-	}
-
-	// Wait a number of conditions before starting to process a managedcluster.
-	clusterDeployment, ready, err := r.isReadyToReconcile(instance)
-	if err != nil || !ready {
-		return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Minute},
-			nil
-	}
-	reqLogger.Info(fmt.Sprintf("AddFinalizer to instance: %s", instance.Name))
-	patch := client.MergeFrom(instance.DeepCopy())
-	libgometav1.AddFinalizer(instance, managedClusterFinalizer)
-
-	instanceLabels := instance.GetLabels()
-	if instanceLabels == nil {
-		instanceLabels = make(map[string]string)
-	}
-
-	if _, ok := instanceLabels["name"]; !ok {
-		instanceLabels["name"] = instance.Name
-		instance.SetLabels(instanceLabels)
-	}
-	// set the created_via annotation
-	r.setCreatedViaAnnotation(instance, clusterDeployment)
-
-	// Patch the managedcluster
-	if err := r.client.Patch(context.TODO(), instance, patch); err != nil {
-		// if err := r.client.Update(context.TODO(), instance); err != nil {
-		reqLogger.Error(err, "Error while patching labels and finalizers")
-		return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Second}, nil
-	}
-
-	// Add clusterLabel on ns if missing
-	ns := &corev1.Namespace{}
-	if err := r.client.Get(
-		context.TODO(),
-		types.NamespacedName{Namespace: "", Name: instance.Name},
-		ns); err != nil {
-		reqLogger.Error(err, "Error while getting ns", "namespace", instance.Name)
-		return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Second}, nil
-	}
-
-	labels := ns.GetLabels()
-	if labels == nil {
-		labels = make(map[string]string)
-	}
-	if _, ok := labels[clusterLabel]; !ok {
-		labels[clusterLabel] = instance.Name
-		ns.SetLabels(labels)
-		if err := r.client.Update(context.TODO(), ns); err != nil {
-			reqLogger.Error(err, "Error while updating ns", "namespace", instance.Name)
-			return reconcile.Result{Requeue: true, RequeueAfter: 1 * time.Second}, nil
-		}
-	}
-
-	// Create the values for the yamls
-	config := struct {
-		ManagedClusterName          string
-		ManagedClusterNamespace     string
-		BootstrapServiceAccountName string
-	}{
-		ManagedClusterName:          instance.Name,
-		ManagedClusterNamespace:     instance.Name,
-		BootstrapServiceAccountName: instance.Name + bootstrapServiceAccountNamePostfix,
-	}
-
-	a, err := applier.NewApplier(
-		bindata.NewBindataReader(),
-		nil,
-		r.client,
-		instance,
-		r.scheme,
-		nil)
-	if err != nil {
-		reqLogger.Error(err, "Error while creating applier", "namespace", instance.Name)
-		return reconcile.Result{}, err
-	}
-
-	sa := &corev1.ServiceAccount{}
-	if err := r.client.Get(context.TODO(),
-		types.NamespacedName{
-			Name:      instance.Name + bootstrapServiceAccountNamePostfix,
-			Namespace: instance.Name,
-		},
-		sa); err != nil && errors.IsNotFound(err) {
-		reqLogger.Info(
-			fmt.Sprintf("Create hub/managedcluster/manifests/managedcluster-service-account.yaml: %s",
-				instance.Name))
-		err = a.CreateResource(
-			"hub/managedcluster/manifests/managedcluster-service-account.yaml",
-			config,
-		)
-		if err != nil {
-			reqLogger.Error(err, "Error while applying service account", "sa", instance.Name+bootstrapServiceAccountNamePostfix)
-			return reconcile.Result{}, err
-		}
-	}
-
-	reqLogger.Info(fmt.Sprintf("CreateOrUpdateInPath hub/managedcluster/manifests except sa: %s", instance.Name))
-	err = a.CreateOrUpdateInPath(
-		"hub/managedcluster/manifests",
-		[]string{"hub/managedcluster/manifests/managedcluster-service-account.yaml"},
-		false,
-		config,
-	)
-
-	if err != nil {
-		reqLogger.Error(err, "Error while applying manifest", "cluster", instance.Name)
-		return reconcile.Result{}, err
-	}
-
-	crds, yamls, err := generateImportYAMLs(r.client, instance, []string{})
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	reqLogger.Info(fmt.Sprintf("createOrUpdateImportSecret: %s", instance.Name))
-	_, err = createOrUpdateImportSecret(r.client, r.scheme, instance, crds, yamls)
-	if err != nil {
-		reqLogger.Error(err, "create ManagedCluster Import Secret")
-		return reconcile.Result{}, err
-	}
-
-	// Remove syncset if exists as we are now using manifestworks
-	result, err := deleteKlusterletSyncSets(r.client, instance)
-	if err != nil {
-		return result, err
-	}
-
-	if !checkOffLine(instance) {
-		reqLogger.Info(fmt.Sprintf("createOrUpdateManifestWorks: %s", instance.Name))
-		isV1, err := isAPIExtensionV1(nil, instance, "")
-		if err != nil {
-			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
-		}
-		if isV1 {
-			// The 2 versions of the crd are added to avoid the unexpected removal during the work-agent upgrade.
-			// We will remove the v1beta1 in a future z-release.
-			// see: https://github.com/open-cluster-management/backlog/issues/13631
-			ucrds := append(crds["v1"], crds["v1beta1"]...)
-			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, ucrds, yamls)
-		} else {
-			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, crds["v1beta1"], yamls)
-		}
-		if err != nil {
-			reqLogger.Error(err, "Error while creating mw")
-			return reconcile.Result{}, err
-		}
-	} else {
-		autoImportSecret, toImport, err := r.toBeImported(instance, clusterDeployment)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 
-		// Stop here if no auto-import
-		if !toImport {
-			klog.Infof("Not importing auto-import cluster: %s", instance.Name)
+		modified := resourcemerge.BoolPtr(false)
+		resourcemerge.MergeMap(modified, &ns.Labels, map[string]string{clusterLabel: managedCluster.Name})
+
+		if !*modified {
 			return reconcile.Result{}, nil
 		}
 
-		// Import the cluster
-		result, err := r.importCluster(instance, clusterDeployment, autoImportSecret)
-		if result.Requeue || err != nil {
-			return result, err
+		if err := r.client.Update(ctx, ns); err != nil {
+			return reconcile.Result{}, err
 		}
-		errCond := r.setConditionImport(instance, err, fmt.Sprintf("Unable to import %s", instance.Name))
-		if errCond != nil {
-			klog.Error(errCond)
-			return reconcile.Result{}, errCond
-		}
-		return result, err
+
+		r.recorder.Eventf("ManagedClusterNamespaceLabelUpdated",
+			"The managed cluster %s namespace label is added", managedCluster.Name)
+		return reconcile.Result{}, nil
 	}
-	return reconcile.Result{}, nil
+
+	if len(managedCluster.Finalizers) > 1 {
+		// managed cluster is deleting, but other components finalizers are remaining,
+		// wait for other components to remove their finalizers
+		return reconcile.Result{}, nil
+	}
+
+	if len(managedCluster.Finalizers) == 0 || managedCluster.Finalizers[0] != constants.ImportFinalizer {
+		// managed cluster import finalizer is missed, this should not be happened,
+		// if happened, we ask user to handle this manually
+		r.recorder.Warningf("ManagedClusterImportFinalizerMissed",
+			"The namespace of managed cluster %s will not be deleted due to import finalizer is missed", managedCluster.Name)
+		return reconcile.Result{}, nil
+	}
+
+	// managed cluster is deleting, remove its namespace
+	if err = r.deleteManagedClusterNamespace(ctx, managedCluster); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	return reconcile.Result{}, helpers.RemoveManagedClusterFinalizer(ctx, r.client, r.recorder, managedCluster, constants.ImportFinalizer)
 }
 
-func (r *ReconcileManagedCluster) isReadyToReconcile(managedCluster *clusterv1.ManagedCluster) (*hivev1.ClusterDeployment, bool, error) {
-	// Check if hive cluster and get client from clusterDeployment
-	clusterDeployment := &hivev1.ClusterDeployment{}
-	err := r.client.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name:      managedCluster.Name,
-			Namespace: managedCluster.Name,
-		},
-		clusterDeployment,
-	)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			klog.Infof("ready to reconcile, cluster %s has no clusterdeployment", clusterDeployment.Name)
-			return nil, true, nil
-		}
-		return nil, false, err
-	}
-	if !clusterDeployment.Spec.Installed {
-		klog.Infof("not ready to reconcile, cluster %s not yet installed", clusterDeployment.Name)
-		return clusterDeployment, false, nil
-	}
-	klog.Infof("ready to reconcile, cluster %s installed", clusterDeployment.Name)
-	return clusterDeployment, true, nil
-}
-
-func (r *ReconcileManagedCluster) setCreatedViaAnnotation(managedCluster *clusterv1.ManagedCluster, clusterDeployment *hivev1.ClusterDeployment) {
-	if isDiscovery(managedCluster) {
-		updateCreatedViaAnnotation(managedCluster, createdViaAnnotationDiscovery)
-		return
-	}
-	if isAI(clusterDeployment) {
-		updateCreatedViaAnnotation(managedCluster, createdViaAnnotationAI)
-		return
-	}
-	if isHive(clusterDeployment) {
-		updateCreatedViaAnnotation(managedCluster, createdViaAnnotationHive)
-		return
-	}
-	updateCreatedViaAnnotation(managedCluster, createdViaAnnotationOther)
-}
-
-func updateCreatedViaAnnotation(managedCluster *clusterv1.ManagedCluster, createdVia string) {
-	if managedCluster.GetAnnotations() == nil {
-		managedCluster.Annotations = make(map[string]string)
-	}
-	managedCluster.GetAnnotations()[createdViaAnnotation] = createdVia
-}
-
-func isAI(clusterDeployment *hivev1.ClusterDeployment) bool {
-	return clusterDeployment != nil && clusterDeployment.Spec.Platform.AgentBareMetal != nil
-}
-
-func isDiscovery(managedCluster *clusterv1.ManagedCluster) bool {
-	if managedCluster.GetAnnotations() == nil {
-		return false
-	}
-	if annotation, ok := managedCluster.GetAnnotations()[createdViaAnnotation]; ok {
-		return annotation == createdViaAnnotationDiscovery
-	}
-	return false
-}
-
-func isHive(clusterDeployment *hivev1.ClusterDeployment) bool {
-	return clusterDeployment != nil
-}
-
-func (r *ReconcileManagedCluster) toBeImported(managedCluster *clusterv1.ManagedCluster,
-	clusterDeployment *hivev1.ClusterDeployment) (*corev1.Secret, bool, error) {
-	// Check self managed
-	if v, ok := managedCluster.GetLabels()[selfManagedLabel]; ok {
-		toImport, err := strconv.ParseBool(v)
-		return nil, toImport, err
-	}
-	// Check if hive cluster and get client from clusterDeployment
-	if clusterDeployment != nil {
-		// clusterDeployment found and so need to be imported
-		return nil, true, nil
-	}
-	// Check auto-import
-	klog.V(2).Info("Check autoImportRetry")
-	autoImportSecret := &corev1.Secret{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{
-		Name:      autoImportSecretName,
-		Namespace: managedCluster.Name,
-	},
-		autoImportSecret)
-	if err != nil {
-		if errors.IsNotFound(err) {
-			klog.Infof("Will not retry as autoImportSecret not found for %s", managedCluster.Name)
-			return nil, false, nil
-		}
-		klog.Errorf("Unable to read the autoImportSecret Error: %s", err.Error())
-		return nil, false, err
-	}
-	klog.Infof("Will retry as autoImportSecret is found for %s and counter still present", managedCluster.Name)
-	return autoImportSecret, true, nil
-}
-
-func (r *ReconcileManagedCluster) setConditionImport(managedCluster *clusterv1.ManagedCluster, errIn error, reason string) error {
-	newCondition := metav1.Condition{
-		Type:    ManagedClusterImportSucceeded,
-		Status:  metav1.ConditionTrue,
-		Message: "Import succeeded",
-		Reason:  "ManagedClusterImported",
-	}
-	if errIn != nil {
-		newCondition.Status = metav1.ConditionFalse
-		newCondition.Message = errIn.Error()
-		newCondition.Reason = "ManagedClusterNotImported"
-		if reason != "" {
-			newCondition.Message += ": " + reason
-		}
-	}
+func (r *ReconcileManagedCluster) ensureManagedClusterMetaObj(ctx context.Context, managedCluster *clusterv1.ManagedCluster) error {
 	patch := client.MergeFrom(managedCluster.DeepCopy())
-	meta.SetStatusCondition(&managedCluster.Status.Conditions, newCondition)
-	err := r.client.Status().Patch(context.TODO(), managedCluster, patch)
-	if err != nil {
+	modified := resourcemerge.BoolPtr(false)
+	msgs := []string{}
+
+	// ensure cluster name label
+	resourcemerge.MergeMap(modified, &managedCluster.Labels, map[string]string{clusterNameLabel: managedCluster.Name})
+	if *modified {
+		msgs = append(msgs, "cluster name label is added")
+	}
+
+	// ensure cluster create-via annotation
+	ensureCreateViaAnnotation(modified, managedCluster)
+	if *modified {
+		msgs = append(msgs, "created-via annotaion is added")
+	}
+
+	// ensure cluster import finalizer
+	helpers.AddManagedClusterFinalizer(modified, managedCluster, constants.ImportFinalizer)
+	if *modified {
+		msgs = append(msgs, "import finalizer is added")
+	}
+
+	if !*modified {
+		// no changed, return
+		return nil
+	}
+
+	// using patch method to avoid error: "the object has been modified; please apply your changes to the
+	// latest version and try again", see:
+	// https://github.com/kubernetes-sigs/controller-runtime/issues/1509
+	// https://github.com/kubernetes-sigs/controller-runtime/issues/741
+	if err := r.client.Patch(ctx, managedCluster, patch); err != nil {
 		return err
 	}
-	return errIn
+	r.recorder.Eventf("ManagedClusterMetaObjModified", "The managed cluster %s meta data is modified: %s",
+		managedCluster.Name, strings.Join(msgs, ","))
+	return nil
 }
 
-func filterFinalizers(managedCluster *clusterv1.ManagedCluster, finalizers []string) []string {
-	results := make([]string, 0)
-	clusterFinalizers := managedCluster.GetFinalizers()
-	for _, cf := range clusterFinalizers {
-		found := false
-		for _, f := range finalizers {
-			if cf == f {
-				found = true
-				break
-			}
-		}
-		if !found {
-			results = append(results, cf)
-		}
-	}
-	return results
-}
-
-func checkOffLine(managedCluster *clusterv1.ManagedCluster) bool {
-	for _, sc := range managedCluster.Status.Conditions {
-		if sc.Type == clusterv1.ManagedClusterConditionAvailable {
-			return sc.Status == metav1.ConditionUnknown || sc.Status == metav1.ConditionFalse
-		}
-	}
-	return true
-}
-
-func (r *ReconcileManagedCluster) deleteNamespace(namespaceName string) error {
+func (r *ReconcileManagedCluster) deleteManagedClusterNamespace(
+	ctx context.Context, managedCluster *clusterv1.ManagedCluster) error {
+	clusterName := managedCluster.Name
 	ns := &corev1.Namespace{}
-	err := r.client.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name: namespaceName,
-		},
-		ns,
-	)
+	err := r.client.Get(ctx, types.NamespacedName{Name: clusterName}, ns)
+	if errors.IsNotFound(err) {
+		return nil
+	}
 	if err != nil {
-		if errors.IsNotFound(err) {
-			log.Info("Namespace " + namespaceName + " not found")
-			return nil
-		}
-		log.Error(err, "Failed to get namespace")
 		return err
 	}
 	if ns.DeletionTimestamp != nil {
-		log.Info("Already in deletion")
+		log.Info(fmt.Sprintf("namespace %s is already in deletion", clusterName))
 		return nil
 	}
 
 	clusterDeployment := &hivev1.ClusterDeployment{}
-	err = r.client.Get(
-		context.TODO(),
-		types.NamespacedName{
-			Name:      namespaceName,
-			Namespace: namespaceName,
-		},
-		clusterDeployment,
-	)
-	tobeDeleted := false
+	err = r.client.Get(ctx, types.NamespacedName{Namespace: clusterName, Name: clusterName}, clusterDeployment)
+	if err == nil && clusterDeployment.DeletionTimestamp.IsZero() {
+		// there is a clusterdeployment in the managed cluster namespace and the clusterdeployment is not in deletion
+		// the managed cluster is detached, we need to keep the managed cluster namespace
+		r.recorder.Warningf("ManagedClusterNamespaceRemained", "There is a clusterdeployment in namespace %s", clusterName)
+		return nil
+	}
+	if !errors.IsNotFound(err) {
+		return err
+	}
+
+	pods := &corev1.PodList{}
+	if err := r.client.List(ctx, pods, client.InNamespace(clusterName)); err != nil {
+		return err
+	}
+	for _, pod := range pods.Items {
+		if !strings.HasPrefix(pod.Name, curatorJobPrefix) &&
+			!strings.HasPrefix(pod.Name, postHookJobPrefix) &&
+			!strings.HasPrefix(pod.Name, preHookJobPrefix) {
+			r.recorder.Warningf("ManagedClusterNamespaceRemained", "There are non curator pods in namespace %s", clusterName)
+			return nil
+		}
+	}
+
+	err = r.client.Delete(ctx, ns)
 	if err != nil {
-		if errors.IsNotFound(err) {
-			tobeDeleted = true
-		} else {
-			log.Error(err, "Failed to get cluster deployment")
-			return err
-		}
-	} else {
-		libgometav1.RemoveFinalizer(clusterDeployment, managedClusterFinalizer)
-		err = r.client.Update(context.TODO(), clusterDeployment)
-		if err != nil {
-			return err
-		}
-		return fmt.Errorf(
-			"can not delete namespace %s as ClusterDeployment %s still exist",
-			namespaceName,
-			namespaceName,
-		)
+		return err
 	}
 
-	if tobeDeleted {
-		pods := &corev1.PodList{}
-		err = r.client.List(context.TODO(), pods, client.InNamespace(namespaceName))
-		if err != nil {
-			return err
-		}
-		for _, pod := range pods.Items {
-			if !strings.HasPrefix(pod.Name, curatorJobPrefix) &&
-				!strings.HasPrefix(pod.Name, postHookJobPrefix) &&
-				!strings.HasPrefix(pod.Name, preHookJobPrefix) {
-				log.Info("Detected non curator pods, the namespace will be not deleted")
-				tobeDeleted = false
-				break
-			}
-		}
-	}
-
-	if tobeDeleted {
-		err = r.client.Delete(context.TODO(), ns)
-		if err != nil && !errors.IsNotFound(err) {
-			log.Error(err, "Failed to delete namespace")
-			return err
-		}
-	}
-
+	r.recorder.Eventf("ManagedClusterNamespaceDeleted", "The managed cluster %s namespace is deleted", managedCluster.Name)
 	return nil
 }
 
-// TODO add logic
-// the client is nil when we create the manifestwork,
-// at that time the managedcluster is already on line and
-// we can check the managedcluster to get the kubeversion
-//
-// the client is not nill when the cluster will be auto-imported and
-// we can check the managed cluster to find out the kubeversion version
-func isAPIExtensionV1(managedClusterClient client.Client,
-	managedCluster *clusterv1.ManagedCluster,
-	managedClusterKubeVersion string) (bool, error) {
-	var actualVersion string
-	// Search kubernetes version for creating manifestwork
-	if managedClusterClient == nil {
-		if managedCluster.Status.Version.Kubernetes == "" {
-			return false, fmt.Errorf("kubernetes version not yet available for managed cluster %s", managedCluster.GetName())
-		}
-		actualVersion = managedCluster.Status.Version.Kubernetes
-	} else {
-		actualVersion = managedClusterKubeVersion
+func ensureCreateViaAnnotation(modified *bool, cluster *clusterv1.ManagedCluster) {
+	createViaOtherAnnotation := map[string]string{constants.CreatedViaAnnotation: createdViaOther}
+	viaAnnotation, ok := cluster.Annotations[constants.CreatedViaAnnotation]
+	if !ok {
+		// no created-via annotation, set it with default annotation (other)
+		resourcemerge.MergeMap(modified, &cluster.Annotations, createViaOtherAnnotation)
+		return
 	}
-	klog.V(4).Infof("actual kubernetes version is %s", actualVersion)
-	isV1, err := v1APIExtensionMinVersion.Compare(actualVersion)
-	if err != nil {
-		return false, err
-	}
-	klog.V(4).Infof("isV1: %t", isV1 == -1)
-	return isV1 == -1, nil
 
+	// there is a created-via annotation and the annotation is not created by hive, we ensue that the
+	// created-via annotation is default annotation
+	if viaAnnotation != constants.CreatedViaAI &&
+		viaAnnotation != constants.CreatedViaHive &&
+		viaAnnotation != createdViaDiscovery {
+		resourcemerge.MergeMap(modified, &cluster.Annotations, createViaOtherAnnotation)
+	}
 }

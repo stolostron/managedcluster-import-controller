@@ -4,6 +4,7 @@
 package autoimport
 
 import (
+	"context"
 	"testing"
 
 	testinghelpers "github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers/testing"
@@ -13,10 +14,10 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -38,17 +39,17 @@ func TestReconcile(t *testing.T) {
 
 	cases := []struct {
 		name        string
-		objs        []runtime.Object
+		objs        []client.Object
 		expectedErr bool
 	}{
 		{
 			name:        "no cluster",
-			objs:        []runtime.Object{},
+			objs:        []client.Object{},
 			expectedErr: false,
 		},
 		{
 			name: "no auto-import-secret",
-			objs: []runtime.Object{
+			objs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
@@ -59,7 +60,7 @@ func TestReconcile(t *testing.T) {
 		},
 		{
 			name: "no import-secret",
-			objs: []runtime.Object{
+			objs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
@@ -76,7 +77,7 @@ func TestReconcile(t *testing.T) {
 		},
 		{
 			name: "import cluster with auto-import secret",
-			objs: []runtime.Object{
+			objs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
@@ -102,13 +103,12 @@ func TestReconcile(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			r := &ReconcileAutoImport{
-				//client:   fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).Build(),
-				client:   fake.NewFakeClientWithScheme(testscheme, c.objs...),
+				client:   fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).Build(),
 				recorder: eventstesting.NewTestingEventRecorder(t),
 			}
 
 			req := reconcile.Request{NamespacedName: types.NamespacedName{Namespace: "test"}}
-			_, err := r.Reconcile(req)
+			_, err := r.Reconcile(context.TODO(), req)
 			if c.expectedErr && err == nil {
 				t.Errorf("expected error, but failed")
 			}

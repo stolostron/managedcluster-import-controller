@@ -181,7 +181,7 @@ func AddManagedClusterFinalizer(modified *bool, managedCluster *clusterv1.Manage
 }
 
 // RemoveManagedClusterFinalizer remove a finalizer from a managed cluster
-func RemoveManagedClusterFinalizer(client client.Client, recorder events.Recorder,
+func RemoveManagedClusterFinalizer(ctx context.Context, runtimeClient client.Client, recorder events.Recorder,
 	managedCluster *clusterv1.ManagedCluster, finalizer string) error {
 	copiedFinalizers := []string{}
 	for i := range managedCluster.Finalizers {
@@ -195,8 +195,9 @@ func RemoveManagedClusterFinalizer(client client.Client, recorder events.Recorde
 		return nil
 	}
 
+	patch := client.MergeFrom(managedCluster.DeepCopy())
 	managedCluster.Finalizers = copiedFinalizers
-	if err := client.Update(context.TODO(), managedCluster); err != nil {
+	if err := runtimeClient.Patch(ctx, managedCluster, patch); err != nil {
 		return err
 	}
 
@@ -218,7 +219,7 @@ func UpdateManagedClusterStatus(client client.Client, recorder events.Recorder,
 	newStatus := oldStatus.DeepCopy()
 
 	meta.SetStatusCondition(&newStatus.Conditions, cond)
-	if equality.Semantic.DeepEqual(managedCluster.Status, newStatus) {
+	if equality.Semantic.DeepEqual(managedCluster.Status.Conditions, newStatus.Conditions) {
 		return nil
 	}
 
@@ -260,17 +261,14 @@ func ImportManagedClusterFromSecret(client *ClientHolder, restMapper meta.RESTMa
 		return err
 	}
 
-	objs := []runtime.Object{}
-	objs = append(objs, mustCreateObject(importSecret.Data[constants.ImportSecretCRDSV1beta1YamlKey]))
-
-	_, err := restMapper.RESTMapping(crdGroupKind, "v1")
-	if err == nil {
-		// the two versions of the crd are added to avoid the unexpected removal during the work-agent upgrade.
-		// we will remove the v1beta1 in a future z-release. see: https://github.com/open-cluster-management/backlog/issues/13631
-		klog.V(4).Infof("crd v1 is supported")
-		objs = append(objs, mustCreateObject(importSecret.Data[constants.ImportSecretCRDSV1YamlKey]))
+	crdsKey := constants.ImportSecretCRDSV1YamlKey
+	if _, err := restMapper.RESTMapping(crdGroupKind, "v1"); err != nil {
+		klog.Infof("crd v1 is not supported, deploy v1beta1")
+		crdsKey = constants.ImportSecretCRDSV1beta1YamlKey
 	}
 
+	objs := []runtime.Object{}
+	objs = append(objs, mustCreateObject(importSecret.Data[crdsKey]))
 	for _, yaml := range SplitYamls(importSecret.Data[constants.ImportSecretImportYamlKey]) {
 		objs = append(objs, mustCreateObject(yaml))
 	}

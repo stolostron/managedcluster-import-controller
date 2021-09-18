@@ -11,12 +11,10 @@ if ! whoami &>/dev/null; then
   fi
 fi
 
-FILENAME=$HOSTNAME-$(basename $OPERATOR)-`date +%s%N`.out
-FILEPATH=/tmp/coverage/$FILENAME
-mkdir -p /tmp/coverage
+FILEPATH=/test-coverage/e2e-test-coverage.out
 
 ${OPERATOR} -test.run "^TestRunMain$" -test.coverprofile=$FILEPATH $@ & PID=$!
 
-trap_with_arg func_trap 15 $PID $FILENAME $FILEPATH
+trap_with_arg func_trap 15 $PID $FILEPATH
 
 wait $PID

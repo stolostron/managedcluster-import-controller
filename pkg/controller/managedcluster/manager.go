@@ -1,13 +1,11 @@
 // Copyright (c) Red Hat, Inc.
 // Copyright Contributors to the Open Cluster Management project
 
-package autoimport
+package managedcluster
 
 import (
-	"strings"
-
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -21,9 +19,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const controllerName = "autoimport-controller"
+const controllerName = "managedcluster-controller"
 
-// Add creates a new autoimport controller and adds it to the Manager.
+// Add creates a new managedcluster controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder) (string, error) {
 	return controllerName, add(mgr, newReconciler(clientHolder))
@@ -31,7 +29,7 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder) (string, error
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(clientHolder *helpers.ClientHolder) reconcile.Reconciler {
-	return &ReconcileAutoImport{
+	return &ReconcileManagedCluster{
 		client:   clientHolder.RuntimeClient,
 		recorder: helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
 	}
@@ -48,35 +46,33 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	if err := c.Watch(
-		&source.Kind{Type: &corev1.Secret{}},
+		&source.Kind{Type: &clusterv1.ManagedCluster{}},
+		&handler.EnqueueRequestForObject{},
+		predicate.Predicate(predicate.Funcs{
+			GenericFunc: func(e event.GenericEvent) bool { return false },
+			DeleteFunc:  func(e event.DeleteEvent) bool { return true },
+			CreateFunc:  func(e event.CreateEvent) bool { return true },
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				// only handle the finalizers/labels/annotations changes
+				return !equality.Semantic.DeepEqual(e.ObjectOld.GetFinalizers(), e.ObjectNew.GetFinalizers()) ||
+					!equality.Semantic.DeepEqual(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels()) ||
+					!equality.Semantic.DeepEqual(e.ObjectOld.GetAnnotations(), e.ObjectNew.GetAnnotations())
+			},
+		}),
+	); err != nil {
+		return err
+	}
+
+	if err := c.Watch(
+		&source.Kind{Type: &corev1.Namespace{}},
 		&handler.EnqueueRequestForObject{},
 		predicate.Predicate(predicate.Funcs{
 			GenericFunc: func(e event.GenericEvent) bool { return false },
 			DeleteFunc:  func(e event.DeleteEvent) bool { return false },
-			CreateFunc: func(e event.CreateEvent) bool {
-				secretName := e.Object.GetName()
-				// only handle the auto import secret and managed cluster import secret
-				if secretName == constants.AutoImportSecretName ||
-					strings.HasSuffix(secretName, constants.ImportSecretNameSuffix) {
-					return true
-				}
-
-				return false
-			},
+			CreateFunc:  func(e event.CreateEvent) bool { return true },
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				secretName := e.ObjectNew.GetName()
-				// only handle the auto import secret and managed cluster import secret
-				if secretName != constants.AutoImportSecretName &&
-					!strings.HasSuffix(secretName, constants.ImportSecretNameSuffix) {
-					return false
-				}
-
-				new, okNew := e.ObjectNew.(*corev1.Secret)
-				old, okOld := e.ObjectOld.(*corev1.Secret)
-				if okNew && okOld {
-					return !equality.Semantic.DeepEqual(old.Data, new.Data)
-				}
-				return false
+				// only handle the labels chanages
+				return !equality.Semantic.DeepEqual(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels())
 			},
 		}),
 	); err != nil {

@@ -61,10 +61,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			DeleteFunc:  func(e event.DeleteEvent) bool { return false },
 			CreateFunc: func(e event.CreateEvent) bool {
 				// only handles the import secret
-				return strings.HasSuffix(e.Meta.GetName(), constants.ImportSecretNameSuffix)
+				return strings.HasSuffix(e.Object.GetName(), constants.ImportSecretNameSuffix)
 			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				secretName := e.MetaNew.GetName()
+				secretName := e.ObjectNew.GetName()
 				// only handles the import secret
 				if !strings.HasSuffix(secretName, constants.ImportSecretNameSuffix) {
 					return false
@@ -92,8 +92,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			CreateFunc:  func(e event.CreateEvent) bool { return false },
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				// only handle the label changed and new self managed label is true
-				newLabels := e.MetaNew.GetLabels()
-				return !equality.Semantic.DeepEqual(e.MetaOld.GetLabels(), newLabels) &&
+				newLabels := e.ObjectNew.GetLabels()
+				return !equality.Semantic.DeepEqual(e.ObjectOld.GetLabels(), newLabels) &&
 					strings.EqualFold(newLabels[constants.SelfManagedLabel], "true")
 			},
 		}),

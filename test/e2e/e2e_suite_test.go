@@ -94,6 +94,15 @@ var _ = ginkgo.BeforeSuite(func() {
 })
 
 // asserters
+func assertManagedClusterImportSecretCreated(clusterName, createdVia string) {
+	assertManagedClusterFinalizer(clusterName, "managedcluster-import-controller.open-cluster-management.io/cleanup")
+	assertManagedClusterCreatedViaAnntation(clusterName, createdVia)
+	assertManagedClusterNameLabel(clusterName)
+	assertManagedClusterNamespaceLabel(clusterName)
+	assertManagedClusterRBAC(clusterName)
+	assertManagedClusterImportSecret(clusterName)
+}
+
 func assertManagedClusterFinalizer(clusterName, expected string) {
 	ginkgo.By(fmt.Sprintf("Managed cluster %s should has expected finalizer: %s", clusterName, expected), func() {
 		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
@@ -248,7 +257,7 @@ func assertManagedClusterDeleted(clusterName string) {
 func assertManagedClusterDeletedFromHub(clusterName string) {
 	start := time.Now()
 	ginkgo.By("Should delete the managed cluster", func() {
-		gomega.Expect(wait.Poll(1*time.Second, 10*time.Minute, func() (bool, error) {
+		gomega.Expect(wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
 			_, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
 				return true, nil
@@ -261,7 +270,7 @@ func assertManagedClusterDeletedFromHub(clusterName string) {
 
 	start = time.Now()
 	ginkgo.By("Should delete the managed cluster namespace", func() {
-		gomega.Expect(wait.Poll(1*time.Second, 10*time.Minute, func() (bool, error) {
+		gomega.Expect(wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
 			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
 				return true, nil
@@ -276,7 +285,7 @@ func assertManagedClusterDeletedFromHub(clusterName string) {
 func assertManagedClusterDeletedFromSpoke() {
 	start := time.Now()
 	ginkgo.By("Should delete the open-cluster-management-agent namespace", func() {
-		gomega.Expect(wait.Poll(1*time.Second, 10*time.Minute, func() (bool, error) {
+		gomega.Expect(wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
 			klusterletNamespace := "open-cluster-management-agent"
 			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), klusterletNamespace, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
@@ -289,7 +298,7 @@ func assertManagedClusterDeletedFromSpoke() {
 
 	start = time.Now()
 	ginkgo.By("Should delete the klusterlet crd", func() {
-		gomega.Expect(wait.Poll(1*time.Second, 10*time.Minute, func() (bool, error) {
+		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
 			klusterletCRDName := "klusterlets.operator.open-cluster-management.io"
 			_, err := crdClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), klusterletCRDName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
@@ -359,6 +368,9 @@ func assertManagedClusterManifestWorks(clusterName string) {
 		})).ToNot(gomega.HaveOccurred())
 		util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
 	})
+
+	util.Logf("wait for applied manifest works ready to avoid delete prematurely (10s)")
+	time.Sleep(10 * time.Second)
 }
 
 func assertAutoImportSecretDeleted(managedClusterName string) {

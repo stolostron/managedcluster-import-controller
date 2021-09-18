@@ -47,9 +47,8 @@ var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", fu
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 		})
 
-		assertManagedClusterCreatedViaAnntation(managedClusterName, "hive")
+		assertManagedClusterImportSecretCreated(managedClusterName, "hive")
 		assertManagedClusterImportSecretApplied(managedClusterName)
-
 		assertManagedClusterAvailable(managedClusterName)
 		assertManagedClusterManifestWorks(managedClusterName)
 	})
@@ -86,13 +85,11 @@ var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", fu
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 		})
 
-		//TODO: delete the clusterdeployment
 		ginkgo.By(fmt.Sprintf("Delete the clusterdeployment %s", managedClusterName), func() {
 			err := util.DeleteClusterDeployment(hubDynamicClient, managedClusterName)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 		})
 
-		//TODO: assert the managed cluster namespace is deleted
 		ginkgo.By("Should delete the managed cluster namespace", func() {
 			gomega.Expect(wait.Poll(1*time.Second, 10*time.Minute, func() (bool, error) {
 				_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), managedClusterName, metav1.GetOptions{})

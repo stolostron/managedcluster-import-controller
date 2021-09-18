@@ -12,15 +12,15 @@ import (
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
 	imgregistryv1alpha1 "github.com/open-cluster-management/multicloud-operators-foundation/pkg/apis/imageregistry/v1alpha1"
-	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+
+	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 
 	configv1 "github.com/openshift/api/config/v1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	kubefake "k8s.io/client-go/kubernetes/fake"
@@ -50,13 +50,13 @@ func init() {
 func TestReconcile(t *testing.T) {
 	cases := []struct {
 		name         string
-		runtimeObjs  []runtime.Object
+		runtimeObjs  []runtimeclient.Object
 		request      reconcile.Request
 		validateFunc func(t *testing.T, client runtimeclient.Client, kubeClient kubernetes.Interface)
 	}{
 		{
 			name:        "no clusters",
-			runtimeObjs: []runtime.Object{},
+			runtimeObjs: []runtimeclient.Object{},
 			request: reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: "test",
@@ -68,7 +68,7 @@ func TestReconcile(t *testing.T) {
 		},
 		{
 			name: "prepare cluster",
-			runtimeObjs: []runtime.Object{
+			runtimeObjs: []runtimeclient.Object{
 				&corev1.Namespace{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
@@ -157,13 +157,13 @@ func TestReconcile(t *testing.T) {
 			r := &ReconcileImportConfig{
 				clientHolder: &helpers.ClientHolder{
 					KubeClient:    kubefake.NewSimpleClientset(),
-					RuntimeClient: fake.NewFakeClientWithScheme(testscheme, c.runtimeObjs...),
+					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.runtimeObjs...).Build(),
 				},
 				scheme:   testscheme,
 				recorder: eventstesting.NewTestingEventRecorder(t),
 			}
 
-			_, err := r.Reconcile(c.request)
+			_, err := r.Reconcile(context.TODO(), c.request)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}

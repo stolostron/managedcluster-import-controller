@@ -77,17 +77,17 @@ type ReconcileImportConfig struct {
 	recorder     events.Recorder
 }
 
+// blank assignment to verify that ReconcileImportConfig implements reconcile.Reconciler
+var _ reconcile.Reconciler = &ReconcileImportConfig{}
+
 // Reconcile one managed cluster to prepare its import secret.
 //
 // Note: The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-//func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-func (r *ReconcileImportConfig) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Name", request.Name)
 	reqLogger.Info("Reconciling managed cluster import secret")
 
-	// TODO: remove this after update the controller-runtime
-	ctx := context.TODO()
 	managedCluster := &clusterv1.ManagedCluster{}
 	err := r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: request.Name}, managedCluster)
 	if errors.IsNotFound(err) {

@@ -8,24 +8,38 @@
 # Copyright Contributors to the Open Cluster Management project
 ###############################################################################
 
-_script_dir=$(dirname "$0")
-if ! which patter > /dev/null; then      echo "Installing patter ..."; pushd $(mktemp -d) && GOSUMDB=off go get -u github.com/apg/patter && popd; fi
-if ! which gocovmerge > /dev/null; then  echo "Installing gocovmerge..."; pushd $(mktemp -d) && GOSUMDB=off go get -u github.com/wadey/gocovmerge && popd; fi
+set -o errexit
+set -o nounset
 
-export GOFLAGS=""
-mkdir -p test/unit/coverage
-echo 'mode: atomic' > test/unit/coverage/cover.out
-echo '' > test/unit/coverage/cover.tmp
-echo -e "${GOPACKAGES// /\\n}" | xargs -n1 -I{} $_script_dir/test-package.sh {} ${GOPACKAGES// /,}
+build_dir="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
+repo_dir="$(dirname "$build_dir")"
+pkg_dir="${repo_dir}/pkg/..."
+cache_dir="${repo_dir}/_output/unit/cache"
+coverage_dir="${repo_dir}/_output/unit/coverage"
 
-if [ ! -f test/unit/coverage/cover.out ]; then
-    echo "Coverage file test/unit/coverage/cover.out does not exist"
-    exit 0
+mkdir -p ${cache_dir}
+mkdir -p ${coverage_dir}
+
+# required by kubebuilder-envtest
+export XDG_CACHE_HOME="${cache_dir}"
+
+export KUBEBUILDER_ASSETS="${repo_dir}/_output/kubebuilder/bin"
+
+k8s_version=1.16.4
+kubebuilder="kubebuilder-tools-${k8s_version}-${GOHOSTOS}-${GOHOSTARCH}.tar.gz"
+kubebuilder_path="${repo_dir}/_output/${kubebuilder}"
+
+if [ ! -d "${KUBEBUILDER_ASSETS}" ]; then
+    echo "Downloading kubebuilder ${k8s_version} into $KUBEBUILDER_ASSETS"
+    mkdir -p "${KUBEBUILDER_ASSETS}"
+	curl -s -f -L "https://storage.googleapis.com/kubebuilder-tools/${kubebuilder}" -o "${kubebuilder_path}"
+	tar -C "${KUBEBUILDER_ASSETS}" --strip-components=2 -zvxf "${kubebuilder_path}"
 fi
 
-COVERAGE=$(go tool cover -func=test/unit/coverage/cover.out | grep "total:" | awk '{ print $3 }' | sed 's/[][()><%]/ /g')
-echo "-------------------------------------------------------------------------"
-echo "TOTAL COVERAGE IS ${COVERAGE}%"
-echo "-------------------------------------------------------------------------"
+echo "Running unit test in $pkg_dir"
+go test -cover -covermode=atomic -coverprofile=${coverage_dir}/cover.out ${pkg_dir}
 
-go tool cover -html=test/unit/coverage/cover.out -o=test/unit/coverage/cover.html
+COVERAGE=$(go tool cover -func=_output/unit/coverage/cover.out | grep "total:" | awk '{ print $3 }')
+echo "-------------------------------------------------------------------------"
+echo "TOTAL COVERAGE IS ${COVERAGE}"
+echo "-------------------------------------------------------------------------"

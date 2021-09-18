@@ -10,76 +10,45 @@ package controller
 
 import (
 	"fmt"
-	"reflect"
 
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/client-go/discovery"
-	"k8s.io/client-go/rest"
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/autoimport"
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/clusterdeployment"
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/csr"
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/importconfig"
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/managedcluster"
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/manifestwork"
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/selfmanagedcluster"
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
+
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
-var log = logf.Log.WithName("controller")
+var log = logf.Log.WithName("controllers")
 
-//addToManager contains the reconciler functions and the mandatory GV for a given controller
-type addToManager struct {
-	function               func(manager.Manager) error
-	MandatoryGroupVersions []schema.GroupVersion
+type AddToManagerFunc func(manager.Manager, *helpers.ClientHolder) (string, error)
+
+// AddToManagerFuncs is a list of functions to add all controllers to the manager
+var AddToManagerFuncs = []AddToManagerFunc{
+	csr.Add,
+	managedcluster.Add,
+	importconfig.Add,
+	manifestwork.Add,
+	selfmanagedcluster.Add,
+	autoimport.Add,
+	clusterdeployment.Add,
 }
 
-// AddToManagerFuncs is a list of functions to add all Controllers to the Manager and the mandatory GVs
-var AddToManagerFuncs []addToManager
-
-// AddToManager adds all Controllers which have all their mandatory GVs installed to the Manager
-func AddToManager(m manager.Manager, missingGVS []schema.GroupVersion) error {
-	for _, a := range AddToManagerFuncs {
-		if mandatoryGVSatisfied(a, missingGVS) {
-			log.Info(fmt.Sprintf("Add to manager %s:", a.MandatoryGroupVersions))
-			if err := a.function(m); err != nil {
-				return err
-			}
+// AddToManager adds all controllers to the manager
+func AddToManager(manager manager.Manager, clientHolder *helpers.ClientHolder) error {
+	for _, addFunc := range AddToManagerFuncs {
+		name, err := addFunc(manager, clientHolder)
+		if err != nil {
+			return err
 		}
+
+		log.Info(fmt.Sprintf("Add controller %s to manager", name))
 	}
 
 	return nil
-}
-
-//mandatoryGVSatisfied Check if the mandatory GVs for a controller are not missing.
-func mandatoryGVSatisfied(a addToManager, missingGVS []schema.GroupVersion) bool {
-	if a.MandatoryGroupVersions == nil ||
-		len(a.MandatoryGroupVersions) == 0 {
-		return true
-	}
-	for _, mandatoryGV := range a.MandatoryGroupVersions {
-		for _, missingGV := range missingGVS {
-			if reflect.DeepEqual(mandatoryGV, missingGV) {
-				return false
-			}
-		}
-	}
-
-	return true
-}
-
-//GetMissingGVS gets the missing GVs
-func GetMissingGVS(cfg *rest.Config) (missingGVS []schema.GroupVersion, err error) {
-	log.Info("Get missing GVS")
-
-	missingGVS = make([]schema.GroupVersion, 0)
-	c, err := discovery.NewDiscoveryClientForConfig(cfg)
-	if err != nil {
-		return missingGVS, err
-	}
-
-	for _, atmf := range AddToManagerFuncs {
-		for _, gv := range atmf.MandatoryGroupVersions {
-			err := discovery.ServerSupportsVersion(c, gv)
-			if err != nil {
-				log.Info(fmt.Sprintf("%s-%s is missing", gv.Group, gv.Version))
-				missingGVS = append(missingGVS, gv)
-			}
-		}
-	}
-
-	return missingGVS, nil
 }

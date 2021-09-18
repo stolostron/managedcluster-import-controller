@@ -50,7 +50,7 @@ func TestGetKubeAPIServerAddress(t *testing.T) {
 		{
 			name: "no cluster",
 			args: args{
-				client: fake.NewFakeClientWithScheme(testscheme, []runtime.Object{}...),
+				client: fake.NewClientBuilder().WithScheme(testscheme).Build(),
 			},
 			want:    "",
 			wantErr: true,
@@ -58,7 +58,7 @@ func TestGetKubeAPIServerAddress(t *testing.T) {
 		{
 			name: "no error",
 			args: args{
-				client: fake.NewFakeClientWithScheme(testscheme, infraConfig),
+				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(infraConfig).Build(),
 			},
 			want:    "http://127.0.0.1:6443",
 			wantErr: false,
@@ -107,7 +107,7 @@ func TestGetKubeAPIServerSecretName(t *testing.T) {
 		{
 			name: "not found apiserver",
 			args: args{
-				client: fake.NewFakeClientWithScheme(testscheme, []runtime.Object{}...),
+				client: fake.NewClientBuilder().WithScheme(testscheme).Build(),
 				name:   "my-secret-name",
 			},
 			want:    "",
@@ -116,7 +116,7 @@ func TestGetKubeAPIServerSecretName(t *testing.T) {
 		{
 			name: "no name matches",
 			args: args{
-				client: fake.NewFakeClientWithScheme(testscheme, apiserverConfig),
+				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(apiserverConfig).Build(),
 				name:   "fake-name",
 			},
 			want:    "",
@@ -125,7 +125,7 @@ func TestGetKubeAPIServerSecretName(t *testing.T) {
 		{
 			name: "success",
 			args: args{
-				client: fake.NewFakeClientWithScheme(testscheme, apiserverConfig),
+				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(apiserverConfig).Build(),
 				name:   "my-dns-name.com",
 			},
 			want:    "my-secret-name",
@@ -190,7 +190,7 @@ func TestGetKubeAPIServerCertificate(t *testing.T) {
 		{
 			name: "no secret",
 			args: args{
-				client: fake.NewFakeClientWithScheme(testscheme, []runtime.Object{}...),
+				client: fake.NewClientBuilder().WithScheme(testscheme).Build(),
 				name:   "test-secret",
 			},
 			want:    nil,
@@ -199,7 +199,7 @@ func TestGetKubeAPIServerCertificate(t *testing.T) {
 		{
 			name: "wrong type",
 			args: args{
-				client: fake.NewFakeClientWithScheme(testscheme, secretWrongType),
+				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(secretWrongType).Build(),
 				name:   "test-secret",
 			},
 			want:    nil,
@@ -208,7 +208,7 @@ func TestGetKubeAPIServerCertificate(t *testing.T) {
 		{
 			name: "empty data",
 			args: args{
-				client: fake.NewFakeClientWithScheme(testscheme, secretNoData),
+				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(secretNoData).Build(),
 				name:   "test-secret",
 			},
 			want:    nil,
@@ -217,7 +217,7 @@ func TestGetKubeAPIServerCertificate(t *testing.T) {
 		{
 			name: "success",
 			args: args{
-				client: fake.NewFakeClientWithScheme(testscheme, secretCorrect),
+				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(secretCorrect).Build(),
 				name:   "test-secret",
 			},
 			want:    []byte("fake-cert-data"),
@@ -259,7 +259,7 @@ func TestCheckIsIBMCloud(t *testing.T) {
 		{
 			name: "is normal ocp",
 			args: args{
-				client: fake.NewFakeClientWithScheme(testscheme, []runtime.Object{nodeOther}...),
+				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(nodeOther).Build(),
 				name:   "test-secret",
 			},
 			want:    false,
@@ -268,7 +268,7 @@ func TestCheckIsIBMCloud(t *testing.T) {
 		{
 			name: "is ibm",
 			args: args{
-				client: fake.NewFakeClientWithScheme(testscheme, []runtime.Object{nodeIBM}...),
+				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(nodeIBM).Build(),
 				name:   "test-secret",
 			},
 			want:    true,
@@ -389,7 +389,7 @@ func TestCreateKubeconfigData(t *testing.T) {
 		{
 			name: "use default certificate",
 			args: args{
-				client: fake.NewFakeClientWithScheme(testscheme, testInfraConfigIP),
+				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraConfigIP).Build(),
 				secret: testTokenSecret,
 			},
 			want: wantData{
@@ -403,7 +403,7 @@ func TestCreateKubeconfigData(t *testing.T) {
 		{
 			name: "use named certificate",
 			args: args{
-				client: fake.NewFakeClientWithScheme(testscheme, testInfraConfigDNS, apiserverConfig, secretCorrect),
+				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraConfigDNS, apiserverConfig, secretCorrect).Build(),
 				secret: testTokenSecret,
 			},
 			want: wantData{
@@ -417,7 +417,7 @@ func TestCreateKubeconfigData(t *testing.T) {
 		{
 			name: "use default when cert not found",
 			args: args{
-				client: fake.NewFakeClientWithScheme(testscheme, testInfraConfigDNS, apiserverConfig),
+				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraConfigDNS, apiserverConfig).Build(),
 				secret: testTokenSecret,
 			},
 			want: wantData{
@@ -431,7 +431,7 @@ func TestCreateKubeconfigData(t *testing.T) {
 		{
 			name: "return error cert malformat",
 			args: args{
-				client: fake.NewFakeClientWithScheme(testscheme, testInfraConfigDNS, apiserverConfig, secretWrong),
+				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraConfigDNS, apiserverConfig, secretWrong).Build(),
 				secret: testTokenSecret,
 			},
 			want: wantData{
@@ -445,11 +445,11 @@ func TestCreateKubeconfigData(t *testing.T) {
 		{
 			name: "roks failed to connect return error",
 			args: args{
-				client: fake.NewFakeClientWithScheme(testscheme, testInfraServerStopped, apiserverConfig, &corev1.Node{
+				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraServerStopped, apiserverConfig, &corev1.Node{
 					Spec: corev1.NodeSpec{
 						ProviderID: "ibm",
 					},
-				}),
+				}).Build(),
 				secret: testTokenSecret,
 			},
 			want: wantData{
@@ -463,11 +463,11 @@ func TestCreateKubeconfigData(t *testing.T) {
 		{
 			name: "roks with no valid cert use default",
 			args: args{
-				client: fake.NewFakeClientWithScheme(testscheme, testInfraServerTLS, apiserverConfig, &corev1.Node{
+				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraServerTLS, apiserverConfig, &corev1.Node{
 					Spec: corev1.NodeSpec{
 						ProviderID: "ibm",
 					},
-				}),
+				}).Build(),
 				secret: testTokenSecret,
 			},
 			want: wantData{
@@ -616,12 +616,12 @@ func TestGetValidCertificatesFromURL(t *testing.T) {
 func TestGetImagePullSecret(t *testing.T) {
 	cases := []struct {
 		name           string
-		clientObjs     []runtime.Object
+		clientObjs     []client.Object
 		managedCluster *clusterv1.ManagedCluster
 	}{
 		{
 			name: "no registry",
-			clientObjs: []runtime.Object{
+			clientObjs: []client.Object{
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
@@ -641,7 +641,7 @@ func TestGetImagePullSecret(t *testing.T) {
 		},
 		{
 			name: "has registry",
-			clientObjs: []runtime.Object{
+			clientObjs: []client.Object{
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
@@ -677,7 +677,7 @@ func TestGetImagePullSecret(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			fakeClient := fake.NewFakeClientWithScheme(testscheme, c.clientObjs...)
+			fakeClient := fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.clientObjs...).Build()
 			_, _, err := getImagePullSecret(fakeClient, c.managedCluster)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)

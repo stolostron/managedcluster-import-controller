@@ -18,10 +18,12 @@ spec:
         app: klusterlet
     spec:
       serviceAccountName: klusterlet
+{{- if .NodeSelector }}
       nodeSelector:
       {{- range $key, $value := .NodeSelector }}
-        {{ $key }}: {{ $value }}
+        "{{ $key }}": "{{ $value }}"
       {{- end }}
+{{- end }}
       tolerations:
         - effect: NoSchedule
           key: node-role.kubernetes.io/infra
@@ -29,7 +31,7 @@ spec:
       containers:
       - name: klusterlet
         image: {{ .RegistrationOperatorImage }}
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         args:
           - "/registration-operator"
           - "klusterlet"

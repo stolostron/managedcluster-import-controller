@@ -7,18 +7,18 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
+	"github.com/openshift/library-go/pkg/operator/events"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+
+	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/kubernetes"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	certificatesv1 "k8s.io/api/certificates/v1"
 )
 
 const (
@@ -27,11 +27,6 @@ const (
 )
 
 var log = logf.Log.WithName("controller_csr")
-
-/**
-* USER ACTION REQUIRED: This is a scaffold file intended for the user to modify with their own Controller
-* business logic.  Delete these comments after modifying this file.*
- */
 
 func getClusterName(csr *certificatesv1.CertificateSigningRequest) (clusterName string) {
 	for label, v := range csr.GetObjectMeta().GetLabels() {
@@ -65,73 +60,74 @@ func csrPredicate(csr *certificatesv1.CertificateSigningRequest) bool {
 		validUsername(csr, clusterName)
 }
 
+// ReconcileCSR reconciles the managed cluster CSR object
+type ReconcileCSR struct {
+	clientHolder *helpers.ClientHolder
+	recorder     events.Recorder
+}
+
 // blank assignment to verify that ReconcileCSR implements reconcile.Reconciler
 var _ reconcile.Reconciler = &ReconcileCSR{}
-
-// ReconcileCSR reconciles a ReconcileCSR object
-type ReconcileCSR struct {
-	// This client, initialized using mgr.Client() above, is a split client
-	// that reads objects from the cache and writes to the apiserver
-	client     client.Client
-	kubeClient kubernetes.Interface
-	scheme     *runtime.Scheme
-}
 
 // Reconcile reads that state of the csr for a ReconcileCSR object and makes changes based on the state read
 // and what is in the CertificateSigningRequest.Spec
 // Note:
 // The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileCSR) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Request.Namespace", request.Namespace, "Request.Name", request.Name)
+func (r *ReconcileCSR) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+	reqLogger := log.WithValues("Request.Name", request.Name)
 	reqLogger.Info("Reconciling CSR")
 
-	// Fetch the CertificateSigningRequest instance
-	instance := &certificatesv1.CertificateSigningRequest{}
+	csrReq := r.clientHolder.KubeClient.CertificatesV1().CertificateSigningRequests()
 
-	if err := r.client.Get(context.TODO(), request.NamespacedName, instance); err != nil {
-		if errors.IsNotFound(err) {
-			reqLogger.Info("CSR ", instance.Name, " not found")
-			// Request object not found, could have been deleted after reconcile request.
-			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
-			// Return and don't requeue
-			return reconcile.Result{}, nil
-		}
-		// Error reading the object - requeue the request.
+	csr, err := csrReq.Get(ctx, request.Name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		return reconcile.Result{}, nil
+	}
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	if isCSRInTerminalState(&csr.Status) {
+		return reconcile.Result{}, nil
+	}
+
+	clusterName := getClusterName(csr)
+	cluster := clusterv1.ManagedCluster{}
+	err = r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: clusterName}, &cluster)
+	if errors.IsNotFound(err) {
+		// no managed cluster, do nothing.
+		return reconcile.Result{}, nil
+	}
+	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	if instance.DeletionTimestamp != nil {
-		reqLogger.Info("CSR ", instance.Name, " has deletiontimestamp set")
-		return reconcile.Result{}, nil
-	}
-
-	clusterName := getClusterName(instance)
-
-	cluster := clusterv1.ManagedCluster{}
-	err := r.client.Get(context.TODO(), types.NamespacedName{Name: clusterName}, &cluster)
-	if err != nil {
-		reqLogger.Info("Warning", "error", err.Error())
-		return reconcile.Result{}, nil
-	}
-
-	reqLogger.Info("Approving CSR", "name", instance.Name)
-	if instance.Status.Conditions == nil {
-		instance.Status.Conditions = make([]certificatesv1.CertificateSigningRequestCondition, 0)
-	}
-
-	instance.Status.Conditions = append(instance.Status.Conditions, certificatesv1.CertificateSigningRequestCondition{
+	reqLogger.Info("Approving CSR")
+	csr = csr.DeepCopy()
+	csr.Status.Conditions = append(csr.Status.Conditions, certificatesv1.CertificateSigningRequestCondition{
 		Type:           certificatesv1.CertificateApproved,
 		Status:         corev1.ConditionTrue,
 		Reason:         "AutoApprovedByCSRController",
 		Message:        "The managedcluster-import-controller auto approval automatically approved this CSR",
 		LastUpdateTime: metav1.Now(),
 	})
-
-	signingRequest := r.kubeClient.CertificatesV1().CertificateSigningRequests()
-	if _, err := signingRequest.UpdateApproval(context.TODO(), instance.Name, instance, metav1.UpdateOptions{}); err != nil {
+	if _, err := csrReq.UpdateApproval(ctx, csr.Name, csr, metav1.UpdateOptions{}); err != nil {
 		return reconcile.Result{}, err
 	}
 
+	r.recorder.Eventf("ManagedClusterCSRAutoApproved", "managed cluster csr %q is auto approved by import controller", csr.Name)
 	return reconcile.Result{}, nil
+}
+
+// check whether a CSR is in terminal state
+func isCSRInTerminalState(status *certificatesv1.CertificateSigningRequestStatus) bool {
+	for _, c := range status.Conditions {
+		if c.Type == certificatesv1.CertificateApproved {
+			return true
+		}
+		if c.Type == certificatesv1.CertificateDenied {
+			return true
+		}
+	}
+	return false
 }

@@ -36,17 +36,18 @@ type ReconcileClusterDeployment struct {
 	recorder events.Recorder
 }
 
+// blank assignment to verify that ReconcileClusterDeployment implements reconcile.Reconciler
+var _ reconcile.Reconciler = &ReconcileClusterDeployment{}
+
 // Reconcile the clusterdeployment that is in the managed cluster namespace to import the managed cluster.
 //
 // Note: The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-//func (r *ReconcileClusterDeployment) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileClusterDeployment) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Name", request.Name)
 	reqLogger.Info("Reconciling clusterdeployment")
 
 	clusterName := request.Name
-	ctx := context.TODO()
 
 	clusterDeployment := &hivev1.ClusterDeployment{}
 	err := r.client.Get(ctx, types.NamespacedName{Name: clusterName, Namespace: clusterName}, clusterDeployment)
@@ -58,8 +59,8 @@ func (r *ReconcileClusterDeployment) Reconcile(request reconcile.Request) (recon
 	}
 
 	if !clusterDeployment.DeletionTimestamp.IsZero() {
-		// clusterdeployment is deleting, its managed cluster may already be detached (the managed cluster has been deleted,
-		// but the namespace is remained), if its managed cluster cannot be found, we cleanup the clusterdepoymnet namespace
+		// the clusterdeployment is deleting, its managed cluster may already be detached (the managed cluster has been deleted,
+		// but the namespace is remained), if it has import finalizer, we remove its namespace
 		return reconcile.Result{}, r.removeImportFinalizer(ctx, clusterDeployment)
 	}
 
@@ -187,21 +188,28 @@ func (r *ReconcileClusterDeployment) addClusterImportFinalizer(
 }
 
 func (r *ReconcileClusterDeployment) removeImportFinalizer(ctx context.Context, clusterDeployment *hivev1.ClusterDeployment) error {
-	copiedFinalizers := []string{}
-	for i := range clusterDeployment.Finalizers {
-		if clusterDeployment.Finalizers[i] == constants.ImportFinalizer {
-			continue
+	hasImportFinalizer := false
+
+	for _, finalizer := range clusterDeployment.Finalizers {
+		if finalizer == constants.ImportFinalizer {
+			hasImportFinalizer = true
+			break
 		}
-		copiedFinalizers = append(copiedFinalizers, clusterDeployment.Finalizers[i])
 	}
 
-	if len(clusterDeployment.Finalizers) == len(copiedFinalizers) {
+	if !hasImportFinalizer {
+		// the clusterdeployment does not have import finalizer, ignore it
+		log.Info(fmt.Sprintf("the clusterDeployment %s does not have import finalizer, skip it", clusterDeployment.Name))
 		return nil
 	}
 
-	clusterDeployment.Finalizers = copiedFinalizers
+	if len(clusterDeployment.Finalizers) != 1 {
+		// the clusterdeployment has other finalizers, wait hive to remove them
+		log.Info(fmt.Sprintf("wait hive to remove the finalizers from the clusterdeployment %s", clusterDeployment.Name))
+		return nil
+	}
 
-	// the managed cluster of the clusterdeployment has been deleted, we delete its namespace
+	// the clusterdeployment alreay be cleaned up by hive, we delete its namespace and remove the import finalizer
 	err := r.client.Get(ctx, types.NamespacedName{Name: clusterDeployment.Namespace}, &clusterv1.ManagedCluster{})
 	if errors.IsNotFound(err) {
 		err := r.client.Delete(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: clusterDeployment.Namespace}})
@@ -213,6 +221,7 @@ func (r *ReconcileClusterDeployment) removeImportFinalizer(ctx context.Context, 
 			"The managed cluster namespace %s is deleted", clusterDeployment.Namespace)
 	}
 
+	clusterDeployment.Finalizers = []string{}
 	if err := r.client.Update(ctx, clusterDeployment); err != nil {
 		return err
 	}

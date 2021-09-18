@@ -32,12 +32,7 @@ var _ = ginkgo.Describe("Importing a self managed cluster", func() {
 		})
 
 		ginkgo.It("Should import the local-cluster", func() {
-			assertManagedClusterFinalizer(localClusterName, "managedcluster-import-controller.open-cluster-management.io/cleanup")
-			assertManagedClusterCreatedViaAnntation(localClusterName, "other")
-			assertManagedClusterNameLabel(localClusterName)
-			assertManagedClusterNamespaceLabel(localClusterName)
-			assertManagedClusterRBAC(localClusterName)
-			assertManagedClusterImportSecret(localClusterName)
+			assertManagedClusterImportSecretCreated(localClusterName, "other")
 			assertManagedClusterImportSecretApplied(localClusterName)
 			assertManagedClusterAvailable(localClusterName)
 			assertManagedClusterManifestWorks(localClusterName)
@@ -61,11 +56,7 @@ var _ = ginkgo.Describe("Importing a self managed cluster", func() {
 		})
 
 		ginkgo.It("Should import the self managed cluster", func() {
-			assertManagedClusterCreatedViaAnntation(managedClusterName, "other")
-			assertManagedClusterNameLabel(managedClusterName)
-			assertManagedClusterNamespaceLabel(managedClusterName)
-			assertManagedClusterRBAC(managedClusterName)
-			assertManagedClusterImportSecret(managedClusterName)
+			assertManagedClusterImportSecretCreated(managedClusterName, "other")
 
 			ginkgo.By(fmt.Sprintf("Add self managed label to managed cluster %s", managedClusterName), func() {
 				cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
@@ -78,6 +69,7 @@ var _ = ginkgo.Describe("Importing a self managed cluster", func() {
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			})
 
+			assertManagedClusterImportSecretApplied(managedClusterName)
 			assertManagedClusterAvailable(managedClusterName)
 			assertManagedClusterManifestWorks(managedClusterName)
 		})
