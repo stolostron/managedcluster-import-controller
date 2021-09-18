@@ -10,7 +10,7 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
@@ -173,6 +173,11 @@ func (r *ReconcileImportConfig) generateImportSecret(managedCluster *clusterv1.M
 		return nil, err
 	}
 
+	nodeSelector, err := helpers.GetNodeSelector(managedCluster)
+	if err != nil {
+		return nil, err
+	}
+
 	config := struct {
 		KlusterletNamespace       string
 		ManagedClusterNamespace   string
@@ -184,6 +189,7 @@ func (r *ReconcileImportConfig) generateImportSecret(managedCluster *clusterv1.M
 		RegistrationOperatorImage string
 		RegistrationImageName     string
 		WorkImageName             string
+		NodeSelector              map[string]string
 	}{
 		ManagedClusterNamespace:   managedCluster.Name,
 		KlusterletNamespace:       klusterletNamespace,
@@ -195,6 +201,7 @@ func (r *ReconcileImportConfig) generateImportSecret(managedCluster *clusterv1.M
 		RegistrationOperatorImage: registrationOperatorImageName,
 		RegistrationImageName:     registrationImageName,
 		WorkImageName:             workImageName,
+		NodeSelector:              nodeSelector,
 	}
 
 	deploymentFiles := append([]string{}, klusterletFiles...)

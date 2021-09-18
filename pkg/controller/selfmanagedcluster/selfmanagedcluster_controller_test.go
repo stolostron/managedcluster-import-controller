@@ -7,10 +7,10 @@ import (
 	"context"
 	"testing"
 
-	operatorfake "github.com/open-cluster-management/api/client/operator/clientset/versioned/fake"
-	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers/testing"
+	operatorfake "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 

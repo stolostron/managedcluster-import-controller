@@ -12,9 +12,9 @@ import (
 	"os"
 	"strings"
 
-	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
 	imgregistryv1alpha1 "github.com/open-cluster-management/multicloud-operators-foundation/pkg/apis/imageregistry/v1alpha1"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
 
