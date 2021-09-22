@@ -785,7 +785,7 @@ github.com/gonum/matrix v0.0.0-20181209220409-c518dec07be9/go.mod h1:0EXg4mc1CNP
 github.com/google/btree v0.0.0-20180124185431-e89373fe6b4a/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
 github.com/google/btree v0.0.0-20180813153112-4030bb1f1f0c/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
 github.com/google/btree v1.0.0/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
-github.com/google/cadvisor v0.38.7/go.mod h1:1OFB9sOOMkBdUBGCO/1SArawTnDscgMzTodacVDe8mA=
+github.com/google/cadvisor v0.38.8/go.mod h1:1OFB9sOOMkBdUBGCO/1SArawTnDscgMzTodacVDe8mA=
 github.com/google/go-cmp v0.2.0/go.mod h1:oXzfMopK8JAjlY9xF4vHSVASa0yLyX7SntLO5aqRK0M=
 github.com/google/go-cmp v0.3.0/go.mod h1:8QqcDgzrUqlUb/G2PQTWiueGozuR1884gddMywk6iLU=
 github.com/google/go-cmp v0.3.1/go.mod h1:8QqcDgzrUqlUb/G2PQTWiueGozuR1884gddMywk6iLU=
@@ -2692,8 +2692,8 @@ k8s.io/kube-state-metrics v1.7.2/go.mod h1:U2Y6DRi07sS85rmVPmBFlmv+2peBcL8IWGjM+
 k8s.io/kubectl v0.20.4/go.mod h1:yCC5lUQyXRmmtwyxfaakryh9ezzp/bT0O14LeoFLbGo=
 k8s.io/kubelet v0.20.4/go.mod h1:Jtubfqr/TlXcOMaUYWoGVkuY/iM5xmZiEukcJSJs0ns=
 k8s.io/kubernetes v1.13.0/go.mod h1:ocZa8+6APFNC2tX1DZASIbocyYT5jHzqFVsY5aoB7Jk=
-k8s.io/kubernetes v1.20.4 h1:gPeOspTx01shAQuFhae+O7ZfU0WKlD7RE5L0pooU0g8=
-k8s.io/kubernetes v1.20.4/go.mod h1:5oh+vhVyWep2o+IH61i3aU4e/Q77Yt96tcKwYOpVbvk=
+k8s.io/kubernetes v1.20.11 h1:xYLZW3+4uGKi6lvEalrghpHfQBfUN+Un9UrZNVRrWSk=
+k8s.io/kubernetes v1.20.11/go.mod h1:iE/QvEbLD6Ne9U03MX/BTBVSbj3pnj/HewBr8XDzLxw=
 k8s.io/legacy-cloud-providers v0.20.4/go.mod h1:whukzxTjXr2SclI8TObPeCFqIyWJ0IfqTb9enRi8Bs8=
 k8s.io/metrics v0.20.4/go.mod h1:DDXS+Ls+2NAxRcVhXKghRPa3csljyJRjDRjPe6EOg/g=
 k8s.io/mount-utils v0.20.4/go.mod h1:Jv9NRZ5L2LF87A17GaGlArD+r3JAJdZFvo4XD1cG4Kc=

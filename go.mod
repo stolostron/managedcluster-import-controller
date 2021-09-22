@@ -20,7 +20,7 @@ require (
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/klog v1.0.0
 	k8s.io/klog/v2 v2.9.0
-	k8s.io/kubernetes v1.20.4
+	k8s.io/kubernetes v1.20.11
 	k8s.io/utils v0.0.0-20210527160623-6fdb442a123b
 	open-cluster-management.io/api v0.0.0-20210916013819-2e58cdb938f9
 	sigs.k8s.io/controller-runtime v0.9.3-0.20210709165254-650ea59f19cc
