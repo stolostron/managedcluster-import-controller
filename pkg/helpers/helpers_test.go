@@ -37,6 +37,7 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/utils/diff"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
@@ -199,7 +200,7 @@ func TestUpdateManagedClusterStatus(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			fakeClient := fake.NewFakeClientWithScheme(testscheme, c.managedCluster)
+			fakeClient := fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.managedCluster).Build()
 
 			err := UpdateManagedClusterStatus(fakeClient, eventstesting.NewTestingEventRecorder(t), c.managedCluster.Name, c.cond)
 			if err != nil {
@@ -293,14 +294,14 @@ func TestRemoveManagedClusterFinalizer(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			fakeClient := fake.NewFakeClientWithScheme(testscheme, c.managedCluster)
+			fakeClient := fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.managedCluster).Build()
 
 			managedCluster := &clusterv1.ManagedCluster{}
 			if err := fakeClient.Get(context.TODO(), types.NamespacedName{Name: c.managedCluster.Name}, managedCluster); err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
 
-			err := RemoveManagedClusterFinalizer(fakeClient, eventstesting.NewTestingEventRecorder(t), managedCluster, c.finalizer)
+			err := RemoveManagedClusterFinalizer(context.TODO(), fakeClient, eventstesting.NewTestingEventRecorder(t), managedCluster, c.finalizer)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
@@ -322,7 +323,7 @@ func TestApplyResources(t *testing.T) {
 		name           string
 		kubeObjs       []runtime.Object
 		klusterletObjs []runtime.Object
-		clientObjs     []runtime.Object
+		clientObjs     []client.Object
 		crds           []runtime.Object
 		requiredObjs   []runtime.Object
 		owner          *clusterv1.ManagedCluster
@@ -331,7 +332,7 @@ func TestApplyResources(t *testing.T) {
 			name:           "create resources",
 			kubeObjs:       []runtime.Object{},
 			klusterletObjs: []runtime.Object{},
-			clientObjs:     []runtime.Object{},
+			clientObjs:     []client.Object{},
 			crds:           []runtime.Object{},
 			requiredObjs: []runtime.Object{
 				&corev1.ServiceAccount{
@@ -449,7 +450,7 @@ func TestApplyResources(t *testing.T) {
 					},
 				},
 			},
-			clientObjs: []runtime.Object{
+			clientObjs: []client.Object{
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test_cluster",
@@ -559,7 +560,7 @@ func TestApplyResources(t *testing.T) {
 				KubeClient:          kubefake.NewSimpleClientset(c.kubeObjs...),
 				APIExtensionsClient: apiextensionsfake.NewSimpleClientset(c.crds...),
 				OperatorClient:      operatorfake.NewSimpleClientset(c.klusterletObjs...),
-				RuntimeClient:       fake.NewFakeClientWithScheme(testscheme, c.clientObjs...),
+				RuntimeClient:       fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.clientObjs...).Build(),
 			}
 			err := ApplyResources(clientHolder, eventstesting.NewTestingEventRecorder(t), testscheme, c.owner, c.requiredObjs...)
 			if err != nil {
@@ -696,7 +697,7 @@ func TestImportManagedClusterFromSecret(t *testing.T) {
 				KubeClient:          kubefake.NewSimpleClientset(),
 				APIExtensionsClient: apiextensionsfake.NewSimpleClientset(),
 				OperatorClient:      operatorfake.NewSimpleClientset(),
-				RuntimeClient:       fake.NewFakeClientWithScheme(testscheme),
+				RuntimeClient:       fake.NewClientBuilder().WithScheme(testscheme).Build(),
 			}
 			err := ImportManagedClusterFromSecret(clientHolder, mapper, fakeRecorder, importSecret)
 			if err != nil {

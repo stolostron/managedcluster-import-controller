@@ -36,17 +36,18 @@ type ReconcileLocalCluster struct {
 	recorder     events.Recorder
 }
 
+// blank assignment to verify that ReconcileLocalCluster implements reconcile.Reconciler
+var _ reconcile.Reconciler = &ReconcileLocalCluster{}
+
 // Reconcile reconciles the import secret to of a self managed cluster to import the managed cluster
 // A a self managed cluster must have self managed label and the label value must be true
 //
 // Note: The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-//func (r *ReconcileLocalCluster) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-func (r *ReconcileLocalCluster) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileLocalCluster) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Name", request.Name)
 	reqLogger.Info("Reconciling self managed cluster")
 
-	ctx := context.TODO()
 	managedCluster := &clusterv1.ManagedCluster{}
 	err := r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: request.Name}, managedCluster)
 	if errors.IsNotFound(err) {

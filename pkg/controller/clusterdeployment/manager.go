@@ -14,7 +14,9 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/types"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -52,16 +54,15 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	if err := c.Watch(
 		&source.Kind{Type: &hivev1.ClusterDeployment{}},
-		// handler.EnqueueRequestsFromMapFunc(func(o client.Object) []reconcile.Request {
-		// 	return []reconcile.Request{
-		// 		{
-		// 			NamespacedName: types.NamespacedName{
-		// 				Name: o.GetNamespace(),
-		// 			},
-		// 		},
-		// 	}
-		// })
-		nil); err != nil {
+		handler.EnqueueRequestsFromMapFunc(func(o client.Object) []reconcile.Request {
+			return []reconcile.Request{
+				{
+					NamespacedName: types.NamespacedName{
+						Name: o.GetNamespace(),
+					},
+				},
+			}
+		})); err != nil {
 		return err
 	}
 
@@ -76,10 +77,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			DeleteFunc:  func(e event.DeleteEvent) bool { return false },
 			CreateFunc: func(e event.CreateEvent) bool {
 				// only handles the import secret
-				return strings.HasSuffix(e.Meta.GetName(), constants.ImportSecretNameSuffix)
+				return strings.HasSuffix(e.Object.GetName(), constants.ImportSecretNameSuffix)
 			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				secretName := e.MetaNew.GetName()
+				secretName := e.ObjectNew.GetName()
 				// only handles the import secret
 				if !strings.HasSuffix(secretName, constants.ImportSecretNameSuffix) {
 					return false

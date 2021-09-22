@@ -1,8 +1,0 @@
-# Copyright Contributors to the Open Cluster Management project
-
-bases:
-- ../../../deploy
-patchesStrategicMerge:
-- deployment.yaml
-resources:
-- fake_secret.yaml

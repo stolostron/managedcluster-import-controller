@@ -10,9 +10,11 @@ import (
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/types"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -56,22 +58,21 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 
 	if err := c.Watch(
 		&source.Kind{Type: &workv1.ManifestWork{}},
-		// handler.EnqueueRequestsFromMapFunc(func(o client.Object) []reconcile.Request {
-		// 	return []reconcile.Request{
-		// 		{
-		// 			NamespacedName: types.NamespacedName{
-		// 				Name: o.GetNamespace(),
-		// 			},
-		// 		},
-		// 	}
-		// }),
-		nil,
+		handler.EnqueueRequestsFromMapFunc(func(o client.Object) []reconcile.Request {
+			return []reconcile.Request{
+				{
+					NamespacedName: types.NamespacedName{
+						Name: o.GetNamespace(),
+					},
+				},
+			}
+		}),
 		predicate.Predicate(predicate.Funcs{
 			GenericFunc: func(e event.GenericEvent) bool { return false },
 			CreateFunc:  func(e event.CreateEvent) bool { return true },
 			DeleteFunc:  func(e event.DeleteEvent) bool { return true },
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				workName := e.MetaNew.GetName()
+				workName := e.ObjectNew.GetName()
 				// for update event, only watch klusterlet manifest works
 				if !strings.HasSuffix(workName, klusterletCRDsSuffix) &&
 					!strings.HasSuffix(workName, klusterletSuffix) {
@@ -81,7 +82,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 				new, okNew := e.ObjectNew.(*workv1.ManifestWork)
 				old, okOld := e.ObjectOld.(*workv1.ManifestWork)
 				if okNew && okOld {
-					return !helpers.ManifestsEqual(new.Spec.Workload.Manifests, old.Spec.Workload.Manifests)
+					return !helpers.ManifestsEqual(new.Spec.Workload.Manifests, old.Spec.Workload.Manifests) ||
+						!equality.Semantic.DeepEqual(new.Status, old.Status)
 				}
 
 				return false
@@ -109,7 +111,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			DeleteFunc:  func(e event.DeleteEvent) bool { return false },
 			CreateFunc:  func(e event.CreateEvent) bool { return false },
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				secretName := e.MetaNew.GetName()
+				secretName := e.ObjectNew.GetName()
 				// only handles the import secret changes
 				if !strings.HasSuffix(secretName, constants.ImportSecretNameSuffix) {
 					return false

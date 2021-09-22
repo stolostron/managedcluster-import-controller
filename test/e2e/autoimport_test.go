@@ -53,6 +53,7 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 		})
 
+		assertManagedClusterImportSecretCreated(managedClusterName, "other")
 		assertManagedClusterImportSecretApplied(managedClusterName)
 		assertManagedClusterAvailable(managedClusterName)
 		assertManagedClusterManifestWorks(managedClusterName)
@@ -73,6 +74,7 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 		})
 
+		assertManagedClusterImportSecretCreated(managedClusterName, "other")
 		assertManagedClusterImportSecretApplied(managedClusterName)
 		assertManagedClusterAvailable(managedClusterName)
 		assertManagedClusterManifestWorks(managedClusterName)

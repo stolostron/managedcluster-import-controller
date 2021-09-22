@@ -35,17 +35,18 @@ type ReconcileAutoImport struct {
 	recorder events.Recorder
 }
 
+// blank assignment to verify that ReconcileAutoImport implements reconcile.Reconciler
+var _ reconcile.Reconciler = &ReconcileAutoImport{}
+
 // Reconcile the managed cluster auto import secret to import the managed cluster
 // Once the managed cluster is imported, the auto import secret will be deleted
 //
 // Note: The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-//func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-func (r *ReconcileAutoImport) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace)
 	reqLogger.Info("Reconciling auto import secret")
 
-	ctx := context.TODO()
 	managedClusterName := request.Namespace
 	managedCluster := &clusterv1.ManagedCluster{}
 	err := r.client.Get(ctx, types.NamespacedName{Name: managedClusterName}, managedCluster)

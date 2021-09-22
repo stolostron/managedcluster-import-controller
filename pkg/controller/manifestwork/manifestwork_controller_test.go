@@ -9,13 +9,13 @@ import (
 
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers/testing"
+	operatorfake "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/scheme"
 
@@ -38,13 +38,13 @@ func init() {
 func TestReconcile(t *testing.T) {
 	cases := []struct {
 		name         string
-		startObjs    []runtime.Object
+		startObjs    []client.Object
 		request      reconcile.Request
 		validateFunc func(t *testing.T, runtimeClient client.Client)
 	}{
 		{
 			name:      "no managed clusters",
-			startObjs: []runtime.Object{},
+			startObjs: []client.Object{},
 			request: reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: "test",
@@ -56,7 +56,7 @@ func TestReconcile(t *testing.T) {
 		},
 		{
 			name: "no manifest works",
-			startObjs: []runtime.Object{
+			startObjs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: v1.ObjectMeta{
 						Name:       "test",
@@ -81,7 +81,7 @@ func TestReconcile(t *testing.T) {
 		},
 		{
 			name: "manifest works are created",
-			startObjs: []runtime.Object{
+			startObjs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: v1.ObjectMeta{
 						Name: "test",
@@ -111,7 +111,7 @@ func TestReconcile(t *testing.T) {
 		},
 		{
 			name: "managed clusters is deleting",
-			startObjs: []runtime.Object{
+			startObjs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: v1.ObjectMeta{
 						Name:              "test",
@@ -136,6 +136,14 @@ func TestReconcile(t *testing.T) {
 						Name:      "test-klusterlet",
 						Namespace: "test",
 					},
+					Status: workv1.ManifestWorkStatus{
+						Conditions: []v1.Condition{
+							{
+								Type:   "Applied",
+								Status: v1.ConditionTrue,
+							},
+						},
+					},
 				},
 			},
 			request: reconcile.Request{
@@ -154,8 +162,49 @@ func TestReconcile(t *testing.T) {
 			},
 		},
 		{
+			name: "only have crd works",
+			startObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: v1.ObjectMeta{
+						Name:       "test",
+						Finalizers: []string{manifestWorkFinalizer},
+						Labels: map[string]string{
+							"local-cluster": "true",
+						},
+						DeletionTimestamp: &now,
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: v1.ObjectMeta{
+						Name:      "test1",
+						Namespace: "test",
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: v1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: "test",
+					},
+				},
+			},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, runtimeClient client.Client) {
+				manifestWorks := &workv1.ManifestWorkList{}
+				if err := runtimeClient.List(context.TODO(), manifestWorks, &client.ListOptions{Namespace: "test"}); err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if len(manifestWorks.Items) != 0 {
+					t.Errorf("expected one work, but failed %d", len(manifestWorks.Items))
+				}
+			},
+		},
+		{
 			name: "managed clusters is deleting - only has klusterlet",
-			startObjs: []runtime.Object{
+			startObjs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: v1.ObjectMeta{
 						Name:              "test",
@@ -187,7 +236,7 @@ func TestReconcile(t *testing.T) {
 		},
 		{
 			name: "managed clusters is deleting and managed clusters is offline",
-			startObjs: []runtime.Object{
+			startObjs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: v1.ObjectMeta{
 						Name:              "test",
@@ -242,7 +291,7 @@ func TestReconcile(t *testing.T) {
 		},
 		{
 			name: "apply klusterlet manifest works",
-			startObjs: []runtime.Object{
+			startObjs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: v1.ObjectMeta{
 						Name:       "test",
@@ -273,14 +322,14 @@ func TestReconcile(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			r := &ReconcileManifestWork{
 				clientHolder: &helpers.ClientHolder{
-					//RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.startObjs...).Build(),
-					RuntimeClient: fake.NewFakeClientWithScheme(testscheme, c.startObjs...),
+					RuntimeClient:  fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.startObjs...).Build(),
+					OperatorClient: operatorfake.NewSimpleClientset(),
 				},
 				scheme:   testscheme,
 				recorder: eventstesting.NewTestingEventRecorder(t),
 			}
 
-			_, err := r.Reconcile(c.request)
+			_, err := r.Reconcile(context.TODO(), c.request)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}

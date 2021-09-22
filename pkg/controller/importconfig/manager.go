@@ -59,7 +59,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			CreateFunc:  func(e event.CreateEvent) bool { return true },
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				// only handle the labels changes for image registry
-				return !equality.Semantic.DeepEqual(e.MetaOld.GetLabels(), e.MetaNew.GetLabels())
+				return !equality.Semantic.DeepEqual(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels())
 			},
 		}),
 	); err != nil {
@@ -107,10 +107,10 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			CreateFunc:  func(e event.CreateEvent) bool { return false },
 			DeleteFunc: func(e event.DeleteEvent) bool {
 				// only handle the import secret
-				return strings.HasSuffix(e.Meta.GetName(), constants.ImportSecretNameSuffix)
+				return strings.HasSuffix(e.Object.GetName(), constants.ImportSecretNameSuffix)
 			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				secretName := e.MetaNew.GetName()
+				secretName := e.ObjectNew.GetName()
 				// only handle the import secret data chanages
 				if !strings.HasSuffix(secretName, constants.ImportSecretNameSuffix) {
 					return false

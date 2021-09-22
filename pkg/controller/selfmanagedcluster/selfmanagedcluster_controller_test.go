@@ -11,6 +11,7 @@ import (
 	testinghelpers "github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers/testing"
 	operatorfake "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 
@@ -18,7 +19,6 @@ import (
 	crdv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -51,24 +51,25 @@ var testscheme = scheme.Scheme
 func init() {
 	testscheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
 	testscheme.AddKnownTypes(crdv1beta1.SchemeGroupVersion, &crdv1beta1.CustomResourceDefinition{})
+	testscheme.AddKnownTypes(operatorv1.SchemeGroupVersion, &operatorv1.Klusterlet{})
 }
 
 func TestReconcile(t *testing.T) {
 	cases := []struct {
 		name         string
-		objs         []runtime.Object
+		objs         []client.Object
 		validateFunc func(t *testing.T, runtimeClient client.Client)
 	}{
 		{
 			name: "no managed clusters",
-			objs: []runtime.Object{},
+			objs: []client.Object{},
 			validateFunc: func(t *testing.T, runtimeClient client.Client) {
 				// do nothing
 			},
 		},
 		{
 			name: "self managed label is false",
-			objs: []runtime.Object{
+			objs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "local-cluster",
@@ -91,7 +92,7 @@ func TestReconcile(t *testing.T) {
 		},
 		{
 			name: "has auto-import-secret",
-			objs: []runtime.Object{
+			objs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "local-cluster",
@@ -120,7 +121,7 @@ func TestReconcile(t *testing.T) {
 		},
 		{
 			name: "no import secret",
-			objs: []runtime.Object{
+			objs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "local-cluster",
@@ -143,7 +144,7 @@ func TestReconcile(t *testing.T) {
 		},
 		{
 			name: "import cluster",
-			objs: []runtime.Object{
+			objs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "local-cluster",
@@ -174,14 +175,18 @@ func TestReconcile(t *testing.T) {
 					KubeClient:          kubefake.NewSimpleClientset(),
 					APIExtensionsClient: apiextensionsfake.NewSimpleClientset(),
 					OperatorClient:      operatorfake.NewSimpleClientset(),
-					RuntimeClient:       fake.NewFakeClientWithScheme(testscheme, c.objs...),
+					RuntimeClient:       fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).Build(),
 				},
 				scheme:     testscheme,
 				recorder:   eventstesting.NewTestingEventRecorder(t),
 				restMapper: restmapper.NewDiscoveryRESTMapper(apiGroupResources),
 			}
 
-			_, err := r.Reconcile(reconcile.Request{NamespacedName: types.NamespacedName{Name: "local-cluster"}})
+			_, err := r.Reconcile(context.TODO(), reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "local-cluster",
+				},
+			})
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}

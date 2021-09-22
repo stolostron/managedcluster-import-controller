@@ -15,15 +15,18 @@ import (
 	"net"
 	"strings"
 
+	"github.com/ghodss/yaml"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
 	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 
 	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -261,6 +264,39 @@ func ValidateImportSecret(importSecret *corev1.Secret) error {
 		return fmt.Errorf("the %s is required", constants.ImportSecretCRDSV1YamlKey)
 	}
 	return nil
+}
+
+func ToImportResoruces(importYaml []byte) []*unstructured.Unstructured {
+	yamls := [][]byte{}
+	for _, yaml := range strings.Split(strings.Replace(string(importYaml), "\n---\n", "", 1), "\n---\n") {
+		yamls = append(yamls, []byte(yaml))
+	}
+
+	unstructuredObjs := []*unstructured.Unstructured{}
+	for _, raw := range yamls {
+		jsonData, err := yaml.YAMLToJSON(raw)
+		if err != nil {
+			panic(err)
+		}
+
+		unstructuredObj := &unstructured.Unstructured{}
+		_, _, err = unstructured.UnstructuredJSONScheme.Decode(jsonData, nil, unstructuredObj)
+		if err != nil {
+			panic(err)
+		}
+
+		unstructuredObjs = append(unstructuredObjs, unstructuredObj)
+	}
+	return unstructuredObjs
+}
+
+func ToKlusterlet(obj *unstructured.Unstructured) *operatorv1.Klusterlet {
+	klusterlet := &operatorv1.Klusterlet{}
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, klusterlet); err != nil {
+		panic(err)
+	}
+
+	return klusterlet
 }
 
 func newClusterDeploymentImportSecret(kubeClient kubernetes.Interface, clusterName string) (*corev1.Secret, error) {

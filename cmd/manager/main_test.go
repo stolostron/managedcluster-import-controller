@@ -13,6 +13,7 @@ import (
 	"testing"
 )
 
+// start the controller to get the test coverage
 func TestRunMain(t *testing.T) {
 	go main()
 	// hacks for handling signals

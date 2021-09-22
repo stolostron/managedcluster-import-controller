@@ -22,6 +22,5 @@ if ! which golangci-lint > /dev/null; then
 fi
 
 echo 'Running linting tool ...'
-# TODO we ignore SA1019 (controller-runtime fake client is deprecated) currently, fix this in the future
-GOLANGCI_LINT_CACHE=${GOLANGCI_LINT_CACHE} golangci-lint run -c build/golangci.yml --exclude SA1019
+GOLANGCI_LINT_CACHE=${GOLANGCI_LINT_CACHE} golangci-lint run -c build/golangci.yml
 echo '##### lint-check #### Success'

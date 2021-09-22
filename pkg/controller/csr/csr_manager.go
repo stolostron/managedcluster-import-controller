@@ -3,8 +3,9 @@
 package csr
 
 import (
-	libgoclient "github.com/open-cluster-management/library-go/pkg/client"
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
 	certificatesv1 "k8s.io/api/certificates/v1"
+
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -14,25 +15,26 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-// Add creates a new ManagedCluster Controller and adds it to the Manager. The Manager will set fields on the Controller
+const controllerName = "csr-controller"
+
+// Add creates a new CSR Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager) error {
-	return add(mgr, newReconciler(mgr))
+func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder) (string, error) {
+	return controllerName, add(mgr, newReconciler(clientHolder))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager) reconcile.Reconciler {
-	kubeClient, err := libgoclient.NewDefaultKubeClient("")
-	if err != nil {
-		kubeClient = nil
+func newReconciler(clientHolder *helpers.ClientHolder) reconcile.Reconciler {
+	return &ReconcileCSR{
+		clientHolder: clientHolder,
+		recorder:     helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
 	}
-	return &ReconcileCSR{client: mgr.GetClient(), kubeClient: kubeClient, scheme: mgr.GetScheme()}
 }
 
 // add adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	// Create a new controller
-	c, err := controller.New("csr-controller", mgr, controller.Options{Reconciler: r})
+	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: r})
 	if err != nil {
 		return err
 	}

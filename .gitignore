@@ -3,44 +3,11 @@
 # Directories
 .go
 .vscode
-/build/_output
-/cmd/manager/__debug_bin
-build-harness
-build-harness-extensions
-vendor
-test/unit/coverage
-test/out
-overlays/deploy
 .idea
 
-
 # Files
-.build-harness
-.build-harness-bootstrap
 OPENSOURCE.check
 .DS_Store
-coverate.out
-gosec.json
-go-bindata.diff
-functional.test
-e2e.test
-e2e-kubeconfig
-
-
-# override build harness vendoring
-!vbh/.build-harness-vendorized
-!vbh/build-harness
-!vbh/build-harness-extensions
 
 # test outputs
-test/functional/tmp
-test/functional/coverage
-test/functional/functional.test
-test/unit/tmp
-kind_kubeconfig.yaml
-kind_kubeconfig_mc.yaml
-kind_kubeconfig_internal.yaml
-kind_kubeconfig_internal_mc.yaml
 _output
-
-report.json

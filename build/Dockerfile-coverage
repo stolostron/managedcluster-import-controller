@@ -1,25 +1,12 @@
 ARG DOCKER_BASE_IMAGE
+ARG HOST_UID
 
 FROM $DOCKER_BASE_IMAGE
 
-ARG REMOTE_SOURCE
-ARG REMOTE_SOURCE_DIR
-ARG GITHUB_TOKEN
-
-ENV OPERATOR=/usr/local/bin/managedcluster-import-controller \
-    USER_UID=1001 \
-    USER_NAME=managedcluster-import-controller
-
-USER root
-# Install unzip
-RUN microdnf update
-RUN microdnf install -y --nodocs jq
-RUN microdnf install -y --nodocs openssl
-
-# install operator binary
-RUN cp ${OPERATOR}-coverage ${OPERATOR}
+ENV OPERATOR=/usr/local/bin/managedcluster-import-controller-coverage
+# Share the same uid as host to recode the test coverage record
+ENV USER_UID=${HOST_UID}
 
 USER ${USER_UID}
 
 ENTRYPOINT ["/usr/local/bin/entrypoint-coverage"]
-

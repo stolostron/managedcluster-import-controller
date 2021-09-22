@@ -9,13 +9,17 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
+	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+
 	certificatesv1 "k8s.io/api/certificates/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	fakeclientset "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -49,11 +53,10 @@ func TestReconcileCSR_Reconcile(t *testing.T) {
 
 	testscheme := scheme.Scheme
 
-	testscheme.AddKnownTypes(certificatesv1.SchemeGroupVersion, &certificatesv1.CertificateSigningRequest{})
 	testscheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
 
 	req := reconcile.Request{
-		types.NamespacedName{
+		NamespacedName: types.NamespacedName{
 			Name: csrNameReconcile,
 		},
 	}
@@ -76,10 +79,7 @@ func TestReconcileCSR_Reconcile(t *testing.T) {
 		{
 			name: "testCSR",
 			fields: fields{
-				client: fake.NewFakeClientWithScheme(testscheme,
-					testManagedCluster,
-					testCSR,
-				),
+				client:     fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testManagedCluster, testCSR).Build(),
 				kubeClient: fakeclientset.NewSimpleClientset(testCSR),
 				scheme:     testscheme,
 			},
@@ -94,9 +94,7 @@ func TestReconcileCSR_Reconcile(t *testing.T) {
 		{
 			name: "testCSRClusterNotFound",
 			fields: fields{
-				client: fake.NewFakeClientWithScheme(testscheme,
-					testCSR,
-				),
+				client:     fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testCSR).Build(),
 				kubeClient: fakeclientset.NewSimpleClientset(testCSR),
 				scheme:     testscheme,
 			},
@@ -113,11 +111,13 @@ func TestReconcileCSR_Reconcile(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Test name: %s", tt.name)
 			r := &ReconcileCSR{
-				client:     tt.fields.client,
-				kubeClient: tt.fields.kubeClient,
-				scheme:     tt.fields.scheme,
+				clientHolder: &helpers.ClientHolder{
+					KubeClient:    tt.fields.kubeClient,
+					RuntimeClient: tt.fields.client,
+				},
+				recorder: eventstesting.NewTestingEventRecorder(t),
 			}
-			got, err := r.Reconcile(tt.args.request)
+			got, err := r.Reconcile(context.TODO(), tt.args.request)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ReconcileCSR.Reconcile() Creation error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -126,7 +126,8 @@ func TestReconcileCSR_Reconcile(t *testing.T) {
 				t.Errorf("ReconcileCSR.Reconcile() Creation= %v, want %v", got, tt.want)
 			}
 			if !tt.wantErr && !got.Requeue {
-				csr, err := r.kubeClient.CertificatesV1().CertificateSigningRequests().Get(context.TODO(), csrNameReconcile, metav1.GetOptions{})
+				csr, err := r.clientHolder.KubeClient.CertificatesV1().CertificateSigningRequests().Get(
+					context.TODO(), csrNameReconcile, metav1.GetOptions{})
 				if err != nil {
 					t.Error("CSR not found")
 				}

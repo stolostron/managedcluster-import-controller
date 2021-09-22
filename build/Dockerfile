@@ -22,7 +22,6 @@ ENV OPERATOR=/usr/local/bin/managedcluster-import-controller \
 COPY --from=builder $REMOTE_SOURCE_DIR/app/manager ${OPERATOR}
 COPY --from=builder $REMOTE_SOURCE_DIR/app/manager-coverage ${OPERATOR}-coverage
 COPY --from=builder $REMOTE_SOURCE_DIR/app/build/bin /usr/local/bin
-COPY --from=builder $REMOTE_SOURCE_DIR/app/build/resources /usr/local/resources
 
 RUN  /usr/local/bin/user_setup
 
