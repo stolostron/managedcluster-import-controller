@@ -45,11 +45,10 @@ var _ = ginkgo.Describe("Importing a managed cluster manually", func() {
 		assertManagedClusterCreatedViaAnntation(managedClusterName, "other")
 		assertManagedClusterNameLabel(managedClusterName)
 
-		ginkgo.By("Modify the managed cluster label and annotation", func() {
+		ginkgo.By("Modify the managed cluster annotation", func() {
 			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			copied := cluster.DeepCopy()
-			copied.Labels["name"] = "wrong"
 			copied.Annotations["open-cluster-management/created-via"] = "wrong"
 			_, err = hubClusterClient.ClusterV1().ManagedClusters().Update(context.TODO(), copied, metav1.UpdateOptions{})
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())

@@ -131,10 +131,13 @@ func (r *ReconcileManagedCluster) ensureManagedClusterMetaObj(ctx context.Contex
 	modified := resourcemerge.BoolPtr(false)
 	msgs := []string{}
 
-	// ensure cluster name label
-	resourcemerge.MergeMap(modified, &managedCluster.Labels, map[string]string{clusterNameLabel: managedCluster.Name})
-	if *modified {
-		msgs = append(msgs, "cluster name label is added")
+	// if there is no cluster name label ensure the cluster name label
+	// TODO we should ensure only update the name label in one place
+	if name, ok := managedCluster.Labels[clusterNameLabel]; !ok || name == "" {
+		resourcemerge.MergeMap(modified, &managedCluster.Labels, map[string]string{clusterNameLabel: managedCluster.Name})
+		if *modified {
+			msgs = append(msgs, "cluster name label is added")
+		}
 	}
 
 	// ensure cluster create-via annotation
