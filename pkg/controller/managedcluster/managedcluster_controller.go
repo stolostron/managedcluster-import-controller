@@ -62,7 +62,7 @@ var _ reconcile.Reconciler = &ReconcileManagedCluster{}
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileManagedCluster) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Name", request.Name)
-	reqLogger.Info("Reconciling managed cluster meta object")
+	reqLogger.Info("Reconciling the managed cluster meta object")
 
 	managedCluster := &clusterv1.ManagedCluster{}
 	err := r.client.Get(ctx, types.NamespacedName{Name: request.Name}, managedCluster)

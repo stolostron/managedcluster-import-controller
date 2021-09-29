@@ -21,6 +21,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	kubefake "k8s.io/client-go/kubernetes/fake"
@@ -50,13 +51,15 @@ func init() {
 func TestReconcile(t *testing.T) {
 	cases := []struct {
 		name         string
-		runtimeObjs  []runtimeclient.Object
+		clientObjs   []runtimeclient.Object
+		runtimeObjs  []runtime.Object
 		request      reconcile.Request
 		validateFunc func(t *testing.T, client runtimeclient.Client, kubeClient kubernetes.Interface)
 	}{
 		{
 			name:        "no clusters",
-			runtimeObjs: []runtimeclient.Object{},
+			clientObjs:  []runtimeclient.Object{},
+			runtimeObjs: []runtime.Object{},
 			request: reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: "test",
@@ -68,12 +71,24 @@ func TestReconcile(t *testing.T) {
 		},
 		{
 			name: "prepare cluster",
-			runtimeObjs: []runtimeclient.Object{
+			clientObjs: []runtimeclient.Object{
 				&corev1.Namespace{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
 					},
 				},
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+				&configv1.Infrastructure{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "cluster",
+					},
+				},
+			},
+			runtimeObjs: []runtime.Object{
 				&corev1.ServiceAccount{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-bootstrap-sa",
@@ -105,16 +120,6 @@ func TestReconcile(t *testing.T) {
 						".dockerconfigjson": []byte("fake-token"),
 					},
 					Type: corev1.SecretTypeDockerConfigJson,
-				},
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
-					},
-				},
-				&configv1.Infrastructure{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "cluster",
-					},
 				},
 			},
 			request: reconcile.Request{
@@ -156,8 +161,8 @@ func TestReconcile(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			r := &ReconcileImportConfig{
 				clientHolder: &helpers.ClientHolder{
-					KubeClient:    kubefake.NewSimpleClientset(),
-					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.runtimeObjs...).Build(),
+					KubeClient:    kubefake.NewSimpleClientset(c.runtimeObjs...),
+					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.clientObjs...).Build(),
 				},
 				scheme:   testscheme,
 				recorder: eventstesting.NewTestingEventRecorder(t),

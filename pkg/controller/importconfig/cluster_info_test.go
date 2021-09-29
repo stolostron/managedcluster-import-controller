@@ -4,6 +4,7 @@
 package importconfig
 
 import (
+	"context"
 	"crypto/x509"
 	"fmt"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
 	imgregistryv1alpha1 "github.com/open-cluster-management/multicloud-operators-foundation/pkg/apis/imageregistry/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
@@ -20,6 +22,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
+	kubefake "k8s.io/client-go/kubernetes/fake"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	clientcmdlatest "k8s.io/client-go/tools/clientcmd/api/latest"
 
@@ -66,7 +70,7 @@ func TestGetKubeAPIServerAddress(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := getKubeAPIServerAddress(tt.args.client)
+			got, err := getKubeAPIServerAddress(context.Background(), tt.args.client)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getKubeAPIServerAddress() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -77,6 +81,7 @@ func TestGetKubeAPIServerAddress(t *testing.T) {
 		})
 	}
 }
+
 func TestGetKubeAPIServerSecretName(t *testing.T) {
 	apiserverConfig := &ocinfrav1.APIServer{
 		ObjectMeta: metav1.ObjectMeta{
@@ -134,7 +139,7 @@ func TestGetKubeAPIServerSecretName(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := getKubeAPIServerSecretName(tt.args.client, tt.args.name)
+			got, err := getKubeAPIServerSecretName(context.Background(), tt.args.client, tt.args.name)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getKubeAPIServerSecretName() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -178,7 +183,7 @@ func TestGetKubeAPIServerCertificate(t *testing.T) {
 	}
 
 	type args struct {
-		client client.Client
+		client kubernetes.Interface
 		name   string
 	}
 	tests := []struct {
@@ -190,7 +195,7 @@ func TestGetKubeAPIServerCertificate(t *testing.T) {
 		{
 			name: "no secret",
 			args: args{
-				client: fake.NewClientBuilder().WithScheme(testscheme).Build(),
+				client: kubefake.NewSimpleClientset(),
 				name:   "test-secret",
 			},
 			want:    nil,
@@ -199,7 +204,7 @@ func TestGetKubeAPIServerCertificate(t *testing.T) {
 		{
 			name: "wrong type",
 			args: args{
-				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(secretWrongType).Build(),
+				client: kubefake.NewSimpleClientset(secretWrongType),
 				name:   "test-secret",
 			},
 			want:    nil,
@@ -208,7 +213,7 @@ func TestGetKubeAPIServerCertificate(t *testing.T) {
 		{
 			name: "empty data",
 			args: args{
-				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(secretNoData).Build(),
+				client: kubefake.NewSimpleClientset(secretNoData),
 				name:   "test-secret",
 			},
 			want:    nil,
@@ -217,7 +222,7 @@ func TestGetKubeAPIServerCertificate(t *testing.T) {
 		{
 			name: "success",
 			args: args{
-				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(secretCorrect).Build(),
+				client: kubefake.NewSimpleClientset(secretCorrect),
 				name:   "test-secret",
 			},
 			want:    []byte("fake-cert-data"),
@@ -226,7 +231,7 @@ func TestGetKubeAPIServerCertificate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := getKubeAPIServerCertificate(tt.args.client, tt.args.name)
+			got, err := getKubeAPIServerCertificate(context.Background(), tt.args.client, tt.args.name)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getKubeAPIServerCertificate() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -277,7 +282,7 @@ func TestCheckIsIBMCloud(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := checkIsIBMCloud(tt.args.client)
+			got, err := checkIsIBMCloud(context.Background(), tt.args.client)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("checkIsROKS() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -290,7 +295,6 @@ func TestCheckIsIBMCloud(t *testing.T) {
 }
 
 func TestCreateKubeconfigData(t *testing.T) {
-
 	testInfraConfigIP := &ocinfrav1.Infrastructure{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "cluster",
@@ -359,20 +363,29 @@ func TestCreateKubeconfigData(t *testing.T) {
 		Data: map[string][]byte{},
 		Type: corev1.SecretTypeTLS,
 	}
+
+	node := &corev1.Node{
+		Spec: corev1.NodeSpec{
+			ProviderID: "ibm",
+		},
+	}
+
 	serverStopped := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "Hello, client")
 	}))
+
 	serverTLS := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "Hello, client")
 	}))
+
 	testInfraServerTLS := testInfraConfigDNS.DeepCopy()
 	testInfraServerTLS.Status.APIServerURL = serverTLS.URL
 	testInfraServerStopped := testInfraConfigDNS.DeepCopy()
 	testInfraServerStopped.Status.APIServerURL = serverStopped.URL
 
 	type args struct {
-		client client.Client
-		secret *corev1.Secret
+		clientHolder *helpers.ClientHolder
+		secret       *corev1.Secret
 	}
 	type wantData struct {
 		serverURL   string
@@ -389,7 +402,10 @@ func TestCreateKubeconfigData(t *testing.T) {
 		{
 			name: "use default certificate",
 			args: args{
-				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraConfigIP).Build(),
+				clientHolder: &helpers.ClientHolder{
+					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraConfigIP).Build(),
+					KubeClient:    kubefake.NewSimpleClientset(),
+				},
 				secret: testTokenSecret,
 			},
 			want: wantData{
@@ -403,7 +419,10 @@ func TestCreateKubeconfigData(t *testing.T) {
 		{
 			name: "use named certificate",
 			args: args{
-				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraConfigDNS, apiserverConfig, secretCorrect).Build(),
+				clientHolder: &helpers.ClientHolder{
+					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraConfigDNS, apiserverConfig).Build(),
+					KubeClient:    kubefake.NewSimpleClientset(secretCorrect),
+				},
 				secret: testTokenSecret,
 			},
 			want: wantData{
@@ -417,7 +436,10 @@ func TestCreateKubeconfigData(t *testing.T) {
 		{
 			name: "use default when cert not found",
 			args: args{
-				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraConfigDNS, apiserverConfig).Build(),
+				clientHolder: &helpers.ClientHolder{
+					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraConfigDNS, apiserverConfig).Build(),
+					KubeClient:    kubefake.NewSimpleClientset(),
+				},
 				secret: testTokenSecret,
 			},
 			want: wantData{
@@ -431,7 +453,10 @@ func TestCreateKubeconfigData(t *testing.T) {
 		{
 			name: "return error cert malformat",
 			args: args{
-				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraConfigDNS, apiserverConfig, secretWrong).Build(),
+				clientHolder: &helpers.ClientHolder{
+					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraConfigDNS, apiserverConfig).Build(),
+					KubeClient:    kubefake.NewSimpleClientset(secretWrong),
+				},
 				secret: testTokenSecret,
 			},
 			want: wantData{
@@ -445,11 +470,9 @@ func TestCreateKubeconfigData(t *testing.T) {
 		{
 			name: "roks failed to connect return error",
 			args: args{
-				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraServerStopped, apiserverConfig, &corev1.Node{
-					Spec: corev1.NodeSpec{
-						ProviderID: "ibm",
-					},
-				}).Build(),
+				clientHolder: &helpers.ClientHolder{
+					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraServerStopped, apiserverConfig, node).Build(),
+				},
 				secret: testTokenSecret,
 			},
 			want: wantData{
@@ -463,11 +486,9 @@ func TestCreateKubeconfigData(t *testing.T) {
 		{
 			name: "roks with no valid cert use default",
 			args: args{
-				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraServerTLS, apiserverConfig, &corev1.Node{
-					Spec: corev1.NodeSpec{
-						ProviderID: "ibm",
-					},
-				}).Build(),
+				clientHolder: &helpers.ClientHolder{
+					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraServerTLS, apiserverConfig, node).Build(),
+				},
 				secret: testTokenSecret,
 			},
 			want: wantData{
@@ -482,8 +503,7 @@ func TestCreateKubeconfigData(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Test name: %s", tt.name)
-			kubeconfigData, err := createKubeconfigData(tt.args.client, tt.args.secret)
-
+			kubeconfigData, err := createKubeconfigData(context.Background(), tt.args.clientHolder, tt.args.secret)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createKubeconfigData() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -541,6 +561,7 @@ func TestCreateKubeconfigData(t *testing.T) {
 	}
 
 }
+
 func TestGetValidCertificatesFromURL(t *testing.T) {
 	serverStopped := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		fmt.Fprintln(w, "Hello, client")
@@ -617,21 +638,21 @@ func TestGetImagePullSecret(t *testing.T) {
 	cases := []struct {
 		name           string
 		clientObjs     []client.Object
+		secret         *corev1.Secret
 		managedCluster *clusterv1.ManagedCluster
 	}{
 		{
-			name: "no registry",
-			clientObjs: []client.Object{
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
-						Namespace: os.Getenv("POD_NAMESPACE"),
-					},
-					Data: map[string][]byte{
-						".dockerconfigjson": []byte("fake-token"),
-					},
-					Type: corev1.SecretTypeDockerConfigJson,
+			name:       "no registry",
+			clientObjs: []client.Object{},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
+					Namespace: os.Getenv("POD_NAMESPACE"),
 				},
+				Data: map[string][]byte{
+					".dockerconfigjson": []byte("fake-token"),
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
 			},
 			managedCluster: &clusterv1.ManagedCluster{
 				ObjectMeta: metav1.ObjectMeta{
@@ -642,16 +663,6 @@ func TestGetImagePullSecret(t *testing.T) {
 		{
 			name: "has registry",
 			clientObjs: []client.Object{
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test",
-						Namespace: "test1",
-					},
-					Data: map[string][]byte{
-						".dockerconfigjson": []byte("fake-token"),
-					},
-					Type: corev1.SecretTypeDockerConfigJson,
-				},
 				&imgregistryv1alpha1.ManagedClusterImageRegistry{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test2",
@@ -663,6 +674,16 @@ func TestGetImagePullSecret(t *testing.T) {
 						},
 					},
 				},
+			},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test1",
+				},
+				Data: map[string][]byte{
+					".dockerconfigjson": []byte("fake-token"),
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
 			},
 			managedCluster: &clusterv1.ManagedCluster{
 				ObjectMeta: metav1.ObjectMeta{
@@ -677,8 +698,11 @@ func TestGetImagePullSecret(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			fakeClient := fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.clientObjs...).Build()
-			_, _, err := getImagePullSecret(fakeClient, c.managedCluster)
+			clientHolder := &helpers.ClientHolder{
+				RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.clientObjs...).Build(),
+				KubeClient:    kubefake.NewSimpleClientset(c.secret),
+			}
+			_, _, err := getImagePullSecret(context.Background(), clientHolder, c.managedCluster)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}

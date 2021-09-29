@@ -14,6 +14,8 @@ const ImportFinalizer string = "managedcluster-import-controller.open-cluster-ma
 
 const SelfManagedLabel string = "local-cluster"
 
+const ClusterImportSecretLabel = "managedcluster-import-controller.open-cluster-management.io/import-secret"
+
 const (
 	CreatedViaAnnotation = "open-cluster-management/created-via"
 	CreatedViaAI         = "assisted-installer"

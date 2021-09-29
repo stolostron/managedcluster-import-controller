@@ -21,6 +21,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/client-go/kubernetes"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -32,8 +33,9 @@ var log = logf.Log.WithName(controllerName)
 // ReconcileClusterDeployment reconciles the clusterdeployment that is in the managed cluster namespace
 // to import the managed cluster
 type ReconcileClusterDeployment struct {
-	client   client.Client
-	recorder events.Recorder
+	client     client.Client
+	kubeClient kubernetes.Interface
+	recorder   events.Recorder
 }
 
 // blank assignment to verify that ReconcileClusterDeployment implements reconcile.Reconciler
@@ -90,7 +92,7 @@ func (r *ReconcileClusterDeployment) Reconcile(ctx context.Context, request reco
 	}
 
 	// if there is an auto import secret in the managed cluster namespce, we will use the auto import secret to import the cluster
-	err = r.client.Get(ctx, types.NamespacedName{Namespace: clusterName, Name: constants.AutoImportSecretName}, &corev1.Secret{})
+	_, err = r.kubeClient.CoreV1().Secrets(clusterName).Get(ctx, constants.AutoImportSecretName, metav1.GetOptions{})
 	if err == nil {
 		reqLogger.Info(fmt.Sprintf("The hive managed cluster %s has auto import secret, skipped", clusterName))
 		return reconcile.Result{}, nil
@@ -99,9 +101,9 @@ func (r *ReconcileClusterDeployment) Reconcile(ctx context.Context, request reco
 		return reconcile.Result{}, err
 	}
 
-	hiveSecret := &corev1.Secret{}
 	secretRefName := clusterDeployment.Spec.ClusterMetadata.AdminKubeconfigSecretRef.Name
-	if err := r.client.Get(ctx, types.NamespacedName{Namespace: clusterName, Name: secretRefName}, hiveSecret); err != nil {
+	hiveSecret, err := r.kubeClient.CoreV1().Secrets(clusterName).Get(ctx, secretRefName, metav1.GetOptions{})
+	if err != nil {
 		return reconcile.Result{}, err
 	}
 	hiveClient, restMapper, err := helpers.GenerateClientFromSecret(hiveSecret)
@@ -110,8 +112,7 @@ func (r *ReconcileClusterDeployment) Reconcile(ctx context.Context, request reco
 	}
 
 	importSecretName := fmt.Sprintf("%s-%s", clusterName, constants.ImportSecretNameSuffix)
-	importSecret := &corev1.Secret{}
-	err = r.client.Get(ctx, types.NamespacedName{Namespace: clusterName, Name: importSecretName}, importSecret)
+	importSecret, err := r.kubeClient.CoreV1().Secrets(clusterName).Get(ctx, importSecretName, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		return reconcile.Result{}, nil
 	}

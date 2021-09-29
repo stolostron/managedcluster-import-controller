@@ -14,7 +14,9 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -40,6 +42,7 @@ func TestReconcile(t *testing.T) {
 	cases := []struct {
 		name        string
 		objs        []client.Object
+		secrets     []runtime.Object
 		expectedErr bool
 	}{
 		{
@@ -56,6 +59,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
+			secrets:     []runtime.Object{},
 			expectedErr: false,
 		},
 		{
@@ -66,6 +70,8 @@ func TestReconcile(t *testing.T) {
 						Name: "test",
 					},
 				},
+			},
+			secrets: []runtime.Object{
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "auto-import-secret",
@@ -83,6 +89,8 @@ func TestReconcile(t *testing.T) {
 						Name: "test",
 					},
 				},
+			},
+			secrets: []runtime.Object{
 				testinghelpers.GetImportSecret("test"),
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
@@ -103,8 +111,9 @@ func TestReconcile(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			r := &ReconcileAutoImport{
-				client:   fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).Build(),
-				recorder: eventstesting.NewTestingEventRecorder(t),
+				client:     fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).Build(),
+				kubeClient: kubefake.NewSimpleClientset(c.secrets...),
+				recorder:   eventstesting.NewTestingEventRecorder(t),
 			}
 
 			req := reconcile.Request{NamespacedName: types.NamespacedName{Namespace: "test"}}

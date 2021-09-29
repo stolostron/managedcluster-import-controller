@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
 	imgregistryv1alpha1 "github.com/open-cluster-management/multicloud-operators-foundation/pkg/apis/imageregistry/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
@@ -20,8 +21,10 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	clientcmdlatest "k8s.io/client-go/tools/clientcmd/api/latest"
 
@@ -29,51 +32,57 @@ import (
 )
 
 // getBootstrapSecret looks for the bootstrap secret from bootstrap sa
-func getBootstrapSecret(client client.Client, managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, error) {
+func getBootstrapSecret(ctx context.Context, kubeClient kubernetes.Interface, managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, error) {
 	saName := fmt.Sprintf("%s-%s", managedCluster.Name, bootstrapSASuffix)
-
-	sa := &corev1.ServiceAccount{}
-	if err := client.Get(context.TODO(), types.NamespacedName{Namespace: managedCluster.Name, Name: saName}, sa); err != nil {
+	sa, err := kubeClient.CoreV1().ServiceAccounts(managedCluster.Name).Get(ctx, saName, metav1.GetOptions{})
+	if err != nil {
 		return nil, err
 	}
 
-	var secret *corev1.Secret
-	for _, objectRef := range sa.Secrets {
-		if objectRef.Namespace != "" && objectRef.Namespace != managedCluster.Name {
+	for _, secretRef := range sa.Secrets {
+		if secretRef.Namespace != "" && secretRef.Namespace != managedCluster.Name {
 			continue
 		}
+
 		prefix := saName
 		if len(prefix) > 63 {
 			prefix = prefix[:37]
 		}
-		if strings.HasPrefix(objectRef.Name, prefix) {
-			secret = &corev1.Secret{}
-			err := client.Get(context.TODO(), types.NamespacedName{Name: objectRef.Name, Namespace: managedCluster.Name}, secret)
+
+		if strings.HasPrefix(secretRef.Name, prefix) {
+			secret, err := kubeClient.CoreV1().Secrets(managedCluster.Name).Get(ctx, secretRef.Name, metav1.GetOptions{})
 			if err != nil {
 				continue
 			}
-			if secret.Type == corev1.SecretTypeServiceAccountToken {
-				break
+
+			if secret.Type != corev1.SecretTypeServiceAccountToken {
+				continue
 			}
+
+			token, ok := secret.Data["token"]
+			if !ok {
+				continue
+			}
+			if len(token) == 0 {
+				continue
+			}
+
+			return secret, nil
 		}
 	}
 
-	if secret == nil {
-		return nil, fmt.Errorf("secret with prefix %s and type %s not found in service account %s/%s",
-			saName,
-			corev1.SecretTypeServiceAccountToken,
-			managedCluster.Name,
-			saName,
-		)
-	}
-
-	return secret, nil
+	return nil, fmt.Errorf("secret with prefix %s and type %s not found in service account %s/%s",
+		saName,
+		corev1.SecretTypeServiceAccountToken,
+		managedCluster.Name,
+		saName,
+	)
 }
 
 // getKubeAPIServerAddress get the kube-apiserver URL from ocp infrastructure
-func getKubeAPIServerAddress(client client.Client) (string, error) {
+func getKubeAPIServerAddress(ctx context.Context, client client.Client) (string, error) {
 	infraConfig := &ocinfrav1.Infrastructure{}
-	if err := client.Get(context.TODO(), types.NamespacedName{Name: "cluster"}, infraConfig); err != nil {
+	if err := client.Get(ctx, types.NamespacedName{Name: "cluster"}, infraConfig); err != nil {
 		return "", err
 	}
 
@@ -82,9 +91,9 @@ func getKubeAPIServerAddress(client client.Client) (string, error) {
 
 // getKubeAPIServerSecretName iterate through all named certificates from apiserver
 // returns the first one which has a name matches the given dnsName
-func getKubeAPIServerSecretName(client client.Client, dnsName string) (string, error) {
+func getKubeAPIServerSecretName(ctx context.Context, client client.Client, dnsName string) (string, error) {
 	apiserver := &ocinfrav1.APIServer{}
-	if err := client.Get(context.TODO(), types.NamespacedName{Name: "cluster"}, apiserver); err != nil {
+	if err := client.Get(ctx, types.NamespacedName{Name: "cluster"}, apiserver); err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Failed to get ocp apiserver cluster")
 			return "", nil
@@ -105,9 +114,9 @@ func getKubeAPIServerSecretName(client client.Client, dnsName string) (string, e
 
 // checkIsIBMCloud detects if the current cloud vendor is ibm or not
 // we know we are on OCP already, so if it's also ibm cloud, it's roks
-func checkIsIBMCloud(client client.Client) (bool, error) {
+func checkIsIBMCloud(ctx context.Context, client client.Client) (bool, error) {
 	nodes := &corev1.NodeList{}
-	if err := client.List(context.TODO(), nodes); err != nil {
+	if err := client.List(ctx, nodes); err != nil {
 		return false, err
 	}
 
@@ -125,9 +134,8 @@ func checkIsIBMCloud(client client.Client) (bool, error) {
 }
 
 // getKubeAPIServerCertificate looks for secret in openshift-config namespace, and returns tls.crt
-func getKubeAPIServerCertificate(client client.Client, secretName string) ([]byte, error) {
-	secret := &corev1.Secret{}
-	err := client.Get(context.TODO(), types.NamespacedName{Name: secretName, Namespace: "openshift-config"}, secret)
+func getKubeAPIServerCertificate(ctx context.Context, kubeClient kubernetes.Interface, secretName string) ([]byte, error) {
+	secret, err := kubeClient.CoreV1().Secrets("openshift-config").Get(ctx, secretName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Info("Failed to get secret", fmt.Sprintf("openshift-config/%s", secretName))
@@ -150,16 +158,15 @@ func getKubeAPIServerCertificate(client client.Client, secretName string) ([]byt
 }
 
 // getImagePullSecret get image pull secret from env
-func getImagePullSecret(client client.Client, managedCluster *clusterv1.ManagedCluster) (string, *corev1.Secret, error) {
-	imageRegistry, err := getImageRegistry(client, managedCluster)
+func getImagePullSecret(ctx context.Context, clientHolder *helpers.ClientHolder, managedCluster *clusterv1.ManagedCluster) (string, *corev1.Secret, error) {
+	imageRegistry, err := getImageRegistry(ctx, clientHolder.RuntimeClient, managedCluster)
 	if err != nil {
 		return "", nil, err
 	}
 
-	secret := &corev1.Secret{}
 	if imageRegistry != nil {
-		secretKey := types.NamespacedName{Namespace: imageRegistry.Namespace, Name: imageRegistry.Spec.PullSecret.Name}
-		if err := client.Get(context.TODO(), secretKey, secret); err != nil {
+		secret, err := clientHolder.KubeClient.CoreV1().Secrets(imageRegistry.Namespace).Get(ctx, imageRegistry.Spec.PullSecret.Name, metav1.GetOptions{})
+		if err != nil {
 			return "", nil, err
 		}
 
@@ -173,8 +180,9 @@ func getImagePullSecret(client client.Client, managedCluster *clusterv1.ManagedC
 		return "", nil, nil
 	}
 
-	secretKey := types.NamespacedName{Namespace: os.Getenv(constants.PodNamespaceEnvVarName), Name: defaultSecretName}
-	if err := client.Get(context.TODO(), secretKey, secret); err != nil {
+	ns := os.Getenv(constants.PodNamespaceEnvVarName)
+	secret, err := clientHolder.KubeClient.CoreV1().Secrets(ns).Get(ctx, defaultSecretName, metav1.GetOptions{})
+	if err != nil {
 		return "", nil, err
 	}
 	return "", secret, nil
@@ -222,10 +230,10 @@ func getValidCertificatesFromURL(serverURL string, rootCAs *x509.CertPool) ([]*x
 }
 
 // create kubeconfig from bootstrap secret
-func createKubeconfigData(client client.Client, bootStrapSecret *corev1.Secret) ([]byte, error) {
+func createKubeconfigData(ctx context.Context, clientHolder *helpers.ClientHolder, bootStrapSecret *corev1.Secret) ([]byte, error) {
 	saToken := bootStrapSecret.Data["token"]
 
-	kubeAPIServer, err := getKubeAPIServerAddress(client)
+	kubeAPIServer, err := getKubeAPIServerAddress(ctx, clientHolder.RuntimeClient)
 	if err != nil {
 		return nil, err
 	}
@@ -233,13 +241,13 @@ func createKubeconfigData(client client.Client, bootStrapSecret *corev1.Secret) 
 	var certData []byte
 	if u, err := url.Parse(kubeAPIServer); err == nil {
 		// get the ca cert from ocp apiserver firstly
-		apiServerCertSecretName, err := getKubeAPIServerSecretName(client, u.Hostname())
+		apiServerCertSecretName, err := getKubeAPIServerSecretName(ctx, clientHolder.RuntimeClient, u.Hostname())
 		if err != nil {
 			return nil, err
 		}
 
 		if len(apiServerCertSecretName) > 0 {
-			apiServerCert, err := getKubeAPIServerCertificate(client, apiServerCertSecretName)
+			apiServerCert, err := getKubeAPIServerCertificate(ctx, clientHolder.KubeClient, apiServerCertSecretName)
 			if err != nil {
 				return nil, err
 			}
@@ -251,10 +259,12 @@ func createKubeconfigData(client client.Client, bootStrapSecret *corev1.Secret) 
 		// fallback to service account token ca.crt
 		if _, ok := bootStrapSecret.Data["ca.crt"]; ok {
 			certData = bootStrapSecret.Data["ca.crt"]
+		} else {
+			log.Info(fmt.Sprintf("No ca.crt in the bootstrap secret %s/%s", bootStrapSecret.Namespace, bootStrapSecret.Name))
 		}
 
 		// if it's ocp && it's on ibm cloud, we treat it as roks
-		isROKS, err := checkIsIBMCloud(client)
+		isROKS, err := checkIsIBMCloud(ctx, clientHolder.RuntimeClient)
 		if err != nil {
 			return nil, err
 		}
@@ -266,9 +276,10 @@ func createKubeconfigData(client client.Client, bootStrapSecret *corev1.Secret) 
 				return nil, err
 			} else if len(certs) > 0 {
 				// simply don't give any certs as the apiserver is using certs signed by known CAs
+				log.Info("Using certs signed by known CAs cas on the ROKS.")
 				certData = nil
 			} else {
-				log.Info("No additional valid certificate found for APIserver. Skipping.")
+				log.Info("No additional valid certificate found for APIserver on the ROKS. Skipping.")
 			}
 		}
 	}
@@ -298,7 +309,7 @@ func createKubeconfigData(client client.Client, bootStrapSecret *corev1.Secret) 
 
 // getImageRegistry gets imageRegistry.
 // imageRegistryLabelValue format is namespace.imageRegistry
-func getImageRegistry(
+func getImageRegistry(ctx context.Context,
 	client client.Client, managedCluster *clusterv1.ManagedCluster) (*imgregistryv1alpha1.ManagedClusterImageRegistry, error) {
 	imageRegistryLabelValue, ok := managedCluster.Labels[clusterImageRegistryLabel]
 	if !ok || imageRegistryLabelValue == "" {
@@ -313,7 +324,7 @@ func getImageRegistry(
 	namespace := segments[0]
 	imageRegistryName := segments[1]
 	imageRegistry := &imgregistryv1alpha1.ManagedClusterImageRegistry{}
-	err := client.Get(context.TODO(), types.NamespacedName{Namespace: namespace, Name: imageRegistryName}, imageRegistry)
+	err := client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: imageRegistryName}, imageRegistry)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get imageregistry %s/%s: %v", namespace, imageRegistryName, err)
 	}
