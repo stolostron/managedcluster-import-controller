@@ -6,7 +6,9 @@ package manifestwork
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
@@ -30,7 +32,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-const manifestWorkFinalizer = "managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup"
+const (
+	manifestWorkFinalizer string = "managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup"
+	posthookAnnotation    string = "managedcluster-import-controller.open-cluster-management.io/posthook-graceperiod"
+)
 
 var log = logf.Log.WithName(controllerName)
 
@@ -145,10 +150,11 @@ func (r *ReconcileManifestWork) assertManifestWorkFinalizer(ctx context.Context,
 // deleteManifestWorks deletes manifest works when a managed cluster is deleting
 // If the managed clsuter is unavailable, we will force delete all manifest works
 // If the managed clsuter is available, we will
-//   1. delete the manifest works that do not include klusterlet works and klusterlet addon works
-//   2. delete the klusterlet manifest work, the delete option of the the klusterlet manifest work
+//   1. Wait all posthook manifestwork to be executed
+//   2. delete the manifest works that do not include klusterlet works and klusterlet addon works
+//   3. delete the klusterlet manifest work, the delete option of the the klusterlet manifest work
 //      is orphan, so we can delete it safely
-//   3. after the klusterlet manifest work is deleted, we delete the klusterlet-crds manifest work,
+//   4. after the klusterlet manifest work is deleted, we delete the klusterlet-crds manifest work,
 //      after the klusterlet-crds manifest work is deleted from the hub cluster, its klusterlet
 //      crds will be deleted from the managed cluser, then the kube system will delete the klusterlet
 //      cr from the managed cluster, once the klusterlet cr is deleted, the klusterlet operator will
@@ -163,6 +169,14 @@ func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster
 		return r.forceDeleteAllManifestWorks(ctx, works)
 	}
 
+	// check is there is still posthook manifestworks
+	hasPosthook, err := r.hasPosthook(ctx, cluster)
+	if err != nil {
+		return err
+	}
+	if hasPosthook {
+		return nil
+	}
 	// delete works that do not include klusterlet worke and klusterlet addon works, the addon works will be removed by
 	// klusterlet-addon-controllerklusterlet, we need to wait the klusterlet-addon-controller delete them
 	for _, manifestWork := range works {
@@ -254,6 +268,34 @@ func (r *ReconcileManifestWork) forceDeleteManifestWork(ctx context.Context, nam
 	r.recorder.Eventf("ManifestWorksForceDeleted",
 		fmt.Sprintf("The manifest work %s/%s is force deleted", manifestWork.Namespace, manifestWork.Name))
 	return nil
+}
+
+func (r *ReconcileManifestWork) hasPosthook(ctx context.Context, cluster *clusterv1.ManagedCluster) (bool, error) {
+	listOpts := &client.ListOptions{Namespace: cluster.Name}
+	manifestWorks := &workv1.ManifestWorkList{}
+	if err := r.clientHolder.RuntimeClient.List(ctx, manifestWorks, listOpts); err != nil {
+		return false, err
+	}
+
+	manifestWorkNames := []string{}
+	for _, manifestWork := range manifestWorks.Items {
+		if gracePeriodString, ok := manifestWork.GetAnnotations()[posthookAnnotation]; ok {
+			gracePeriod, err := strconv.Atoi(gracePeriodString)
+			if err != nil {
+				return false, err
+			}
+			if time.Since(cluster.DeletionTimestamp.Time) < time.Duration(gracePeriod)*time.Second {
+				manifestWorkNames = append(manifestWorkNames, manifestWork.GetName())
+			}
+		}
+	}
+
+	if len(manifestWorkNames) != 0 {
+		log.Info(fmt.Sprintf("In addition to klusterlet manifest works, there are also have %s", strings.Join(manifestWorkNames, ",")))
+		return true, nil
+	}
+
+	return false, nil
 }
 
 func (r *ReconcileManifestWork) onlyHasKlusterletManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster) (bool, error) {
