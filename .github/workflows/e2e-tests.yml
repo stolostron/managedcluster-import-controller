@@ -24,4 +24,4 @@ jobs:
   
     - if:  ${{ failure() }}
       name: Logs after Tests Failed
-      run: kubectl --kubeconfig=build/_output/kubeconfig -n open-cluster-management logs -l name=managedcluster-import-controller --tail=-1
+      run: kubectl --kubeconfig=_output/kubeconfig -n open-cluster-management logs -l name=managedcluster-import-controller --tail=-1

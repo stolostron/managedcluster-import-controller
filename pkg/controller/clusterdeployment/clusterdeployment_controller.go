@@ -171,6 +171,7 @@ func (r *ReconcileClusterDeployment) setCreatedViaAnnotation(
 
 func (r *ReconcileClusterDeployment) addClusterImportFinalizer(
 	ctx context.Context, clusterDeployment *hivev1.ClusterDeployment) error {
+	patch := client.MergeFrom(clusterDeployment.DeepCopy())
 	for i := range clusterDeployment.Finalizers {
 		if clusterDeployment.Finalizers[i] == constants.ImportFinalizer {
 			return nil
@@ -178,7 +179,7 @@ func (r *ReconcileClusterDeployment) addClusterImportFinalizer(
 	}
 
 	clusterDeployment.Finalizers = append(clusterDeployment.Finalizers, constants.ImportFinalizer)
-	if err := r.client.Update(ctx, clusterDeployment); err != nil {
+	if err := r.client.Patch(ctx, clusterDeployment, patch); err != nil {
 		return err
 	}
 
@@ -221,8 +222,9 @@ func (r *ReconcileClusterDeployment) removeImportFinalizer(ctx context.Context, 
 			"The managed cluster namespace %s is deleted", clusterDeployment.Namespace)
 	}
 
+	patch := client.MergeFrom(clusterDeployment.DeepCopy())
 	clusterDeployment.Finalizers = []string{}
-	if err := r.client.Update(ctx, clusterDeployment); err != nil {
+	if err := r.client.Patch(ctx, clusterDeployment, patch); err != nil {
 		return err
 	}
 
