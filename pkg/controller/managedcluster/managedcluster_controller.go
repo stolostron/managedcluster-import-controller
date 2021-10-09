@@ -10,6 +10,7 @@ import (
 
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
+	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
@@ -193,7 +194,20 @@ func (r *ReconcileManagedCluster) deleteManagedClusterNamespace(
 		r.recorder.Warningf("ManagedClusterNamespaceRemained", "There is a clusterdeployment in namespace %s", clusterName)
 		return nil
 	}
-	if !errors.IsNotFound(err) {
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+
+	infraEnvList := &asv1beta1.InfraEnvList{}
+	err = r.client.List(ctx, infraEnvList, client.InNamespace(clusterName))
+	if err == nil && len(infraEnvList.Items) != 0 {
+		// there are infraEnvs in the managed cluster namespace.
+		// the managed cluster is deleted, we need to keep the managed cluster namespace.
+		// TODO: find a proper way to hand the deletion of the managed cluster namespace.
+		r.recorder.Warningf("ManagedClusterNamespaceRemained", "There are infraEnvs in namespace %s", clusterName)
+		return nil
+	}
+	if err != nil && !errors.IsNotFound(err) {
 		return err
 	}
 

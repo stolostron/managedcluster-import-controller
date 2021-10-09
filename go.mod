@@ -8,6 +8,7 @@ require (
 	github.com/onsi/gomega v1.13.0
 	github.com/open-cluster-management/multicloud-operators-foundation v0.0.0-20210824054957-51557a572f11
 	github.com/openshift/api v3.9.1-0.20191111211345-a27ff30ebf09+incompatible
+	github.com/openshift/assisted-service v1.0.10-0.20211007120927-ad88cd9a8817
 	github.com/openshift/hive/apis v3.9.1-0.20191111211345-a27ff30ebf09+incompatible
 	github.com/openshift/library-go v0.0.0-20210330121802-ebbc677c82a5
 	k8s.io/api v0.21.2
