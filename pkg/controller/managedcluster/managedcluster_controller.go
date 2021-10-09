@@ -207,7 +207,7 @@ func (r *ReconcileManagedCluster) deleteManagedClusterNamespace(
 		r.recorder.Warningf("ManagedClusterNamespaceRemained", "There are infraEnvs in namespace %s", clusterName)
 		return nil
 	}
-	if err != nil && !errors.IsNotFound(err) {
+	if err != nil && !errors.IsNotFound(err) && !strings.Contains(err.Error(), "no matches for kind \"InfraEnv\"") {
 		return err
 	}
 
