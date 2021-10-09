@@ -207,3 +207,11 @@ rules:
   - get
   - create
   - update
+- apiGroups:
+    - agent-install.openshift.io
+  resources:
+    - infraenvs
+  verbs:
+    - get
+    - list
+    - watch
