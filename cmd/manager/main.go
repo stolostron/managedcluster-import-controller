@@ -34,6 +34,7 @@ import (
 	k8sscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/component-base/logs"
 
+	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -54,6 +55,7 @@ func init() {
 	utilruntime.Must(clusterv1.AddToScheme(scheme))
 	utilruntime.Must(workv1.AddToScheme(scheme))
 	utilruntime.Must(imgregistryv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(asv1beta1.AddToScheme(scheme))
 }
 
 func main() {
