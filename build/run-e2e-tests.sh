@@ -63,6 +63,7 @@ git clone https://github.com/open-cluster-management/registration-operator.git "
 ${KUBECTL} apply -k "$WORK_DIR/registration-operator/deploy/cluster-manager/config/manifests"
 ${KUBECTL} apply -k "$WORK_DIR/registration-operator/deploy/cluster-manager/config/samples"
 rm -rf "$WORK_DIR/registration-operator"
+sleep 10
 ${KUBECTL} -n open-cluster-management rollout status deploy cluster-manager --timeout=120s
 ${KUBECTL} -n open-cluster-management-hub rollout status deploy cluster-manager-registration-controller --timeout=120s
 ${KUBECTL} -n open-cluster-management-hub rollout status deploy cluster-manager-registration-webhook --timeout=120s
@@ -70,6 +71,7 @@ ${KUBECTL} -n open-cluster-management-hub rollout status deploy cluster-manager-
 
 echo "###### deploy managedcluster-import-controller with image coverage image"
 kubectl kustomize "$REPO_DIR/deploy/test" | kubectl apply -f -
+sleep 5
 ${KUBECTL} -n open-cluster-management rollout status deploy managedcluster-import-controller --timeout=120s
 
 echo "###### prepare required crds"

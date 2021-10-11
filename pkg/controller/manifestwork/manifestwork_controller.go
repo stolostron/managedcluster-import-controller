@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
@@ -30,9 +31,17 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-const manifestWorkFinalizer = "managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup"
+const (
+	manifestWorkFinalizer = "managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup"
+
+	// postponeDeletionAnnotation is used to delete the manifest work with this annotation until 10 min after the cluster is deleted.
+	postponeDeletionAnnotation = "open-cluster-management/postpone-delete"
+)
 
 var log = logf.Log.WithName(controllerName)
+
+// manifestWorkPostponeDeleteTime is the postponed time to delete manifest work with postpone-delete annotation
+var manifestWorkPostponeDeleteTime = 10 * time.Minute
 
 // ReconcileManifestWork reconciles the ManagedClusters of the ManifestWorks object
 type ReconcileManifestWork struct {
@@ -88,7 +97,7 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	// after managed clusrter joined, apply klusterlet manifest works from import secret
+	// after managed cluster joined, apply klusterlet manifest works from import secret
 	importSecretName := fmt.Sprintf("%s-%s", managedClusterName, constants.ImportSecretNameSuffix)
 	importSecretKey := types.NamespacedName{Namespace: managedClusterName, Name: importSecretName}
 	importSecret := &corev1.Secret{}
@@ -143,14 +152,15 @@ func (r *ReconcileManifestWork) assertManifestWorkFinalizer(ctx context.Context,
 }
 
 // deleteManifestWorks deletes manifest works when a managed cluster is deleting
-// If the managed clsuter is unavailable, we will force delete all manifest works
-// If the managed clsuter is available, we will
-//   1. delete the manifest works that do not include klusterlet works and klusterlet addon works
-//   2. delete the klusterlet manifest work, the delete option of the the klusterlet manifest work
+// If the managed cluster is unavailable, we will force delete all manifest works
+// If the managed cluster is available, we will
+//   1. delete the manifest work with the postpone-delete annotation until 10 min after the cluster is deleted.
+//   2. delete the manifest works that do not include klusterlet works and klusterlet addon works
+//   3. delete the klusterlet manifest work, the delete option of the klusterlet manifest work
 //      is orphan, so we can delete it safely
-//   3. after the klusterlet manifest work is deleted, we delete the klusterlet-crds manifest work,
+//   4. after the klusterlet manifest work is deleted, we delete the klusterlet-crds manifest work,
 //      after the klusterlet-crds manifest work is deleted from the hub cluster, its klusterlet
-//      crds will be deleted from the managed cluser, then the kube system will delete the klusterlet
+//      crds will be deleted from the managed cluster, then the kube system will delete the klusterlet
 //      cr from the managed cluster, once the klusterlet cr is deleted, the klusterlet operator will
 //      clean up the klusterlet on the managed cluster
 func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster, works []workv1.ManifestWork) error {
@@ -159,12 +169,12 @@ func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster
 	}
 
 	if isClusterUnavailable(cluster) {
-		// the managed cluster is is offline, force delete all manifest works
+		// the managed cluster is offline, force delete all manifest works
 		return r.forceDeleteAllManifestWorks(ctx, works)
 	}
 
-	// delete works that do not include klusterlet worke and klusterlet addon works, the addon works will be removed by
-	// klusterlet-addon-controllerklusterlet, we need to wait the klusterlet-addon-controller delete them
+	// delete works that do not include klusterlet works and klusterlet addon works, the addon works will be removed by
+	// klusterlet-addon-controller, we need to wait the klusterlet-addon-controller delete them
 	for _, manifestWork := range works {
 		if manifestWork.GetName() == fmt.Sprintf("%s-%s", cluster.Name, klusterletSuffix) ||
 			manifestWork.GetName() == fmt.Sprintf("%s-%s", cluster.Name, klusterletCRDsSuffix) ||
@@ -172,6 +182,12 @@ func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster
 			continue
 		}
 
+		annotations := manifestWork.GetAnnotations()
+		if _, ok := annotations[postponeDeletionAnnotation]; ok {
+			if time.Since(cluster.DeletionTimestamp.Time) < manifestWorkPostponeDeleteTime {
+				continue
+			}
+		}
 		if err := r.deleteManifestWork(ctx, manifestWork.Namespace, manifestWork.Name); err != nil {
 			return err
 		}

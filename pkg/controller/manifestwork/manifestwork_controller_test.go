@@ -290,6 +290,61 @@ func TestReconcile(t *testing.T) {
 			},
 		},
 		{
+			name: "managed clusters is deleting and has manifestwork with postpone-delete annotation",
+			startObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: v1.ObjectMeta{
+						Name:              "test",
+						Finalizers:        []string{manifestWorkFinalizer},
+						DeletionTimestamp: &now,
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: v1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: v1.ObjectMeta{
+						Name:       "test-crds",
+						Namespace:  "test",
+						Finalizers: []string{"test"},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: v1.ObjectMeta{
+						Name:       "test-klusterlet",
+						Namespace:  "test",
+						Finalizers: []string{"test"},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: v1.ObjectMeta{
+						Name:      "test-postpone-time",
+						Namespace: "test",
+						Annotations: map[string]string{
+							"open-cluster-management/postpone-delete": "",
+						},
+					},
+				},
+			},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, runtimeClient client.Client) {
+				manifestWorks := &workv1.ManifestWorkList{}
+				if err := runtimeClient.List(context.TODO(), manifestWorks, &client.ListOptions{Namespace: "test"}); err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if len(manifestWorks.Items) != 3 {
+					t.Errorf("expected 3 works, but failed %v", len(manifestWorks.Items))
+				}
+			},
+		},
+		{
 			name: "apply klusterlet manifest works",
 			startObjs: []client.Object{
 				&clusterv1.ManagedCluster{
