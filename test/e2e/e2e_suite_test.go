@@ -96,7 +96,7 @@ var _ = ginkgo.BeforeSuite(func() {
 // asserters
 func assertManagedClusterImportSecretCreated(clusterName, createdVia string) {
 	assertManagedClusterFinalizer(clusterName, "managedcluster-import-controller.open-cluster-management.io/cleanup")
-	assertManagedClusterCreatedViaAnntation(clusterName, createdVia)
+	assertManagedClusterCreatedViaAnnotation(clusterName, createdVia)
 	assertManagedClusterNameLabel(clusterName)
 	assertManagedClusterNamespaceLabel(clusterName)
 	assertManagedClusterRBAC(clusterName)
@@ -122,7 +122,7 @@ func assertManagedClusterFinalizer(clusterName, expected string) {
 	})
 }
 
-func assertManagedClusterCreatedViaAnntation(clusterName, expected string) {
+func assertManagedClusterCreatedViaAnnotation(clusterName, expected string) {
 	ginkgo.By(fmt.Sprintf("Managed cluster %s should has expected annotation: %s", clusterName, expected), func() {
 		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
 			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
@@ -247,7 +247,9 @@ func assertManagedClusterImportSecret(managedClusterName string) {
 func assertManagedClusterDeleted(clusterName string) {
 	ginkgo.By(fmt.Sprintf("Delete the managed cluster %s", clusterName), func() {
 		err := hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), clusterName, metav1.DeleteOptions{})
-		gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		if err != nil && !errors.IsNotFound(err) {
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		}
 	})
 
 	assertManagedClusterDeletedFromHub(clusterName)
@@ -381,6 +383,21 @@ func assertAutoImportSecretDeleted(managedClusterName string) {
 				return true, nil
 			}
 			return false, err
+		})).ToNot(gomega.HaveOccurred())
+	})
+}
+
+func assertManagedClusterNamespace(managedClusterName string) {
+	ginkgo.By("Should create the managedCluster namespace", func() {
+		gomega.Expect(wait.Poll(1*time.Second, 60*time.Second, func() (bool, error) {
+			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
+			if err != nil && errors.IsNotFound(err) {
+				return true, nil
+			}
+			if err != nil {
+				return false, err
+			}
+			return true, nil
 		})).ToNot(gomega.HaveOccurred())
 	})
 }
