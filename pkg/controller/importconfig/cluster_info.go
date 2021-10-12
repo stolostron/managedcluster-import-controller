@@ -224,6 +224,10 @@ func getValidCertificatesFromURL(serverURL string, rootCAs *x509.CertPool) ([]*x
 // create kubeconfig from bootstrap secret
 func createKubeconfigData(client client.Client, bootStrapSecret *corev1.Secret) ([]byte, error) {
 	saToken := bootStrapSecret.Data["token"]
+	if len(saToken) == 0 {
+		log.Error(nil, "No token value found in the boot strap secret", "secret name", bootStrapSecret.Name)
+		return nil, fmt.Errorf("no token value found in the boot strap secret")
+	}
 
 	kubeAPIServer, err := getKubeAPIServerAddress(client)
 	if err != nil {
@@ -248,17 +252,13 @@ func createKubeconfigData(client client.Client, bootStrapSecret *corev1.Secret) 
 	}
 
 	if len(certData) == 0 {
-		// fallback to service account token ca.crt
-		if _, ok := bootStrapSecret.Data["ca.crt"]; ok {
-			certData = bootStrapSecret.Data["ca.crt"]
-		}
-
 		// if it's ocp && it's on ibm cloud, we treat it as roks
 		isROKS, err := checkIsIBMCloud(client)
 		if err != nil {
 			return nil, err
 		}
 
+		knownCAs := false
 		if isROKS {
 			// ROKS should have a certificate that is signed by trusted CA
 			if certs, err := getValidCertificatesFromURL(kubeAPIServer, nil); err != nil {
@@ -266,9 +266,19 @@ func createKubeconfigData(client client.Client, bootStrapSecret *corev1.Secret) 
 				return nil, err
 			} else if len(certs) > 0 {
 				// simply don't give any certs as the apiserver is using certs signed by known CAs
-				certData = nil
+				knownCAs = true
 			} else {
 				log.Info("No additional valid certificate found for APIserver. Skipping.")
+			}
+		}
+
+		if !knownCAs {
+			// fallback to service account token ca.crt
+			if v := bootStrapSecret.Data["ca.crt"]; len(v) > 0 {
+				certData = bootStrapSecret.Data["ca.crt"]
+			} else {
+				log.Error(nil, "No ca.crt found in the boot strap secret", "secret name", bootStrapSecret.Name)
+				return nil, fmt.Errorf("no ca.crt found in the boot strap secret")
 			}
 		}
 	}

@@ -92,7 +92,8 @@ func TestReconcile(t *testing.T) {
 						Namespace: "test",
 					},
 					Data: map[string][]byte{
-						"token": []byte("fake-token"),
+						"token":  []byte("fake-token"),
+						"ca.crt": []byte("fake-ca"),
 					},
 					Type: corev1.SecretTypeServiceAccountToken,
 				},
@@ -169,6 +170,154 @@ func TestReconcile(t *testing.T) {
 			}
 
 			c.validateFunc(t, r.clientHolder.RuntimeClient, r.clientHolder.KubeClient)
+		})
+	}
+}
+
+func TestReconcileError(t *testing.T) {
+	cases := []struct {
+		name        string
+		runtimeObjs []runtimeclient.Object
+		request     reconcile.Request
+		errMsg      string
+	}{
+		{
+			name: "token invalid",
+			runtimeObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+				&corev1.ServiceAccount{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa",
+						Namespace: "test",
+					},
+					Secrets: []corev1.ObjectReference{
+						{
+							Name:      "test-bootstrap-sa-token-5pw5c",
+							Namespace: "test",
+						},
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa-token-5pw5c",
+						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"ca.crt": []byte("fake-ca"),
+					},
+					Type: corev1.SecretTypeServiceAccountToken,
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
+						Namespace: os.Getenv("POD_NAMESPACE"),
+					},
+					Data: map[string][]byte{
+						".dockerconfigjson": []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeDockerConfigJson,
+				},
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+				&configv1.Infrastructure{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "cluster",
+					},
+				},
+			},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			errMsg: "no token value found in the boot strap secret",
+		},
+		{
+			name: "cert invalid",
+			runtimeObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+				&corev1.ServiceAccount{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa",
+						Namespace: "test",
+					},
+					Secrets: []corev1.ObjectReference{
+						{
+							Name:      "test-bootstrap-sa-token-5pw5c",
+							Namespace: "test",
+						},
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa-token-5pw5c",
+						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"token": []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeServiceAccountToken,
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
+						Namespace: os.Getenv("POD_NAMESPACE"),
+					},
+					Data: map[string][]byte{
+						".dockerconfigjson": []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeDockerConfigJson,
+				},
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+				&configv1.Infrastructure{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "cluster",
+					},
+				},
+			},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			errMsg: "no ca.crt found in the boot strap secret",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r := &ReconcileImportConfig{
+				clientHolder: &helpers.ClientHolder{
+					KubeClient:    kubefake.NewSimpleClientset(),
+					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.runtimeObjs...).Build(),
+				},
+				scheme:   testscheme,
+				recorder: eventstesting.NewTestingEventRecorder(t),
+			}
+
+			_, err := r.Reconcile(context.TODO(), c.request)
+			if err == nil {
+				t.Errorf("error %v should be occurred", c.errMsg)
+			}
+
+			if err.Error() != c.errMsg {
+				t.Errorf("error should be %v, but got %v", c.errMsg, err.Error())
+			}
 		})
 	}
 }
