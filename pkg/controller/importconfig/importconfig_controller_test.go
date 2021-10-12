@@ -92,8 +92,7 @@ func TestReconcile(t *testing.T) {
 						Namespace: "test",
 					},
 					Data: map[string][]byte{
-						"token":  []byte("fake-token"),
-						"ca.crt": []byte("fake-ca"),
+						"token": []byte("fake-token"),
 					},
 					Type: corev1.SecretTypeServiceAccountToken,
 				},
@@ -238,64 +237,6 @@ func TestReconcileError(t *testing.T) {
 				},
 			},
 			errMsg: "no token value found in the boot strap secret",
-		},
-		{
-			name: "cert invalid",
-			runtimeObjs: []runtimeclient.Object{
-				&corev1.Namespace{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
-					},
-				},
-				&corev1.ServiceAccount{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-bootstrap-sa",
-						Namespace: "test",
-					},
-					Secrets: []corev1.ObjectReference{
-						{
-							Name:      "test-bootstrap-sa-token-5pw5c",
-							Namespace: "test",
-						},
-					},
-				},
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-bootstrap-sa-token-5pw5c",
-						Namespace: "test",
-					},
-					Data: map[string][]byte{
-						"token": []byte("fake-token"),
-					},
-					Type: corev1.SecretTypeServiceAccountToken,
-				},
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
-						Namespace: os.Getenv("POD_NAMESPACE"),
-					},
-					Data: map[string][]byte{
-						".dockerconfigjson": []byte("fake-token"),
-					},
-					Type: corev1.SecretTypeDockerConfigJson,
-				},
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
-					},
-				},
-				&configv1.Infrastructure{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "cluster",
-					},
-				},
-			},
-			request: reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name: "test",
-				},
-			},
-			errMsg: "no ca.crt found in the boot strap secret",
 		},
 	}
 
