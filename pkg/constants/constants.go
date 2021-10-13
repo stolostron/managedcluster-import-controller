@@ -18,6 +18,7 @@ const (
 	CreatedViaAnnotation = "open-cluster-management/created-via"
 	CreatedViaAI         = "assisted-installer"
 	CreatedViaHive       = "hive"
+	CreatedViaDiscovery  = "discovery"
 )
 
 /* #nosec */

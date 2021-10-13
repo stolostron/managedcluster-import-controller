@@ -32,8 +32,7 @@ const clusterNameLabel = "name"
 const clusterLabel = "cluster.open-cluster-management.io/managedCluster"
 
 const (
-	createdViaDiscovery = "discovery"
-	createdViaOther     = "other"
+	createdViaOther = "other"
 )
 
 const (
@@ -246,7 +245,7 @@ func ensureCreateViaAnnotation(modified *bool, cluster *clusterv1.ManagedCluster
 	// created-via annotation is default annotation
 	if viaAnnotation != constants.CreatedViaAI &&
 		viaAnnotation != constants.CreatedViaHive &&
-		viaAnnotation != createdViaDiscovery {
+		viaAnnotation != constants.CreatedViaDiscovery {
 		resourcemerge.MergeMap(modified, &cluster.Annotations, createViaOtherAnnotation)
 	}
 }
