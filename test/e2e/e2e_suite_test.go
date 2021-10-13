@@ -135,7 +135,7 @@ func assertManagedClusterCreatedViaAnnotation(clusterName, expected string) {
 				return false, nil
 			}
 
-			if annotation != "other" {
+			if annotation != expected {
 				return false, nil
 			}
 
