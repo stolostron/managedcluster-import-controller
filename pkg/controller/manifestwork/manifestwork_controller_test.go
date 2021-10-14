@@ -16,7 +16,9 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,12 +41,14 @@ func TestReconcile(t *testing.T) {
 	cases := []struct {
 		name         string
 		startObjs    []client.Object
+		secrets      []runtime.Object
 		request      reconcile.Request
 		validateFunc func(t *testing.T, runtimeClient client.Client)
 	}{
 		{
 			name:      "no managed clusters",
 			startObjs: []client.Object{},
+			secrets:   []runtime.Object{},
 			request: reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: "test",
@@ -64,6 +68,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
+			secrets: []runtime.Object{},
 			request: reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: "test",
@@ -94,6 +99,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
+			secrets: []runtime.Object{},
 			request: reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: "test",
@@ -146,6 +152,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
+			secrets: []runtime.Object{},
 			request: reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: "test",
@@ -187,6 +194,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
+			secrets: []runtime.Object{},
 			request: reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: "test",
@@ -219,6 +227,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
+			secrets: []runtime.Object{},
 			request: reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: "test",
@@ -274,6 +283,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
+			secrets: []runtime.Object{},
 			request: reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: "test",
@@ -329,6 +339,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
+			secrets: []runtime.Object{},
 			request: reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: "test",
@@ -362,6 +373,8 @@ func TestReconcile(t *testing.T) {
 						Version: clusterv1.ManagedClusterVersion{Kubernetes: "v1.18.0"},
 					},
 				},
+			},
+			secrets: []runtime.Object{
 				testinghelpers.GetImportSecret("test"),
 			},
 			request: reconcile.Request{
@@ -379,6 +392,7 @@ func TestReconcile(t *testing.T) {
 				clientHolder: &helpers.ClientHolder{
 					RuntimeClient:  fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.startObjs...).Build(),
 					OperatorClient: operatorfake.NewSimpleClientset(),
+					KubeClient:     kubefake.NewSimpleClientset(c.secrets...),
 				},
 				scheme:   testscheme,
 				recorder: eventstesting.NewTestingEventRecorder(t),

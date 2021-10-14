@@ -231,6 +231,9 @@ func assertManagedClusterImportSecret(managedClusterName string) {
 		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
 			name := fmt.Sprintf("%s-import", managedClusterName)
 			secret, err := hubKubeClient.CoreV1().Secrets(managedClusterName).Get(context.TODO(), name, metav1.GetOptions{})
+			if errors.IsNotFound(err) {
+				return false, nil
+			}
 			if err != nil {
 				return false, err
 			}

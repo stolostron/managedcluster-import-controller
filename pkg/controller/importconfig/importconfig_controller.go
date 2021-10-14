@@ -123,7 +123,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// make sure the managed cluster import secret is updated
-	importSecret, err := r.generateImportSecret(managedCluster)
+	importSecret, err := r.generateImportSecret(ctx, managedCluster)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -135,18 +135,18 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileImportConfig) generateImportSecret(managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, error) {
-	bootStrapSecret, err := getBootstrapSecret(r.clientHolder.RuntimeClient, managedCluster)
+func (r *ReconcileImportConfig) generateImportSecret(ctx context.Context, managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, error) {
+	bootStrapSecret, err := getBootstrapSecret(ctx, r.clientHolder.KubeClient, managedCluster)
 	if err != nil {
 		return nil, err
 	}
 
-	bootstrapKubeconfigData, err := createKubeconfigData(r.clientHolder.RuntimeClient, bootStrapSecret)
+	bootstrapKubeconfigData, err := createKubeconfigData(ctx, r.clientHolder, bootStrapSecret)
 	if err != nil {
 		return nil, err
 	}
 
-	imageRegistry, imagePullSecret, err := getImagePullSecret(r.clientHolder.RuntimeClient, managedCluster)
+	imageRegistry, imagePullSecret, err := getImagePullSecret(ctx, r.clientHolder, managedCluster)
 	if err != nil {
 		return nil, err
 	}
@@ -234,12 +234,14 @@ func (r *ReconcileImportConfig) generateImportSecret(managedCluster *clusterv1.M
 	}
 	crdsV1YAML.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, string(crdsV1)))
 
-	// TODO: add bootstrap-hub-kubeconfig
 	return &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-%s", managedCluster.Name, constants.ImportSecretNameSuffix),
 			Namespace: managedCluster.Name,
+			Labels: map[string]string{
+				constants.ClusterImportSecretLabel: "",
+			},
 		},
 		Data: map[string][]byte{
 			constants.ImportSecretImportYamlKey:      importYAML.Bytes(),

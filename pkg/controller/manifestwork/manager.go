@@ -6,11 +6,13 @@ package manifestwork
 import (
 	"strings"
 
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/source"
+
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/cache"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 
@@ -21,7 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
+	runtimesource "sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const controllerName = "manifestwork-controller"
@@ -33,8 +35,9 @@ const (
 
 // Add creates a new manifestwork controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
-func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder) (string, error) {
-	return controllerName, add(mgr, newReconciler(mgr, clientHolder))
+func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder,
+	importSecretInformer, autoImportSecretInformer cache.SharedIndexInformer) (string, error) {
+	return controllerName, add(importSecretInformer, mgr, newReconciler(mgr, clientHolder))
 }
 
 // newReconciler returns a new reconcile.Reconciler
@@ -47,7 +50,7 @@ func newReconciler(mgr manager.Manager, clientHolder *helpers.ClientHolder) reco
 }
 
 // adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r reconcile.Reconciler) error {
 	c, err := controller.New(controllerName, mgr, controller.Options{
 		Reconciler:              r,
 		MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
@@ -57,7 +60,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	if err := c.Watch(
-		&source.Kind{Type: &workv1.ManifestWork{}},
+		&runtimesource.Kind{Type: &workv1.ManifestWork{}},
 		handler.EnqueueRequestsFromMapFunc(func(o client.Object) []reconcile.Request {
 			return []reconcile.Request{
 				{
@@ -94,29 +97,20 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	if err := c.Watch(
-		&source.Kind{Type: &clusterv1.ManagedCluster{}},
+		&runtimesource.Kind{Type: &clusterv1.ManagedCluster{}},
 		&handler.EnqueueRequestForObject{},
 	); err != nil {
 		return err
 	}
 
 	if err := c.Watch(
-		&source.Kind{Type: &corev1.Secret{}},
-		&handler.EnqueueRequestForOwner{
-			IsController: true,
-			OwnerType:    &clusterv1.ManagedCluster{},
-		},
+		source.NewImportSecretSource(importSecretInformer),
+		&source.ManagedClusterSecretEventHandler{},
 		predicate.Predicate(predicate.Funcs{
 			GenericFunc: func(e event.GenericEvent) bool { return false },
 			DeleteFunc:  func(e event.DeleteEvent) bool { return false },
 			CreateFunc:  func(e event.CreateEvent) bool { return false },
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				secretName := e.ObjectNew.GetName()
-				// only handles the import secret changes
-				if !strings.HasSuffix(secretName, constants.ImportSecretNameSuffix) {
-					return false
-				}
-
 				new, okNew := e.ObjectNew.(*corev1.Secret)
 				old, okOld := e.ObjectOld.(*corev1.Secret)
 				if okNew && okOld {

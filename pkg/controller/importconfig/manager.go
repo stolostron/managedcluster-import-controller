@@ -4,15 +4,14 @@
 package importconfig
 
 import (
-	"strings"
-
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/source"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/client-go/tools/cache"
 
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -20,15 +19,16 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
+	runtimesource "sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const controllerName = "importconfig-controller"
 
 // Add creates a new importconfig controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
-func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder) (string, error) {
-	return controllerName, add(mgr, newReconciler(mgr, clientHolder))
+func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder,
+	importSecretInformer, autoImportSecretInformer cache.SharedIndexInformer) (string, error) {
+	return controllerName, add(importSecretInformer, mgr, newReconciler(mgr, clientHolder))
 }
 
 // newReconciler returns a new reconcile.Reconciler
@@ -41,7 +41,7 @@ func newReconciler(mgr manager.Manager, clientHolder *helpers.ClientHolder) reco
 }
 
 // adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r reconcile.Reconciler) error {
 	c, err := controller.New(controllerName, mgr, controller.Options{
 		Reconciler:              r,
 		MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
@@ -51,7 +51,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	if err := c.Watch(
-		&source.Kind{Type: &clusterv1.ManagedCluster{}},
+		&runtimesource.Kind{Type: &clusterv1.ManagedCluster{}},
 		&handler.EnqueueRequestForObject{},
 		predicate.Predicate(predicate.Funcs{
 			GenericFunc: func(e event.GenericEvent) bool { return false },
@@ -67,7 +67,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	if err := c.Watch(
-		&source.Kind{Type: &rbacv1.ClusterRole{}},
+		&runtimesource.Kind{Type: &rbacv1.ClusterRole{}},
 		&handler.EnqueueRequestForOwner{
 			IsController: true,
 			OwnerType:    &clusterv1.ManagedCluster{},
@@ -77,7 +77,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	if err := c.Watch(
-		&source.Kind{Type: &rbacv1.ClusterRoleBinding{}},
+		&runtimesource.Kind{Type: &rbacv1.ClusterRoleBinding{}},
 		&handler.EnqueueRequestForOwner{
 			IsController: true,
 			OwnerType:    &clusterv1.ManagedCluster{},
@@ -87,7 +87,7 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	if err := c.Watch(
-		&source.Kind{Type: &corev1.ServiceAccount{}},
+		&runtimesource.Kind{Type: &corev1.ServiceAccount{}},
 		&handler.EnqueueRequestForOwner{
 			IsController: true,
 			OwnerType:    &clusterv1.ManagedCluster{},
@@ -97,33 +97,13 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 	}
 
 	if err := c.Watch(
-		&source.Kind{Type: &corev1.Secret{}},
-		&handler.EnqueueRequestForOwner{
-			IsController: true,
-			OwnerType:    &clusterv1.ManagedCluster{},
-		},
+		source.NewImportSecretSource(importSecretInformer),
+		&source.ManagedClusterSecretEventHandler{},
 		predicate.Predicate(predicate.Funcs{
 			GenericFunc: func(e event.GenericEvent) bool { return false },
 			CreateFunc:  func(e event.CreateEvent) bool { return false },
-			DeleteFunc: func(e event.DeleteEvent) bool {
-				// only handle the import secret
-				return strings.HasSuffix(e.Object.GetName(), constants.ImportSecretNameSuffix)
-			},
-			UpdateFunc: func(e event.UpdateEvent) bool {
-				secretName := e.ObjectNew.GetName()
-				// only handle the import secret data chanages
-				if !strings.HasSuffix(secretName, constants.ImportSecretNameSuffix) {
-					return false
-				}
-
-				new, okNew := e.ObjectNew.(*corev1.Secret)
-				old, okOld := e.ObjectOld.(*corev1.Secret)
-				if okNew && okOld {
-					return !equality.Semantic.DeepEqual(old.Data, new.Data)
-				}
-
-				return false
-			},
+			DeleteFunc:  func(e event.DeleteEvent) bool { return true },
+			UpdateFunc:  func(e event.UpdateEvent) bool { return true },
 		}),
 	); err != nil {
 		return err

@@ -14,7 +14,6 @@ import (
 
 	"github.com/openshift/library-go/pkg/operator/events"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -65,10 +64,7 @@ func (r *ReconcileLocalCluster) Reconcile(ctx context.Context, request reconcile
 
 	// if there is an auto import secret in the managed cluster namespce, we will use the auto import secret to import
 	// the cluster
-	err = r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{
-		Namespace: request.Name,
-		Name:      constants.AutoImportSecretName,
-	}, &corev1.Secret{})
+	_, err = r.clientHolder.KubeClient.CoreV1().Secrets(request.Name).Get(ctx, constants.AutoImportSecretName, metav1.GetOptions{})
 	if err == nil {
 		log.Info(fmt.Sprintf("The self managed cluster %s has auto import secret, skipped", request.Name))
 		return reconcile.Result{}, nil
@@ -78,9 +74,7 @@ func (r *ReconcileLocalCluster) Reconcile(ctx context.Context, request reconcile
 	}
 
 	importSecretName := fmt.Sprintf("%s-%s", request.Name, constants.ImportSecretNameSuffix)
-	importSecretKey := types.NamespacedName{Namespace: request.Name, Name: importSecretName}
-	importSecret := &corev1.Secret{}
-	err = r.clientHolder.RuntimeClient.Get(ctx, importSecretKey, importSecret)
+	importSecret, err := r.clientHolder.KubeClient.CoreV1().Secrets(request.Name).Get(ctx, importSecretName, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		// the import secret could have been deleted, do nothing
 		return reconcile.Result{}, nil

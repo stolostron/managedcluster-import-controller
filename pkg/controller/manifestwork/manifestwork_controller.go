@@ -99,9 +99,7 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 
 	// after managed cluster joined, apply klusterlet manifest works from import secret
 	importSecretName := fmt.Sprintf("%s-%s", managedClusterName, constants.ImportSecretNameSuffix)
-	importSecretKey := types.NamespacedName{Namespace: managedClusterName, Name: importSecretName}
-	importSecret := &corev1.Secret{}
-	err = r.clientHolder.RuntimeClient.Get(ctx, importSecretKey, importSecret)
+	importSecret, err := r.clientHolder.KubeClient.CoreV1().Secrets(managedClusterName).Get(ctx, importSecretName, metav1.GetOptions{})
 	if err != nil {
 		return reconcile.Result{}, err
 	}

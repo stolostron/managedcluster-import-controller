@@ -5,6 +5,7 @@ package csr
 import (
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
 	certificatesv1 "k8s.io/api/certificates/v1"
+	"k8s.io/client-go/tools/cache"
 
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -19,7 +20,7 @@ const controllerName = "csr-controller"
 
 // Add creates a new CSR Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder) (string, error) {
+func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, importSecretInformer, autoImportSecretInformer cache.SharedIndexInformer) (string, error) {
 	return controllerName, add(mgr, newReconciler(clientHolder))
 }
 

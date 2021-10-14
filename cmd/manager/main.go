@@ -11,11 +11,13 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
 	imgregistryv1alpha1 "github.com/open-cluster-management/multicloud-operators-foundation/pkg/apis/imageregistry/v1alpha1"
@@ -28,10 +30,14 @@ import (
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/fields"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	informerscorev1 "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
 	k8sscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/component-base/logs"
 
 	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
@@ -64,6 +70,8 @@ func main() {
 
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
+	ctx := ctrl.SetupSignalHandler()
+
 	// Get a config to talk to the kube-apiserver
 	cfg, err := ctrl.GetConfig()
 	if err != nil {
@@ -89,6 +97,34 @@ func main() {
 		os.Exit(1)
 	}
 
+	importSecretInformer := informerscorev1.NewFilteredSecretInformer(
+		kubeClient,
+		metav1.NamespaceAll,
+		10*time.Minute,
+		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
+		func(listOptions *metav1.ListOptions) {
+			selector := &metav1.LabelSelector{
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{
+						Key:      constants.ClusterImportSecretLabel,
+						Operator: metav1.LabelSelectorOpExists,
+					},
+				},
+			}
+			listOptions.LabelSelector = metav1.FormatLabelSelector(selector)
+		},
+	)
+
+	autoimportSecretInformer := informerscorev1.NewFilteredSecretInformer(
+		kubeClient,
+		metav1.NamespaceAll,
+		10*time.Minute,
+		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
+		func(listOptions *metav1.ListOptions) {
+			listOptions.FieldSelector = fields.OneTermEqualSelector("metadata.name", constants.AutoImportSecretName).String()
+		},
+	)
+
 	// Create controller-runtime manager
 	mgr, err := ctrl.NewManager(cfg, manager.Options{
 		Scheme:             scheme,
@@ -102,18 +138,26 @@ func main() {
 	}
 
 	setupLog.Info("Registering Controllers")
-	if err := controller.AddToManager(mgr, &helpers.ClientHolder{
-		KubeClient:          kubeClient,
-		APIExtensionsClient: apiExtensionsClient,
-		OperatorClient:      operatorClient,
-		RuntimeClient:       mgr.GetClient(),
-	}); err != nil {
+	if err := controller.AddToManager(
+		mgr,
+		&helpers.ClientHolder{
+			KubeClient:          kubeClient,
+			APIExtensionsClient: apiExtensionsClient,
+			OperatorClient:      operatorClient,
+			RuntimeClient:       mgr.GetClient(),
+		},
+		importSecretInformer,
+		autoimportSecretInformer,
+	); err != nil {
 		setupLog.Error(err, "failed to register controller")
 		os.Exit(1)
 	}
 
+	go importSecretInformer.Run(ctx.Done())
+	go autoimportSecretInformer.Run(ctx.Done())
+
 	setupLog.Info("Starting Controller Manager")
-	if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "failed to start manager")
 		os.Exit(1)
 	}

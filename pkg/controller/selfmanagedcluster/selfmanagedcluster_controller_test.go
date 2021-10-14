@@ -19,6 +19,7 @@ import (
 	crdv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -58,11 +59,13 @@ func TestReconcile(t *testing.T) {
 	cases := []struct {
 		name         string
 		objs         []client.Object
+		secrets      []runtime.Object
 		validateFunc func(t *testing.T, runtimeClient client.Client)
 	}{
 		{
-			name: "no managed clusters",
-			objs: []client.Object{},
+			name:    "no managed clusters",
+			objs:    []client.Object{},
+			secrets: []runtime.Object{},
 			validateFunc: func(t *testing.T, runtimeClient client.Client) {
 				// do nothing
 			},
@@ -79,6 +82,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
+			secrets: []runtime.Object{},
 			validateFunc: func(t *testing.T, runtimeClient client.Client) {
 				cluster := &clusterv1.ManagedCluster{}
 				err := runtimeClient.Get(context.TODO(), types.NamespacedName{Name: "local-cluster"}, cluster)
@@ -101,6 +105,8 @@ func TestReconcile(t *testing.T) {
 						},
 					},
 				},
+			},
+			secrets: []runtime.Object{
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "auto-import-secret",
@@ -131,6 +137,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
+			secrets: []runtime.Object{},
 			validateFunc: func(t *testing.T, runtimeClient client.Client) {
 				cluster := &clusterv1.ManagedCluster{}
 				err := runtimeClient.Get(context.TODO(), types.NamespacedName{Name: "local-cluster"}, cluster)
@@ -153,6 +160,8 @@ func TestReconcile(t *testing.T) {
 						},
 					},
 				},
+			},
+			secrets: []runtime.Object{
 				testinghelpers.GetImportSecret("local-cluster"),
 			},
 			validateFunc: func(t *testing.T, runtimeClient client.Client) {
@@ -172,7 +181,7 @@ func TestReconcile(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			r := &ReconcileLocalCluster{
 				clientHolder: &helpers.ClientHolder{
-					KubeClient:          kubefake.NewSimpleClientset(),
+					KubeClient:          kubefake.NewSimpleClientset(c.secrets...),
 					APIExtensionsClient: apiextensionsfake.NewSimpleClientset(),
 					OperatorClient:      operatorfake.NewSimpleClientset(),
 					RuntimeClient:       fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).Build(),

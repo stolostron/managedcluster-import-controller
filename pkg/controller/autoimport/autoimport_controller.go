@@ -19,6 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	"k8s.io/client-go/kubernetes"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -31,8 +32,9 @@ var log = logf.Log.WithName(controllerName)
 
 // ReconcileAutoImport reconciles the managed cluster auto import secret to import the managed cluster
 type ReconcileAutoImport struct {
-	client   client.Client
-	recorder events.Recorder
+	client     client.Client
+	kubeClient kubernetes.Interface
+	recorder   events.Recorder
 }
 
 // blank assignment to verify that ReconcileAutoImport implements reconcile.Reconciler
@@ -58,11 +60,8 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	autoImportSecret := &corev1.Secret{}
-	err = r.client.Get(ctx, types.NamespacedName{
-		Namespace: managedClusterName,
-		Name:      constants.AutoImportSecretName,
-	}, autoImportSecret)
+	// TODO: we will use list instead of get to reduce the request in the future
+	autoImportSecret, err := r.kubeClient.CoreV1().Secrets(managedClusterName).Get(ctx, constants.AutoImportSecretName, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		// the auto import secret could have been deleted, do nothing
 		return reconcile.Result{}, nil
@@ -72,8 +71,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	importSecretName := fmt.Sprintf("%s-%s", managedClusterName, constants.ImportSecretNameSuffix)
-	importSecret := &corev1.Secret{}
-	err = r.client.Get(ctx, types.NamespacedName{Namespace: managedClusterName, Name: importSecretName}, importSecret)
+	importSecret, err := r.kubeClient.CoreV1().Secrets(managedClusterName).Get(ctx, importSecretName, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		// there is no import secret, do nothing
 		return reconcile.Result{}, nil
@@ -101,11 +99,11 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		importCondition.Message = fmt.Sprintf("Unable to import %s: %s", managedClusterName, err.Error())
 		importCondition.Reason = "ManagedClusterNotImported"
 
-		errs = append(errs, err, r.updateAutoImportRetryTimes(ctx, autoImportSecret))
+		errs = append(errs, err, r.updateAutoImportRetryTimes(ctx, autoImportSecret.DeepCopy()))
 	}
 
 	if len(errs) == 0 {
-		err := r.client.Delete(ctx, autoImportSecret)
+		err := r.kubeClient.CoreV1().Secrets(autoImportSecret.Namespace).Delete(ctx, autoImportSecret.Name, metav1.DeleteOptions{})
 		if err != nil {
 			errs = append(errs, err)
 		}
@@ -133,7 +131,8 @@ func (r *ReconcileAutoImport) updateAutoImportRetryTimes(ctx context.Context, se
 	autoImportRetry--
 	if autoImportRetry < 0 {
 		// stop retry, delete the auto-import-secret
-		if err := r.client.Delete(ctx, secret); err != nil {
+		err := r.kubeClient.CoreV1().Secrets(secret.Namespace).Delete(ctx, secret.Name, metav1.DeleteOptions{})
+		if err != nil {
 			return err
 		}
 		r.recorder.Eventf("AutoImportSecretDeleted",
@@ -142,5 +141,6 @@ func (r *ReconcileAutoImport) updateAutoImportRetryTimes(ctx context.Context, se
 	}
 
 	secret.Data[autoImportRetryName] = []byte(strconv.Itoa(autoImportRetry))
-	return r.client.Update(ctx, secret)
+	_, err = r.kubeClient.CoreV1().Secrets(secret.Namespace).Update(ctx, secret, metav1.UpdateOptions{})
+	return err
 }

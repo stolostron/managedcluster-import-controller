@@ -19,6 +19,7 @@ import (
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/manifestwork"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/selfmanagedcluster"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
+	"k8s.io/client-go/tools/cache"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -26,7 +27,7 @@ import (
 
 var log = logf.Log.WithName("controllers")
 
-type AddToManagerFunc func(manager.Manager, *helpers.ClientHolder) (string, error)
+type AddToManagerFunc func(manager.Manager, *helpers.ClientHolder, cache.SharedIndexInformer, cache.SharedIndexInformer) (string, error)
 
 // AddToManagerFuncs is a list of functions to add all controllers to the manager
 var AddToManagerFuncs = []AddToManagerFunc{
@@ -40,9 +41,9 @@ var AddToManagerFuncs = []AddToManagerFunc{
 }
 
 // AddToManager adds all controllers to the manager
-func AddToManager(manager manager.Manager, clientHolder *helpers.ClientHolder) error {
+func AddToManager(manager manager.Manager, clientHolder *helpers.ClientHolder, importSecretInformer, autoImportSecretInformer cache.SharedIndexInformer) error {
 	for _, addFunc := range AddToManagerFuncs {
-		name, err := addFunc(manager, clientHolder)
+		name, err := addFunc(manager, clientHolder, importSecretInformer, autoImportSecretInformer)
 		if err != nil {
 			return err
 		}
