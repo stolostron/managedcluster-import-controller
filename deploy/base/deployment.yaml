@@ -21,7 +21,7 @@ spec:
       containers:
         - name: managedcluster-import-controller
           image: quay.io/open-cluster-management/managedcluster-import-controller:latest
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           env:
             - name: POD_NAME
               valueFrom:

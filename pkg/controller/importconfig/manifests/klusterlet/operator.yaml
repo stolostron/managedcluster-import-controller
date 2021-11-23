@@ -31,7 +31,7 @@ spec:
       containers:
       - name: klusterlet
         image: {{ .RegistrationOperatorImage }}
-        imagePullPolicy: Always
+        imagePullPolicy: IfNotPresent
         args:
           - "/registration-operator"
           - "klusterlet"
