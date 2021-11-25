@@ -333,11 +333,12 @@ func (r *ReconcileHostedcluster) removeImportFinalizer(ctx context.Context, hClu
 		return nil
 	}
 
-	if len(hCluster.Finalizers) != 1 {
-		// the hostedcluster has other finalizers, wait hive to remove them
-		log.Info(fmt.Sprintf("wait hypershift to remove the finalizers from the hostedCluster %s", hCluster.Name))
-		return nil
-	}
+	// TODO: maybe I don't need to wait till the end
+	//	if len(hCluster.Finalizers) != 1 {
+	//		// the hostedcluster has other finalizers, wait hive to remove them
+	//		log.Info(fmt.Sprintf("wait hypershift to remove the finalizers from the hostedCluster %s", hCluster.Name))
+	//		return nil
+	//	}
 
 	// the hostedcluster alreay be cleaned up by hive, we delete its namespace and remove the import finalizer
 	err := r.client.Get(ctx, types.NamespacedName{Name: hCluster.Name, Namespace: hCluster.Namespace}, &hyperv1.HostedCluster{})
@@ -351,12 +352,6 @@ func (r *ReconcileHostedcluster) removeImportFinalizer(ctx context.Context, hClu
 			"The managed cluster namespace %s is deleted", hCluster.Name)
 	}
 
-	patch := client.MergeFrom(hCluster.DeepCopy())
-	hCluster.Finalizers = []string{}
-	if err := r.client.Patch(ctx, hCluster, patch); err != nil {
-		return err
-	}
-
 	if err := r.client.Delete(ctx, &unstructured.Unstructured{
 		Object: map[string]interface{}{
 			"apiVersion": "agent.open-cluster-management.io/v1",
@@ -367,6 +362,19 @@ func (r *ReconcileHostedcluster) removeImportFinalizer(ctx context.Context, hClu
 			},
 		},
 	}); err != nil {
+		return fmt.Errorf("hypershift failed to delete KlusterletAddonConfig CR, err: %w", err)
+	}
+
+	if err := r.client.Delete(ctx,
+		&clusterv1.ManagedCluster{
+			ObjectMeta: metav1.ObjectMeta{Name: hCluster.Name}},
+	); err != nil {
+		return fmt.Errorf("hypershift failed to delete managedCluster CR, err: %w", err)
+	}
+
+	patch := client.MergeFrom(hCluster.DeepCopy())
+	hCluster.Finalizers = []string{}
+	if err := r.client.Patch(ctx, hCluster, patch); err != nil {
 		return err
 	}
 
