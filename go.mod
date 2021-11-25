@@ -10,6 +10,7 @@ require (
 	github.com/openshift/api v3.9.1-0.20191111211345-a27ff30ebf09+incompatible
 	github.com/openshift/assisted-service v1.0.10-0.20211007120927-ad88cd9a8817
 	github.com/openshift/hive/apis v3.9.1-0.20191111211345-a27ff30ebf09+incompatible
+	github.com/openshift/hypershift/api v0.0.0-20210826030201-9e6982f7554e
 	github.com/openshift/library-go v0.0.0-20210330121802-ebbc677c82a5
 	k8s.io/api v0.21.2
 	k8s.io/apiextensions-apiserver v0.21.2

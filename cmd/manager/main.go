@@ -28,6 +28,7 @@ import (
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
+	hyperv1 "github.com/openshift/hypershift/api/v1alpha1"
 
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -62,6 +63,7 @@ func init() {
 	utilruntime.Must(workv1.AddToScheme(scheme))
 	utilruntime.Must(imgregistryv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(asv1beta1.AddToScheme(scheme))
+	utilruntime.Must(hyperv1.AddToScheme(scheme))
 }
 
 func main() {
@@ -127,10 +129,11 @@ func main() {
 
 	// Create controller-runtime manager
 	mgr, err := ctrl.NewManager(cfg, manager.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: fmt.Sprintf(":%d", metricsPort),
-		LeaderElection:     true,
-		LeaderElectionID:   "managedcluster-import-controller.open-cluster-management.io",
+		Scheme:                  scheme,
+		MetricsBindAddress:      fmt.Sprintf(":%d", metricsPort),
+		LeaderElection:          true,
+		LeaderElectionNamespace: "open-cluster-management",
+		LeaderElectionID:        "managedcluster-import-controller.open-cluster-management.io",
 	})
 	if err != nil {
 		setupLog.Error(err, "failed to create manager")
