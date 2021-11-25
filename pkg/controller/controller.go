@@ -14,6 +14,7 @@ import (
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/autoimport"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/clusterdeployment"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/csr"
+	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/hypershift"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/importconfig"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/managedcluster"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/manifestwork"
@@ -38,6 +39,7 @@ var AddToManagerFuncs = []AddToManagerFunc{
 	selfmanagedcluster.Add,
 	autoimport.Add,
 	clusterdeployment.Add,
+	hypershift.Add,
 }
 
 // AddToManager adds all controllers to the manager

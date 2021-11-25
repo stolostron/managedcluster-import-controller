@@ -206,6 +206,9 @@ issues:
       linters:
         - errcheck
         - maligned
+    - linters:
+        - lll
+      source: "^[	| ].*// " #skip comment line, in case there's a URL in comment
 
   # Independently from option `exclude` we use default exclude patterns,
   # it can be disabled by this option. To list all
