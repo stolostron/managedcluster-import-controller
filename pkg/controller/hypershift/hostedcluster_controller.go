@@ -328,18 +328,18 @@ func (r *ReconcileHostedcluster) removeImportFinalizer(ctx context.Context, hClu
 	}
 
 	if !hasImportFinalizer {
-		// the clusterdeployment does not have import finalizer, ignore it
+		// the hostedcluster does not have import finalizer, ignore it
 		log.Info(fmt.Sprintf("the hostedCluster %s does not have import finalizer, skip it", hCluster.Name))
 		return nil
 	}
 
 	if len(hCluster.Finalizers) != 1 {
-		// the clusterdeployment has other finalizers, wait hive to remove them
+		// the hostedcluster has other finalizers, wait hive to remove them
 		log.Info(fmt.Sprintf("wait hypershift to remove the finalizers from the hostedCluster %s", hCluster.Name))
 		return nil
 	}
 
-	// the clusterdeployment alreay be cleaned up by hive, we delete its namespace and remove the import finalizer
+	// the hostedcluster alreay be cleaned up by hive, we delete its namespace and remove the import finalizer
 	err := r.client.Get(ctx, types.NamespacedName{Name: hCluster.Name, Namespace: hCluster.Namespace}, &hyperv1.HostedCluster{})
 	if errors.IsNotFound(err) {
 		err := r.client.Delete(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: hCluster.Name}})
