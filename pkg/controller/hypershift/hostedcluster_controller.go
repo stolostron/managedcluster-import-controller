@@ -40,6 +40,7 @@ var log = logf.Log.WithName(controllerName)
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder,
 	importSecretInformer, autoImportSecretInformer cache.SharedIndexInformer) (string, error) {
+	_ = autoImportSecretInformer
 	return controllerName, add(importSecretInformer, mgr, newReconciler(clientHolder))
 }
 
@@ -104,7 +105,7 @@ type ReconcileHostedcluster struct {
 	recorder   events.Recorder
 }
 
-// blank assignment to verify that ReconcileClusterDeployment implements reconcile.Reconciler
+// blank assignment to verify that ReconcileHostedcluster implements reconcile.Reconciler
 var _ reconcile.Reconciler = &ReconcileHostedcluster{}
 
 // Reconcile the hostedcluster that is in the managed cluster namespace to import the managed cluster.
@@ -313,7 +314,7 @@ func (r *ReconcileHostedcluster) addClusterImportFinalizer(
 	}
 
 	r.recorder.Eventf("HostedClusterFinalizerAdded",
-		"The clusterdeployment %s finalizer %s is added", hCluster.Name, constants.ImportFinalizer)
+		"The hostedcluster %s finalizer %s is added", hCluster.Name, constants.ImportFinalizer)
 	return nil
 }
 
