@@ -55,6 +55,7 @@ func newReconciler(clientHolder *helpers.ClientHolder) reconcile.Reconciler {
 
 // adds a new Controller to mgr with r as the reconcile.Reconciler
 func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r reconcile.Reconciler) error {
+	_ = importSecretInformer
 	c, err := controller.New(controllerName, mgr, controller.Options{
 		Reconciler:              r,
 		MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
