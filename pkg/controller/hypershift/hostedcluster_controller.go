@@ -364,14 +364,18 @@ func (r *ReconcileHostedcluster) removeImportFinalizer(ctx context.Context, hClu
 			},
 		},
 	}); err != nil {
-		return fmt.Errorf("hypershift failed to delete KlusterletAddonConfig CR, err: %w", err)
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("hypershift failed to delete KlusterletAddonConfig CR, err: %w", err)
+		}
 	}
 
 	if err := r.client.Delete(ctx,
 		&clusterv1.ManagedCluster{
 			ObjectMeta: metav1.ObjectMeta{Name: hCluster.Name}},
 	); err != nil {
-		return fmt.Errorf("hypershift failed to delete managedCluster CR, err: %w", err)
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("hypershift failed to delete managedCluster CR, err: %w", err)
+		}
 	}
 
 	patch := client.MergeFrom(hCluster.DeepCopy())
