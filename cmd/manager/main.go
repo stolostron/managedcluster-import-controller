@@ -129,11 +129,10 @@ func main() {
 
 	// Create controller-runtime manager
 	mgr, err := ctrl.NewManager(cfg, manager.Options{
-		Scheme:                  scheme,
-		MetricsBindAddress:      fmt.Sprintf(":%d", metricsPort),
-		LeaderElection:          true,
-		LeaderElectionNamespace: "open-cluster-management",
-		LeaderElectionID:        "managedcluster-import-controller.open-cluster-management.io",
+		Scheme:             scheme,
+		MetricsBindAddress: fmt.Sprintf(":%d", metricsPort),
+		LeaderElection:     true,
+		LeaderElectionID:   "managedcluster-import-controller.open-cluster-management.io",
 	})
 	if err != nil {
 		setupLog.Error(err, "failed to create manager")
