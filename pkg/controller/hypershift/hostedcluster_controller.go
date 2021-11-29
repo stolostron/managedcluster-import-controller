@@ -71,30 +71,6 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 		return err
 	}
 
-	//  watch secret with label "managedcluster-import-controller.open-cluster-management.io/import-secret"
-	//  ../../../cmd/manager/main.go:100
-	//
-	//	if err := c.Watch(
-	//		source.NewImportSecretSource(importSecretInformer),
-	//		&source.ManagedClusterSecretEventHandler{},
-	//		predicate.Predicate(predicate.Funcs{
-	//			GenericFunc: func(e event.GenericEvent) bool { return false },
-	//			DeleteFunc:  func(e event.DeleteEvent) bool { return false },
-	//			CreateFunc:  func(e event.CreateEvent) bool { return true },
-	//			UpdateFunc: func(e event.UpdateEvent) bool {
-	//				new, okNew := e.ObjectNew.(*corev1.Secret)
-	//				old, okOld := e.ObjectOld.(*corev1.Secret)
-	//				if okNew && okOld {
-	//					return !equality.Semantic.DeepEqual(old.Data, new.Data)
-	//				}
-	//
-	//				return false
-	//			},
-	//		}),
-	//	); err != nil {
-	//		return err
-	//	}
-
 	return nil
 }
 
@@ -144,16 +120,6 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
-	// if there is an auto import secret in the managed cluster namespce, we will use the auto import secret to import the cluster
-	_, err = r.kubeClient.CoreV1().Secrets(clusterName).Get(ctx, constants.AutoImportSecretName, metav1.GetOptions{})
-	if err == nil {
-		reqLogger.Info(fmt.Sprintf("The hypershift managed cluster %s has auto import secret, skipped", clusterName))
-		return reconcile.Result{}, nil
-	}
-	if !errors.IsNotFound(err) {
-		return reconcile.Result{}, err
-	}
-
 	if hCluster.Status.KubeConfig == nil {
 		return reconcile.Result{}, fmt.Errorf("hostedcluster's kubeconfig secret is not generated yet")
 	}
@@ -175,9 +141,6 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 
 	importSecretName := fmt.Sprintf("%s-%s", clusterName, constants.ImportSecretNameSuffix)
 	importSecret, err := r.kubeClient.CoreV1().Secrets(clusterName).Get(ctx, importSecretName, metav1.GetOptions{})
-	if errors.IsNotFound(err) {
-		return reconcile.Result{}, nil
-	}
 	if err != nil {
 		return reconcile.Result{}, err
 	}
