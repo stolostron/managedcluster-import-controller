@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/klog"
@@ -338,9 +339,21 @@ func (r *ReconcileManagedCluster) Reconcile(request reconcile.Request) (reconcil
 		if err != nil {
 			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
 		}
+
+		isV1Only, err := isAPIExtensionV1Only(instance)
+		if err != nil {
+			return reconcile.Result{Requeue: true, RequeueAfter: 30 * time.Second}, err
+		}
+
+		// - only v1beta1 crds when spoke kube version < v1.16 (ocp311);
+		// - both v1beta1 crds and v1 crds when v1.16 <= spoke kube version < v1.22；
+		// - only v1 crds when spoke kube version >= v1.22 (ocp 4.9);
 		if isV1 {
-			// From 2.3.4, only add crd v1
-			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, crds["v1"], yamls)
+			ucrds := append([]*unstructured.Unstructured{}, crds["v1"]...)
+			if !isV1Only {
+				ucrds = append(ucrds, crds["v1beta1"]...)
+			}
+			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, ucrds, yamls)
 		} else {
 			_, _, err = createOrUpdateManifestWorks(r.client, r.scheme, instance, crds["v1beta1"], yamls)
 		}
@@ -632,5 +645,20 @@ func isAPIExtensionV1(managedClusterClient client.Client,
 	}
 	klog.V(4).Infof("isV1: %t", isV1 == -1)
 	return isV1 == -1, nil
+}
 
+func isAPIExtensionV1Only(managedCluster *clusterv1.ManagedCluster) (bool, error) {
+	var actualVersion string
+	//Search kubernetes version for creating manifestwork
+	if managedCluster.Status.Version.Kubernetes == "" {
+		return false, fmt.Errorf("kubernetes version not yet available for managed cluster %s", managedCluster.GetName())
+	}
+	actualVersion = managedCluster.Status.Version.Kubernetes
+	klog.V(4).Infof("actual kubernetes version is %s", actualVersion)
+	isV1, err := v1OnlyAPIExtensionMinVersion.Compare(actualVersion)
+	if err != nil {
+		return false, err
+	}
+	klog.V(4).Infof("isV1: %t", isV1 == -1)
+	return isV1 <= 0, nil
 }
