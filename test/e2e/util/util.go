@@ -52,6 +52,11 @@ var (
 		Version:  "v1",
 		Resource: "clusterdeployments",
 	}
+	hostedclusterGVR = schema.GroupVersionResource{
+		Group:    "hypershift.openshift.io",
+		Version:  "v1alpha1",
+		Resource: "hostedclusters",
+	}
 )
 
 func Logf(format string, args ...interface{}) {
@@ -395,4 +400,127 @@ func newClusterdeployment(clusterName string) *unstructured.Unstructured {
 			},
 		},
 	}
+}
+
+func newHostedcluster(hostedClusterNamespace, clusterName string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "hypershift.openshift.io/v1alpha1",
+			"kind":       "HostedCluster",
+			"metadata": map[string]interface{}{
+				"name":      clusterName,
+				"namespace": hostedClusterNamespace,
+			},
+			"spec": map[string]interface{}{
+				"infraID":                      "my-infra-id",
+				"controllerAvailabilityPolicy": "SingleReplica",
+				"dns": map[string]interface{}{
+					"baseDomain": "fake-domain.red-chesterfield.com",
+				},
+				"etcd": map[string]interface{}{
+					"managed": map[string]interface{}{
+						"storage": map[string]interface{}{
+							"persistentVolume": map[string]interface{}{
+								"size": "4Gi",
+							},
+							"type": "PersistentVolume",
+						},
+					},
+					"managementType": "Managed",
+				},
+				"fips": false,
+				"networking": map[string]interface{}{
+					"machineCIDR": "10.0.0.0/16",
+					"networkType": "OpenShiftSDN",
+					"podCIDR":     "10.132.0.0/14",
+					"serviceCIDR": "172.31.0.0/16",
+				},
+				"platform": map[string]interface{}{
+					"type": "None",
+				},
+				"pullSecret": map[string]interface{}{
+					"name": "fake-pull-secret",
+				},
+				"release": map[string]interface{}{
+					"image": "quay.io/openshift-release-dev/ocp-release:4.9.8-x86_64",
+				},
+				"sshKey":   map[string]interface{}{},
+				"services": []unstructured.Unstructured{},
+			},
+		},
+	}
+}
+
+func CreateHostedCluster(dynamicClient dynamic.Interface, clusterName string) error {
+	hostedClusterNamespace := fmt.Sprintf("%s-%s", clusterName, clusterName)
+	hostedclusters := dynamicClient.Resource(hostedclusterGVR).Namespace(hostedClusterNamespace)
+	hostedCluster := newHostedcluster(hostedClusterNamespace, clusterName)
+	_, err := hostedclusters.Get(context.TODO(), clusterName, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		_, err := hostedclusters.Create(context.TODO(), hostedCluster, metav1.CreateOptions{})
+		return err
+	}
+	return err
+}
+
+func InstallHostedCluster(kubeClient kubernetes.Interface, dynamicClient dynamic.Interface, clusterName string) error {
+	hostedClusterNamespace := fmt.Sprintf("%s-%s", clusterName, clusterName)
+	hostedclusters := dynamicClient.Resource(hostedclusterGVR).Namespace(hostedClusterNamespace)
+	hostedCluster, err := hostedclusters.Get(context.TODO(), clusterName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	secret, err := newHostedClusterImportSecret(kubeClient, clusterName)
+	if err != nil {
+		return err
+	}
+
+	if _, err := kubeClient.CoreV1().Secrets(hostedClusterNamespace).Create(context.TODO(), secret, metav1.CreateOptions{}); err != nil {
+		return err
+	}
+
+	hostedCluster = hostedCluster.DeepCopy()
+
+	// set status.kubeconfig.name field
+	kubeconfigName := map[string]interface{}{
+		"name": secret.Name,
+	}
+	if err := unstructured.SetNestedField(hostedCluster.Object, kubeconfigName, "status", "kubeconfig"); err != nil {
+		return err
+	}
+
+	// set status.conditions field (required)
+	conditions := []interface{}{}
+	if err := unstructured.SetNestedField(hostedCluster.Object, conditions, "status", "conditions"); err != nil {
+		return err
+	}
+
+	_, err = hostedclusters.UpdateStatus(context.TODO(), hostedCluster, metav1.UpdateOptions{})
+
+	return err
+}
+
+func DeleteHostedCluster(dynamicClient dynamic.Interface, clusterName string) error {
+	hostedClusterNamespace := fmt.Sprintf("%s-%s", clusterName, clusterName)
+	hostedclusters := dynamicClient.Resource(hostedclusterGVR).Namespace(hostedClusterNamespace)
+	return hostedclusters.Delete(context.TODO(), clusterName, metav1.DeleteOptions{})
+}
+
+func newHostedClusterImportSecret(kubeClient kubernetes.Interface, clusterName string) (*corev1.Secret, error) {
+	hostedClusterNamespace := fmt.Sprintf("%s-%s", clusterName, clusterName)
+	secret, err := kubeClient.CoreV1().Secrets(ocmNamespace).Get(context.TODO(), "e2e-auto-import-secret", metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-admin-kubeconfig", clusterName),
+			Namespace: hostedClusterNamespace,
+		},
+		Data: map[string][]byte{
+			"kubeconfig": secret.Data["kubeconfig"],
+		},
+	}, nil
 }

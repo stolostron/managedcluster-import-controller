@@ -215,3 +215,23 @@ rules:
     - get
     - list
     - watch
+- apiGroups:
+  - hypershift.openshift.io
+  resources:
+  - hostedclusters
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - agent.open-cluster-management.io
+  resources:
+  - klusterletaddonconfigs
+  verbs:
+  - create
+  - delete
+  - get

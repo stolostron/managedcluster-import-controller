@@ -115,11 +115,6 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
-	// add a managed cluster finalizer to the hosted cluster, to handle the managed cluster detach case.
-	if err := r.addClusterImportFinalizer(ctx, hCluster); err != nil {
-		return reconcile.Result{}, err
-	}
-
 	if hCluster.Status.KubeConfig == nil {
 		return reconcile.Result{}, fmt.Errorf("hostedcluster's kubeconfig secret is not generated yet")
 	}
@@ -131,6 +126,11 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 	hostedKubeconfigSecret := &corev1.Secret{}
 
 	if err := r.client.Get(ctx, hosteKubeSecertKey, hostedKubeconfigSecret); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// add a managed cluster finalizer to the hosted cluster, to handle the managed cluster detach case.
+	if err := r.addClusterImportFinalizer(ctx, hCluster); err != nil {
 		return reconcile.Result{}, err
 	}
 
