@@ -23,10 +23,12 @@ import (
 )
 
 const (
-	_v1APIExtensionKubeMinVersion = "v1.16.0"
+	_v1APIExtensionKubeMinVersion     = "v1.16.0"
+	_v1OnlyAPIExtensionKubeMinVersion = "v1.22.0"
 )
 
 var v1APIExtensionMinVersion = version.MustParseGeneric(_v1APIExtensionKubeMinVersion)
+var v1OnlyAPIExtensionMinVersion = version.MustParseGeneric(_v1OnlyAPIExtensionKubeMinVersion)
 
 // Add creates a new ManagedCluster Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.

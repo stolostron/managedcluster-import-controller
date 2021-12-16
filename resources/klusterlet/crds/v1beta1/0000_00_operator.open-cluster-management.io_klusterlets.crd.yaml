@@ -11,6 +11,7 @@ spec:
     plural: klusterlets
     singular: klusterlet
   scope: Cluster
+  preserveUnknownFields: false
   subresources:
     status: {}
   validation:
