@@ -4,8 +4,8 @@
 package importconfig
 
 import (
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/source"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	corev1 "k8s.io/api/core/v1"

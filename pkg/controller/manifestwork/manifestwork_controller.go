@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 

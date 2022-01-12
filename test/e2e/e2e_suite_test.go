@@ -13,7 +13,7 @@ import (
 	ginkgo "github.com/onsi/ginkgo"
 	gomega "github.com/onsi/gomega"
 
-	"github.com/open-cluster-management/managedcluster-import-controller/test/e2e/util"
+	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
 	workclient "open-cluster-management.io/api/client/work/clientset/versioned"

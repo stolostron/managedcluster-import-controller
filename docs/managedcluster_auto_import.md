@@ -4,8 +4,6 @@
 
 The hub is automatically importing a managed cluster when a secret called `auto-import-secret` is placed in a namespace named as the cluster name. The namespace will also needs to contain the managedcluster and the kubeaddonconfig CR. The `auto-import-secret` will be automatically deleted when the import is completed (sucessfully on not).
 
-You can use the scripts available at [applier-samples-for-acm](https://github.com/open-cluster-management/applier-samples-for-acm) to ease the import process.
-
 ## Creating a namespace in which the cluster will get imported
 On the Hub cluster:
 - Create a namespace
@@ -93,10 +91,9 @@ spec:
   version: 2.2.0
 ```
 
-## ManagedCluster controller
+## Import secret
 
-- ManagedCluster creation triggers `Reconcile()` in [/pkg/controller/managedcluster/managedcluster_controller.go](https://github.com/open-cluster-management/managedcluster-import-controller/blob/master/pkg/controller/managedcluster/managedcluster_controller.go).
-- Controller will generate a secret named `<cluster_name>-import`.
+- Import controller will generate a secret named `<cluster_name>-import`.
 - The `<cluster_name>-import` secret contains the crds.yaml and import.yaml that the user will apply on managed cluster to install klusterlet.
 - The controller will apply the crds.yaml and import.yaml.
 
