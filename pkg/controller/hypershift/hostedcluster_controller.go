@@ -126,7 +126,7 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 	hostedKubeconfigSecret := &corev1.Secret{}
 
 	if err := r.client.Get(ctx, hosteKubeSecertKey, hostedKubeconfigSecret); err != nil {
-		return reconcile.Result{}, err
+		return reconcile.Result{}, fmt.Errorf("failed to get hosted cluster kubeconfig secret, err: %w", err)
 	}
 
 	// add a managed cluster finalizer to the hosted cluster, to handle the managed cluster detach case.
@@ -176,26 +176,16 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 
 func (r *ReconcileHostedcluster) ensureManagedClusterCR(ctx context.Context, hClusterKey types.NamespacedName) error {
 	managedClusterNs := &corev1.Namespace{}
-	managedCluster := &clusterv1.ManagedCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: hClusterKey.Name},
-		Spec:       clusterv1.ManagedClusterSpec{HubAcceptsClient: true},
-	}
 
-	err := r.client.Get(ctx, types.NamespacedName{Name: hClusterKey.Name}, managedClusterNs)
-	if errors.IsNotFound(err) {
-		managedClusterNs.SetName(hClusterKey.Name)
-		if err := r.client.Create(ctx, managedClusterNs); err != nil {
-			return fmt.Errorf("failed to created managedcluster namespace, err: %w", err)
+	// make sure the managedcluster namespace exist
+	if err := r.client.Get(ctx, types.NamespacedName{Name: hClusterKey.Name}, managedClusterNs); err != nil {
+		if errors.IsNotFound(err) {
+			managedClusterNs.SetName(hClusterKey.Name)
+			if err := r.client.Create(ctx, managedClusterNs); err != nil {
+				return fmt.Errorf("failed to created managedcluster namespace, err: %w", err)
+			}
+
 		}
-
-		if err := r.client.Create(ctx, managedCluster); err != nil {
-			return fmt.Errorf("failed to created managedcluster CR, err: %w", err)
-		}
-
-		return nil
-	}
-
-	if err != nil {
 		return err
 	}
 
@@ -203,13 +193,24 @@ func (r *ReconcileHostedcluster) ensureManagedClusterCR(ctx context.Context, hCl
 		return nil
 	}
 
-	err = r.client.Get(ctx, types.NamespacedName{Name: hClusterKey.Name}, managedCluster)
-	if errors.IsNotFound(err) {
-		// the managed cluster could be deleted, do nothing
-		return nil
+	managedCluster := &clusterv1.ManagedCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: hClusterKey.Name},
+		Spec:       clusterv1.ManagedClusterSpec{HubAcceptsClient: true},
 	}
 
-	return err
+	// if the managedcluster CR doesn't exist, then creates it
+	if err := r.client.Get(ctx, types.NamespacedName{Name: hClusterKey.Name}, managedCluster); err != nil {
+		if errors.IsNotFound(err) {
+			if err := r.client.Create(ctx, managedCluster); err != nil {
+
+				return fmt.Errorf("failed to created managedcluster CR, err: %w", err)
+			}
+		}
+
+		return err
+	}
+
+	return nil
 }
 
 func (r *ReconcileHostedcluster) enableAddons(ctx context.Context, hClusterKey types.NamespacedName) error {
