@@ -214,6 +214,7 @@ func (r *ReconcileHostedcluster) ensureExternalManagedKubeconfigSecret(ctx conte
 		return err
 	}
 
+	//nolint:lll
 	//https://github.com/stolostron/registration-operator/blob/f456cceff3385ca53a152ec5cef36e79a1488e4c/deploy/klusterlet/config/samples/managedcluster/kustomization.yaml#L2-L3
 	externalManagedKubeconfigName := "external-managed-kubeconfig"
 	mSrt := &corev1.Secret{}
