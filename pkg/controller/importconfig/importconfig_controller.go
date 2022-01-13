@@ -178,7 +178,10 @@ func (r *ReconcileImportConfig) generateImportSecret(ctx context.Context, manage
 		return nil, err
 	}
 
+	dateched := helpers.IsDetached(managedCluster)
+
 	config := struct {
+		KlusterletName            string
 		KlusterletNamespace       string
 		ManagedClusterNamespace   string
 		BootstrapKubeconfig       string
@@ -190,7 +193,9 @@ func (r *ReconcileImportConfig) generateImportSecret(ctx context.Context, manage
 		RegistrationImageName     string
 		WorkImageName             string
 		NodeSelector              map[string]string
+		Detached                  bool
 	}{
+		KlusterletName:            fmt.Sprintf("klusterlet-%s", managedCluster.GetName()),
 		ManagedClusterNamespace:   managedCluster.Name,
 		KlusterletNamespace:       klusterletNamespace,
 		BootstrapKubeconfig:       base64.StdEncoding.EncodeToString(bootstrapKubeconfigData),
@@ -202,6 +207,12 @@ func (r *ReconcileImportConfig) generateImportSecret(ctx context.Context, manage
 		RegistrationImageName:     registrationImageName,
 		WorkImageName:             workImageName,
 		NodeSelector:              nodeSelector,
+		Detached:                  dateched,
+	}
+
+	if dateched {
+		// ../hypershift/hostedcluster_controller.go:202
+		config.KlusterletNamespace = "klusterlet"
 	}
 
 	deploymentFiles := append([]string{}, klusterletFiles...)

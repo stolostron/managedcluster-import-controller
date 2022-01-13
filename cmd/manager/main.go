@@ -22,6 +22,7 @@ import (
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
 	imgregistryv1alpha1 "github.com/open-cluster-management/multicloud-operators-foundation/pkg/apis/imageregistry/v1alpha1"
 
+	uzap "go.uber.org/zap"
 	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
@@ -70,7 +71,7 @@ func main() {
 	logs.InitLogs()
 	defer logs.FlushLogs()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true), zap.RawZapOpts(uzap.WithCaller(true), uzap.AddCallerSkip(1))))
 
 	ctx := ctrl.SetupSignalHandler()
 
@@ -129,10 +130,11 @@ func main() {
 
 	// Create controller-runtime manager
 	mgr, err := ctrl.NewManager(cfg, manager.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: fmt.Sprintf(":%d", metricsPort),
-		LeaderElection:     true,
-		LeaderElectionID:   "managedcluster-import-controller.open-cluster-management.io",
+		Scheme:                  scheme,
+		MetricsBindAddress:      fmt.Sprintf(":%d", metricsPort),
+		LeaderElection:          true,
+		LeaderElectionID:        "managedcluster-import-controller.open-cluster-management.io",
+		LeaderElectionNamespace: "open-cluster-management",
 	})
 	if err != nil {
 		setupLog.Error(err, "failed to create manager")

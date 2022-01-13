@@ -465,6 +465,7 @@ func applyManifestWork(client client.Client, recorder events.Recorder, required 
 
 func mustCreateObject(raw []byte) runtime.Object {
 	obj, _, err := genericCodec.Decode(raw, nil, nil)
+
 	if err != nil {
 		panic(err)
 	}
@@ -527,4 +528,19 @@ func GetNodeSelector(cluster *clusterv1.ManagedCluster) (map[string]string, erro
 	}
 
 	return nodeSelector, nil
+}
+
+//IsDetached tests if a managedcluster CR is annotated as detached or not
+func IsDetached(mc *clusterv1.ManagedCluster) bool {
+	if mc == nil {
+		return false
+	}
+
+	anno := mc.GetAnnotations()
+
+	if len(anno) == 0 || anno["hypershift-on-management"] != "true" {
+		return false
+	}
+
+	return true
 }

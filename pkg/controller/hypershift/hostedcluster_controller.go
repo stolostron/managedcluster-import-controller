@@ -47,9 +47,10 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder,
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(clientHolder *helpers.ClientHolder) reconcile.Reconciler {
 	return &ReconcileHostedcluster{
-		client:     clientHolder.RuntimeClient,
-		kubeClient: clientHolder.KubeClient,
-		recorder:   helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
+		hubClientHolder: clientHolder,
+		client:          clientHolder.RuntimeClient,
+		kubeClient:      clientHolder.KubeClient,
+		recorder:        helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
 	}
 }
 
@@ -77,9 +78,10 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 // ReconcileHostedcluster reconciles the hostedcluster that is in the hosted cluster namespace
 // to import the managed cluster
 type ReconcileHostedcluster struct {
-	client     client.Client
-	kubeClient kubernetes.Interface
-	recorder   events.Recorder
+	hubClientHolder *helpers.ClientHolder
+	client          client.Client
+	kubeClient      kubernetes.Interface
+	recorder        events.Recorder
 }
 
 // blank assignment to verify that ReconcileHostedcluster implements reconcile.Reconciler
@@ -111,7 +113,17 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 	}
 
 	// TODO: check if UI would do so or not
-	if err := r.ensureManagedClusterCR(ctx, request.NamespacedName); err != nil {
+	managedCluster, err := r.ensureManagedClusterCR(ctx, request.NamespacedName)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	if managedCluster == nil || !managedCluster.DeletionTimestamp.IsZero() {
+		return reconcile.Result{}, nil
+	}
+
+	// add a managed cluster finalizer to the hosted cluster, to handle the managed cluster detach case.
+	if err := r.addClusterImportFinalizer(ctx, hCluster); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -127,11 +139,6 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 
 	if err := r.client.Get(ctx, hosteKubeSecertKey, hostedKubeconfigSecret); err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed to get hosted cluster kubeconfig secret, err: %w", err)
-	}
-
-	// add a managed cluster finalizer to the hosted cluster, to handle the managed cluster detach case.
-	if err := r.addClusterImportFinalizer(ctx, hCluster); err != nil {
-		return reconcile.Result{}, err
 	}
 
 	hostedClusterClient, restMapper, err := helpers.GenerateClientFromSecret(hostedKubeconfigSecret)
@@ -153,12 +160,25 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 	}
 
 	errs := []error{}
-	err = helpers.ImportManagedClusterFromSecret(hostedClusterClient, restMapper, r.recorder, importSecret)
-	if err != nil {
-		errs = append(errs, err)
+
+	var importErr error
+
+	if helpers.IsDetached(managedCluster) {
+		if err := r.ensureExternalManagedKubeconfigSecret(ctx, hostedKubeconfigSecret); err != nil {
+			return reconcile.Result{}, err
+		}
+
+		//TODO need to get a valid restMapper for hub client
+		importErr = helpers.ImportManagedClusterFromSecret(r.hubClientHolder, restMapper, r.recorder, importSecret)
+	} else {
+		importErr = helpers.ImportManagedClusterFromSecret(hostedClusterClient, restMapper, r.recorder, importSecret)
+	}
+
+	if importErr != nil {
+		errs = append(errs, importErr)
 
 		importCondition.Status = metav1.ConditionFalse
-		importCondition.Message = fmt.Sprintf("Unable to import %s: %s", clusterName, err.Error())
+		importCondition.Message = fmt.Sprintf("Unable to import %s: %s", clusterName, importErr.Error())
 		importCondition.Reason = "ManagedClusterNotImported"
 	}
 
@@ -174,7 +194,57 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 	return reconcile.Result{}, utilerrors.NewAggregate(errs)
 }
 
-func (r *ReconcileHostedcluster) ensureManagedClusterCR(ctx context.Context, hClusterKey types.NamespacedName) error {
+func (r *ReconcileHostedcluster) ensureExternalManagedKubeconfigSecret(ctx context.Context, hostClusterSercret *corev1.Secret) error {
+	if hostClusterSercret == nil {
+		return fmt.Errorf("hostClusterSercret is nil")
+	}
+
+	klusterletNsString := "klusterlet"
+	klusterletNs := &corev1.Namespace{}
+
+	// make sure the klusterlet namespace exist
+	if err := r.client.Get(ctx, types.NamespacedName{Name: klusterletNsString}, klusterletNs); err != nil {
+		if errors.IsNotFound(err) {
+			klusterletNs.SetName(klusterletNsString)
+			if err := r.client.Create(ctx, klusterletNs); err != nil {
+				return fmt.Errorf("failed to created klusterlet namespace, err: %w", err)
+			}
+
+		}
+		return err
+	}
+
+	//https://github.com/stolostron/registration-operator/blob/f456cceff3385ca53a152ec5cef36e79a1488e4c/deploy/klusterlet/config/samples/managedcluster/kustomization.yaml#L2-L3
+	externalManagedKubeconfigName := "external-managed-kubeconfig"
+	mSrt := &corev1.Secret{}
+	mSrt.SetNamespace(klusterletNsString)
+	mSrt.SetName(externalManagedKubeconfigName)
+	if len(hostClusterSercret.Data) != 0 {
+		mSrt.Data = hostClusterSercret.Data
+	}
+
+	if len(hostClusterSercret.StringData) != 0 {
+		mSrt.StringData = hostClusterSercret.StringData
+	}
+
+	if len(hostClusterSercret.Type) != 0 {
+		mSrt.Type = hostClusterSercret.Type
+	}
+
+	if err := r.client.Get(ctx, types.NamespacedName{Name: externalManagedKubeconfigName, Namespace: klusterletNsString}, &corev1.Secret{}); err != nil {
+		if errors.IsNotFound(err) {
+			if err := r.client.Create(ctx, mSrt); err != nil {
+				return fmt.Errorf("failed to created external-managed-kubeconfig secret, err: %w", err)
+			}
+		}
+
+		return err
+	}
+
+	return r.client.Update(ctx, mSrt)
+}
+
+func (r *ReconcileHostedcluster) ensureManagedClusterCR(ctx context.Context, hClusterKey types.NamespacedName) (*clusterv1.ManagedCluster, error) {
 	managedClusterNs := &corev1.Namespace{}
 
 	// make sure the managedcluster namespace exist
@@ -182,35 +252,39 @@ func (r *ReconcileHostedcluster) ensureManagedClusterCR(ctx context.Context, hCl
 		if errors.IsNotFound(err) {
 			managedClusterNs.SetName(hClusterKey.Name)
 			if err := r.client.Create(ctx, managedClusterNs); err != nil {
-				return fmt.Errorf("failed to created managedcluster namespace, err: %w", err)
+				return nil, fmt.Errorf("failed to created managedcluster namespace, err: %w", err)
 			}
 
 		}
-		return err
+		return nil, err
 	}
 
 	if !managedClusterNs.DeletionTimestamp.IsZero() {
-		return nil
+		return nil, nil
 	}
 
 	managedCluster := &clusterv1.ManagedCluster{
-		ObjectMeta: metav1.ObjectMeta{Name: hClusterKey.Name},
-		Spec:       clusterv1.ManagedClusterSpec{HubAcceptsClient: true},
+		ObjectMeta: metav1.ObjectMeta{
+			Name: hClusterKey.Name,
+			Annotations: map[string]string{
+				"hypershift-on-management": "true",
+			},
+		},
+		Spec: clusterv1.ManagedClusterSpec{HubAcceptsClient: true},
 	}
 
 	// if the managedcluster CR doesn't exist, then creates it
 	if err := r.client.Get(ctx, types.NamespacedName{Name: hClusterKey.Name}, managedCluster); err != nil {
 		if errors.IsNotFound(err) {
 			if err := r.client.Create(ctx, managedCluster); err != nil {
-
-				return fmt.Errorf("failed to created managedcluster CR, err: %w", err)
+				return managedCluster, fmt.Errorf("failed to created managedcluster CR, err: %w", err)
 			}
 		}
 
-		return err
+		return nil, err
 	}
 
-	return nil
+	return managedCluster, nil
 }
 
 func (r *ReconcileHostedcluster) enableAddons(ctx context.Context, hClusterKey types.NamespacedName) error {
