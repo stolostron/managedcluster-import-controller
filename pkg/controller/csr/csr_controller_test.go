@@ -9,8 +9,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	certificatesv1 "k8s.io/api/certificates/v1"

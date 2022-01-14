@@ -7,7 +7,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"

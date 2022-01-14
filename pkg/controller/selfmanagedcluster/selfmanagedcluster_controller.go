@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	"github.com/openshift/library-go/pkg/operator/events"

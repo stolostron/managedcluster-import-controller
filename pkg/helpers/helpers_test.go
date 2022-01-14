@@ -10,7 +10,7 @@ import (
 	"reflect"
 	"testing"
 
-	testinghelpers "github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers/testing"
+	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	operatorfake "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
