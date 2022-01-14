@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/go-logr/logr"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
 	hyperv1 "github.com/openshift/hypershift/api/v1alpha1"
@@ -22,19 +23,18 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	runtimesource "sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const controllerName = "hostedcluster-controller"
-
-var log = logf.Log.WithName(controllerName)
 
 // Add creates a new managedcluster controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
@@ -47,6 +47,7 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder,
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(clientHolder *helpers.ClientHolder) reconcile.Reconciler {
 	return &ReconcileHostedcluster{
+		logger:          logf.Log.WithName(controllerName),
 		hubClientHolder: clientHolder,
 		client:          clientHolder.RuntimeClient,
 		kubeClient:      clientHolder.KubeClient,
@@ -78,6 +79,7 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 // ReconcileHostedcluster reconciles the hostedcluster that is in the hosted cluster namespace
 // to import the managed cluster
 type ReconcileHostedcluster struct {
+	logger          logr.Logger
 	hubClientHolder *helpers.ClientHolder
 	client          client.Client
 	kubeClient      kubernetes.Interface
@@ -92,8 +94,9 @@ var _ reconcile.Reconciler = &ReconcileHostedcluster{}
 // Note: The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	reqLogger := log.WithValues("Request", request)
+	reqLogger := r.logger.WithValues("Request", request)
 	reqLogger.Info("Reconciling HostedCluster")
+
 	defer reqLogger.Info("Reocileing HostedCluster Done")
 
 	clusterName := request.Name
@@ -370,7 +373,7 @@ func (r *ReconcileHostedcluster) removeImportFinalizer(ctx context.Context, hClu
 
 	if !hasImportFinalizer {
 		// the hostedcluster does not have import finalizer, ignore it
-		log.Info(fmt.Sprintf("the hostedCluster %s does not have import finalizer, skip it", hCluster.Name))
+		r.logger.Info(fmt.Sprintf("the hostedCluster %s does not have import finalizer, skip it", hCluster.Name))
 		return nil
 	}
 
