@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
 	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	hivev1 "github.com/openshift/hive/apis/hive/v1"

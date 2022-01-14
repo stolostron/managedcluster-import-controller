@@ -3,7 +3,7 @@
 package csr
 
 import (
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	certificatesv1 "k8s.io/api/certificates/v1"
 	"k8s.io/client-go/tools/cache"
 
