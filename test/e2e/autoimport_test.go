@@ -11,7 +11,7 @@ import (
 	ginkgo "github.com/onsi/ginkgo"
 	gomega "github.com/onsi/gomega"
 
-	"github.com/open-cluster-management/managedcluster-import-controller/test/e2e/util"
+	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"

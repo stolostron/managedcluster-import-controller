@@ -17,7 +17,7 @@ import (
 	"k8s.io/client-go/util/retry"
 	workv1 "open-cluster-management.io/api/work/v1"
 
-	"github.com/open-cluster-management/managedcluster-import-controller/test/e2e/util"
+	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 )
 
 var _ = ginkgo.Describe("Importing a managed cluster manually", func() {

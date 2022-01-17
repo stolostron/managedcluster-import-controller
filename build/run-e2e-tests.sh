@@ -59,7 +59,7 @@ ${KIND} load docker-image managedcluster-import-controller-coverage --name ${CLU
 
 echo "###### deploy registration-operator"
 rm -rf "$WORK_DIR/registration-operator"
-git clone https://github.com/open-cluster-management/registration-operator.git "$WORK_DIR/registration-operator"
+git clone https://github.com/stolostron/registration-operator.git "$WORK_DIR/registration-operator"
 ${KUBECTL} apply -k "$WORK_DIR/registration-operator/deploy/cluster-manager/config/manifests"
 ${KUBECTL} apply -k "$WORK_DIR/registration-operator/deploy/cluster-manager/config/samples"
 rm -rf "$WORK_DIR/registration-operator"
