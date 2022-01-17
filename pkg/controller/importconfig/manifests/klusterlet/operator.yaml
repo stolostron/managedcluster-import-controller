@@ -17,7 +17,7 @@ spec:
       labels:
         app: {{ .KlusterletName }}
     spec:
-      serviceAccountName: klusterlet
+      serviceAccountName: {{ .KlusterletName }}
 {{- if .NodeSelector }}
       nodeSelector:
       {{- range $key, $value := .NodeSelector }}

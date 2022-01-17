@@ -168,6 +168,10 @@ func GenerateClientFromSecret(secret *corev1.Secret) (*ClientHolder, meta.RESTMa
 	}, mapper, nil
 }
 
+func ConstructKlusterNamespace(mc string) string {
+	return fmt.Sprintf("klusterlet-%s", mc)
+}
+
 // AddManagedClusterFinalizer add a finalizer to a managed cluster
 func AddManagedClusterFinalizer(modified *bool, managedCluster *clusterv1.ManagedCluster, finalizer string) {
 	for i := range managedCluster.Finalizers {

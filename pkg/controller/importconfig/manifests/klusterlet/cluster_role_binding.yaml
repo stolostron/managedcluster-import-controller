@@ -8,5 +8,5 @@ roleRef:
   name: klusterlet
 subjects:
 - kind: ServiceAccount
-  name: klusterlet
+  name: {{ .KlusterletName }}
   namespace: "{{ .KlusterletNamespace }}"

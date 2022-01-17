@@ -6,6 +6,7 @@ package hypershift
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/open-cluster-management/managedcluster-import-controller/pkg/constants"
@@ -112,7 +113,9 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 	if !hCluster.DeletionTimestamp.IsZero() {
 		// the hostedcluster is deleting, its managed cluster may already be detached (the managed cluster has been deleted,
 		// but the namespace is remained), if it has import finalizer, we remove its namespace
-		return reconcile.Result{}, r.removeImportFinalizer(ctx, hCluster)
+		err := r.removeImportFinalizer(ctx, hCluster)
+		reqLogger.Error(err, "encountered error while remove finalizer")
+		return reconcile.Result{}, err
 	}
 
 	// TODO: check if UI would do so or not
@@ -131,7 +134,8 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 	}
 
 	if hCluster.Status.KubeConfig == nil {
-		return reconcile.Result{}, fmt.Errorf("hostedcluster's kubeconfig secret is not generated yet")
+		reqLogger.Error(fmt.Errorf("hostedcluster's kubeconfig secret is not generated yet."), "Reconcile is requeued after 10s")
+		return reconcile.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
 	hosteKubeSecertKey := types.NamespacedName{
@@ -141,7 +145,8 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 	hostedKubeconfigSecret := &corev1.Secret{}
 
 	if err := r.client.Get(ctx, hosteKubeSecertKey, hostedKubeconfigSecret); err != nil {
-		return reconcile.Result{}, fmt.Errorf("failed to get hosted cluster kubeconfig secret, err: %w", err)
+		reqLogger.Error(err, fmt.Sprintf("failed to get hosted cluster kubeconfig secret. Reconcile is requeued after 10s", err))
+		return reconcile.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
 	hostedClusterClient, restMapper, err := helpers.GenerateClientFromSecret(hostedKubeconfigSecret)
@@ -167,7 +172,7 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 	var importErr error
 
 	if helpers.IsDetached(managedCluster) {
-		if err := r.ensureExternalManagedKubeconfigSecret(ctx, hostedKubeconfigSecret); err != nil {
+		if err := r.ensureExternalManagedKubeconfigSecret(ctx, hostedKubeconfigSecret, managedCluster.GetName()); err != nil {
 			return reconcile.Result{}, err
 		}
 
@@ -197,13 +202,14 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 	return reconcile.Result{}, utilerrors.NewAggregate(errs)
 }
 
-func (r *ReconcileHostedcluster) ensureExternalManagedKubeconfigSecret(ctx context.Context, hostClusterSercret *corev1.Secret) error {
+func (r *ReconcileHostedcluster) ensureExternalManagedKubeconfigSecret(ctx context.Context, hostClusterSercret *corev1.Secret, mc string) error {
 	if hostClusterSercret == nil {
 		return fmt.Errorf("hostClusterSercret is nil")
 	}
 
-	klusterletNsString := "klusterlet"
+	klusterletNsString := helpers.ConstructKlusterNamespace(mc)
 	klusterletNs := &corev1.Namespace{}
+	klusterletNs.SetName(klusterletNsString)
 
 	// make sure the klusterlet namespace exist
 	if err := r.client.Get(ctx, types.NamespacedName{Name: klusterletNsString}, klusterletNs); err != nil {
@@ -417,6 +423,15 @@ func (r *ReconcileHostedcluster) removeImportFinalizer(ctx context.Context, hClu
 	); err != nil {
 		if !errors.IsNotFound(err) {
 			return fmt.Errorf("hypershift failed to delete managedCluster CR, err: %w", err)
+		}
+	}
+
+	if err := r.client.Delete(ctx,
+		&corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{Name: helpers.ConstructKlusterNamespace(hCluster.Name)}},
+	); err != nil {
+		if !errors.IsNotFound(err) {
+			return fmt.Errorf("hypershift failed to delete klusterlet's namespace %s, err: %w", helpers.ConstructKlusterNamespace(hCluster.Name), err)
 		}
 	}
 

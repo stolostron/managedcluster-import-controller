@@ -195,9 +195,9 @@ func (r *ReconcileImportConfig) generateImportSecret(ctx context.Context, manage
 		NodeSelector              map[string]string
 		Detached                  bool
 	}{
-		KlusterletName:            fmt.Sprintf("klusterlet-%s", managedCluster.GetName()),
-		ManagedClusterNamespace:   managedCluster.Name,
+		KlusterletName:            helpers.ConstructKlusterNamespace(managedCluster.GetName()),
 		KlusterletNamespace:       klusterletNamespace,
+		ManagedClusterNamespace:   managedCluster.Name,
 		BootstrapKubeconfig:       base64.StdEncoding.EncodeToString(bootstrapKubeconfigData),
 		UseImagePullSecret:        useImagePullSecret,
 		ImagePullSecretName:       managedClusterImagePullSecretName,
@@ -212,7 +212,7 @@ func (r *ReconcileImportConfig) generateImportSecret(ctx context.Context, manage
 
 	if dateched {
 		// ../hypershift/hostedcluster_controller.go:202
-		config.KlusterletNamespace = "klusterlet"
+		config.KlusterletNamespace = helpers.ConstructKlusterNamespace(managedCluster.GetName())
 	}
 
 	deploymentFiles := append([]string{}, klusterletFiles...)
