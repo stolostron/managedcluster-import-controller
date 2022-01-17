@@ -134,7 +134,7 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 	}
 
 	if hCluster.Status.KubeConfig == nil {
-		reqLogger.Error(fmt.Errorf("hostedcluster's kubeconfig secret is not generated yet."), "Reconcile is requeued after 10s")
+		reqLogger.Error(fmt.Errorf("hostedcluster's kubeconfig secret is not generated yet"), "reconcile is requeued after 10s")
 		return reconcile.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
@@ -145,7 +145,7 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 	hostedKubeconfigSecret := &corev1.Secret{}
 
 	if err := r.client.Get(ctx, hosteKubeSecertKey, hostedKubeconfigSecret); err != nil {
-		reqLogger.Error(err, fmt.Sprintf("failed to get hosted cluster kubeconfig secret. Reconcile is requeued after 10s", err))
+		reqLogger.Error(err, "failed to get hosted cluster kubeconfig secret, reconcile is requeued after 10s")
 		return reconcile.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
