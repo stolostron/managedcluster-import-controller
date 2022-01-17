@@ -60,7 +60,6 @@ spec:
 
 ## ManagedCluster controller
 
-- ManagedCluster creation triggers `Reconcile()` in [/pkg/controller/managedcluster/managedcluster_controller.go](https://github.com/open-cluster-management/managedcluster-import-controller/blob/master/pkg/controller/managedcluster/managedcluster_controller.go).
 - Controller will generate a secret named `{cluster_name}-import`.
 - The `{cluster_name}-import` secret contains the crds.yaml and import.yaml that the user will apply on managed cluster to install klusterlet.
 - The controller will apply the crds.yaml and import.yaml.

@@ -32,7 +32,7 @@ import (
 
 	"github.com/open-cluster-management/applier/pkg/applier"
 	libgometav1 "github.com/open-cluster-management/library-go/pkg/apis/meta/v1"
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/bindata"
+	"github.com/stolostron/managedcluster-import-controller/pkg/bindata"
 )
 
 // constants for delete work and finalizer

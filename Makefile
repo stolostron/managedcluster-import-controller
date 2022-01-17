@@ -36,7 +36,7 @@ export SECURITYSCANS_IMAGE_VERSION ?= $(shell cat ./COMPONENT_VERSION 2> /dev/nu
 export IMAGE_DESCRIPTION ?= RCM_Controller
 export DOCKER_FILE        = $(BUILD_DIR)/Dockerfile
 export DOCKER_REGISTRY   ?= quay.io
-export DOCKER_NAMESPACE  ?= open-cluster-management
+export DOCKER_NAMESPACE  ?= stolostron
 export DOCKER_IMAGE      ?= $(COMPONENT_NAME)
 export DOCKER_IMAGE_COVERAGE_POSTFIX ?= -coverage
 export DOCKER_IMAGE_COVERAGE      ?= $(DOCKER_IMAGE)$(DOCKER_IMAGE_COVERAGE_POSTFIX)
@@ -116,7 +116,7 @@ build:
 ## Builds instructed controller binary for coverage report
 .PHONY: build-coverage
 build-coverage:
-	go test -covermode=atomic -coverpkg=github.com/open-cluster-management/managedcluster-import-controller/pkg/... -c -tags testrunmain ./cmd/manager -o build/_output/manager-coverage
+	go test -covermode=atomic -coverpkg=github.com/stolostron/managedcluster-import-controller/pkg/... -c -tags testrunmain ./cmd/manager -o build/_output/manager-coverage
 
 .PHONY: build-image
 build-image:
@@ -139,9 +139,9 @@ clean: clean-functional-test-full
 run: go-bindata
 	DEFAULT_IMAGE_PULL_SECRET=multiclusterhub-operator-pull-secret \
 	POD_NAMESPACE=open-cluster-management \
-	REGISTRATION_OPERATOR_IMAGE=quay.io/open-cluster-management/registration-operator:latest \
-	REGISTRATION_IMAGE=quay.io/open-cluster-management/registration:latest \
-	WORK_IMAGE=quay.io/open-cluster-management/work:latest \
+	REGISTRATION_OPERATOR_IMAGE=quay.io/stolostron/registration-operator:latest \
+	REGISTRATION_IMAGE=quay.io/stolostron/registration:latest \
+	WORK_IMAGE=quay.io/stolostron/work:latest \
 	WATCH_NAMESPACE="" \
 	go run cmd/manager/main.go -v=4
 
@@ -200,5 +200,5 @@ clean-functional-test-full:
 sync-coverage-entrypoint:
 	@echo downloading coverage entrypoint file
 	@tmp_dir=$$(mktemp -d); \
-	curl  --fail -H 'Accept: application/vnd.github.v4.raw' -L https://api.github.com/repos/open-cluster-management/build-harness-extensions/contents/modules/component/bin/component/coverage-entrypoint-func.sh > "$$tmp_dir/coverage-entrypoint-func.sh" \
+	curl  --fail -H 'Accept: application/vnd.github.v4.raw' -L https://api.github.com/repos/stolostron/build-harness-extensions/contents/modules/component/bin/component/coverage-entrypoint-func.sh > "$$tmp_dir/coverage-entrypoint-func.sh" \
 	&& mv "$$tmp_dir/coverage-entrypoint-func.sh" build/bin/ && chmod +x build/bin/coverage-entrypoint-func.sh ;

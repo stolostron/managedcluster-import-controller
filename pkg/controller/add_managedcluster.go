@@ -11,7 +11,7 @@ package controller
 import (
 	clusterv1 "github.com/open-cluster-management/api/cluster/v1"
 	workv1 "github.com/open-cluster-management/api/work/v1"
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/managedcluster"
+	"github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
