@@ -4,7 +4,6 @@
 
 The manual import process has 2 phases, first create the necessary resources on the hub, and then deploy the agent on the managed cluster.
 
-You can use the scripts available at [applier-samples-for-acm](https://github.com/open-cluster-management/applier-samples-for-acm) to ease the import process.
 
 ## Creating a namespace in which the cluster will get imported
 On the Hub cluster:
@@ -29,7 +28,7 @@ spec:
 
 ## ManagedCluster controller
 
-- ManagedCluster creation triggers `Reconcile()` in [/pkg/controller/managedcluster/managedcluster_controller.go](https://github.com/open-cluster-management/managedcluster-import-controller/blob/master/pkg/controller/managedcluster/managedcluster_controller.go).
+- ManagedCluster creation triggers `Reconcile()` in [/pkg/controller/managedcluster/managedcluster_controller.go](https://github.com/stolostron/managedcluster-import-controller/blob/master/pkg/controller/managedcluster/managedcluster_controller.go).
 - Controller will generate a secret named `{cluster_name}-import`.
 - The `{cluster_name}-import` secret contains the crds.yaml and import.yaml that the user will apply on managed cluster to install klusterlet.
 

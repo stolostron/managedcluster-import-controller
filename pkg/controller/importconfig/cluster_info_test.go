@@ -13,8 +13,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
 	imgregistryv1alpha1 "github.com/open-cluster-management/multicloud-operators-foundation/pkg/apis/imageregistry/v1alpha1"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
