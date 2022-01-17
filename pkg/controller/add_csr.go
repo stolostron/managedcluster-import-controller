@@ -4,7 +4,7 @@
 package controller
 
 import (
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/csr"
+	"github.com/stolostron/managedcluster-import-controller/pkg/controller/csr"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
