@@ -4,8 +4,8 @@
 package autoimport
 
 import (
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/source"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"

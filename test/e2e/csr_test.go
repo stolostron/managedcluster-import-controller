@@ -10,7 +10,7 @@ import (
 	ginkgo "github.com/onsi/ginkgo"
 	gomega "github.com/onsi/gomega"
 
-	"github.com/open-cluster-management/managedcluster-import-controller/test/e2e/util"
+	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 
 	certificatesv1 "k8s.io/api/certificates/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"

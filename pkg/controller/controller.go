@@ -11,14 +11,14 @@ package controller
 import (
 	"fmt"
 
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/autoimport"
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/clusterdeployment"
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/csr"
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/importconfig"
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/managedcluster"
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/manifestwork"
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/controller/selfmanagedcluster"
-	"github.com/open-cluster-management/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/controller/autoimport"
+	"github.com/stolostron/managedcluster-import-controller/pkg/controller/clusterdeployment"
+	"github.com/stolostron/managedcluster-import-controller/pkg/controller/csr"
+	"github.com/stolostron/managedcluster-import-controller/pkg/controller/importconfig"
+	"github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
+	"github.com/stolostron/managedcluster-import-controller/pkg/controller/manifestwork"
+	"github.com/stolostron/managedcluster-import-controller/pkg/controller/selfmanagedcluster"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"k8s.io/client-go/tools/cache"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
