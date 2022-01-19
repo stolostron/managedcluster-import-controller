@@ -76,14 +76,14 @@ func (r *ReconcileClusterDeployment) Reconcile(ctx context.Context, request reco
 		return reconcile.Result{}, err
 	}
 
-	if !clusterDeployment.Spec.Installed {
-		// cluster deployment is not installed yet, do nothing
-		return reconcile.Result{}, nil
-	}
-
 	// add a managed cluster finalizer to the cluster deployment, to handle the managed cluster detach case.
 	if err := r.addClusterImportFinalizer(ctx, clusterDeployment); err != nil {
 		return reconcile.Result{}, err
+	}
+
+	if !clusterDeployment.Spec.Installed {
+		// cluster deployment is not installed yet, do nothing
+		return reconcile.Result{}, nil
 	}
 
 	// set managed cluster created-via annotation

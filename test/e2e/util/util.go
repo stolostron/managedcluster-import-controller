@@ -134,7 +134,8 @@ func InstallClusterDeployment(kubeClient kubernetes.Interface, dynamicClient dyn
 		return err
 	}
 
-	if _, err := kubeClient.CoreV1().Secrets(clusterName).Create(context.TODO(), secret, metav1.CreateOptions{}); err != nil {
+	_, err = kubeClient.CoreV1().Secrets(clusterName).Create(context.TODO(), secret, metav1.CreateOptions{})
+	if err != nil && !errors.IsAlreadyExists(err) {
 		return err
 	}
 
