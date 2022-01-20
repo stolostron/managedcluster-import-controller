@@ -134,7 +134,11 @@ func (r *ReconcileManagedCluster) ensureManagedClusterMetaObj(ctx context.Contex
 	// if there is no cluster name label ensure the cluster name label
 	// TODO we should ensure only update the name label in one place
 	if name, ok := managedCluster.Labels[clusterNameLabel]; !ok || name == "" {
-		resourcemerge.MergeMap(modified, &managedCluster.Labels, map[string]string{clusterNameLabel: managedCluster.Name})
+		clusterName, err := r.getClusterName(ctx, managedCluster)
+		if err != nil {
+			return err
+		}
+		resourcemerge.MergeMap(modified, &managedCluster.Labels, map[string]string{clusterNameLabel: clusterName})
 		if *modified {
 			msgs = append(msgs, "cluster name label is added")
 		}
@@ -230,6 +234,24 @@ func (r *ReconcileManagedCluster) deleteManagedClusterNamespace(
 
 	r.recorder.Eventf("ManagedClusterNamespaceDeleted", "The managed cluster %s namespace is deleted", managedCluster.Name)
 	return nil
+}
+
+func (r *ReconcileManagedCluster) getClusterName(ctx context.Context, cluster *clusterv1.ManagedCluster) (string, error) {
+	clusterDeployment := &hivev1.ClusterDeployment{}
+	err := r.client.Get(ctx, types.NamespacedName{Namespace: cluster.Name, Name: cluster.Name}, clusterDeployment)
+	if errors.IsNotFound(err) {
+		return cluster.Name, nil
+	}
+
+	if err != nil {
+		return "", err
+	}
+
+	if clusterDeployment.Spec.ClusterPoolRef != nil {
+		return clusterDeployment.Spec.ClusterPoolRef.ClaimName, nil
+	}
+
+	return cluster.Name, nil
 }
 
 func ensureCreateViaAnnotation(modified *bool, cluster *clusterv1.ManagedCluster) {
