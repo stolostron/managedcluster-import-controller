@@ -43,8 +43,9 @@ var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", fu
 		})
 
 		ginkgo.By(fmt.Sprintf("Install the clusterdeployment %s", managedClusterName), func() {
-			err := util.InstallClusterDeployment(hubKubeClient, hubDynamicClient, managedClusterName)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			gomega.Eventually(func() error {
+				return util.InstallClusterDeployment(hubKubeClient, hubDynamicClient, managedClusterName)
+			}, 30, 1).ShouldNot(gomega.HaveOccurred())
 		})
 
 		assertManagedClusterImportSecretCreated(managedClusterName, "hive")
