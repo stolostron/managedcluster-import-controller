@@ -7,6 +7,18 @@
 set -o errexit
 set -o nounset
 
+function wait_deployment() {
+  for((i=0;i<30;i++));  
+  do
+    kubectl -n $1 get deploy $2
+    if [ 0 -eq $? ]; then
+      break
+    fi
+
+    sleep 1
+  done
+}
+
 BUILD_DIR="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 REPO_DIR="$(dirname "$BUILD_DIR")"
 WORK_DIR="${REPO_DIR}/_output"
@@ -63,8 +75,11 @@ git clone https://github.com/stolostron/registration-operator.git "$WORK_DIR/reg
 ${KUBECTL} apply -k "$WORK_DIR/registration-operator/deploy/cluster-manager/config/manifests"
 ${KUBECTL} apply -k "$WORK_DIR/registration-operator/deploy/cluster-manager/config/samples"
 rm -rf "$WORK_DIR/registration-operator"
-sleep 10
+
+wait_deployment open-cluster-management cluster-manager
 ${KUBECTL} -n open-cluster-management rollout status deploy cluster-manager --timeout=120s
+
+wait_deployment open-cluster-management-hub cluster-manager-registration-controller
 ${KUBECTL} -n open-cluster-management-hub rollout status deploy cluster-manager-registration-controller --timeout=120s
 ${KUBECTL} -n open-cluster-management-hub rollout status deploy cluster-manager-registration-webhook --timeout=120s
 ${KUBECTL} -n open-cluster-management-hub rollout status deploy cluster-manager-work-webhook --timeout=120s
