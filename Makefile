@@ -98,3 +98,15 @@ e2e-test: build-image-coverage build-e2e-test
 .PHONY: clean-e2e-test
 clean-e2e-test:
 	@build/run-e2e-tests.sh clean
+
+# Update vendor
+.PHONY: vendor
+vendor:
+	go mod tidy
+	go mod vendor
+
+# Copy CRDs
+.PHONY: copy-crd
+copy-crd: vendor
+	bash -x hack/copy-crds.sh
+
