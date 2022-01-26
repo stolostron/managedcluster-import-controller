@@ -106,6 +106,7 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 	if errors.IsNotFound(err) {
 		return reconcile.Result{}, nil
 	}
+
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -118,8 +119,12 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 		return reconcile.Result{}, err
 	}
 
+	if !autoImport(hCluster) {
+		return reconcile.Result{}, err
+	}
+
 	// TODO: check if UI would do so or not
-	managedCluster, err := r.ensureManagedClusterCR(ctx, request.NamespacedName)
+	managedCluster, err := r.ensureManagedClusterCR(ctx, hCluster)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -151,7 +156,8 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 
 	hostedClusterClient, restMapper, err := helpers.GenerateClientFromSecret(hostedKubeconfigSecret)
 	if err != nil {
-		return reconcile.Result{}, err
+		reqLogger.Error(err, "failed to generate client from secret, reconcile is requeued after 10s")
+		return reconcile.Result{RequeueAfter: time.Second * 10}, nil
 	}
 
 	importSecretName := fmt.Sprintf("%s-%s", clusterName, constants.ImportSecretNameSuffix)
@@ -199,7 +205,24 @@ func (r *ReconcileHostedcluster) Reconcile(ctx context.Context, request reconcil
 		errs = append(errs, err)
 	}
 
-	return reconcile.Result{}, utilerrors.NewAggregate(errs)
+	allErrs := utilerrors.NewAggregate(errs)
+	if allErrs != nil && len(allErrs.Error()) != 0 {
+		reqLogger.Error(allErrs, "failed to process auto-import")
+		return reconcile.Result{RequeueAfter: time.Second * 5}, nil
+	}
+
+	return reconcile.Result{}, nil
+}
+
+func autoImport(hCluster *hyperv1.HostedCluster) bool {
+	a := hCluster.GetAnnotations()
+
+	if len(a) == 0 {
+		return false
+	}
+
+	return a[helpers.HypershiftAutoImport] == "true"
+
 }
 
 func (r *ReconcileHostedcluster) ensureExternalManagedKubeconfigSecret(ctx context.Context, hostClusterSercret *corev1.Secret, mc string) error {
@@ -254,13 +277,14 @@ func (r *ReconcileHostedcluster) ensureExternalManagedKubeconfigSecret(ctx conte
 	return r.client.Update(ctx, mSrt)
 }
 
-func (r *ReconcileHostedcluster) ensureManagedClusterCR(ctx context.Context, hClusterKey types.NamespacedName) (*clusterv1.ManagedCluster, error) {
+func (r *ReconcileHostedcluster) ensureManagedClusterCR(ctx context.Context, hCluster *hyperv1.HostedCluster) (*clusterv1.ManagedCluster, error) {
 	managedClusterNs := &corev1.Namespace{}
+	hcName := hCluster.GetName()
 
 	// make sure the managedcluster namespace exist
-	if err := r.client.Get(ctx, types.NamespacedName{Name: hClusterKey.Name}, managedClusterNs); err != nil {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: hcName}, managedClusterNs); err != nil {
 		if errors.IsNotFound(err) {
-			managedClusterNs.SetName(hClusterKey.Name)
+			managedClusterNs.SetName(hcName)
 			if err := r.client.Create(ctx, managedClusterNs); err != nil {
 				return nil, fmt.Errorf("failed to created managedcluster namespace, err: %w", err)
 			}
@@ -275,16 +299,19 @@ func (r *ReconcileHostedcluster) ensureManagedClusterCR(ctx context.Context, hCl
 
 	managedCluster := &clusterv1.ManagedCluster{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: hClusterKey.Name,
-			Annotations: map[string]string{
-				"hypershift-on-management": "true",
-			},
+			Name: hcName,
 		},
 		Spec: clusterv1.ManagedClusterSpec{HubAcceptsClient: true},
 	}
 
+	//TODO: @ianzhang366 maybe I want to make sure there's an update to k8s to make sure this one is persist
+	hcAn := hCluster.GetAnnotations()
+	if len(hcAn) != 0 && hcAn[helpers.HypershiftOnManagement] == "true" {
+		managedCluster.SetAnnotations(map[string]string{helpers.HypershiftOnManagement: "true"})
+	}
+
 	// if the managedcluster CR doesn't exist, then creates it
-	if err := r.client.Get(ctx, types.NamespacedName{Name: hClusterKey.Name}, managedCluster); err != nil {
+	if err := r.client.Get(ctx, types.NamespacedName{Name: hcName}, managedCluster); err != nil {
 		if errors.IsNotFound(err) {
 			if err := r.client.Create(ctx, managedCluster); err != nil {
 				return managedCluster, fmt.Errorf("failed to created managedcluster CR, err: %w", err)

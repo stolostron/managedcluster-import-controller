@@ -135,6 +135,7 @@ func main() {
 		MetricsBindAddress: fmt.Sprintf(":%d", metricsPort),
 		LeaderElection:     true,
 		LeaderElectionID:   "managedcluster-import-controller.open-cluster-management.io",
+		// LeaderElectionNamespace: "open-cluster-management",
 	})
 	if err != nil {
 		setupLog.Error(err, "failed to create manager")

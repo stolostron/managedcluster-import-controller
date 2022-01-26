@@ -3,10 +3,8 @@ kind: Klusterlet
 metadata:
   name: {{ .KlusterletName }}
 spec:
-{{ if .Detached }}
   deployOption:
-    mode: Detached
-{{ end }}
+{{ if .Detached }}    mode: Detached{{ else }}    mode: Default{{ end }}
   registrationImagePullSpec: "{{ .RegistrationImageName }}"
   workImagePullSpec: "{{ .WorkImageName }}"
   clusterName: "{{ .ManagedClusterNamespace }}"

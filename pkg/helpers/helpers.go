@@ -55,6 +55,9 @@ const maxConcurrentReconcilesEnvVarName = "MAX_CONCURRENT_RECONCILES"
 // AnnotationNodeSelector key name of nodeSelector annotation synced from mch
 const AnnotationNodeSelector = "open-cluster-management/nodeSelector"
 
+const HypershiftAutoImport = "hypershift-auto-import"
+const HypershiftOnManagement = "hypershift-on-management"
+
 var v1APIExtensionMinVersion = version.MustParseGeneric("v1.16.0")
 
 var crdGroupKind = schema.GroupKind{Group: "apiextensions.k8s.io", Kind: "CustomResourceDefinition"}
@@ -288,6 +291,7 @@ func SplitYamls(yamls []byte) [][]byte {
 	for _, yaml := range strings.Split(sYamls, constants.YamlSperator) {
 		bYamls = append(bYamls, []byte(yaml))
 	}
+
 	return bYamls
 }
 
@@ -542,7 +546,7 @@ func IsDetached(mc *clusterv1.ManagedCluster) bool {
 
 	anno := mc.GetAnnotations()
 
-	if len(anno) == 0 || anno["hypershift-on-management"] != "true" {
+	if len(anno) == 0 || anno[HypershiftOnManagement] != "true" {
 		return false
 	}
 

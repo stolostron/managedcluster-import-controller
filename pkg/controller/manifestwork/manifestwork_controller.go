@@ -359,10 +359,16 @@ func createKlusterletCRDsManifestWork(managedCluster *clusterv1.ManagedCluster, 
 
 func createKlusterletManifestWork(managedCluster *clusterv1.ManagedCluster, importSecret *corev1.Secret) *workv1.ManifestWork {
 	manifests := []workv1.Manifest{}
+
 	importYaml := importSecret.Data[constants.ImportSecretImportYamlKey]
+
 	for _, yamlData := range helpers.SplitYamls(importYaml) {
 		jsonData, err := yaml.YAMLToJSON(yamlData)
+		if len(jsonData) == 0 {
+			continue
+		}
 		if err != nil {
+
 			panic(err)
 		}
 		manifests = append(manifests, workv1.Manifest{
