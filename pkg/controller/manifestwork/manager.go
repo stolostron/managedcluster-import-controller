@@ -6,6 +6,7 @@ package manifestwork
 import (
 	"strings"
 
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
@@ -14,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -109,7 +111,10 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 		predicate.Predicate(predicate.Funcs{
 			GenericFunc: func(e event.GenericEvent) bool { return false },
 			DeleteFunc:  func(e event.DeleteEvent) bool { return false },
-			CreateFunc:  func(e event.CreateEvent) bool { return false },
+			CreateFunc: func(e event.CreateEvent) bool {
+				// only handle the detached mode import secret
+				return strings.EqualFold(e.Object.GetLabels()[constants.KlusterletDeployModeLabel], string(operatorv1.InstallModeDetached))
+			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				new, okNew := e.ObjectNew.(*corev1.Secret)
 				old, okOld := e.ObjectOld.(*corev1.Secret)

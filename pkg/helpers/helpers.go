@@ -235,7 +235,13 @@ func UpdateManagedClusterStatus(client client.Client, recorder events.Recorder,
 }
 
 // ValidateImportSecret validate managed cluster import secret
-func ValidateImportSecret(importSecret *corev1.Secret) error {
+func ValidateImportSecret(mode operatorv1.InstallMode, importSecret *corev1.Secret) error {
+	if mode == operatorv1.InstallModeDetached {
+		if data, ok := importSecret.Data[constants.ImportSecretImportYamlKey]; !ok || len(data) == 0 {
+			return fmt.Errorf("the %s is required", constants.ImportSecretCRDSV1YamlKey)
+		}
+		return nil
+	}
 	if data, ok := importSecret.Data[constants.ImportSecretCRDSYamlKey]; !ok || len(data) == 0 {
 		return fmt.Errorf("the %s is required", constants.ImportSecretCRDSYamlKey)
 	}
@@ -257,7 +263,7 @@ func ValidateImportSecret(importSecret *corev1.Secret) error {
 // ImportManagedClusterFromSecret use managed clustr client to import managed cluster from import-secret
 func ImportManagedClusterFromSecret(client *ClientHolder, restMapper meta.RESTMapper, recorder events.Recorder,
 	importSecret *corev1.Secret) error {
-	if err := ValidateImportSecret(importSecret); err != nil {
+	if err := ValidateImportSecret(operatorv1.InstallModeDefault, importSecret); err != nil {
 		return err
 	}
 
@@ -527,4 +533,26 @@ func GetNodeSelector(cluster *clusterv1.ManagedCluster) (map[string]string, erro
 	}
 
 	return nodeSelector, nil
+}
+
+// DetermineKlusterletMode gets the klusterlet deploy mode for the managed cluster.
+func DetermineKlusterletMode(cluster *clusterv1.ManagedCluster) (operatorv1.InstallMode, string, error) {
+	mode, ok := cluster.Labels[constants.KlusterletDeployModeLabel]
+	if !ok {
+		return operatorv1.InstallModeDefault, "", nil
+	}
+
+	if mode == string(operatorv1.InstallModeDefault) {
+		return operatorv1.InstallModeDefault, "", nil
+	}
+
+	if mode == string(operatorv1.InstallModeDetached) {
+		if managementCluster, ok := cluster.Labels[constants.ManagementClusterNameLabel]; ok {
+			// TODO(zhujian7): check if management cluster is a managed cluster of hub, and check its status.
+			return operatorv1.InstallModeDetached, managementCluster, nil
+		}
+		return operatorv1.InstallModeDetached, "", fmt.Errorf("label %s is required for Detached mode", constants.ManagementClusterNameLabel)
+	}
+
+	return "", "", fmt.Errorf("value %s of the label %s invalid, only supports Detached and Default", mode, constants.KlusterletDeployModeLabel)
 }

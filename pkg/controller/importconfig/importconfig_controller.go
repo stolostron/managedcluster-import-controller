@@ -10,21 +10,20 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-
-	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-
-	"github.com/openshift/library-go/pkg/operator/events"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/openshift/library-go/pkg/operator/events"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 )
 
 const bootstrapSASuffix = "bootstrap-sa"
@@ -54,14 +53,17 @@ var hubFiles = []string{
 	"manifests/hub/managedcluster-clusterrolebinding.yaml",
 }
 
-var klusterletFiles = []string{
+var klusterletOperatorFiles = []string{
 	"manifests/klusterlet/namespace.yaml",
 	"manifests/klusterlet/service_account.yaml",
-	"manifests/klusterlet/bootstrap_secret.yaml",
 	"manifests/klusterlet/cluster_role.yaml",
 	"manifests/klusterlet/clusterrole_aggregate.yaml",
 	"manifests/klusterlet/cluster_role_binding.yaml",
 	"manifests/klusterlet/operator.yaml",
+}
+
+var klusterletFiles = []string{
+	"manifests/klusterlet/bootstrap_secret.yaml",
 	"manifests/klusterlet/klusterlet.yaml",
 }
 
@@ -97,6 +99,11 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	mode, management, err := helpers.DetermineKlusterletMode(managedCluster)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
 	// make sure the managed cluster clusterrole, cluserrolebiding and bootstrap sa are updated
 	config := struct {
 		ManagedClusterName          string
@@ -123,7 +130,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// make sure the managed cluster import secret is updated
-	importSecret, err := r.generateImportSecret(ctx, managedCluster)
+	importSecret, err := r.generateImportSecret(ctx, mode, management, managedCluster)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -135,7 +142,8 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileImportConfig) generateImportSecret(ctx context.Context, managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, error) {
+func (r *ReconcileImportConfig) generateImportSecret(ctx context.Context, mode operatorv1.InstallMode, management string,
+	managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, error) {
 	bootStrapSecret, err := getBootstrapSecret(ctx, r.clientHolder.KubeClient, managedCluster)
 	if err != nil {
 		return nil, err
@@ -190,6 +198,9 @@ func (r *ReconcileImportConfig) generateImportSecret(ctx context.Context, manage
 		RegistrationImageName     string
 		WorkImageName             string
 		NodeSelector              map[string]string
+
+		InstallMode           string
+		ManagementClusterName string
 	}{
 		ManagedClusterNamespace:   managedCluster.Name,
 		KlusterletNamespace:       klusterletNamespace,
@@ -202,11 +213,19 @@ func (r *ReconcileImportConfig) generateImportSecret(ctx context.Context, manage
 		RegistrationImageName:     registrationImageName,
 		WorkImageName:             workImageName,
 		NodeSelector:              nodeSelector,
+
+		InstallMode:           string(mode),
+		ManagementClusterName: management,
 	}
 
+	// TODO(zhujian7): refactor this, detached mode don't need to prepare the klusterlet-operator
+	// related values
 	deploymentFiles := append([]string{}, klusterletFiles...)
-	if useImagePullSecret {
-		deploymentFiles = append(deploymentFiles, "manifests/klusterlet/image_pull_secret.yaml")
+	if mode == operatorv1.InstallModeDefault {
+		if useImagePullSecret {
+			deploymentFiles = append(deploymentFiles, "manifests/klusterlet/image_pull_secret.yaml")
+		}
+		deploymentFiles = append(deploymentFiles, klusterletOperatorFiles...)
 	}
 
 	importYAML := new(bytes.Buffer)
@@ -234,7 +253,7 @@ func (r *ReconcileImportConfig) generateImportSecret(ctx context.Context, manage
 	}
 	crdsV1YAML.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, string(crdsV1)))
 
-	return &corev1.Secret{
+	secret := &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-%s", managedCluster.Name, constants.ImportSecretNameSuffix),
@@ -244,10 +263,17 @@ func (r *ReconcileImportConfig) generateImportSecret(ctx context.Context, manage
 			},
 		},
 		Data: map[string][]byte{
-			constants.ImportSecretImportYamlKey:      importYAML.Bytes(),
-			constants.ImportSecretCRDSYamlKey:        crdsV1YAML.Bytes(),
-			constants.ImportSecretCRDSV1YamlKey:      crdsV1YAML.Bytes(),
-			constants.ImportSecretCRDSV1beta1YamlKey: crdsV1beta1YAML.Bytes(),
+			constants.ImportSecretImportYamlKey: importYAML.Bytes(),
 		},
-	}, nil
+	}
+
+	if mode == operatorv1.InstallModeDetached {
+		secret.Labels[constants.KlusterletDeployModeLabel] = string(operatorv1.InstallModeDetached)
+	} else {
+		secret.Data[constants.ImportSecretCRDSYamlKey] = crdsV1YAML.Bytes()
+		secret.Data[constants.ImportSecretCRDSV1YamlKey] = crdsV1YAML.Bytes()
+		secret.Data[constants.ImportSecretCRDSV1beta1YamlKey] = crdsV1beta1YAML.Bytes()
+	}
+
+	return secret, nil
 }

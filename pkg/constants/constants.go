@@ -31,3 +31,15 @@ const (
 	ImportSecretCRDSV1YamlKey      = "crdsv1.yaml"
 	ImportSecretCRDSV1beta1YamlKey = "crdsv1beta1.yaml"
 )
+
+const (
+	// KlusterletDeployModeLabel describe the klusterlet deploy mode when importing a managed cluster.
+	// If the value is "Detached", the ManagementClusterNameLabel label will be required, we use
+	// ManagementClusterNameLabel to determine where to deploy the registration-agent and work-agent.
+	KlusterletDeployModeLabel string = "managedcluster-import-controller.open-cluster-management.io/klusterlet-deploy-mode"
+
+	// ManagementClusterNameLabel is required in Detached mode, and the management cluster MUST be one
+	// of the managed cluster of the hub. The value of the label should be the ManagedCluster name of
+	// management cluster.
+	ManagementClusterNameLabel string = "managedcluster-import-controller.open-cluster-management.io/management-cluster-name"
+)

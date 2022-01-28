@@ -127,3 +127,42 @@ func TestReconcile(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateManagedKubeconfigManifestWork(t *testing.T) {
+	kubeconfigData := "dGVzdAo="
+	cases := []struct {
+		name      string
+		cluster   string
+		secret    *corev1.Secret
+		namespace string
+
+		objs        []client.Object
+		secrets     []runtime.Object
+		expectedErr bool
+	}{
+		{
+			name:    "normal",
+			cluster: "demo",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "auto-import-secret",
+					Namespace: "demo",
+				},
+				Data: map[string][]byte{
+					"kubeconfig": []byte(kubeconfigData),
+				},
+			},
+			namespace:   "management",
+			expectedErr: false,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, err := createManagedKubeconfigManifestWork(c.cluster, c.secret, c.namespace)
+			if !c.expectedErr && err != nil {
+				t.Errorf("expected %s no error, but failed, err: %s", c.name, err)
+			}
+		})
+	}
+}

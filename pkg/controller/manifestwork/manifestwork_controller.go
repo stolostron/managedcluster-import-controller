@@ -12,6 +12,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 
 	"github.com/openshift/library-go/pkg/operator/events"
@@ -64,7 +65,6 @@ var _ reconcile.Reconciler = &ReconcileManifestWork{}
 func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Name", request.Name)
 	reqLogger.Info("Reconciling the manifest works of the managed cluster")
-
 	managedClusterName := request.Name
 
 	managedCluster := &clusterv1.ManagedCluster{}
@@ -73,6 +73,11 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 		// the managed cluster could have been deleted, do nothing
 		return reconcile.Result{}, nil
 	}
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	mode, management, err := helpers.DetermineKlusterletMode(managedCluster)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -89,11 +94,14 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 
 	if !managedCluster.DeletionTimestamp.IsZero() {
 		// the managed cluster is deleting, delete its manifestworks
-		return reconcile.Result{}, r.deleteManifestWorks(ctx, managedCluster, manifestWorks.Items)
+		return reconcile.Result{}, r.deleteManifestWorks(ctx, mode, management, managedCluster, manifestWorks.Items)
 	}
 
-	if !meta.IsStatusConditionTrue(managedCluster.Status.Conditions, clusterv1.ManagedClusterConditionJoined) {
-		// managed cluster does not join, do nothing
+	// For Default mode, managed cluster does not join, do nothing
+	// But for Detached mode, try to klusterlet CR by creating manifestwork in the
+	// management cluster to trigger the joining process.
+	if mode == operatorv1.InstallModeDefault && !meta.IsStatusConditionTrue(managedCluster.Status.Conditions, clusterv1.ManagedClusterConditionJoined) {
+		// For Default mode, managed cluster does not join, do nothing
 		return reconcile.Result{}, nil
 	}
 
@@ -104,8 +112,18 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	if err := helpers.ValidateImportSecret(importSecret); err != nil {
+	if err := helpers.ValidateImportSecret(mode, importSecret); err != nil {
 		return reconcile.Result{}, err
+	}
+
+	objs := []runtime.Object{
+		createKlusterletCRDsManifestWork(managedCluster, importSecret),
+		createKlusterletManifestWork(managedCluster, importSecret, mode, managedClusterName),
+	}
+	if mode == operatorv1.InstallModeDetached {
+		objs = []runtime.Object{
+			createKlusterletManifestWork(managedCluster, importSecret, mode, management),
+		}
 	}
 
 	if err := helpers.ApplyResources(
@@ -113,8 +131,7 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 		r.recorder,
 		r.scheme,
 		managedCluster,
-		createKlusterletCRDsManifestWork(managedCluster, importSecret),
-		createKlusterletManifestWork(managedCluster, importSecret),
+		objs...,
 	); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -161,7 +178,8 @@ func (r *ReconcileManifestWork) assertManifestWorkFinalizer(ctx context.Context,
 //      crds will be deleted from the managed cluster, then the kube system will delete the klusterlet
 //      cr from the managed cluster, once the klusterlet cr is deleted, the klusterlet operator will
 //      clean up the klusterlet on the managed cluster
-func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster, works []workv1.ManifestWork) error {
+func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, mode operatorv1.InstallMode, management string,
+	cluster *clusterv1.ManagedCluster, works []workv1.ManifestWork) error {
 	if len(works) == 0 {
 		return nil
 	}
@@ -202,6 +220,11 @@ func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster
 
 	// only have klusterlet manifest works, delete klusterlet manifest works
 	klusterletName := fmt.Sprintf("%s-%s", cluster.Name, klusterletSuffix)
+	if mode == operatorv1.InstallModeDetached {
+		// TODO(zhujian7): Check if more granular processing is required.
+		return r.deleteManifestWork(ctx, management, klusterletName)
+	}
+
 	klusterletWork := &workv1.ManifestWork{}
 	err = r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Namespace: cluster.Name, Name: klusterletName}, klusterletWork)
 	if errors.IsNotFound(err) {
@@ -357,7 +380,8 @@ func createKlusterletCRDsManifestWork(managedCluster *clusterv1.ManagedCluster, 
 	}
 }
 
-func createKlusterletManifestWork(managedCluster *clusterv1.ManagedCluster, importSecret *corev1.Secret) *workv1.ManifestWork {
+func createKlusterletManifestWork(managedCluster *clusterv1.ManagedCluster, importSecret *corev1.Secret,
+	mode operatorv1.InstallMode, manifestWorkNamespace string) *workv1.ManifestWork {
 	manifests := []workv1.Manifest{}
 	importYaml := importSecret.Data[constants.ImportSecretImportYamlKey]
 	for _, yamlData := range helpers.SplitYamls(importYaml) {
@@ -370,19 +394,30 @@ func createKlusterletManifestWork(managedCluster *clusterv1.ManagedCluster, impo
 		})
 	}
 
-	return &workv1.ManifestWork{
+	// For default mode, the klusterletManifestWork contains klusterlet-operator,
+	// delete the klusterletManifestWork with orphan policy, and delete klusterlet
+	// CRD resource will trigger to delete the klusterlet CR and the operator.
+	// For detached mode, the klusterletManifestWork only contains a klusterlet CR
+	// and a bootstrap secret, delete it in foreground.
+	deletePolicy := workv1.DeletePropagationPolicyTypeOrphan
+	if mode == operatorv1.InstallModeDetached {
+		deletePolicy = workv1.DeletePropagationPolicyTypeForeground
+	}
+	mw := &workv1.ManifestWork{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-%s", managedCluster.Name, klusterletSuffix),
-			Namespace: managedCluster.Name,
+			Namespace: manifestWorkNamespace,
 		},
 		Spec: workv1.ManifestWorkSpec{
 			Workload: workv1.ManifestsTemplate{
 				Manifests: manifests,
 			},
 			DeleteOption: &workv1.DeleteOption{
-				PropagationPolicy: workv1.DeletePropagationPolicyTypeOrphan,
+				PropagationPolicy: deletePolicy,
 			},
 		},
 	}
+
+	return mw
 }

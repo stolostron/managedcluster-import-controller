@@ -2,4 +2,5 @@
 .copyrightignore
 _generated.go
 pkg/controller/importconfig/manifests/*
+pkg/controller/autoimport/manifests/*
 test/e2e/resources/*

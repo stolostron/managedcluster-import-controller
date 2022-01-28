@@ -8,7 +8,7 @@ set -o errexit
 set -o nounset
 
 function wait_deployment() {
-  for((i=0;i<30;i++));  
+  for((i=0;i<60;i++));
   do
     kubectl -n $1 get deploy $2
     if [ 0 -eq $? ]; then
