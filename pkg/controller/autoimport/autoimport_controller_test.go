@@ -7,6 +7,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
@@ -110,19 +111,26 @@ func TestReconcile(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			recorder := eventstesting.NewTestingEventRecorder(t)
 			r := &ReconcileAutoImport{
 				client:     fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).Build(),
 				kubeClient: kubefake.NewSimpleClientset(c.secrets...),
-				recorder:   eventstesting.NewTestingEventRecorder(t),
+				recorder:   recorder,
+
+				workers: map[string]autoImportWorker{
+					constants.KlusterletDeployModeDefault: &defaultWorker{
+						recorder: recorder,
+					},
+				},
 			}
 
 			req := reconcile.Request{NamespacedName: types.NamespacedName{Namespace: "test"}}
 			_, err := r.Reconcile(context.TODO(), req)
 			if c.expectedErr && err == nil {
-				t.Errorf("expected error, but failed")
+				t.Errorf("%s: expected error, but failed", c.name)
 			}
 			if !c.expectedErr && err != nil {
-				t.Errorf("unexpected error: %v", err)
+				t.Errorf("%s: unexpected error: %v", err, c.name)
 			}
 		})
 	}

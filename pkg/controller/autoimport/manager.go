@@ -4,18 +4,27 @@
 package autoimport
 
 import (
+	"strings"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/workqueue"
 
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	runtimesource "sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const controllerName = "autoimport-controller"
@@ -24,16 +33,32 @@ const controllerName = "autoimport-controller"
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder,
 	importSecretInformer, autoImportSecretInformer cache.SharedIndexInformer) (string, error) {
-	return controllerName, add(importSecretInformer, autoImportSecretInformer, mgr, newReconciler(clientHolder))
+	return controllerName, add(importSecretInformer, autoImportSecretInformer, mgr, newReconciler(mgr, clientHolder))
 }
 
 // newReconciler returns a new reconcile.Reconciler
-func newReconciler(clientHolder *helpers.ClientHolder) reconcile.Reconciler {
-	return &ReconcileAutoImport{
+func newReconciler(mgr manager.Manager, clientHolder *helpers.ClientHolder) reconcile.Reconciler {
+	recorder := helpers.NewEventRecorder(clientHolder.KubeClient, controllerName)
+
+	r := &ReconcileAutoImport{
 		client:     clientHolder.RuntimeClient,
 		kubeClient: clientHolder.KubeClient,
-		recorder:   helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
+		recorder:   recorder,
+		workers: map[string]autoImportWorker{
+			constants.KlusterletDeployModeDefault: &defaultWorker{
+				recorder: recorder,
+			},
+		},
 	}
+	if features.DefaultMutableFeatureGate.Enabled(features.HypershiftImport) {
+		r.workers[constants.KlusterletDeployModeHypershiftDetached] = &hypershiftDetachedWorker{
+			recorder:     recorder,
+			client:       clientHolder.RuntimeClient,
+			clientHolder: clientHolder,
+			scheme:       mgr.GetScheme(),
+		}
+	}
+	return r
 }
 
 // adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -88,5 +113,46 @@ func add(importSecretInformer, autoImportSecretInformer cache.SharedIndexInforme
 		return err
 	}
 
+	// watch detached mode managedcluster deletion
+	if err := c.Watch(
+		&runtimesource.Kind{Type: &clusterv1.ManagedCluster{}},
+		&managedClusterAutoImportEventHandler{},
+		predicate.Predicate(predicate.Funcs{
+			GenericFunc: func(e event.GenericEvent) bool { return false },
+			DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+			CreateFunc:  func(e event.CreateEvent) bool { return false },
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				if e.ObjectNew.GetDeletionTimestamp().IsZero() {
+					return false
+				}
+				// only handle the hypershift detached mode update event(deletion will set DeletionTimestamp first)
+				return strings.EqualFold(e.ObjectNew.GetLabels()[constants.KlusterletDeployModeLabel], constants.KlusterletDeployModeHypershiftDetached)
+			},
+		}),
+	); err != nil {
+		return err
+	}
+
 	return nil
+}
+
+type managedClusterAutoImportEventHandler struct{}
+
+var _ handler.EventHandler = &managedClusterAutoImportEventHandler{}
+
+func (e *managedClusterAutoImportEventHandler) Create(evt event.CreateEvent, q workqueue.RateLimitingInterface) {
+	// do nothing
+}
+
+func (e *managedClusterAutoImportEventHandler) Update(evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
+	// the auto import controller get the object key from namespace.
+	q.Add(reconcile.Request{NamespacedName: types.NamespacedName{Namespace: evt.ObjectNew.GetName()}})
+}
+
+func (e *managedClusterAutoImportEventHandler) Delete(evt event.DeleteEvent, q workqueue.RateLimitingInterface) {
+	// do nothing
+}
+
+func (e *managedClusterAutoImportEventHandler) Generic(evt event.GenericEvent, q workqueue.RateLimitingInterface) {
+	// do nothing
 }

@@ -45,13 +45,20 @@ var manifestWorkPostponeDeleteTime = 10 * time.Minute
 
 // ReconcileManifestWork reconciles the ManagedClusters of the ManifestWorks object
 type ReconcileManifestWork struct {
-	clientHolder *helpers.ClientHolder
-	scheme       *runtime.Scheme
-	recorder     events.Recorder
+	commonProcessor
+
+	// the key of the map represents klusterlet deploy mode
+	workers map[string]manifestWorker
 }
 
 // blank assignment to verify that ReconcileManifestWork implements reconcile.Reconciler
 var _ reconcile.Reconciler = &ReconcileManifestWork{}
+
+type commonProcessor struct {
+	clientHolder *helpers.ClientHolder
+	scheme       *runtime.Scheme
+	recorder     events.Recorder
+}
 
 // Reconcile the ManagedClusters of the ManifestWorks.
 // - When the manifester works are created in one managed cluster namespace, we will add a manifest work
@@ -64,7 +71,6 @@ var _ reconcile.Reconciler = &ReconcileManifestWork{}
 func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Name", request.Name)
 	reqLogger.Info("Reconciling the manifest works of the managed cluster")
-
 	managedClusterName := request.Name
 
 	managedCluster := &clusterv1.ManagedCluster{}
@@ -75,6 +81,16 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 	}
 	if err != nil {
 		return reconcile.Result{}, err
+	}
+
+	mode, err := helpers.DetermineKlusterletMode(managedCluster)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	worker, ok := r.workers[mode]
+	if !ok {
+		reqLogger.Error(nil, "klusterlet deploy mode not supportted", "mode", mode)
+		return reconcile.Result{}, nil
 	}
 
 	listOpts := &client.ListOptions{Namespace: managedClusterName}
@@ -89,22 +105,34 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 
 	if !managedCluster.DeletionTimestamp.IsZero() {
 		// the managed cluster is deleting, delete its manifestworks
-		return reconcile.Result{}, r.deleteManifestWorks(ctx, managedCluster, manifestWorks.Items)
+		return reconcile.Result{}, worker.deleteManifestWorks(ctx, managedCluster, manifestWorks.Items)
 	}
 
-	if !meta.IsStatusConditionTrue(managedCluster.Status.Conditions, clusterv1.ManagedClusterConditionJoined) {
-		// managed cluster does not join, do nothing
+	// For Default mode, managed cluster does not join, do nothing
+	// But for Detached mode, try to create klusterlet CR by creating manifestwork in the
+	// management cluster to trigger the joining process.
+	if mode == constants.KlusterletDeployModeDefault && !meta.IsStatusConditionTrue(managedCluster.Status.Conditions, clusterv1.ManagedClusterConditionJoined) {
 		return reconcile.Result{}, nil
 	}
 
-	// after managed cluster joined, apply klusterlet manifest works from import secret
+	// For default mode, after managed cluster joined, apply klusterlet manifest works from import secret to the managed cluster namespace
+	// For detached mode, apply klusterlet manifest works from import secret to the management cluster namespace
 	importSecretName := fmt.Sprintf("%s-%s", managedClusterName, constants.ImportSecretNameSuffix)
 	importSecret, err := r.clientHolder.KubeClient.CoreV1().Secrets(managedClusterName).Get(ctx, importSecretName, metav1.GetOptions{})
 	if err != nil {
+		if errors.IsNotFound(err) && mode == constants.KlusterletDeployModeHypershiftDetached {
+			// For Detached mode, import secret does not exist, do nothing
+			return reconcile.Result{}, nil
+		}
 		return reconcile.Result{}, err
 	}
 
-	if err := helpers.ValidateImportSecret(importSecret); err != nil {
+	if err := worker.validateImportSecret(importSecret); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	objs, err := worker.generateManifestWorks(managedCluster, importSecret)
+	if err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -113,8 +141,7 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 		r.recorder,
 		r.scheme,
 		managedCluster,
-		createKlusterletCRDsManifestWork(managedCluster, importSecret),
-		createKlusterletManifestWork(managedCluster, importSecret),
+		objs...,
 	); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -149,81 +176,7 @@ func (r *ReconcileManifestWork) assertManifestWorkFinalizer(ctx context.Context,
 	return nil
 }
 
-// deleteManifestWorks deletes manifest works when a managed cluster is deleting
-// If the managed cluster is unavailable, we will force delete all manifest works
-// If the managed cluster is available, we will
-//   1. delete the manifest work with the postpone-delete annotation until 10 min after the cluster is deleted.
-//   2. delete the manifest works that do not include klusterlet works and klusterlet addon works
-//   3. delete the klusterlet manifest work, the delete option of the klusterlet manifest work
-//      is orphan, so we can delete it safely
-//   4. after the klusterlet manifest work is deleted, we delete the klusterlet-crds manifest work,
-//      after the klusterlet-crds manifest work is deleted from the hub cluster, its klusterlet
-//      crds will be deleted from the managed cluster, then the kube system will delete the klusterlet
-//      cr from the managed cluster, once the klusterlet cr is deleted, the klusterlet operator will
-//      clean up the klusterlet on the managed cluster
-func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster, works []workv1.ManifestWork) error {
-	if len(works) == 0 {
-		return nil
-	}
-
-	if isClusterUnavailable(cluster) {
-		// the managed cluster is offline, force delete all manifest works
-		return r.forceDeleteAllManifestWorks(ctx, works)
-	}
-
-	// delete works that do not include klusterlet works and klusterlet addon works, the addon works will be removed by
-	// klusterlet-addon-controller, we need to wait the klusterlet-addon-controller delete them
-	for _, manifestWork := range works {
-		if manifestWork.GetName() == fmt.Sprintf("%s-%s", cluster.Name, klusterletSuffix) ||
-			manifestWork.GetName() == fmt.Sprintf("%s-%s", cluster.Name, klusterletCRDsSuffix) ||
-			strings.HasPrefix(manifestWork.GetName(), fmt.Sprintf("%s-klusterlet-addon", manifestWork.GetNamespace())) {
-			continue
-		}
-
-		annotations := manifestWork.GetAnnotations()
-		if _, ok := annotations[postponeDeletionAnnotation]; ok {
-			if time.Since(cluster.DeletionTimestamp.Time) < manifestWorkPostponeDeleteTime {
-				continue
-			}
-		}
-		if err := r.deleteManifestWork(ctx, manifestWork.Namespace, manifestWork.Name); err != nil {
-			return err
-		}
-	}
-
-	onlyHas, err := r.onlyHasKlusterletManifestWorks(ctx, cluster)
-	if err != nil {
-		return err
-	}
-	if !onlyHas {
-		// still have other works, do nothing
-		return nil
-	}
-
-	// only have klusterlet manifest works, delete klusterlet manifest works
-	klusterletName := fmt.Sprintf("%s-%s", cluster.Name, klusterletSuffix)
-	klusterletWork := &workv1.ManifestWork{}
-	err = r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Namespace: cluster.Name, Name: klusterletName}, klusterletWork)
-	if errors.IsNotFound(err) {
-		// the klusterlet work could be deleted, ensure the klusterlet crds work is deleted
-		return r.forceDeleteManifestWork(ctx, cluster.Name, fmt.Sprintf("%s-%s", cluster.Name, klusterletCRDsSuffix))
-	}
-	if err != nil {
-		return err
-	}
-
-	// if the manifest work is not applied, we do nothing to avoid to delete the cluster prematurely
-	// Note: there is a corner case, the registration-agent is availabel, but the work-agent is unavailablel,
-	// this will cause that the klusterlet work cannot be deleted, we need user to handle this manually
-	if !meta.IsStatusConditionTrue(klusterletWork.Status.Conditions, workv1.WorkApplied) {
-		log.Info(fmt.Sprintf("delete the manifest work %s until it is applied ...", klusterletWork.Name))
-		return nil
-	}
-
-	return r.deleteManifestWork(ctx, klusterletWork.Namespace, klusterletWork.Name)
-}
-
-func (r *ReconcileManifestWork) forceDeleteAllManifestWorks(ctx context.Context, manifestWorks []workv1.ManifestWork) error {
+func (r *commonProcessor) forceDeleteAllManifestWorks(ctx context.Context, manifestWorks []workv1.ManifestWork) error {
 	for _, item := range manifestWorks {
 		if err := r.forceDeleteManifestWork(ctx, item.Namespace, item.Name); err != nil {
 			return err
@@ -232,7 +185,7 @@ func (r *ReconcileManifestWork) forceDeleteAllManifestWorks(ctx context.Context,
 	return nil
 }
 
-func (r *ReconcileManifestWork) forceDeleteManifestWork(ctx context.Context, namespace, name string) error {
+func (r *commonProcessor) forceDeleteManifestWork(ctx context.Context, namespace, name string) error {
 	manifestWorkKey := types.NamespacedName{Namespace: namespace, Name: name}
 	manifestWork := &workv1.ManifestWork{}
 	err := r.clientHolder.RuntimeClient.Get(ctx, manifestWorkKey, manifestWork)
@@ -270,7 +223,8 @@ func (r *ReconcileManifestWork) forceDeleteManifestWork(ctx context.Context, nam
 	return nil
 }
 
-func (r *ReconcileManifestWork) onlyHasKlusterletManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster) (bool, error) {
+func (r *commonProcessor) noPendingManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster,
+	ignoredSelector func(clusterName string, manifestWork workv1.ManifestWork) bool) (bool, error) {
 	listOpts := &client.ListOptions{Namespace: cluster.Name}
 	manifestWorks := &workv1.ManifestWorkList{}
 	if err := r.clientHolder.RuntimeClient.List(ctx, manifestWorks, listOpts); err != nil {
@@ -278,22 +232,25 @@ func (r *ReconcileManifestWork) onlyHasKlusterletManifestWorks(ctx context.Conte
 	}
 
 	manifestWorkNames := []string{}
+	ignoredManifestWorkNames := []string{}
 	for _, manifestWork := range manifestWorks.Items {
-		if manifestWork.GetName() != fmt.Sprintf("%s-%s", cluster.Name, klusterletSuffix) &&
-			manifestWork.GetName() != fmt.Sprintf("%s-%s", cluster.Name, klusterletCRDsSuffix) {
+		if ignoredSelector(cluster.GetName(), manifestWork) {
+			ignoredManifestWorkNames = append(ignoredManifestWorkNames, manifestWork.GetName())
+		} else {
 			manifestWorkNames = append(manifestWorkNames, manifestWork.GetName())
 		}
 	}
 
 	if len(manifestWorkNames) != 0 {
-		log.Info(fmt.Sprintf("In addition to klusterlet manifest works, there are also have %s", strings.Join(manifestWorkNames, ",")))
+		log.Info(fmt.Sprintf("In addition to ignored manifest works %s, there are also have %s",
+			strings.Join(ignoredManifestWorkNames, ","), strings.Join(manifestWorkNames, ",")))
 		return false, nil
 	}
 
 	return true, nil
 }
 
-func (r *ReconcileManifestWork) deleteManifestWork(ctx context.Context, namespace, name string) error {
+func (r *commonProcessor) deleteManifestWork(ctx context.Context, namespace, name string) error {
 	manifestWork := &workv1.ManifestWork{}
 	err := r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, manifestWork)
 	if errors.IsNotFound(err) {
@@ -357,7 +314,8 @@ func createKlusterletCRDsManifestWork(managedCluster *clusterv1.ManagedCluster, 
 	}
 }
 
-func createKlusterletManifestWork(managedCluster *clusterv1.ManagedCluster, importSecret *corev1.Secret) *workv1.ManifestWork {
+func createKlusterletManifestWork(managedCluster *clusterv1.ManagedCluster, importSecret *corev1.Secret,
+	manifestWorkNamespace string, deletePolicy workv1.DeletePropagationPolicyType) *workv1.ManifestWork {
 	manifests := []workv1.Manifest{}
 	importYaml := importSecret.Data[constants.ImportSecretImportYamlKey]
 	for _, yamlData := range helpers.SplitYamls(importYaml) {
@@ -370,19 +328,21 @@ func createKlusterletManifestWork(managedCluster *clusterv1.ManagedCluster, impo
 		})
 	}
 
-	return &workv1.ManifestWork{
+	mw := &workv1.ManifestWork{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-%s", managedCluster.Name, klusterletSuffix),
-			Namespace: managedCluster.Name,
+			Namespace: manifestWorkNamespace,
 		},
 		Spec: workv1.ManifestWorkSpec{
 			Workload: workv1.ManifestsTemplate{
 				Manifests: manifests,
 			},
 			DeleteOption: &workv1.DeleteOption{
-				PropagationPolicy: workv1.DeletePropagationPolicyTypeOrphan,
+				PropagationPolicy: deletePolicy,
 			},
 		},
 	}
+
+	return mw
 }

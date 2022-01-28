@@ -4,6 +4,8 @@
 package importconfig
 
 import (
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -33,11 +35,24 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder,
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, clientHolder *helpers.ClientHolder) reconcile.Reconciler {
-	return &ReconcileImportConfig{
+	r := &ReconcileImportConfig{
 		clientHolder: clientHolder,
 		scheme:       mgr.GetScheme(),
 		recorder:     helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
+		workers: map[string]importWorker{
+			constants.KlusterletDeployModeDefault: &defaultWorker{
+				clientHolder: clientHolder,
+			},
+		},
 	}
+
+	if features.DefaultMutableFeatureGate.Enabled(features.HypershiftImport) {
+		r.workers[constants.KlusterletDeployModeHypershiftDetached] = &hypershiftDetachedWorker{
+			clientHolder: clientHolder,
+		}
+	}
+
+	return r
 }
 
 // adds a new Controller to mgr with r as the reconcile.Reconciler

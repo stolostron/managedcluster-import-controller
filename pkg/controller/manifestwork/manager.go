@@ -6,6 +6,8 @@ package manifestwork
 import (
 	"strings"
 
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
@@ -42,11 +44,27 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder,
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, clientHolder *helpers.ClientHolder) reconcile.Reconciler {
-	return &ReconcileManifestWork{
+	cp := commonProcessor{
 		clientHolder: clientHolder,
 		scheme:       mgr.GetScheme(),
 		recorder:     helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
 	}
+
+	r := &ReconcileManifestWork{
+		commonProcessor: cp,
+		workers: map[string]manifestWorker{
+			constants.KlusterletDeployModeDefault: &defaultWorker{
+				p: cp,
+			},
+		},
+	}
+
+	if features.DefaultMutableFeatureGate.Enabled(features.HypershiftImport) {
+		r.workers[constants.KlusterletDeployModeHypershiftDetached] = &hypershiftDetachedWorker{
+			p: cp,
+		}
+	}
+	return r
 }
 
 // adds a new Controller to mgr with r as the reconcile.Reconciler
@@ -109,7 +127,10 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 		predicate.Predicate(predicate.Funcs{
 			GenericFunc: func(e event.GenericEvent) bool { return false },
 			DeleteFunc:  func(e event.DeleteEvent) bool { return false },
-			CreateFunc:  func(e event.CreateEvent) bool { return false },
+			CreateFunc: func(e event.CreateEvent) bool {
+				// only handle the hypershift detached mode import secret
+				return strings.EqualFold(e.Object.GetLabels()[constants.KlusterletDeployModeLabel], constants.KlusterletDeployModeHypershiftDetached)
+			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				new, okNew := e.ObjectNew.(*corev1.Secret)
 				old, okOld := e.ObjectOld.(*corev1.Secret)

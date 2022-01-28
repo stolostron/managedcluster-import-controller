@@ -62,7 +62,7 @@ func (r *ReconcileLocalCluster) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	// if there is an auto import secret in the managed cluster namespce, we will use the auto import secret to import
+	// if there is an auto import secret in the managed cluster namespace, we will use the auto import secret to import
 	// the cluster
 	_, err = r.clientHolder.KubeClient.CoreV1().Secrets(request.Name).Get(ctx, constants.AutoImportSecretName, metav1.GetOptions{})
 	if err == nil {

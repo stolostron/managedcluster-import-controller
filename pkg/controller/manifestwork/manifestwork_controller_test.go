@@ -7,6 +7,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	operatorfake "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
@@ -388,7 +389,7 @@ func TestReconcile(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			r := &ReconcileManifestWork{
+			cp := commonProcessor{
 				clientHolder: &helpers.ClientHolder{
 					RuntimeClient:  fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.startObjs...).Build(),
 					OperatorClient: operatorfake.NewSimpleClientset(),
@@ -396,6 +397,14 @@ func TestReconcile(t *testing.T) {
 				},
 				scheme:   testscheme,
 				recorder: eventstesting.NewTestingEventRecorder(t),
+			}
+			r := &ReconcileManifestWork{
+				commonProcessor: cp,
+				workers: map[string]manifestWorker{
+					constants.KlusterletDeployModeDefault: &defaultWorker{
+						p: cp,
+					},
+				},
 			}
 
 			_, err := r.Reconcile(context.TODO(), c.request)

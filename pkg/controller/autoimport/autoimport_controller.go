@@ -5,14 +5,15 @@ package autoimport
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"strconv"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	"github.com/openshift/library-go/pkg/operator/events"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -28,6 +29,13 @@ import (
 
 const autoImportRetryName string = "autoImportRetry"
 
+const finalizerExternalManagedSecret string = "managedcluster-import-controller.open-cluster-management.io/cleanup-external-managed-kubeconfig"
+
+//go:embed manifests
+var manifestFiles embed.FS
+
+var klusterletDetachedExternalKubeconfig = "manifests/external_managed_secret.yaml"
+
 var log = logf.Log.WithName(controllerName)
 
 // ReconcileAutoImport reconciles the managed cluster auto import secret to import the managed cluster
@@ -35,6 +43,9 @@ type ReconcileAutoImport struct {
 	client     client.Client
 	kubeClient kubernetes.Interface
 	recorder   events.Recorder
+
+	// the key of the map represents klusterlet deploy mode
+	workers map[string]autoImportWorker
 }
 
 // blank assignment to verify that ReconcileAutoImport implements reconcile.Reconciler
@@ -60,6 +71,24 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	mode, err := helpers.DetermineKlusterletMode(managedCluster)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	worker, ok := r.workers[mode]
+	if !ok {
+		reqLogger.Error(nil, "klusterlet deploy mode not supportted", "mode", mode)
+		return reconcile.Result{}, nil
+	}
+
+	if !managedCluster.DeletionTimestamp.IsZero() {
+		return reconcile.Result{}, worker.removeImportFinalizer(ctx, managedCluster)
+	}
+
+	err = worker.addFinalizer(ctx, managedCluster)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 	// TODO: we will use list instead of get to reduce the request in the future
 	autoImportSecret, err := r.kubeClient.CoreV1().Secrets(managedClusterName).Get(ctx, constants.AutoImportSecretName, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
@@ -80,25 +109,12 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	importClient, restMapper, err := helpers.GenerateClientFromSecret(autoImportSecret)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	importCondition := metav1.Condition{
-		Type:    "ManagedClusterImportSucceeded",
-		Status:  metav1.ConditionTrue,
-		Message: "Import succeeded",
-		Reason:  "ManagedClusterImported",
-	}
-
 	errs := []error{}
-	err = helpers.ImportManagedClusterFromSecret(importClient, restMapper, r.recorder, importSecret)
+	importCondition, updateRetryTimes, err := worker.autoImport(managedCluster, autoImportSecret, importSecret)
 	if err != nil {
-		importCondition.Status = metav1.ConditionFalse
-		importCondition.Message = fmt.Sprintf("Unable to import %s: %s", managedClusterName, err.Error())
-		importCondition.Reason = "ManagedClusterNotImported"
-
+		if !updateRetryTimes {
+			return reconcile.Result{}, err
+		}
 		errs = append(errs, err, r.updateAutoImportRetryTimes(ctx, autoImportSecret.DeepCopy()))
 	}
 
@@ -143,4 +159,8 @@ func (r *ReconcileAutoImport) updateAutoImportRetryTimes(ctx context.Context, se
 	secret.Data[autoImportRetryName] = []byte(strconv.Itoa(autoImportRetry))
 	_, err = r.kubeClient.CoreV1().Secrets(secret.Namespace).Update(ctx, secret, metav1.UpdateOptions{})
 	return err
+}
+
+func externalManagedKubeconfigManifestWorkName(managedClusterName string) string {
+	return fmt.Sprintf("%s-klusterlet-managed-kubeconfig", managedClusterName)
 }
