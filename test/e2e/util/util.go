@@ -58,6 +58,32 @@ func Logf(format string, args ...interface{}) {
 	fmt.Fprintf(ginkgo.GinkgoWriter, "DEBUG: "+format+"\n", args...)
 }
 
+func CreateHypershiftDetachedManagedCluster(clusterClient clusterclient.Interface, name, management string) (*clusterv1.ManagedCluster, error) {
+	clusterLabels := map[string]string{}
+	clusterLabels[constants.KlusterletDeployModeLabel] = constants.KlusterletDeployModeHypershiftDetached
+	clusterAnnotations := map[string]string{}
+	clusterAnnotations[constants.ManagementClusterNameAnnotation] = management
+	cluster, err := clusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		return clusterClient.ClusterV1().ManagedClusters().Create(
+			context.TODO(),
+			&clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        name,
+					Labels:      clusterLabels,
+					Annotations: clusterAnnotations,
+				},
+				Spec: clusterv1.ManagedClusterSpec{
+					HubAcceptsClient: true,
+				},
+			},
+			metav1.CreateOptions{},
+		)
+	}
+
+	return cluster, err
+}
+
 func CreateManagedCluster(clusterClient clusterclient.Interface, name string, labels ...Label) (*clusterv1.ManagedCluster, error) {
 	clusterLabels := map[string]string{}
 	for _, label := range labels {
@@ -155,8 +181,12 @@ func NewLable(key, value string) Label {
 	}
 }
 
-func NewAutoImportSecret(kubeClient kubernetes.Interface, clusterName string) (*corev1.Secret, error) {
-	secret, err := kubeClient.CoreV1().Secrets(ocmNamespace).Get(context.TODO(), "e2e-auto-import-secret", metav1.GetOptions{})
+func NewAutoImportSecret(kubeClient kubernetes.Interface, clusterName string, mode ...string) (*corev1.Secret, error) {
+	name := "e2e-auto-import-secret"
+	if len(mode) != 0 && mode[0] == constants.KlusterletDeployModeHypershiftDetached {
+		name = "e2e-managed-auto-import-secret"
+	}
+	secret, err := kubeClient.CoreV1().Secrets(ocmNamespace).Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -246,25 +276,6 @@ func NewCSR(labels ...Label) *certificatesv1.CertificateSigningRequest {
 			Request:    pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrb}),
 		},
 	}
-}
-
-func ValidateImportSecret(importSecret *corev1.Secret) error {
-	if data, ok := importSecret.Data[constants.ImportSecretCRDSYamlKey]; !ok || len(data) == 0 {
-		return fmt.Errorf("the %s is required", constants.ImportSecretCRDSYamlKey)
-	}
-
-	if data, ok := importSecret.Data[constants.ImportSecretCRDSV1beta1YamlKey]; !ok || len(data) == 0 {
-		return fmt.Errorf("the %s is required", constants.ImportSecretCRDSV1beta1YamlKey)
-	}
-
-	if data, ok := importSecret.Data[constants.ImportSecretCRDSV1YamlKey]; !ok || len(data) == 0 {
-		return fmt.Errorf("the %s is required", constants.ImportSecretCRDSV1YamlKey)
-	}
-
-	if data, ok := importSecret.Data[constants.ImportSecretImportYamlKey]; !ok || len(data) == 0 {
-		return fmt.Errorf("the %s is required", constants.ImportSecretCRDSV1YamlKey)
-	}
-	return nil
 }
 
 func ToImportResoruces(importYaml []byte) []*unstructured.Unstructured {

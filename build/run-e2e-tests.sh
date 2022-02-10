@@ -33,6 +33,7 @@ KUBE_VERSION="v1.20.2"
 KUBECTL="${WORK_DIR}/bin/kubectl"
 
 CLUSTER_NAME="e2e-test-cluster"
+CLUSTER_NAME_MANAGED="e2e-test-cluster-managed"
 
 mkdir -p "${WORK_DIR}/bin"
 mkdir -p "${WORK_DIR}/config"
@@ -67,6 +68,8 @@ nodes:
 EOF
 cluster_ip=$(${KUBECTL} get svc kubernetes -n default -o jsonpath="{.spec.clusterIP}")
 cluster_context=$(${KUBECTL} config current-context)
+# scale replicas to 1 to save resources
+${KUBECTL} --context="${cluster_context}" -n kube-system scale --replicas=1 deployment/coredns
 
 echo "###### loading coverage image"
 ${KIND} load docker-image managedcluster-import-controller-coverage --name ${CLUSTER_NAME}
@@ -85,6 +88,11 @@ wait_deployment open-cluster-management-hub cluster-manager-registration-control
 ${KUBECTL} -n open-cluster-management-hub rollout status deploy cluster-manager-registration-controller --timeout=120s
 ${KUBECTL} -n open-cluster-management-hub rollout status deploy cluster-manager-registration-webhook --timeout=120s
 ${KUBECTL} -n open-cluster-management-hub rollout status deploy cluster-manager-work-webhook --timeout=120s
+
+# scale replicas to save resources, after the hub are installed, we don't need
+# the cluster-manager and placement-controller for the e2e test
+${KUBECTL} -n open-cluster-management scale --replicas=0 deployment/cluster-manager
+${KUBECTL} -n open-cluster-management-hub scale --replicas=0 deployment/cluster-manager-placement-controller
 
 echo "###### deploy managedcluster-import-controller with image coverage image"
 kubectl kustomize "$REPO_DIR/deploy/test" | kubectl apply -f -
@@ -172,6 +180,22 @@ spec:
     resource: placement
     name: test
 EOF
+
+# prepare another managed cluster for hypershift detached mode testing
+echo "###### installing e2e test managed cluster"
+export KUBECONFIG="${WORK_DIR}/kubeconfig"
+${KIND} delete cluster --name ${CLUSTER_NAME_MANAGED}
+${KIND} create cluster --image kindest/node:${KUBE_VERSION} --name ${CLUSTER_NAME_MANAGED}
+cluster_context_managed=$(${KUBECTL} config current-context)
+echo "hypershift managed cluster context is: ${cluster_context_managed}"
+# scale replicas to 1 to save resources
+${KUBECTL} --context="${cluster_context_managed}" -n kube-system scale --replicas=1 deployment/coredns
+
+echo "###### prepare auto-import-secret for hypershift detached cluster"
+${KIND} get kubeconfig --name=${CLUSTER_NAME_MANAGED} --internal > "${WORK_DIR}"/e2e-managed-kubeconfig
+${KUBECTL} config use-context "${cluster_context}"
+${KUBECTL} delete secret e2e-managed-auto-import-secret -n open-cluster-management --ignore-not-found
+${KUBECTL} create secret generic e2e-managed-auto-import-secret --from-file=kubeconfig="${WORK_DIR}"/e2e-managed-kubeconfig -n open-cluster-management
 
 # start the e2e test
 ${WORK_DIR}/e2e.test -test.v -ginkgo.v
