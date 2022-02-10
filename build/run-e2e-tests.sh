@@ -8,15 +8,17 @@ set -o errexit
 set -o nounset
 
 function wait_deployment() {
-  for((i=0;i<30;i++));  
+  set +e
+  for((i=0;i<30;i++));
   do
-    kubectl -n $1 get deploy $2
+    ${KUBECTL} -n $1 get deploy $2
     if [ 0 -eq $? ]; then
       break
     fi
-
+    echo "sleep 1 second to wait deployment $1/$2 to exist: $i"
     sleep 1
   done
+  set -e
 }
 
 BUILD_DIR="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
