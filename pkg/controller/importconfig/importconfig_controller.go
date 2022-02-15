@@ -96,10 +96,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	mode, err := helpers.DetermineKlusterletMode(managedCluster)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
+	mode := helpers.DetermineKlusterletMode(managedCluster)
 	worker, ok := r.workers[mode]
 	if !ok {
 		reqLogger.Error(nil, "klusterlet deploy mode not supportted", "mode", mode)

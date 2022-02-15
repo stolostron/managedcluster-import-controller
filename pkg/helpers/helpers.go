@@ -538,28 +538,21 @@ func GetNodeSelector(cluster *clusterv1.ManagedCluster) (map[string]string, erro
 }
 
 // DetermineKlusterletMode gets the klusterlet deploy mode for the managed cluster.
-func DetermineKlusterletMode(cluster *clusterv1.ManagedCluster) (string, error) {
+func DetermineKlusterletMode(cluster *clusterv1.ManagedCluster) string {
 	mode, ok := cluster.Labels[constants.KlusterletDeployModeLabel]
 	if !ok {
-		return constants.KlusterletDeployModeDefault, nil
+		return constants.KlusterletDeployModeDefault
 	}
 
 	if strings.EqualFold(mode, constants.KlusterletDeployModeDefault) {
-		return constants.KlusterletDeployModeDefault, nil
+		return constants.KlusterletDeployModeDefault
 	}
 
 	if strings.EqualFold(mode, constants.KlusterletDeployModeHypershiftDetached) {
-		_, err := GetManagementCluster(cluster)
-		if err != nil {
-			return constants.KlusterletDeployModeHypershiftDetached,
-				fmt.Errorf("annotation %s is required for Hypershift-Detached mode", constants.ManagementClusterNameAnnotation)
-		}
-
-		// TODO(zhujian7): check if management cluster is a managed cluster of hub, and check its status.
-		return constants.KlusterletDeployModeHypershiftDetached, nil
+		return constants.KlusterletDeployModeHypershiftDetached
 	}
 
-	return "", fmt.Errorf("value %s of the label %s invalid, only supports Hypershift-Detached and Default", mode, constants.KlusterletDeployModeLabel)
+	return "Unknown"
 }
 
 // GetManagementCluster gets the management cluster name from the managed cluster annotation

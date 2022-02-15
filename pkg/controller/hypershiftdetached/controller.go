@@ -77,13 +77,11 @@ func (r *ReconcileHypershift) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	mode, err := helpers.DetermineKlusterletMode(managedCluster)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-	if mode != constants.KlusterletDeployModeHypershiftDetached {
+	if helpers.DetermineKlusterletMode(managedCluster) != constants.KlusterletDeployModeHypershiftDetached {
 		return reconcile.Result{}, nil
 	}
+	// TODO(zhujian7): check if annotation management cluster is provided, check if the management cluster
+	// is a managed cluster of hub, and check its status.
 
 	reqLogger.Info("Reconciling the manifest works of the hypershift managed cluster")
 

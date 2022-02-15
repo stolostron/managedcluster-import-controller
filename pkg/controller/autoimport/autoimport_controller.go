@@ -66,11 +66,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	mode, err := helpers.DetermineKlusterletMode(managedCluster)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-	if mode != constants.KlusterletDeployModeDefault {
+	if helpers.DetermineKlusterletMode(managedCluster) != constants.KlusterletDeployModeDefault {
 		return reconcile.Result{}, nil
 	}
 
