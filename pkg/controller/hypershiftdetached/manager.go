@@ -74,8 +74,9 @@ func add(importSecretInformer, autoImportSecretInformer cache.SharedIndexInforme
 			DeleteFunc:  func(e event.DeleteEvent) bool { return true },
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				workName := e.ObjectNew.GetName()
-				// for update event, only watch hypershift detached manifest work
-				if !strings.HasSuffix(workName, constants.HypershiftDetachedManifestworkSuffix) {
+				// for update event, only watch hypershift detached manifest works
+				if !strings.HasSuffix(workName, constants.HypershiftDetachedKlusterletManifestworkSuffix) ||
+					!strings.HasSuffix(workName, constants.HypershiftDetachedManagedKubeconfigManifestworkSuffix) {
 					return false
 				}
 

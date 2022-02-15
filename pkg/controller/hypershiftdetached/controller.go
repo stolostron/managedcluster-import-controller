@@ -39,9 +39,6 @@ var klusterletDetachedExternalKubeconfig = "manifests/external_managed_secret.ya
 
 var log = logf.Log.WithName(controllerName)
 
-// HypershiftDetachedManifestworkSuffix is a suffix of the hypershift detached mode manifestwork name.
-const HypershiftDetachedManifestworkSuffix = "klusterlet"
-
 // ReconcileHypershift reconciles the ManagedClusters of the ManifestWorks object
 type ReconcileHypershift struct {
 	clientHolder *helpers.ClientHolder
@@ -126,28 +123,26 @@ func (r *ReconcileHypershift) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	manifestWork := createHypershiftDetachedManifestWork(managedCluster, importSecret, managementCluster)
-	containAutoImport := false
-
-	autoImportSecret, err := r.kubeClient.CoreV1().Secrets(managedClusterName).Get(ctx, constants.AutoImportSecretName, metav1.GetOptions{})
-	if err != nil {
-		if !errors.IsNotFound(err) {
-			return reconcile.Result{}, err
-		}
-		// the auto import secret has not be created or has been deleted, continue
-	} else {
-		// add auto import secret to the manifestwork
-		err := r.addAutoImportSecret(managedCluster.Name, autoImportSecret, manifestWork)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-		containAutoImport = true
-	}
-
+	manifestWork := createHypershiftDetachedManifestWork(managedCluster.Name, importSecret, managementCluster)
 	err = helpers.ApplyResources(r.clientHolder, r.recorder, r.scheme, managedCluster, manifestWork)
-	if !containAutoImport {
+	if err != nil {
 		return reconcile.Result{}, err
 	}
+
+	autoImportSecret, err := r.kubeClient.CoreV1().Secrets(managedClusterName).Get(ctx, constants.AutoImportSecretName, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		// the auto import secret has not be created or has been deleted, do nothing
+		return reconcile.Result{}, nil
+	}
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	manifestWork, err = createManagedKubeconfigManifestWork(managedCluster.Name, autoImportSecret, managementCluster)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	err = helpers.ApplyResources(r.clientHolder, r.recorder, r.scheme, managedCluster, manifestWork)
 	if err != nil {
 		errStatus := helpers.UpdateManagedClusterStatus(r.client, r.recorder, managedClusterName, metav1.Condition{
 			Type:    "ExternalManagedKubeconfigCreatedSucceeded",
@@ -189,38 +184,6 @@ func klusterletNamespace(managedCluster string) string {
 	return fmt.Sprintf("klusterlet-%s", managedCluster)
 }
 
-func (r *ReconcileHypershift) addAutoImportSecret(managedClusterName string, secret *corev1.Secret, manifestWork *workv1.ManifestWork) error {
-	kubeconfig := secret.Data["kubeconfig"]
-	if len(kubeconfig) == 0 {
-		return fmt.Errorf("import secret invalid, the field kubeconfig must exist in the secret for detached mode")
-	}
-
-	config := struct {
-		KlusterletNamespace       string
-		ExternalManagedKubeconfig string
-	}{
-		KlusterletNamespace:       klusterletNamespace(managedClusterName),
-		ExternalManagedKubeconfig: base64.StdEncoding.EncodeToString(kubeconfig),
-	}
-
-	template, err := manifestFiles.ReadFile(klusterletDetachedExternalKubeconfig)
-	if err != nil {
-		return err
-	}
-	externalKubeYAML := helpers.MustCreateAssetFromTemplate(klusterletDetachedExternalKubeconfig, template, config)
-	externalKubeJSON, err := yaml.YAMLToJSON(externalKubeYAML)
-	if err != nil {
-		return err
-	}
-
-	manifestWork.Spec.Workload.Manifests = append(manifestWork.Spec.Workload.Manifests,
-		workv1.Manifest{
-			RawExtension: runtime.RawExtension{Raw: externalKubeJSON},
-		})
-
-	return nil
-}
-
 // deleteManifestWorks deletes manifest works when a managed cluster is deleting
 // If the managed cluster is unavailable, we will force delete all manifest works
 // If the managed cluster is available, we will
@@ -238,7 +201,7 @@ func (r *ReconcileHypershift) deleteManifestWorks(ctx context.Context, cluster *
 		if err := helpers.ForceDeleteAllManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, works); err != nil {
 			return err
 		}
-		return r.deleteKlusterletManifestWork(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster)
+		return r.deleteHypershiftManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster)
 	}
 
 	// delete works that do not include klusterlet addon works, the addon works will be removed by
@@ -261,23 +224,27 @@ func (r *ReconcileHypershift) deleteManifestWorks(ctx context.Context, cluster *
 		return nil
 	}
 
-	// no other manifest works, delete klusterlet manifest works in the management cluster namespace
-	return r.deleteKlusterletManifestWork(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster)
+	return r.deleteHypershiftManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster)
 }
 
-func (r *ReconcileHypershift) deleteKlusterletManifestWork(ctx context.Context, runtimeClient client.Client,
+// deleteHypershiftManifestWorks delete klusterlet and managed kubeconfig manifest works in the management cluster namespace
+func (r *ReconcileHypershift) deleteHypershiftManifestWorks(ctx context.Context, runtimeClient client.Client,
 	recorder events.Recorder, cluster *clusterv1.ManagedCluster) error {
-	klusterletName := fmt.Sprintf("%s-%s", cluster.Name, constants.HypershiftDetachedManifestworkSuffix)
 	managementCluster, err := helpers.GetManagementCluster(cluster)
 	if err != nil {
 		return err
 	}
 
-	return helpers.DeleteManifestWork(ctx, runtimeClient, recorder, managementCluster, klusterletName)
+	err = helpers.DeleteManifestWork(ctx, runtimeClient, recorder, managementCluster, hypershiftKlusterletManifestWorkName(cluster.Name))
+	if err != nil {
+		return err
+	}
+
+	return helpers.DeleteManifestWork(ctx, runtimeClient, recorder, managementCluster, hypershiftManagedKubeconfigManifestWorkName(cluster.Name))
 }
 
 // createHypershiftDetachedManifestWork creates a manifestwork from import secret for hypershift detached mode cluster
-func createHypershiftDetachedManifestWork(managedCluster *clusterv1.ManagedCluster,
+func createHypershiftDetachedManifestWork(managedClusterName string,
 	importSecret *corev1.Secret, manifestWorkNamespace string) *workv1.ManifestWork {
 	manifests := []workv1.Manifest{}
 	importYaml := importSecret.Data[constants.ImportSecretImportYamlKey]
@@ -291,15 +258,12 @@ func createHypershiftDetachedManifestWork(managedCluster *clusterv1.ManagedClust
 		})
 	}
 
-	// For detached mode, the klusterletManifestWork contains a klusterlet CR and a bootstrap secret,
-	// if auto import secret is provided, there also be a external managed kubeconfig secret, and when
-	// deleting, we need to leave the external managed kubeconfig on the managed cluster(klusterlet
-	// operator will use this secret to clean resources on the managed cluster, after the cleanup
-	// finished, the klusterlet operator will delete the secret.) and delete others.
+	// For detached mode, the klusterletManifestWork only contains a klusterlet CR
+	// and a bootstrap secret, delete it in foreground.
 	return &workv1.ManifestWork{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-%s", managedCluster.Name, HypershiftDetachedManifestworkSuffix),
+			Name:      hypershiftKlusterletManifestWorkName(managedClusterName),
 			Namespace: manifestWorkNamespace,
 		},
 		Spec: workv1.ManifestWorkSpec{
@@ -307,17 +271,70 @@ func createHypershiftDetachedManifestWork(managedCluster *clusterv1.ManagedClust
 				Manifests: manifests,
 			},
 			DeleteOption: &workv1.DeleteOption{
-				PropagationPolicy: workv1.DeletePropagationPolicyTypeSelectivelyOrphan,
-				SelectivelyOrphan: &workv1.SelectivelyOrphan{
-					OrphaningRules: []workv1.OrphaningRule{
-						{
-							Resource:  "Secret",
-							Name:      "external-managed-kubeconfig",
-							Namespace: klusterletNamespace(managedCluster.GetName()),
-						},
-					},
-				},
+				PropagationPolicy: workv1.DeletePropagationPolicyTypeForeground,
 			},
 		},
 	}
+}
+
+func createManagedKubeconfigManifestWork(managedClusterName string, importSecret *corev1.Secret,
+	manifestWorkNamespace string) (*workv1.ManifestWork, error) {
+	kubeconfig := importSecret.Data["kubeconfig"]
+	if len(kubeconfig) == 0 {
+		return nil, fmt.Errorf("import secret invalid, the field kubeconfig must exist in the secret for detached mode")
+	}
+
+	config := struct {
+		KlusterletNamespace       string
+		ExternalManagedKubeconfig string
+	}{
+		KlusterletNamespace:       klusterletNamespace(managedClusterName),
+		ExternalManagedKubeconfig: base64.StdEncoding.EncodeToString(kubeconfig),
+	}
+
+	template, err := manifestFiles.ReadFile(klusterletDetachedExternalKubeconfig)
+	if err != nil {
+		return nil, err
+	}
+	externalKubeYAML := helpers.MustCreateAssetFromTemplate(klusterletDetachedExternalKubeconfig, template, config)
+	externalKubeJSON, err := yaml.YAMLToJSON(externalKubeYAML)
+	if err != nil {
+		return nil, err
+	}
+
+	manifests := []workv1.Manifest{
+		{
+			RawExtension: runtime.RawExtension{Raw: externalKubeJSON},
+		},
+	}
+
+	mw := &workv1.ManifestWork{
+		TypeMeta: metav1.TypeMeta{},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      hypershiftManagedKubeconfigManifestWorkName(managedClusterName),
+			Namespace: manifestWorkNamespace,
+		},
+		Spec: workv1.ManifestWorkSpec{
+			Workload: workv1.ManifestsTemplate{
+				Manifests: manifests,
+			},
+			DeleteOption: &workv1.DeleteOption{
+				// For detached mode, we will not delete the "external-managed-kubeconfig" since
+				// klusterlet operator will use this secret to clean resources on the managed
+				// cluster, after the cleanup finished, the klusterlet operator will delete the
+				// secret.
+				PropagationPolicy: workv1.DeletePropagationPolicyTypeOrphan,
+			},
+		},
+	}
+
+	return mw, nil
+}
+
+func hypershiftKlusterletManifestWorkName(managedClusterName string) string {
+	return fmt.Sprintf("%s-%s", managedClusterName, constants.HypershiftDetachedKlusterletManifestworkSuffix)
+}
+
+func hypershiftManagedKubeconfigManifestWorkName(managedClusterName string) string {
+	return fmt.Sprintf("%s-%s", managedClusterName, constants.HypershiftDetachedManagedKubeconfigManifestworkSuffix)
 }

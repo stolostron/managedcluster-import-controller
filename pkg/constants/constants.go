@@ -65,8 +65,11 @@ const (
 	// // KlusterletSuffix is a suffix of the klusterlet manifestwork name.
 	// KlusterletSuffix = "klusterlet"
 
-	// HypershiftDetachedManifestworkSuffix is a suffix of the hypershift detached mode manifestwork name.
-	HypershiftDetachedManifestworkSuffix = "klusterlet"
+	// HypershiftDetachedManifestworkSuffix is a suffix of the hypershift detached mode klusterlet manifestwork name.
+	HypershiftDetachedKlusterletManifestworkSuffix = "hypershift-detached-klusterlet"
+
+	// HypershiftDetachedManagedKubeconfigManifestworkSuffix is a suffix of the hypershift detached mode managed custer kubeconfig manifestwork name.
+	HypershiftDetachedManagedKubeconfigManifestworkSuffix = "hypershift-detached-kubeconfig"
 
 	// ManifestWorkFinalizer is used to delete all manifestworks before deleting a managed cluster.
 	ManifestWorkFinalizer = "managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup"

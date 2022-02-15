@@ -150,7 +150,8 @@ func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster
 		return manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, klusterletSuffix) ||
 			manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, klusterletCRDsSuffix) ||
 			strings.HasPrefix(manifestWork.GetName(), fmt.Sprintf("%s-klusterlet-addon", manifestWork.GetNamespace())) ||
-			manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, constants.HypershiftDetachedManifestworkSuffix)
+			manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, constants.HypershiftDetachedKlusterletManifestworkSuffix) ||
+			manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, constants.HypershiftDetachedManagedKubeconfigManifestworkSuffix)
 	}
 	err := helpers.DeleteManifestWorkWithSelector(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster, works, ignoreKlusterletAndAddons)
 	if err != nil {
