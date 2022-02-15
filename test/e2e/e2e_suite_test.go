@@ -13,6 +13,8 @@ import (
 	ginkgo "github.com/onsi/ginkgo"
 	gomega "github.com/onsi/gomega"
 
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
@@ -94,13 +96,17 @@ var _ = ginkgo.BeforeSuite(func() {
 })
 
 // asserters
-func assertManagedClusterImportSecretCreated(clusterName, createdVia string) {
+func assertManagedClusterImportSecretCreated(clusterName, createdVia string, mode ...string) {
 	assertManagedClusterFinalizer(clusterName, "managedcluster-import-controller.open-cluster-management.io/cleanup")
 	assertManagedClusterCreatedViaAnnotation(clusterName, createdVia)
 	assertManagedClusterNameLabel(clusterName)
 	assertManagedClusterNamespaceLabel(clusterName)
 	assertManagedClusterRBAC(clusterName)
-	assertManagedClusterImportSecret(clusterName)
+	if len(mode) != 0 && mode[0] == constants.KlusterletDeployModeHypershiftDetached {
+		assertHypershiftDetachedManagedClusterImportSecret(clusterName)
+	} else {
+		assertManagedClusterImportSecret(clusterName)
+	}
 }
 
 func assertManagedClusterFinalizer(clusterName, expected string) {
@@ -238,8 +244,29 @@ func assertManagedClusterImportSecret(managedClusterName string) {
 				return false, err
 			}
 
-			if err := util.ValidateImportSecret(secret); err != nil {
+			if err := helpers.ValidateImportSecret(secret); err != nil {
 				util.Logf("invalidated import secret:%v", err)
+				return false, err
+			}
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
+	})
+}
+
+func assertHypershiftDetachedManagedClusterImportSecret(managedClusterName string) {
+	ginkgo.By("Should create the import secret", func() {
+		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
+			name := fmt.Sprintf("%s-import", managedClusterName)
+			secret, err := hubKubeClient.CoreV1().Secrets(managedClusterName).Get(context.TODO(), name, metav1.GetOptions{})
+			if errors.IsNotFound(err) {
+				return false, nil
+			}
+			if err != nil {
+				return false, err
+			}
+
+			if err := helpers.ValidateHypershiftDetachedImportSecret(secret); err != nil {
+				util.Logf("invalid import secret:%v", err)
 				return false, err
 			}
 			return true, nil
@@ -259,9 +286,21 @@ func assertManagedClusterDeleted(clusterName string) {
 	assertManagedClusterDeletedFromSpoke()
 }
 
+func assertHypershiftDetachedManagedClusterDeleted(clusterName, managementCluster string) {
+	ginkgo.By(fmt.Sprintf("Delete the hypershift detached managed cluster %s", clusterName), func() {
+		err := hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), clusterName, metav1.DeleteOptions{})
+		if err != nil && !errors.IsNotFound(err) {
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		}
+	})
+
+	assertManagedClusterDeletedFromHub(clusterName)
+	assertHypershiftDetachedManagedClusterDeletedFromSpoke(clusterName, managementCluster)
+}
+
 func assertManagedClusterDeletedFromHub(clusterName string) {
 	start := time.Now()
-	ginkgo.By("Should delete the managed cluster", func() {
+	ginkgo.By(fmt.Sprintf("Should delete the managed cluster %s", clusterName), func() {
 		gomega.Expect(wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
 			_, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
@@ -274,7 +313,7 @@ func assertManagedClusterDeletedFromHub(clusterName string) {
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
 
 	start = time.Now()
-	ginkgo.By("Should delete the managed cluster namespace", func() {
+	ginkgo.By(fmt.Sprintf("Should delete the managed cluster namespace %s", clusterName), func() {
 		gomega.Expect(wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
 			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
@@ -314,10 +353,38 @@ func assertManagedClusterDeletedFromSpoke() {
 		})).ToNot(gomega.HaveOccurred())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
-
 }
 
-func assertManagedClusterImportSecretApplied(clusterName string) {
+func assertHypershiftDetachedManagedClusterDeletedFromSpoke(cluster, managementCluster string) {
+	start := time.Now()
+	namespace := fmt.Sprintf("klusterlet-%s", cluster)
+	ginkgo.By(fmt.Sprintf("Should delete the %s namespace", namespace), func() {
+		gomega.Expect(wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
+			klusterletNamespace := namespace
+			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), klusterletNamespace, metav1.GetOptions{})
+			if errors.IsNotFound(err) {
+				return true, nil
+			}
+			return false, err
+		})).ToNot(gomega.HaveOccurred())
+	})
+	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
+
+	start = time.Now()
+	klusterletManifestWorkName := fmt.Sprintf("%s-klusterlet", cluster)
+	ginkgo.By(fmt.Sprintf("Should delete the klusterlet manifest work %s", klusterletManifestWorkName), func() {
+		gomega.Expect(wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
+			_, err := hubWorkClient.WorkV1().ManifestWorks(managementCluster).Get(context.TODO(), klusterletManifestWorkName, metav1.GetOptions{})
+			if errors.IsNotFound(err) {
+				return true, nil
+			}
+			return false, err
+		})).ToNot(gomega.HaveOccurred())
+	})
+	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
+}
+
+func assertManagedClusterImportSecretApplied(clusterName string, mode ...string) {
 	ginkgo.By(fmt.Sprintf("Managed cluster %s should be imported", clusterName), func() {
 		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
 			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
@@ -325,6 +392,9 @@ func assertManagedClusterImportSecretApplied(clusterName string) {
 				return false, err
 			}
 
+			if len(mode) != 0 && mode[0] == constants.KlusterletDeployModeHypershiftDetached {
+				return meta.IsStatusConditionTrue(cluster.Status.Conditions, "ExternalManagedKubeconfigCreatedSucceeded"), nil
+			}
 			return meta.IsStatusConditionTrue(cluster.Status.Conditions, "ManagedClusterImportSucceeded"), nil
 		})).ToNot(gomega.HaveOccurred())
 	})
