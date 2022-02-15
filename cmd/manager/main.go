@@ -19,6 +19,7 @@ import (
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller"
+	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	imgregistryv1alpha1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/imageregistry/v1alpha1"
 
@@ -27,8 +28,10 @@ import (
 	workv1 "open-cluster-management.io/api/work/v1"
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
+	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 
+	"github.com/spf13/pflag"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -38,9 +41,9 @@ import (
 	"k8s.io/client-go/kubernetes"
 	k8sscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/cache"
+	utilflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/logs"
 
-	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -64,7 +67,22 @@ func init() {
 	utilruntime.Must(asv1beta1.AddToScheme(scheme))
 }
 
+// EnvironmentEnableHypershiftImportFG is an environment key for E2E test to enable
+// the HYPERSHIFT-IMPORT feature gate.
+const EnvironmentEnableHypershiftImportFG = "ENABLE_HYPERSHIFT_IMPORT"
+
 func main() {
+	pflag.CommandLine.SetNormalizeFunc(utilflag.WordSepNormalizeFunc)
+	features.DefaultMutableFeatureGate.AddFlag(pflag.CommandLine)
+	// E2E tests use env to tweak the feature-gates flag
+	if os.Getenv(EnvironmentEnableHypershiftImportFG) == "true" {
+		err := pflag.Set("feature-gates", "HypershiftImport=true")
+		if err != nil {
+			panic(err)
+		}
+	}
+	pflag.Parse()
+
 	logs.InitLogs()
 	defer logs.FlushLogs()
 

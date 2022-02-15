@@ -7,6 +7,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	operatorfake "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
@@ -64,7 +65,7 @@ func TestReconcile(t *testing.T) {
 				&clusterv1.ManagedCluster{
 					ObjectMeta: v1.ObjectMeta{
 						Name:       "test",
-						Finalizers: []string{manifestWorkFinalizer},
+						Finalizers: []string{constants.ManifestWorkFinalizer},
 					},
 				},
 			},
@@ -121,7 +122,7 @@ func TestReconcile(t *testing.T) {
 				&clusterv1.ManagedCluster{
 					ObjectMeta: v1.ObjectMeta{
 						Name:              "test",
-						Finalizers:        []string{manifestWorkFinalizer},
+						Finalizers:        []string{constants.ManifestWorkFinalizer},
 						DeletionTimestamp: &now,
 					},
 				},
@@ -174,7 +175,7 @@ func TestReconcile(t *testing.T) {
 				&clusterv1.ManagedCluster{
 					ObjectMeta: v1.ObjectMeta{
 						Name:       "test",
-						Finalizers: []string{manifestWorkFinalizer},
+						Finalizers: []string{constants.ManifestWorkFinalizer},
 						Labels: map[string]string{
 							"local-cluster": "true",
 						},
@@ -216,7 +217,7 @@ func TestReconcile(t *testing.T) {
 				&clusterv1.ManagedCluster{
 					ObjectMeta: v1.ObjectMeta{
 						Name:              "test",
-						Finalizers:        []string{manifestWorkFinalizer},
+						Finalizers:        []string{constants.ManifestWorkFinalizer},
 						DeletionTimestamp: &now,
 					},
 				},
@@ -249,7 +250,7 @@ func TestReconcile(t *testing.T) {
 				&clusterv1.ManagedCluster{
 					ObjectMeta: v1.ObjectMeta{
 						Name:              "test",
-						Finalizers:        []string{manifestWorkFinalizer},
+						Finalizers:        []string{constants.ManifestWorkFinalizer},
 						DeletionTimestamp: &now,
 					},
 					Status: clusterv1.ManagedClusterStatus{
@@ -305,7 +306,7 @@ func TestReconcile(t *testing.T) {
 				&clusterv1.ManagedCluster{
 					ObjectMeta: v1.ObjectMeta{
 						Name:              "test",
-						Finalizers:        []string{manifestWorkFinalizer},
+						Finalizers:        []string{constants.ManifestWorkFinalizer},
 						DeletionTimestamp: &now,
 					},
 				},
@@ -361,7 +362,7 @@ func TestReconcile(t *testing.T) {
 				&clusterv1.ManagedCluster{
 					ObjectMeta: v1.ObjectMeta{
 						Name:       "test",
-						Finalizers: []string{manifestWorkFinalizer},
+						Finalizers: []string{constants.ManifestWorkFinalizer},
 					},
 					Status: clusterv1.ManagedClusterStatus{
 						Conditions: []v1.Condition{

@@ -249,12 +249,20 @@ func ValidateImportSecret(importSecret *corev1.Secret) error {
 	}
 
 	if data, ok := importSecret.Data[constants.ImportSecretImportYamlKey]; !ok || len(data) == 0 {
-		return fmt.Errorf("the %s is required", constants.ImportSecretCRDSV1YamlKey)
+		return fmt.Errorf("the %s is required", constants.ImportSecretImportYamlKey)
 	}
 	return nil
 }
 
-// ImportManagedClusterFromSecret use managed clustr client to import managed cluster from import-secret
+// ValidateHypershiftDetachedImportSecret validate hypershift managed cluster import secret
+func ValidateHypershiftDetachedImportSecret(importSecret *corev1.Secret) error {
+	if data, ok := importSecret.Data[constants.ImportSecretImportYamlKey]; !ok || len(data) == 0 {
+		return fmt.Errorf("the %s is required", constants.ImportSecretImportYamlKey)
+	}
+	return nil
+}
+
+// ImportManagedClusterFromSecret use managed cluster client to import managed cluster from import-secret
 func ImportManagedClusterFromSecret(client *ClientHolder, restMapper meta.RESTMapper, recorder events.Recorder,
 	importSecret *corev1.Secret) error {
 	if err := ValidateImportSecret(importSecret); err != nil {
@@ -527,4 +535,38 @@ func GetNodeSelector(cluster *clusterv1.ManagedCluster) (map[string]string, erro
 	}
 
 	return nodeSelector, nil
+}
+
+// DetermineKlusterletMode gets the klusterlet deploy mode for the managed cluster.
+func DetermineKlusterletMode(cluster *clusterv1.ManagedCluster) (string, error) {
+	mode, ok := cluster.Labels[constants.KlusterletDeployModeLabel]
+	if !ok {
+		return constants.KlusterletDeployModeDefault, nil
+	}
+
+	if strings.EqualFold(mode, constants.KlusterletDeployModeDefault) {
+		return constants.KlusterletDeployModeDefault, nil
+	}
+
+	if strings.EqualFold(mode, constants.KlusterletDeployModeHypershiftDetached) {
+		_, err := GetManagementCluster(cluster)
+		if err != nil {
+			return constants.KlusterletDeployModeHypershiftDetached,
+				fmt.Errorf("annotation %s is required for Hypershift-Detached mode", constants.ManagementClusterNameAnnotation)
+		}
+
+		// TODO(zhujian7): check if management cluster is a managed cluster of hub, and check its status.
+		return constants.KlusterletDeployModeHypershiftDetached, nil
+	}
+
+	return "", fmt.Errorf("value %s of the label %s invalid, only supports Hypershift-Detached and Default", mode, constants.KlusterletDeployModeLabel)
+}
+
+// GetManagementCluster gets the management cluster name from the managed cluster annotation
+func GetManagementCluster(cluster *clusterv1.ManagedCluster) (string, error) {
+	if managementCluster, ok := cluster.Annotations[constants.ManagementClusterNameAnnotation]; ok {
+		return managementCluster, nil
+	}
+
+	return "", fmt.Errorf("annotation %s not found", constants.ManagementClusterNameAnnotation)
 }

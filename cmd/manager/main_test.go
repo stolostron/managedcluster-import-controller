@@ -1,6 +1,7 @@
 // Copyright (c) Red Hat, Inc.
 // Copyright Contributors to the Open Cluster Management project
 
+//go:build testrunmain
 // +build testrunmain
 
 package main
@@ -15,6 +16,7 @@ import (
 
 // start the controller to get the test coverage
 func TestRunMain(t *testing.T) {
+	os.Setenv(EnvironmentEnableHypershiftImportFG, "true")
 	go main()
 	// hacks for handling signals
 	signalChannel := make(chan os.Signal, 2)

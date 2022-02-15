@@ -70,6 +70,14 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	mode, err := helpers.DetermineKlusterletMode(managedCluster)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	if mode != constants.KlusterletDeployModeDefault {
+		return reconcile.Result{}, nil
+	}
+
 	importSecretName := fmt.Sprintf("%s-%s", managedClusterName, constants.ImportSecretNameSuffix)
 	importSecret, err := r.kubeClient.CoreV1().Secrets(managedClusterName).Get(ctx, importSecretName, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
