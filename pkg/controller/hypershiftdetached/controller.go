@@ -54,8 +54,8 @@ var _ reconcile.Reconciler = &ReconcileHypershift{}
 // Reconcile the hypershift detached mode ManagedClusters of the ManifestWorks.
 // - When a hypershift detached mode ManagedCluster created, we will create a klusterlet manifestwork to
 //   trigger the cluster importing process
-// - When an auto import secret created for the hypershift detached mode managed cluster, we update the
-//   klusterlet to create an external managed kubeconfig secret on the management cluster
+// - When an auto import secret created for the hypershift detached mode managed cluster, we create a managed
+//   kubeconfig manifestwork to create an external managed kubeconfig secret on the management cluster
 // - When the manifester works are created in one managed cluster namespace, we will add a manifest work
 //   finalizer to the managed cluster
 // - When a managed cluster is deleting, we delete the manifest works and remove the manifest work
@@ -103,14 +103,14 @@ func (r *ReconcileHypershift) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, r.deleteManifestWorks(ctx, managedCluster, manifestWorks.Items)
 	}
 
-	// after managed cluster joined, apply klusterlet manifest works from import secret
+	// apply klusterlet manifest works klustelet to the management namespace from import secret to trigger the joining process.
 	importSecretName := fmt.Sprintf("%s-%s", managedClusterName, constants.ImportSecretNameSuffix)
 	importSecret, err := r.clientHolder.KubeClient.CoreV1().Secrets(managedClusterName).Get(ctx, importSecretName, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		// wait for the import secret to exist, do nothing
+		return reconcile.Result{}, nil
+	}
 	if err != nil {
-		if errors.IsNotFound(err) {
-			// wait for the import secret to exist, do nothing
-			return reconcile.Result{}, nil
-		}
 		return reconcile.Result{}, err
 	}
 
@@ -154,7 +154,7 @@ func (r *ReconcileHypershift) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, errStatus
 		}
 
-		errRetry := helpers.UpdateAutoImportRetryTimes(ctx, autoImportSecret.DeepCopy(), r.kubeClient, r.recorder)
+		errRetry := helpers.UpdateAutoImportRetryTimes(ctx, r.kubeClient, r.recorder, autoImportSecret.DeepCopy())
 		return reconcile.Result{}, utilerrors.NewAggregate([]error{err, errRetry})
 	}
 
@@ -190,7 +190,7 @@ func klusterletNamespace(managedCluster string) string {
 //   1. delete the manifest work with the postpone-delete annotation until 10 min
 //      after the cluster is deleted.
 //   2. delete the manifest works that do not include klusterlet addon works
-//   3. delete the klusterlet manifest work
+//   3. delete the klusterlet and managed kubeconfig manifest works
 func (r *ReconcileHypershift) deleteManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster, works []workv1.ManifestWork) error {
 	if len(works) == 0 {
 		return nil

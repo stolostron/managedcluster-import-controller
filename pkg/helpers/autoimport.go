@@ -18,7 +18,7 @@ import (
 )
 
 // UpdateAutoImportRetryTimes minus 1 for the value of AutoImportRetryName in the auto import secret
-func UpdateAutoImportRetryTimes(ctx context.Context, secret *corev1.Secret, kubeClient kubernetes.Interface, recorder events.Recorder) error {
+func UpdateAutoImportRetryTimes(ctx context.Context, kubeClient kubernetes.Interface, recorder events.Recorder, secret *corev1.Secret) error {
 	autoImportRetry, err := strconv.Atoi(string(secret.Data[constants.AutoImportRetryName]))
 	if err != nil {
 		recorder.Warningf("AutoImportRetryInvalid", "The value of autoImportRetry is invalid in auto-import-secret secret")
