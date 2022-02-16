@@ -15,9 +15,10 @@ const (
 	// // alpha: v1.X
 	// MyFeature featuregate.Feature = "MyFeature"
 
-	// HypershiftImport will register 3 hypershift importing workers for import-secret controller,
-	// manifestwork controller, and auto-import controller, and also will start a new controllers
-	// to watch HypershiftDeployment, and import it to the hub cluster.
+	// HypershiftImport will provide a hypershift importing worker for import-secret controller,
+	// and will start a new hypershift detached controller to process hypershift cluster importing,
+	// and in the future this will also start a new controllers to watch HypershiftDeployment and
+	// import it to the hub cluster automatically.
 	HypershiftImport featuregate.Feature = "HypershiftImport"
 )
 

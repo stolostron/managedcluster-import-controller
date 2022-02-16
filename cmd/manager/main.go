@@ -67,20 +67,9 @@ func init() {
 	utilruntime.Must(asv1beta1.AddToScheme(scheme))
 }
 
-// EnvironmentEnableHypershiftImportFG is an environment key for E2E test to enable
-// the HYPERSHIFT-IMPORT feature gate.
-const EnvironmentEnableHypershiftImportFG = "ENABLE_HYPERSHIFT_IMPORT"
-
 func main() {
 	pflag.CommandLine.SetNormalizeFunc(utilflag.WordSepNormalizeFunc)
 	features.DefaultMutableFeatureGate.AddFlag(pflag.CommandLine)
-	// E2E tests use env to tweak the feature-gates flag
-	if os.Getenv(EnvironmentEnableHypershiftImportFG) == "true" {
-		err := pflag.Set("feature-gates", "HypershiftImport=true")
-		if err != nil {
-			panic(err)
-		}
-	}
 	pflag.Parse()
 
 	logs.InitLogs()
