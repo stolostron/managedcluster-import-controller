@@ -238,13 +238,14 @@ func (w *hypershiftDetachedWorker) generateImportSecret(ctx context.Context, man
 			Labels: map[string]string{
 				constants.ClusterImportSecretLabel: "",
 			},
+			Annotations: map[string]string{
+				constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHypershiftDetached,
+			},
 		},
 		Data: map[string][]byte{
 			constants.ImportSecretImportYamlKey: importYAML.Bytes(),
 		},
 	}
-
-	secret.Labels[constants.KlusterletDeployModeLabel] = constants.KlusterletDeployModeHypershiftDetached
 
 	return secret, nil
 }

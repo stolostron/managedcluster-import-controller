@@ -539,7 +539,7 @@ func GetNodeSelector(cluster *clusterv1.ManagedCluster) (map[string]string, erro
 
 // DetermineKlusterletMode gets the klusterlet deploy mode for the managed cluster.
 func DetermineKlusterletMode(cluster *clusterv1.ManagedCluster) string {
-	mode, ok := cluster.Labels[constants.KlusterletDeployModeLabel]
+	mode, ok := cluster.Annotations[constants.KlusterletDeployModeAnnotation]
 	if !ok {
 		return constants.KlusterletDeployModeDefault
 	}

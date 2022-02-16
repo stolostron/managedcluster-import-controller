@@ -38,10 +38,10 @@ const (
 )
 
 const (
-	// KlusterletDeployModeLabel describe the klusterlet deploy mode when importing a managed cluster.
+	// KlusterletDeployModeAnnotation describe the klusterlet deploy mode when importing a managed cluster.
 	// If the value is "Hypershift-Detached", the ManagementClusterNameAnnotation annotation will be required,
 	// we use ManagementClusterNameAnnotation to determine where to deploy the registration-agent and work-agent.
-	KlusterletDeployModeLabel string = "import.open-cluster-management.io/klusterlet-deploy-mode"
+	KlusterletDeployModeAnnotation string = "import.open-cluster-management.io/klusterlet-deploy-mode"
 
 	// ManagementClusterNameAnnotation is required in Hypershift-Detached mode, and the management cluster MUST be one
 	// of the managed cluster of the hub. The value of the annotation should be the ManagedCluster name of management cluster.

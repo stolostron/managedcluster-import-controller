@@ -155,5 +155,5 @@ func add(importSecretInformer, autoImportSecretInformer cache.SharedIndexInforme
 }
 
 func isHypershiftDetachedModeObject(object client.Object) bool {
-	return strings.EqualFold(object.GetLabels()[constants.KlusterletDeployModeLabel], constants.KlusterletDeployModeHypershiftDetached)
+	return strings.EqualFold(object.GetAnnotations()[constants.KlusterletDeployModeAnnotation], constants.KlusterletDeployModeHypershiftDetached)
 }

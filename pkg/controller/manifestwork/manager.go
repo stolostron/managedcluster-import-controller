@@ -134,5 +134,5 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 }
 
 func isDefaultModeObject(object client.Object) bool {
-	return !strings.EqualFold(object.GetLabels()[constants.KlusterletDeployModeLabel], constants.KlusterletDeployModeHypershiftDetached)
+	return !strings.EqualFold(object.GetAnnotations()[constants.KlusterletDeployModeAnnotation], constants.KlusterletDeployModeHypershiftDetached)
 }

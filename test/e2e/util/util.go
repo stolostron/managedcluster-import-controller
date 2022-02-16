@@ -59,9 +59,8 @@ func Logf(format string, args ...interface{}) {
 }
 
 func CreateHypershiftDetachedManagedCluster(clusterClient clusterclient.Interface, name, management string) (*clusterv1.ManagedCluster, error) {
-	clusterLabels := map[string]string{}
-	clusterLabels[constants.KlusterletDeployModeLabel] = constants.KlusterletDeployModeHypershiftDetached
 	clusterAnnotations := map[string]string{}
+	clusterAnnotations[constants.KlusterletDeployModeAnnotation] = constants.KlusterletDeployModeHypershiftDetached
 	clusterAnnotations[constants.ManagementClusterNameAnnotation] = management
 	cluster, err := clusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
@@ -70,7 +69,6 @@ func CreateHypershiftDetachedManagedCluster(clusterClient clusterclient.Interfac
 			&clusterv1.ManagedCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:        name,
-					Labels:      clusterLabels,
 					Annotations: clusterAnnotations,
 				},
 				Spec: clusterv1.ManagedClusterSpec{
