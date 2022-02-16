@@ -165,14 +165,10 @@ func TestReconcile(t *testing.T) {
 			}
 
 			r := &ReconcileImportConfig{
-				clientHolder: clientHolder,
-				scheme:       testscheme,
-				recorder:     eventstesting.NewTestingEventRecorder(t),
-				workers: map[string]importWorker{
-					constants.KlusterletDeployModeDefault: &defaultWorker{
-						clientHolder: clientHolder,
-					},
-				},
+				clientHolder:  clientHolder,
+				scheme:        testscheme,
+				recorder:      eventstesting.NewTestingEventRecorder(t),
+				workerFactory: &workerFactory{clientHolder: clientHolder},
 			}
 
 			_, err := r.Reconcile(context.TODO(), c.request)

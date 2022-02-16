@@ -72,8 +72,7 @@ type ReconcileImportConfig struct {
 	scheme       *runtime.Scheme
 	recorder     events.Recorder
 
-	// the key of the map represents klusterlet deploy mode
-	workers map[string]importWorker
+	workerFactory *workerFactory
 }
 
 // blank assignment to verify that ReconcileImportConfig implements reconcile.Reconciler
@@ -97,9 +96,9 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 	}
 
 	mode := helpers.DetermineKlusterletMode(managedCluster)
-	worker, ok := r.workers[mode]
-	if !ok {
-		reqLogger.Error(nil, "klusterlet deploy mode not supportted", "mode", mode)
+	worker, err := r.workerFactory.newWorker(mode)
+	if err != nil {
+		reqLogger.Info(err.Error())
 		return reconcile.Result{}, nil
 	}
 

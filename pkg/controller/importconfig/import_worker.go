@@ -10,6 +10,7 @@ import (
 	"fmt"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 
 	corev1 "k8s.io/api/core/v1"
@@ -20,6 +21,28 @@ import (
 
 type importWorker interface {
 	generateImportSecret(ctx context.Context, managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, error)
+}
+
+type workerFactory struct {
+	clientHolder *helpers.ClientHolder
+}
+
+func (f *workerFactory) newWorker(mode string) (importWorker, error) {
+	switch mode {
+	case constants.KlusterletDeployModeDefault:
+		return &defaultWorker{
+			clientHolder: f.clientHolder,
+		}, nil
+	case constants.KlusterletDeployModeHypershiftDetached:
+		if !features.DefaultMutableFeatureGate.Enabled(features.HypershiftImport) {
+			return nil, fmt.Errorf("featurn gate %s is not enabled", features.HypershiftImport)
+		}
+		return &hypershiftDetachedWorker{
+			clientHolder: f.clientHolder,
+		}, nil
+	default:
+		return nil, fmt.Errorf("klusterlet deploy mode %s not supportted", mode)
+	}
 }
 
 type defaultWorker struct {
