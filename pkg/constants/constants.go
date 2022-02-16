@@ -62,9 +62,6 @@ const (
 )
 
 const (
-	// // KlusterletSuffix is a suffix of the klusterlet manifestwork name.
-	// KlusterletSuffix = "klusterlet"
-
 	// HypershiftDetachedManifestworkSuffix is a suffix of the hypershift detached mode klusterlet manifestwork name.
 	HypershiftDetachedKlusterletManifestworkSuffix = "hypershift-detached-klusterlet"
 
