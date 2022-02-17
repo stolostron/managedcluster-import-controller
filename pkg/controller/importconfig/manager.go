@@ -33,11 +33,14 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder,
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, clientHolder *helpers.ClientHolder) reconcile.Reconciler {
-	return &ReconcileImportConfig{
-		clientHolder: clientHolder,
-		scheme:       mgr.GetScheme(),
-		recorder:     helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
+	r := &ReconcileImportConfig{
+		clientHolder:  clientHolder,
+		scheme:        mgr.GetScheme(),
+		recorder:      helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
+		workerFactory: &workerFactory{clientHolder: clientHolder},
 	}
+
+	return r
 }
 
 // adds a new Controller to mgr with r as the reconcile.Reconciler

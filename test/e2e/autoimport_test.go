@@ -11,6 +11,7 @@ import (
 	ginkgo "github.com/onsi/ginkgo"
 	gomega "github.com/onsi/gomega"
 
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 
 	corev1 "k8s.io/api/core/v1"
@@ -104,5 +105,61 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 				return meta.IsStatusConditionFalse(cluster.Status.Conditions, "ManagedClusterImportSucceeded"), nil
 			})).ToNot(gomega.HaveOccurred())
 		})
+	})
+})
+
+var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret for Hypershift-Detached mode", func() {
+	ginkgo.Context("Local-cluster as management cluster", func() {
+		const localClusterName = "local-cluster"
+		var managedClusterName string
+		ginkgo.BeforeEach(func() {
+			ginkgo.By(fmt.Sprintf("Create managed cluster %s", localClusterName), func() {
+				_, err := util.CreateManagedCluster(hubClusterClient, localClusterName, util.NewLable("local-cluster", "true"))
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			})
+
+			assertManagedClusterImportSecretCreated(localClusterName, "other")
+			assertManagedClusterImportSecretApplied(localClusterName)
+			assertManagedClusterAvailable(localClusterName)
+			assertManagedClusterManifestWorks(localClusterName)
+		})
+
+		ginkgo.JustBeforeEach(func() {
+			managedClusterName = fmt.Sprintf("autoimport-test-hypershift-detached-%s", rand.String(6))
+			ginkgo.By(fmt.Sprintf("Create managed cluster namespace %s", managedClusterName), func() {
+				ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: managedClusterName}}
+				_, err := hubKubeClient.CoreV1().Namespaces().Create(context.TODO(), ns, metav1.CreateOptions{})
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			})
+		})
+
+		ginkgo.JustAfterEach(func() {
+			assertAutoImportSecretDeleted(managedClusterName)
+			assertHypershiftDetachedManagedClusterDeleted(managedClusterName, localClusterName)
+		})
+
+		ginkgo.AfterEach(func() {
+			assertManagedClusterDeleted(localClusterName)
+		})
+
+		ginkgo.It("Should import the cluster with auto-import-secret with kubeconfig", func() {
+			ginkgo.By(fmt.Sprintf("Create auto-import-secret for managed cluster %s with kubeconfig", managedClusterName), func() {
+				secret, err := util.NewAutoImportSecret(hubKubeClient, managedClusterName, constants.KlusterletDeployModeHypershiftDetached)
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+				_, err = hubKubeClient.CoreV1().Secrets(managedClusterName).Create(context.TODO(), secret, metav1.CreateOptions{})
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			})
+
+			ginkgo.By(fmt.Sprintf("Create managed cluster %s", managedClusterName), func() {
+				_, err := util.CreateHypershiftDetachedManagedCluster(hubClusterClient, managedClusterName, localClusterName)
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			})
+
+			assertManagedClusterImportSecretCreated(managedClusterName, "other", constants.KlusterletDeployModeHypershiftDetached)
+			assertManagedClusterImportSecretApplied(managedClusterName, constants.KlusterletDeployModeHypershiftDetached)
+			assertManagedClusterAvailable(managedClusterName)
+		})
+
 	})
 })

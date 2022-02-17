@@ -1,7 +1,7 @@
 // Copyright (c) Red Hat, Inc.
 // Copyright Contributors to the Open Cluster Management project
 
-package manifestwork
+package hypershiftdetached
 
 import (
 	"strings"
@@ -27,31 +27,28 @@ import (
 	runtimesource "sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const controllerName = "manifestwork-controller"
-
-const (
-	klusterletSuffix     = "klusterlet"
-	klusterletCRDsSuffix = "klusterlet-crds"
-)
+const controllerName = "hypershift-detached-controller"
 
 // Add creates a new manifestwork controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder,
 	importSecretInformer, autoImportSecretInformer cache.SharedIndexInformer) (string, error) {
-	return controllerName, add(importSecretInformer, mgr, newReconciler(mgr, clientHolder))
+	return controllerName, add(importSecretInformer, autoImportSecretInformer, mgr, newReconciler(mgr, clientHolder))
 }
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, clientHolder *helpers.ClientHolder) reconcile.Reconciler {
-	return &ReconcileManifestWork{
+	return &ReconcileHypershift{
 		clientHolder: clientHolder,
 		scheme:       mgr.GetScheme(),
+		client:       clientHolder.RuntimeClient,
+		kubeClient:   clientHolder.KubeClient,
 		recorder:     helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
 	}
 }
 
 // adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r reconcile.Reconciler) error {
+func add(importSecretInformer, autoImportSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r reconcile.Reconciler) error {
 	c, err := controller.New(controllerName, mgr, controller.Options{
 		Reconciler:              r,
 		MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
@@ -77,9 +74,9 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 			DeleteFunc:  func(e event.DeleteEvent) bool { return true },
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				workName := e.ObjectNew.GetName()
-				// for update event, only watch klusterlet manifest works
-				if !strings.HasSuffix(workName, klusterletCRDsSuffix) &&
-					!strings.HasSuffix(workName, klusterletSuffix) {
+				// for update event, only watch hypershift detached manifest works
+				if !strings.HasSuffix(workName, constants.HypershiftDetachedKlusterletManifestworkSuffix) ||
+					!strings.HasSuffix(workName, constants.HypershiftDetachedManagedKubeconfigManifestworkSuffix) {
 					return false
 				}
 
@@ -101,10 +98,10 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 		&runtimesource.Kind{Type: &clusterv1.ManagedCluster{}},
 		&handler.EnqueueRequestForObject{},
 		predicate.Predicate(predicate.Funcs{
-			GenericFunc: func(e event.GenericEvent) bool { return isDefaultModeObject(e.Object) },
-			DeleteFunc:  func(e event.DeleteEvent) bool { return isDefaultModeObject(e.Object) },
-			CreateFunc:  func(e event.CreateEvent) bool { return isDefaultModeObject(e.Object) },
-			UpdateFunc:  func(e event.UpdateEvent) bool { return isDefaultModeObject(e.ObjectNew) },
+			GenericFunc: func(e event.GenericEvent) bool { return isHypershiftDetachedModeObject(e.Object) },
+			DeleteFunc:  func(e event.DeleteEvent) bool { return isHypershiftDetachedModeObject(e.Object) },
+			CreateFunc:  func(e event.CreateEvent) bool { return isHypershiftDetachedModeObject(e.Object) },
+			UpdateFunc:  func(e event.UpdateEvent) bool { return isHypershiftDetachedModeObject(e.ObjectNew) },
 		})); err != nil {
 		return err
 	}
@@ -115,7 +112,10 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 		predicate.Predicate(predicate.Funcs{
 			GenericFunc: func(e event.GenericEvent) bool { return false },
 			DeleteFunc:  func(e event.DeleteEvent) bool { return false },
-			CreateFunc:  func(e event.CreateEvent) bool { return false },
+			CreateFunc: func(e event.CreateEvent) bool {
+				// only handle the hypershift detached mode import secret
+				return isHypershiftDetachedModeObject(e.Object)
+			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				new, okNew := e.ObjectNew.(*corev1.Secret)
 				old, okOld := e.ObjectOld.(*corev1.Secret)
@@ -130,9 +130,30 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 		return err
 	}
 
+	// watch the auto-import secrets
+	if err := c.Watch(
+		source.NewAutoImportSecretSource(autoImportSecretInformer),
+		&source.ManagedClusterSecretEventHandler{},
+		predicate.Predicate(predicate.Funcs{
+			GenericFunc: func(e event.GenericEvent) bool { return false },
+			DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+			CreateFunc:  func(e event.CreateEvent) bool { return true },
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				new, okNew := e.ObjectNew.(*corev1.Secret)
+				old, okOld := e.ObjectOld.(*corev1.Secret)
+				if okNew && okOld {
+					return !equality.Semantic.DeepEqual(old.Data, new.Data)
+				}
+				return false
+			},
+		}),
+	); err != nil {
+		return err
+	}
+
 	return nil
 }
 
-func isDefaultModeObject(object client.Object) bool {
-	return !strings.EqualFold(object.GetAnnotations()[constants.KlusterletDeployModeAnnotation], constants.KlusterletDeployModeHypershiftDetached)
+func isHypershiftDetachedModeObject(object client.Object) bool {
+	return strings.EqualFold(object.GetAnnotations()[constants.KlusterletDeployModeAnnotation], constants.KlusterletDeployModeHypershiftDetached)
 }

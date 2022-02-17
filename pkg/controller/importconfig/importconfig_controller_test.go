@@ -159,13 +159,16 @@ func TestReconcile(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			clientHolder := &helpers.ClientHolder{
+				KubeClient:    kubefake.NewSimpleClientset(c.runtimeObjs...),
+				RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.clientObjs...).Build(),
+			}
+
 			r := &ReconcileImportConfig{
-				clientHolder: &helpers.ClientHolder{
-					KubeClient:    kubefake.NewSimpleClientset(c.runtimeObjs...),
-					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.clientObjs...).Build(),
-				},
-				scheme:   testscheme,
-				recorder: eventstesting.NewTestingEventRecorder(t),
+				clientHolder:  clientHolder,
+				scheme:        testscheme,
+				recorder:      eventstesting.NewTestingEventRecorder(t),
+				workerFactory: &workerFactory{clientHolder: clientHolder},
 			}
 
 			_, err := r.Reconcile(context.TODO(), c.request)

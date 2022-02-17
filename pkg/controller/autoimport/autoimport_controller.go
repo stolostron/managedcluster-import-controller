@@ -6,7 +6,6 @@ package autoimport
 import (
 	"context"
 	"fmt"
-	"strconv"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
@@ -14,7 +13,6 @@ import (
 
 	"github.com/openshift/library-go/pkg/operator/events"
 
-	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -25,8 +23,6 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
-
-const autoImportRetryName string = "autoImportRetry"
 
 var log = logf.Log.WithName(controllerName)
 
@@ -70,6 +66,10 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	if helpers.DetermineKlusterletMode(managedCluster) != constants.KlusterletDeployModeDefault {
+		return reconcile.Result{}, nil
+	}
+
 	importSecretName := fmt.Sprintf("%s-%s", managedClusterName, constants.ImportSecretNameSuffix)
 	importSecret, err := r.kubeClient.CoreV1().Secrets(managedClusterName).Get(ctx, importSecretName, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
@@ -99,7 +99,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		importCondition.Message = fmt.Sprintf("Unable to import %s: %s", managedClusterName, err.Error())
 		importCondition.Reason = "ManagedClusterNotImported"
 
-		errs = append(errs, err, r.updateAutoImportRetryTimes(ctx, autoImportSecret.DeepCopy()))
+		errs = append(errs, err, helpers.UpdateAutoImportRetryTimes(ctx, r.kubeClient, r.recorder, autoImportSecret.DeepCopy()))
 	}
 
 	if len(errs) == 0 {
@@ -117,30 +117,4 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	return reconcile.Result{}, utilerrors.NewAggregate(errs)
-}
-
-func (r *ReconcileAutoImport) updateAutoImportRetryTimes(ctx context.Context, secret *corev1.Secret) error {
-	autoImportRetry, err := strconv.Atoi(string(secret.Data[autoImportRetryName]))
-	if err != nil {
-		r.recorder.Warningf("AutoImportRetryInvalid", "The value of autoImportRetry is invalid in auto-import-secret secret")
-		return err
-	}
-
-	r.recorder.Eventf("RetryToImportCluster", "Retry to import cluster %s, %d", secret.Namespace, autoImportRetry)
-
-	autoImportRetry--
-	if autoImportRetry < 0 {
-		// stop retry, delete the auto-import-secret
-		err := r.kubeClient.CoreV1().Secrets(secret.Namespace).Delete(ctx, secret.Name, metav1.DeleteOptions{})
-		if err != nil {
-			return err
-		}
-		r.recorder.Eventf("AutoImportSecretDeleted",
-			fmt.Sprintf("Exceed the retry times, delete the auto import secret %s/%s", secret.Namespace, secret.Name))
-		return nil
-	}
-
-	secret.Data[autoImportRetryName] = []byte(strconv.Itoa(autoImportRetry))
-	_, err = r.kubeClient.CoreV1().Secrets(secret.Namespace).Update(ctx, secret, metav1.UpdateOptions{})
-	return err
 }

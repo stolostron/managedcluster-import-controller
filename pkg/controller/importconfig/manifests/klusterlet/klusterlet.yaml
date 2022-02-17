@@ -1,10 +1,18 @@
 apiVersion: operator.open-cluster-management.io/v1
 kind: Klusterlet
 metadata:
+  {{if eq .InstallMode "Detached"}}
+  name: klusterlet-{{ .ManagedClusterNamespace }}
+  {{ else }}
   name: klusterlet
+  {{end}}
 spec:
   deployOption:
+    {{if eq .InstallMode "Detached"}}
+    mode: Detached
+    {{ else }}
     mode: Default
+    {{end}}
   registrationImagePullSpec: "{{ .RegistrationImageName }}"
   workImagePullSpec: "{{ .WorkImageName }}"
   clusterName: "{{ .ManagedClusterNamespace }}"

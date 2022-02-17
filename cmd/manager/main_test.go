@@ -1,6 +1,7 @@
 // Copyright (c) Red Hat, Inc.
 // Copyright Contributors to the Open Cluster Management project
 
+//go:build testrunmain
 // +build testrunmain
 
 package main
@@ -11,10 +12,15 @@ import (
 	"os/signal"
 	"syscall"
 	"testing"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 )
 
 // start the controller to get the test coverage
 func TestRunMain(t *testing.T) {
+	if err := features.DefaultMutableFeatureGate.Set(fmt.Sprintf("%s=true", features.HypershiftImport)); err != nil {
+		panic(err)
+	}
 	go main()
 	// hacks for handling signals
 	signalChannel := make(chan os.Signal, 2)

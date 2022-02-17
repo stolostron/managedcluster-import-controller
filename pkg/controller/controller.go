@@ -14,13 +14,15 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/autoimport"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/clusterdeployment"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/csr"
+	"github.com/stolostron/managedcluster-import-controller/pkg/controller/hypershiftdetached"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/importconfig"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/manifestwork"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/selfmanagedcluster"
+	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	"k8s.io/client-go/tools/cache"
 
+	"k8s.io/client-go/tools/cache"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
@@ -51,5 +53,13 @@ func AddToManager(manager manager.Manager, clientHolder *helpers.ClientHolder, i
 		log.Info(fmt.Sprintf("Add controller %s to manager", name))
 	}
 
+	if features.DefaultMutableFeatureGate.Enabled(features.HypershiftImport) {
+		name, err := hypershiftdetached.Add(manager, clientHolder, importSecretInformer, autoImportSecretInformer)
+		if err != nil {
+			return err
+		}
+
+		log.Info(fmt.Sprintf("Add controller %s to manager", name))
+	}
 	return nil
 }
