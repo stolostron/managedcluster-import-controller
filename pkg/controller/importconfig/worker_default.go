@@ -93,11 +93,13 @@ func (w *defaultWorker) generateImportSecret(ctx context.Context, managedCluster
 		RegistrationOperatorImage: registrationOperatorImageName,
 	}
 
-	deploymentFiles := append([]string{}, klusterletFiles...)
+	var deploymentFiles = make([]string, 0)
+	// deploy the klusterletOperatorFiles first, it contains the agent namespace, if not deploy
+	// the namespace first, other namespace scope resources will fail.
+	deploymentFiles = append(append(deploymentFiles, klusterletOperatorFiles...), klusterletFiles...)
 	if useImagePullSecret {
 		deploymentFiles = append(deploymentFiles, "manifests/klusterlet/image_pull_secret.yaml")
 	}
-	deploymentFiles = append(deploymentFiles, klusterletOperatorFiles...)
 
 	importYAML := new(bytes.Buffer)
 	for _, file := range deploymentFiles {
