@@ -148,6 +148,21 @@ func TestReconcile(t *testing.T) {
 				data, ok := importSecret.Data[constants.ImportSecretImportYamlKey]
 				if !ok {
 					t.Errorf("the %s is required, %s", constants.ImportSecretImportYamlKey, string(data))
+				} else {
+					objs := []runtime.Object{}
+					for _, yaml := range helpers.SplitYamls(importSecret.Data[constants.ImportSecretImportYamlKey]) {
+						objs = append(objs, helpers.MustCreateObject(yaml))
+					}
+					if len(objs) < 1 {
+						t.Errorf("import secret data %s, objs is empty: %v", constants.ImportSecretImportYamlKey, objs)
+					}
+					ns, ok := objs[0].(*corev1.Namespace)
+					if !ok {
+						t.Errorf("import secret data %s, the first element is not namespace", constants.ImportSecretImportYamlKey)
+					}
+					if ns.Name != klusterletNamespace {
+						t.Errorf("import secret data %s, the namespace name %s is not %s", constants.ImportSecretImportYamlKey, ns.Name, klusterletNamespace)
+					}
 				}
 
 				if len(strings.Split(strings.Replace(string(data), constants.YamlSperator, "", 1), constants.YamlSperator)) != 9 {
