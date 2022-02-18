@@ -276,9 +276,9 @@ func ImportManagedClusterFromSecret(client *ClientHolder, restMapper meta.RESTMa
 	}
 
 	objs := []runtime.Object{}
-	objs = append(objs, mustCreateObject(importSecret.Data[crdsKey]))
+	objs = append(objs, MustCreateObject(importSecret.Data[crdsKey]))
 	for _, yaml := range SplitYamls(importSecret.Data[constants.ImportSecretImportYamlKey]) {
-		objs = append(objs, mustCreateObject(yaml))
+		objs = append(objs, MustCreateObject(yaml))
 	}
 	// using managed cluster client to apply resources in managed cluster, so the owner is not need
 	return ApplyResources(client, recorder, nil, nil, objs...)
@@ -309,7 +309,7 @@ func IsAPIExtensionV1Supported(kubeVersion string) bool {
 // If it's failed, this function will panic
 func MustCreateObjectFromTemplate(file string, template []byte, config interface{}) runtime.Object {
 	raw := MustCreateAssetFromTemplate(file, template, config)
-	return mustCreateObject(raw)
+	return MustCreateObject(raw)
 }
 
 // MustCreateAssetFromTemplate render a template with its configuration
@@ -471,7 +471,8 @@ func applyManifestWork(client client.Client, recorder events.Recorder, required 
 	return nil
 }
 
-func mustCreateObject(raw []byte) runtime.Object {
+// MustCreateObject translate object from raw bytes to runtime object
+func MustCreateObject(raw []byte) runtime.Object {
 	obj, _, err := genericCodec.Decode(raw, nil, nil)
 	if err != nil {
 		panic(err)
