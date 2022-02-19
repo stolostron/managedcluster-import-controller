@@ -46,6 +46,7 @@ chmod +x "${KIND}"
 CLEAN_ARG=${1:-unclean}
 if [ "$CLEAN_ARG"x = "clean"x ]; then
     ${KIND} delete cluster --name ${CLUSTER_NAME}
+    ${KIND} delete cluster --name ${CLUSTER_NAME_MANAGED}
     exit 0
 fi
 
