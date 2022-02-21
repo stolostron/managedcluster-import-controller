@@ -22,7 +22,6 @@ require (
 	k8s.io/utils v0.0.0-20210802155522-efc7438f0176
 	open-cluster-management.io/api v0.6.0
 	sigs.k8s.io/controller-runtime v0.9.7
-	sigs.k8s.io/yaml v1.2.0
 )
 
 require (
@@ -100,6 +99,7 @@ require (
 	k8s.io/kube-aggregator v0.22.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20211115234752-e816edb12b65 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.1.2 // indirect
+	sigs.k8s.io/yaml v1.2.0 // indirect
 )
 
 // required by multicloud-operators-foundation
