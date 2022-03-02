@@ -41,10 +41,25 @@ func (w *defaultWorker) generateImportSecret(ctx context.Context, managedCluster
 	}
 
 	useImagePullSecret := false
+	var imagePullSecretType corev1.SecretType
+	var dockerConfigKey string
 	imagePullSecretDataBase64 := ""
-	if imagePullSecret != nil && len(imagePullSecret.Data[".dockerconfigjson"]) != 0 {
-		imagePullSecretDataBase64 = base64.StdEncoding.EncodeToString(imagePullSecret.Data[".dockerconfigjson"])
-		useImagePullSecret = true
+	if imagePullSecret != nil {
+		switch {
+		case len(imagePullSecret.Data[corev1.DockerConfigJsonKey]) != 0:
+			dockerConfigKey = corev1.DockerConfigJsonKey
+			imagePullSecretType = corev1.SecretTypeDockerConfigJson
+			imagePullSecretDataBase64 = base64.StdEncoding.EncodeToString(imagePullSecret.Data[corev1.DockerConfigJsonKey])
+			useImagePullSecret = true
+		case len(imagePullSecret.Data[corev1.DockerConfigKey]) != 0:
+			dockerConfigKey = corev1.DockerConfigKey
+			imagePullSecretType = corev1.SecretTypeDockercfg
+			imagePullSecretDataBase64 = base64.StdEncoding.EncodeToString(imagePullSecret.Data[corev1.DockerConfigKey])
+			useImagePullSecret = true
+		default:
+			return nil, fmt.Errorf("there is invalid type of the data of pull secret %v/%v",
+				imagePullSecret.GetNamespace(), imagePullSecret.GetName())
+		}
 	}
 
 	registrationOperatorImageName, err := getImage(imageRegistry, registrationOperatorImageEnvVarName)
@@ -72,6 +87,7 @@ func (w *defaultWorker) generateImportSecret(ctx context.Context, managedCluster
 		UseImagePullSecret        bool
 		ImagePullSecretName       string
 		ImagePullSecretData       string
+		ImagePullSecretConfigKey  string
 		ImagePullSecretType       corev1.SecretType
 		RegistrationOperatorImage string
 	}
@@ -89,7 +105,8 @@ func (w *defaultWorker) generateImportSecret(ctx context.Context, managedCluster
 		UseImagePullSecret:        useImagePullSecret,
 		ImagePullSecretName:       managedClusterImagePullSecretName,
 		ImagePullSecretData:       imagePullSecretDataBase64,
-		ImagePullSecretType:       corev1.SecretTypeDockerConfigJson,
+		ImagePullSecretType:       imagePullSecretType,
+		ImagePullSecretConfigKey:  dockerConfigKey,
 		RegistrationOperatorImage: registrationOperatorImageName,
 	}
 

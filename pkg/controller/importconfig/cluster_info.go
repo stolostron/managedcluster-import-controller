@@ -145,10 +145,6 @@ func getKubeAPIServerCertificate(ctx context.Context, kubeClient kubernetes.Inte
 		return nil, err
 	}
 
-	if secret.Type != corev1.SecretTypeTLS {
-		return nil, fmt.Errorf("secret openshift-config/%s should have type=kubernetes.io/tls", secretName)
-	}
-
 	res, ok := secret.Data["tls.crt"]
 	if !ok {
 		return nil, fmt.Errorf("failed to find data[tls.crt] in secret openshift-config/%s", secretName)
