@@ -14,7 +14,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/autoimport"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/clusterdeployment"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/csr"
-	"github.com/stolostron/managedcluster-import-controller/pkg/controller/hypershiftdetached"
+	"github.com/stolostron/managedcluster-import-controller/pkg/controller/detached"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/importconfig"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/manifestwork"
@@ -53,8 +53,8 @@ func AddToManager(manager manager.Manager, clientHolder *helpers.ClientHolder, i
 		log.Info(fmt.Sprintf("Add controller %s to manager", name))
 	}
 
-	if features.DefaultMutableFeatureGate.Enabled(features.HypershiftImport) {
-		name, err := hypershiftdetached.Add(manager, clientHolder, importSecretInformer, autoImportSecretInformer)
+	if features.DefaultMutableFeatureGate.Enabled(features.KlusterletDetachedMode) {
+		name, err := detached.Add(manager, clientHolder, importSecretInformer, autoImportSecretInformer)
 		if err != nil {
 			return err
 		}

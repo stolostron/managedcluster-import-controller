@@ -15,11 +15,9 @@ const (
 	// // alpha: v1.X
 	// MyFeature featuregate.Feature = "MyFeature"
 
-	// HypershiftImport will provide a hypershift importing worker for import-secret controller,
-	// and will start a new hypershift detached controller to process hypershift cluster importing,
-	// and in the future this will also start a new controllers to watch HypershiftDeployment and
-	// import it to the hub cluster automatically.
-	HypershiftImport featuregate.Feature = "HypershiftImport"
+	// KlusterletDetachedMode will provide a detached importing worker for import-secret controller,
+	// and will start a new detached controller to process cluster in detached mode importing,
+	KlusterletDetachedMode featuregate.Feature = "KlusterletDetachedMode"
 )
 
 var (
@@ -37,5 +35,5 @@ func init() {
 // feature keys.  To add a new feature, define a key for it above and
 // add it here.
 var defaultRegistrationFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
-	HypershiftImport: {Default: false, PreRelease: featuregate.Alpha},
+	KlusterletDetachedMode: {Default: true, PreRelease: featuregate.Alpha},
 }

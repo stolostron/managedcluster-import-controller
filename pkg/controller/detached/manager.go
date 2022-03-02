@@ -1,7 +1,7 @@
 // Copyright (c) Red Hat, Inc.
 // Copyright Contributors to the Open Cluster Management project
 
-package hypershiftdetached
+package detached
 
 import (
 	"strings"
@@ -27,7 +27,7 @@ import (
 	runtimesource "sigs.k8s.io/controller-runtime/pkg/source"
 )
 
-const controllerName = "hypershift-detached-controller"
+const controllerName = "detached-manifestwork-controller"
 
 // Add creates a new manifestwork controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
@@ -38,7 +38,7 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder,
 
 // newReconciler returns a new reconcile.Reconciler
 func newReconciler(mgr manager.Manager, clientHolder *helpers.ClientHolder) reconcile.Reconciler {
-	return &ReconcileHypershift{
+	return &ReconcileDetached{
 		clientHolder: clientHolder,
 		scheme:       mgr.GetScheme(),
 		client:       clientHolder.RuntimeClient,
@@ -74,9 +74,9 @@ func add(importSecretInformer, autoImportSecretInformer cache.SharedIndexInforme
 			DeleteFunc:  func(e event.DeleteEvent) bool { return true },
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				workName := e.ObjectNew.GetName()
-				// for update event, only watch hypershift detached manifest works
-				if !strings.HasSuffix(workName, constants.HypershiftDetachedKlusterletManifestworkSuffix) ||
-					!strings.HasSuffix(workName, constants.HypershiftDetachedManagedKubeconfigManifestworkSuffix) {
+				// for update event, only watch detached mode manifest works
+				if !strings.HasSuffix(workName, constants.DetachedKlusterletManifestworkSuffix) ||
+					!strings.HasSuffix(workName, constants.DetachedManagedKubeconfigManifestworkSuffix) {
 					return false
 				}
 
@@ -98,10 +98,10 @@ func add(importSecretInformer, autoImportSecretInformer cache.SharedIndexInforme
 		&runtimesource.Kind{Type: &clusterv1.ManagedCluster{}},
 		&handler.EnqueueRequestForObject{},
 		predicate.Predicate(predicate.Funcs{
-			GenericFunc: func(e event.GenericEvent) bool { return isHypershiftDetachedModeObject(e.Object) },
-			DeleteFunc:  func(e event.DeleteEvent) bool { return isHypershiftDetachedModeObject(e.Object) },
-			CreateFunc:  func(e event.CreateEvent) bool { return isHypershiftDetachedModeObject(e.Object) },
-			UpdateFunc:  func(e event.UpdateEvent) bool { return isHypershiftDetachedModeObject(e.ObjectNew) },
+			GenericFunc: func(e event.GenericEvent) bool { return isDetachedModeObject(e.Object) },
+			DeleteFunc:  func(e event.DeleteEvent) bool { return isDetachedModeObject(e.Object) },
+			CreateFunc:  func(e event.CreateEvent) bool { return isDetachedModeObject(e.Object) },
+			UpdateFunc:  func(e event.UpdateEvent) bool { return isDetachedModeObject(e.ObjectNew) },
 		})); err != nil {
 		return err
 	}
@@ -113,8 +113,8 @@ func add(importSecretInformer, autoImportSecretInformer cache.SharedIndexInforme
 			GenericFunc: func(e event.GenericEvent) bool { return false },
 			DeleteFunc:  func(e event.DeleteEvent) bool { return false },
 			CreateFunc: func(e event.CreateEvent) bool {
-				// only handle the hypershift detached mode import secret
-				return isHypershiftDetachedModeObject(e.Object)
+				// only handle the detached mode import secret
+				return isDetachedModeObject(e.Object)
 			},
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				new, okNew := e.ObjectNew.(*corev1.Secret)
@@ -154,6 +154,6 @@ func add(importSecretInformer, autoImportSecretInformer cache.SharedIndexInforme
 	return nil
 }
 
-func isHypershiftDetachedModeObject(object client.Object) bool {
-	return strings.EqualFold(object.GetAnnotations()[constants.KlusterletDeployModeAnnotation], constants.KlusterletDeployModeHypershiftDetached)
+func isDetachedModeObject(object client.Object) bool {
+	return strings.EqualFold(object.GetAnnotations()[constants.KlusterletDeployModeAnnotation], constants.KlusterletDeployModeDetached)
 }

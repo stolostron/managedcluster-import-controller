@@ -254,8 +254,8 @@ func ValidateImportSecret(importSecret *corev1.Secret) error {
 	return nil
 }
 
-// ValidateHypershiftDetachedImportSecret validate hypershift managed cluster import secret
-func ValidateHypershiftDetachedImportSecret(importSecret *corev1.Secret) error {
+// ValidateDetachedImportSecret validate detached mode managed cluster import secret
+func ValidateDetachedImportSecret(importSecret *corev1.Secret) error {
 	if data, ok := importSecret.Data[constants.ImportSecretImportYamlKey]; !ok || len(data) == 0 {
 		return fmt.Errorf("the %s is required", constants.ImportSecretImportYamlKey)
 	}
@@ -549,8 +549,8 @@ func DetermineKlusterletMode(cluster *clusterv1.ManagedCluster) string {
 		return constants.KlusterletDeployModeDefault
 	}
 
-	if strings.EqualFold(mode, constants.KlusterletDeployModeHypershiftDetached) {
-		return constants.KlusterletDeployModeHypershiftDetached
+	if strings.EqualFold(mode, constants.KlusterletDeployModeDetached) {
+		return constants.KlusterletDeployModeDetached
 	}
 
 	return "Unknown"

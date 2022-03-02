@@ -18,13 +18,13 @@ import (
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 )
 
-type hypershiftDetachedWorker struct {
+type detachedWorker struct {
 	clientHolder *helpers.ClientHolder
 }
 
-var _ importWorker = &hypershiftDetachedWorker{}
+var _ importWorker = &detachedWorker{}
 
-func (w *hypershiftDetachedWorker) generateImportSecret(ctx context.Context, managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, error) {
+func (w *detachedWorker) generateImportSecret(ctx context.Context, managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, error) {
 	bootStrapSecret, err := getBootstrapSecret(ctx, w.clientHolder.KubeClient, managedCluster)
 	if err != nil {
 		return nil, err
@@ -86,7 +86,7 @@ func (w *hypershiftDetachedWorker) generateImportSecret(ctx context.Context, man
 				constants.ClusterImportSecretLabel: "",
 			},
 			Annotations: map[string]string{
-				constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHypershiftDetached,
+				constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeDetached,
 			},
 		},
 		Data: map[string][]byte{
