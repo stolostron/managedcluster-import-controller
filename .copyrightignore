@@ -2,5 +2,5 @@
 .copyrightignore
 _generated.go
 pkg/controller/importconfig/manifests/*
-pkg/controller/hypershiftdetached/manifests/*
+pkg/controller/detached/manifests/*
 test/e2e/resources/*

@@ -1,7 +1,7 @@
 // Copyright (c) Red Hat, Inc.
 // Copyright Contributors to the Open Cluster Management project
 
-package hypershiftdetached
+package detached
 
 import (
 	"context"
@@ -39,8 +39,8 @@ var klusterletDetachedExternalKubeconfig = "manifests/external_managed_secret.ya
 
 var log = logf.Log.WithName(controllerName)
 
-// ReconcileHypershift reconciles the ManagedClusters of the ManifestWorks object
-type ReconcileHypershift struct {
+// ReconcileDetached reconciles the Detached mode ManagedClusters of the ManifestWorks object
+type ReconcileDetached struct {
 	clientHolder *helpers.ClientHolder
 	scheme       *runtime.Scheme
 	client       client.Client
@@ -48,13 +48,13 @@ type ReconcileHypershift struct {
 	recorder     events.Recorder
 }
 
-// blank assignment to verify that ReconcileManifestWork implements reconcile.Reconciler
-var _ reconcile.Reconciler = &ReconcileHypershift{}
+// blank assignment to verify that ReconcileDetached implements reconcile.Reconciler
+var _ reconcile.Reconciler = &ReconcileDetached{}
 
-// Reconcile the hypershift detached mode ManagedClusters of the ManifestWorks.
-// - When a hypershift detached mode ManagedCluster created, we will create a klusterlet manifestwork to
-//   trigger the cluster importing process
-// - When an auto import secret created for the hypershift detached mode managed cluster, we create a managed
+// Reconcile the detached mode ManagedClusters of the ManifestWorks.
+// - When a detached mode ManagedCluster created, we will create a klusterlet manifestwork to trigger the
+//   cluster importing process
+// - When an auto import secret created for the detached mode managed cluster, we create a managed
 //   kubeconfig manifestwork to create an external managed kubeconfig secret on the management cluster
 // - When the manifester works are created in one managed cluster namespace, we will add a manifest work
 //   finalizer to the managed cluster
@@ -63,7 +63,7 @@ var _ reconcile.Reconciler = &ReconcileHypershift{}
 //
 // Note: The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileHypershift) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileDetached) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Name", request.Name)
 
 	managedClusterName := request.Name
@@ -77,13 +77,13 @@ func (r *ReconcileHypershift) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	if helpers.DetermineKlusterletMode(managedCluster) != constants.KlusterletDeployModeHypershiftDetached {
+	if helpers.DetermineKlusterletMode(managedCluster) != constants.KlusterletDeployModeDetached {
 		return reconcile.Result{}, nil
 	}
 	// TODO(zhujian7): check if annotation management cluster is provided, check if the management cluster
 	// is a managed cluster of hub, and check its status.
 
-	reqLogger.Info("Reconciling the manifest works of the hypershift managed cluster")
+	reqLogger.Info("Reconciling the manifest works of the detached mode managed cluster")
 
 	listOpts := &client.ListOptions{Namespace: managedClusterName}
 	manifestWorks := &workv1.ManifestWorkList{}
@@ -112,7 +112,7 @@ func (r *ReconcileHypershift) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	if err := helpers.ValidateHypershiftDetachedImportSecret(importSecret); err != nil {
+	if err := helpers.ValidateDetachedImportSecret(importSecret); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -121,7 +121,7 @@ func (r *ReconcileHypershift) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	manifestWork := createHypershiftDetachedManifestWork(managedCluster.Name, importSecret, managementCluster)
+	manifestWork := createDetachedManifestWork(managedCluster.Name, importSecret, managementCluster)
 	err = helpers.ApplyResources(r.clientHolder, r.recorder, r.scheme, managedCluster, manifestWork)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -189,7 +189,7 @@ func klusterletNamespace(managedCluster string) string {
 //      after the cluster is deleted.
 //   2. delete the manifest works that do not include klusterlet addon works
 //   3. delete the klusterlet and managed kubeconfig manifest works
-func (r *ReconcileHypershift) deleteManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster, works []workv1.ManifestWork) error {
+func (r *ReconcileDetached) deleteManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster, works []workv1.ManifestWork) error {
 	if len(works) == 0 {
 		return nil
 	}
@@ -199,7 +199,7 @@ func (r *ReconcileHypershift) deleteManifestWorks(ctx context.Context, cluster *
 		if err := helpers.ForceDeleteAllManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, works); err != nil {
 			return err
 		}
-		return r.deleteHypershiftManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster)
+		return r.deleteDetachedManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster)
 	}
 
 	// delete works that do not include klusterlet addon works, the addon works will be removed by
@@ -222,27 +222,27 @@ func (r *ReconcileHypershift) deleteManifestWorks(ctx context.Context, cluster *
 		return nil
 	}
 
-	return r.deleteHypershiftManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster)
+	return r.deleteDetachedManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster)
 }
 
-// deleteHypershiftManifestWorks delete klusterlet and managed kubeconfig manifest works in the management cluster namespace
-func (r *ReconcileHypershift) deleteHypershiftManifestWorks(ctx context.Context, runtimeClient client.Client,
+// deleteDetachedManifestWorks delete klusterlet and managed kubeconfig manifest works in the management cluster namespace
+func (r *ReconcileDetached) deleteDetachedManifestWorks(ctx context.Context, runtimeClient client.Client,
 	recorder events.Recorder, cluster *clusterv1.ManagedCluster) error {
 	managementCluster, err := helpers.GetManagementCluster(cluster)
 	if err != nil {
 		return err
 	}
 
-	err = helpers.DeleteManifestWork(ctx, runtimeClient, recorder, managementCluster, hypershiftKlusterletManifestWorkName(cluster.Name))
+	err = helpers.DeleteManifestWork(ctx, runtimeClient, recorder, managementCluster, detachedKlusterletManifestWorkName(cluster.Name))
 	if err != nil {
 		return err
 	}
 
-	return helpers.DeleteManifestWork(ctx, runtimeClient, recorder, managementCluster, hypershiftManagedKubeconfigManifestWorkName(cluster.Name))
+	return helpers.DeleteManifestWork(ctx, runtimeClient, recorder, managementCluster, detachedManagedKubeconfigManifestWorkName(cluster.Name))
 }
 
-// createHypershiftDetachedManifestWork creates a manifestwork from import secret for hypershift detached mode cluster
-func createHypershiftDetachedManifestWork(managedClusterName string,
+// createDetachedManifestWork creates a manifestwork from import secret for detached mode cluster
+func createDetachedManifestWork(managedClusterName string,
 	importSecret *corev1.Secret, manifestWorkNamespace string) *workv1.ManifestWork {
 	manifests := []workv1.Manifest{}
 	importYaml := importSecret.Data[constants.ImportSecretImportYamlKey]
@@ -261,7 +261,7 @@ func createHypershiftDetachedManifestWork(managedClusterName string,
 	return &workv1.ManifestWork{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      hypershiftKlusterletManifestWorkName(managedClusterName),
+			Name:      detachedKlusterletManifestWorkName(managedClusterName),
 			Namespace: manifestWorkNamespace,
 		},
 		Spec: workv1.ManifestWorkSpec{
@@ -309,7 +309,7 @@ func createManagedKubeconfigManifestWork(managedClusterName string, importSecret
 	mw := &workv1.ManifestWork{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      hypershiftManagedKubeconfigManifestWorkName(managedClusterName),
+			Name:      detachedManagedKubeconfigManifestWorkName(managedClusterName),
 			Namespace: manifestWorkNamespace,
 		},
 		Spec: workv1.ManifestWorkSpec{
@@ -329,10 +329,10 @@ func createManagedKubeconfigManifestWork(managedClusterName string, importSecret
 	return mw, nil
 }
 
-func hypershiftKlusterletManifestWorkName(managedClusterName string) string {
-	return fmt.Sprintf("%s-%s", managedClusterName, constants.HypershiftDetachedKlusterletManifestworkSuffix)
+func detachedKlusterletManifestWorkName(managedClusterName string) string {
+	return fmt.Sprintf("%s-%s", managedClusterName, constants.DetachedKlusterletManifestworkSuffix)
 }
 
-func hypershiftManagedKubeconfigManifestWorkName(managedClusterName string) string {
-	return fmt.Sprintf("%s-%s", managedClusterName, constants.HypershiftDetachedManagedKubeconfigManifestworkSuffix)
+func detachedManagedKubeconfigManifestWorkName(managedClusterName string) string {
+	return fmt.Sprintf("%s-%s", managedClusterName, constants.DetachedManagedKubeconfigManifestworkSuffix)
 }

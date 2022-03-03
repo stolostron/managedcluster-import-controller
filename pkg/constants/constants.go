@@ -39,12 +39,13 @@ const (
 
 const (
 	// KlusterletDeployModeAnnotation describe the klusterlet deploy mode when importing a managed cluster.
-	// If the value is "Hypershift-Detached", the ManagementClusterNameAnnotation annotation will be required,
+	// If the value is "Detached", the ManagementClusterNameAnnotation annotation will be required,
 	// we use ManagementClusterNameAnnotation to determine where to deploy the registration-agent and work-agent.
 	KlusterletDeployModeAnnotation string = "import.open-cluster-management.io/klusterlet-deploy-mode"
 
-	// ManagementClusterNameAnnotation is required in Hypershift-Detached mode, and the management cluster MUST be one
-	// of the managed cluster of the hub. The value of the annotation should be the ManagedCluster name of management cluster.
+	// ManagementClusterNameAnnotation is required in Detached mode, and the management cluster MUST be one
+	// of the managed cluster of the hub. The value of the annotation should be the ManagedCluster name of
+	// the management cluster.
 	ManagementClusterNameAnnotation string = "import.open-cluster-management.io/management-cluster-name"
 )
 
@@ -53,20 +54,15 @@ const (
 	KlusterletDeployModeDefault string = "Default"
 
 	// KlusterletDeployModeDetached means deploying klusterlet outside. the klusterlet will be deployed outside of the managed-cluster.
-	// This value is reserved for the general detached mode for klusterlet that we are not sure how to present for users for now.
 	KlusterletDeployModeDetached string = "Detached"
-
-	// KlusterletDeployModeHypershiftDetached means deploying klusterlet outside. the klusterlet will be deployed on the hypershift
-	// management cluster.
-	KlusterletDeployModeHypershiftDetached string = "Hypershift-Detached"
 )
 
 const (
-	// HypershiftDetachedManifestworkSuffix is a suffix of the hypershift detached mode klusterlet manifestwork name.
-	HypershiftDetachedKlusterletManifestworkSuffix = "hypershift-detached-klusterlet"
+	// DetachedManifestworkSuffix is a suffix of the detached mode klusterlet manifestwork name.
+	DetachedKlusterletManifestworkSuffix = "detached-klusterlet"
 
-	// HypershiftDetachedManagedKubeconfigManifestworkSuffix is a suffix of the hypershift detached mode managed custer kubeconfig manifestwork name.
-	HypershiftDetachedManagedKubeconfigManifestworkSuffix = "hypershift-detached-kubeconfig"
+	// DetachedManagedKubeconfigManifestworkSuffix is a suffix of the detached mode managed custer kubeconfig manifestwork name.
+	DetachedManagedKubeconfigManifestworkSuffix = "detached-kubeconfig"
 
 	// ManifestWorkFinalizer is used to delete all manifestworks before deleting a managed cluster.
 	ManifestWorkFinalizer = "managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup"

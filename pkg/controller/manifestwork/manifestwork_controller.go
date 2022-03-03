@@ -140,14 +140,13 @@ func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster
 	// delete works that do not include klusterlet works and klusterlet addon works, the addon works will be removed by
 	// klusterlet-addon-controller, we need to wait the klusterlet-addon-controller delete them.
 	//
-	// if there are any hypershift detached mode manifestworks we also wait for users to detach the hypershift managed
-	// cluster first.
+	// if there are any Detached mode manifestworks we also wait for users to detach the managed cluster first.
 	ignoreKlusterletAndAddons := func(clusterName string, manifestWork workv1.ManifestWork) bool {
 		return manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, klusterletSuffix) ||
 			manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, klusterletCRDsSuffix) ||
 			strings.HasPrefix(manifestWork.GetName(), fmt.Sprintf("%s-klusterlet-addon", manifestWork.GetNamespace())) ||
-			manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, constants.HypershiftDetachedKlusterletManifestworkSuffix) ||
-			manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, constants.HypershiftDetachedManagedKubeconfigManifestworkSuffix)
+			manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, constants.DetachedKlusterletManifestworkSuffix) ||
+			manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, constants.DetachedManagedKubeconfigManifestworkSuffix)
 	}
 	err := helpers.DeleteManifestWorkWithSelector(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster, works, ignoreKlusterletAndAddons)
 	if err != nil {
