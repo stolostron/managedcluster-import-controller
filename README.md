@@ -16,7 +16,7 @@ Check the [DEVELOPMENT Doc](docs/development.md) for how to build and make chang
 Check the [Run functional test](docs/functional_test.md) for how to run functional tests.
 
 ------
-
+ 
 ## Getting Started
 
 This is a guide on how to build and deploy klusterlet addon controller from code.
