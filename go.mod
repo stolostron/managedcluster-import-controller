@@ -9,7 +9,7 @@ require (
 	github.com/onsi/gomega v1.15.0
 	github.com/openshift/api v3.9.1-0.20191111211345-a27ff30ebf09+incompatible
 	github.com/openshift/assisted-service v1.0.10-0.20211007120927-ad88cd9a8817
-	github.com/openshift/hive/apis v3.9.1-0.20191111211345-a27ff30ebf09+incompatible
+	github.com/openshift/hive/apis v0.0.0
 	github.com/openshift/library-go v0.0.0-20210916194400-ae21aab32431
 	github.com/spf13/pflag v1.0.5
 	github.com/stolostron/multicloud-operators-foundation v1.0.0-2021-10-26-20-16-14.0.20220110023249-172fb944faa9
@@ -110,7 +110,7 @@ replace (
 	github.com/metal3-io/baremetal-operator => github.com/openshift/baremetal-operator v0.0.0-20200715132148-0f91f62a41fe
 	github.com/metal3-io/cluster-api-provider-baremetal => github.com/openshift/cluster-api-provider-baremetal v0.0.0-20190821174549-a2a477909c1d
 	github.com/openshift/api => github.com/openshift/api v0.0.0-20210331193751-3acddb19d360
-	github.com/openshift/hive/apis => github.com/openshift/hive/apis v0.0.0-20210802140536-4d8d83dcd464
+	github.com/openshift/hive/apis => github.com/openshift/hive/apis v0.0.0-20220210162524-665b268161d8
 	github.com/openshift/library-go => github.com/openshift/library-go v0.0.0-20200918101923-1e4c94603efe
 	github.com/terraform-providers/terraform-provider-ignition/v2 => github.com/community-terraform-providers/terraform-provider-ignition/v2 v2.1.0
 	google.golang.org/grpc => google.golang.org/grpc v1.38.0
