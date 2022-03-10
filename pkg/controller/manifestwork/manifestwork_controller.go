@@ -142,18 +142,26 @@ func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster
 	//
 	// if there are any Detached mode manifestworks we also wait for users to detach the managed cluster first.
 	ignoreKlusterletAndAddons := func(clusterName string, manifestWork workv1.ManifestWork) bool {
-		return manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, klusterletSuffix) ||
-			manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, klusterletCRDsSuffix) ||
-			strings.HasPrefix(manifestWork.GetName(), fmt.Sprintf("%s-klusterlet-addon", manifestWork.GetNamespace())) ||
-			manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, constants.DetachedKlusterletManifestworkSuffix) ||
-			manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, constants.DetachedManagedKubeconfigManifestworkSuffix)
+		manifestWorkName := manifestWork.GetName()
+		switch {
+		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, klusterletSuffix):
+		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, klusterletCRDsSuffix):
+		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, constants.DetachedKlusterletManifestworkSuffix):
+		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, constants.DetachedManagedKubeconfigManifestworkSuffix):
+		case strings.HasPrefix(manifestWorkName, fmt.Sprintf("%s-klusterlet-addon", manifestWork.GetNamespace())):
+		case strings.HasPrefix(manifestWorkName, "addon-") && strings.HasSuffix(manifestWork.GetName(), "-deploy"):
+		case strings.HasPrefix(manifestWorkName, "addon-") && strings.HasSuffix(manifestWork.GetName(), "-pre-delete"):
+		default:
+			return false
+		}
+		return true
 	}
 	err := helpers.DeleteManifestWorkWithSelector(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster, works, ignoreKlusterletAndAddons)
 	if err != nil {
 		return err
 	}
 
-	// check wether there are only klusterlet manifestworks
+	// check whether there are only klusterlet manifestworks
 	ignoreKlusterlet := func(clusterName string, manifestWork workv1.ManifestWork) bool {
 		return manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, klusterletSuffix) ||
 			manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, klusterletCRDsSuffix)
