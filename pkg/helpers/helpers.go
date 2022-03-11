@@ -44,6 +44,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/klog/v2"
+	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -72,6 +73,7 @@ func init() {
 	utilruntime.Must(crdv1beta1.AddToScheme(genericScheme))
 	utilruntime.Must(crdv1.AddToScheme(genericScheme))
 	utilruntime.Must(operatorv1.AddToScheme(genericScheme))
+	utilruntime.Must(addonv1alpha1.AddToScheme(genericScheme))
 }
 
 type ClientHolder struct {
@@ -563,4 +565,42 @@ func GetManagementCluster(cluster *clusterv1.ManagedCluster) (string, error) {
 	}
 
 	return "", fmt.Errorf("annotation %s not found", constants.ManagementClusterNameAnnotation)
+}
+
+// ForceDeleteManagedClusterAddon will delete the managedClusterAddon regardless of finalizers.
+func ForceDeleteManagedClusterAddon(
+	ctx context.Context,
+	runtimeClient client.Client,
+	recorder events.Recorder,
+	addon addonv1alpha1.ManagedClusterAddOn) error {
+	if addon.DeletionTimestamp.IsZero() {
+		if err := runtimeClient.Delete(ctx, &addon); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+	}
+
+	if err := runtimeClient.Get(ctx, types.NamespacedName{Namespace: addon.Namespace, Name: addon.Name}, &addon); err != nil {
+		if errors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+
+	if len(addon.Finalizers) != 0 {
+		patch := client.MergeFrom(addon.DeepCopy())
+		addon.Finalizers = []string{}
+		if err := runtimeClient.Patch(ctx, &addon, patch); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+	}
+
+	recorder.Eventf("ManagedClusterAddonForceDeleted",
+		fmt.Sprintf("The managedClusterAddon %s/%s is force deleted", addon.Namespace, addon.Name))
+	return nil
 }

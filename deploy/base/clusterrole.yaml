@@ -215,3 +215,15 @@ rules:
     - get
     - list
     - watch
+- apiGroups:
+    - addon.open-cluster-management.io
+  resources:
+    - managedclusteraddons
+    - managedclusteraddons/finalizers
+  verbs:
+    - get
+    - list
+    - watch
+    - patch
+    - update
+    - delete

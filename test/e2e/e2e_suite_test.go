@@ -16,6 +16,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
+	addonclient "open-cluster-management.io/api/client/addon/clientset/versioned"
 	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
 	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
@@ -41,6 +42,7 @@ var (
 	hubClusterClient  clusterclient.Interface
 	hubWorkClient     workclient.Interface
 	hubOperatorClient operatorclient.Interface
+	addonClient       addonclient.Interface
 )
 
 func TestE2E(t *testing.T) {
@@ -88,7 +90,10 @@ var _ = ginkgo.BeforeSuite(func() {
 		if err != nil {
 			return err
 		}
-
+		addonClient, err = addonclient.NewForConfig(clusterCfg)
+		if err != nil {
+			return err
+		}
 		return nil
 	}()
 

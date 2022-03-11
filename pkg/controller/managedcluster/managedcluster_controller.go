@@ -11,6 +11,7 @@ import (
 	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	"open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
@@ -217,6 +218,18 @@ func (r *ReconcileManagedCluster) deleteManagedClusterNamespace(
 			!strings.HasPrefix(pod.Name, preHookJobPrefix) {
 			r.recorder.Warningf("ManagedClusterNamespaceRemained", "There are non curator pods in namespace %s", clusterName)
 			return nil
+		}
+	}
+
+	// force delete addons before delete cluster namespace in this case the addon is in deleting with finalizer.
+	// otherwise, the deleting addon may prevent the cluster namespace from being deleted.
+	addons := &v1alpha1.ManagedClusterAddOnList{}
+	if err := r.client.List(ctx, addons, client.InNamespace(clusterName)); err != nil {
+		return err
+	}
+	for _, addon := range addons.Items {
+		if err = helpers.ForceDeleteManagedClusterAddon(ctx, r.client, r.recorder, addon); err != nil {
+			return err
 		}
 	}
 

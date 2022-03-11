@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
@@ -34,6 +36,8 @@ func init() {
 	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &hivev1.ClusterDeployment{})
 	testscheme.AddKnownTypes(asv1beta1.GroupVersion, &asv1beta1.InfraEnvList{})
 	testscheme.AddKnownTypes(asv1beta1.GroupVersion, &asv1beta1.InfraEnv{})
+	testscheme.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.ManagedClusterAddOnList{})
+	testscheme.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.ManagedClusterAddOn{})
 }
 
 func TestReconcile(t *testing.T) {
@@ -198,6 +202,47 @@ func TestReconcile(t *testing.T) {
 				ns := &corev1.Namespace{}
 				if err := runtimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, ns); err != nil {
 					t.Errorf("unexpected error, but failed, %v", err)
+				}
+			},
+		},
+		{
+			name: "managed clusters is deleting, but there are addons in its namespace",
+			startObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "test",
+						Finalizers:        []string{constants.ImportFinalizer},
+						DeletionTimestamp: &now,
+					},
+				},
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+				&v1alpha1.ManagedClusterAddOn{
+					ObjectMeta: metav1.ObjectMeta{
+						Finalizers: []string{
+							"cluster.open-cluster-management.io/addon-pre-delete",
+						},
+						Name:      "test",
+						Namespace: "test",
+					},
+				},
+			},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, runtimeClient client.Client) {
+				addon := &v1alpha1.ManagedClusterAddOn{}
+				if err := runtimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, addon); !errors.IsNotFound(err) {
+					t.Errorf("unexpected not found, but failed, %v", err)
+				}
+				ns := &corev1.Namespace{}
+				if err := runtimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, ns); !errors.IsNotFound(err) {
+					t.Errorf("unexpected not found, but failed, %v", err)
 				}
 			},
 		},
