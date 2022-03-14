@@ -29,11 +29,11 @@ func (f *workerFactory) newWorker(mode string) (importWorker, error) {
 		return &defaultWorker{
 			clientHolder: f.clientHolder,
 		}, nil
-	case constants.KlusterletDeployModeDetached:
-		if !features.DefaultMutableFeatureGate.Enabled(features.KlusterletDetachedMode) {
-			return nil, fmt.Errorf("featurn gate %s is not enabled", features.KlusterletDetachedMode)
+	case constants.KlusterletDeployModeHosted:
+		if !features.DefaultMutableFeatureGate.Enabled(features.KlusterletHostedMode) {
+			return nil, fmt.Errorf("featurn gate %s is not enabled", features.KlusterletHostedMode)
 		}
-		return &detachedWorker{
+		return &hostedWorker{
 			clientHolder: f.clientHolder,
 		}, nil
 	default:

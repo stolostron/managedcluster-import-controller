@@ -18,7 +18,7 @@ import (
 
 // start the controller to get the test coverage
 func TestRunMain(t *testing.T) {
-	if err := features.DefaultMutableFeatureGate.Set(fmt.Sprintf("%s=true", features.KlusterletDetachedMode)); err != nil {
+	if err := features.DefaultMutableFeatureGate.Set(fmt.Sprintf("%s=true", features.KlusterletHostedMode)); err != nil {
 		panic(err)
 	}
 	go main()

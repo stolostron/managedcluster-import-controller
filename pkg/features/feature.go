@@ -15,9 +15,9 @@ const (
 	// // alpha: v1.X
 	// MyFeature featuregate.Feature = "MyFeature"
 
-	// KlusterletDetachedMode will provide a detached importing worker for import-secret controller,
-	// and will start a new detached controller to process cluster in detached mode importing,
-	KlusterletDetachedMode featuregate.Feature = "KlusterletDetachedMode"
+	// KlusterletHostedMode will provide a hosted importing worker for import-secret controller,
+	// and will start a new hosted controller to process cluster in hosted mode importing,
+	KlusterletHostedMode featuregate.Feature = "KlusterletHostedMode"
 )
 
 var (
@@ -35,5 +35,5 @@ func init() {
 // feature keys.  To add a new feature, define a key for it above and
 // add it here.
 var defaultRegistrationFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
-	KlusterletDetachedMode: {Default: true, PreRelease: featuregate.Alpha},
+	KlusterletHostedMode: {Default: true, PreRelease: featuregate.Alpha},
 }

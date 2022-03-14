@@ -256,8 +256,8 @@ func ValidateImportSecret(importSecret *corev1.Secret) error {
 	return nil
 }
 
-// ValidateDetachedImportSecret validate detached mode managed cluster import secret
-func ValidateDetachedImportSecret(importSecret *corev1.Secret) error {
+// ValidateHostedImportSecret validate hosted mode managed cluster import secret
+func ValidateHostedImportSecret(importSecret *corev1.Secret) error {
 	if data, ok := importSecret.Data[constants.ImportSecretImportYamlKey]; !ok || len(data) == 0 {
 		return fmt.Errorf("the %s is required", constants.ImportSecretImportYamlKey)
 	}
@@ -551,8 +551,8 @@ func DetermineKlusterletMode(cluster *clusterv1.ManagedCluster) string {
 		return constants.KlusterletDeployModeDefault
 	}
 
-	if strings.EqualFold(mode, constants.KlusterletDeployModeDetached) {
-		return constants.KlusterletDeployModeDetached
+	if strings.EqualFold(mode, constants.KlusterletDeployModeHosted) {
+		return constants.KlusterletDeployModeHosted
 	}
 
 	return "Unknown"

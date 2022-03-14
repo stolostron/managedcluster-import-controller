@@ -39,11 +39,11 @@ const (
 
 const (
 	// KlusterletDeployModeAnnotation describe the klusterlet deploy mode when importing a managed cluster.
-	// If the value is "Detached", the ManagementClusterNameAnnotation annotation will be required,
+	// If the value is "Hosted", the ManagementClusterNameAnnotation annotation will be required,
 	// we use ManagementClusterNameAnnotation to determine where to deploy the registration-agent and work-agent.
 	KlusterletDeployModeAnnotation string = "import.open-cluster-management.io/klusterlet-deploy-mode"
 
-	// ManagementClusterNameAnnotation is required in Detached mode, and the management cluster MUST be one
+	// ManagementClusterNameAnnotation is required in Hosted mode, and the management cluster MUST be one
 	// of the managed cluster of the hub. The value of the annotation should be the ManagedCluster name of
 	// the management cluster.
 	ManagementClusterNameAnnotation string = "import.open-cluster-management.io/management-cluster-name"
@@ -53,16 +53,16 @@ const (
 	// KlusterletDeployModeDefault is the default deploy mode. the klusterlet will be deployed in the managed-cluster.
 	KlusterletDeployModeDefault string = "Default"
 
-	// KlusterletDeployModeDetached means deploying klusterlet outside. the klusterlet will be deployed outside of the managed-cluster.
-	KlusterletDeployModeDetached string = "Detached"
+	// KlusterletDeployModeHosted means deploying klusterlet outside. the klusterlet will be deployed outside of the managed-cluster.
+	KlusterletDeployModeHosted string = "Hosted"
 )
 
 const (
-	// DetachedManifestworkSuffix is a suffix of the detached mode klusterlet manifestwork name.
-	DetachedKlusterletManifestworkSuffix = "detached-klusterlet"
+	// HostedManifestworkSuffix is a suffix of the hosted mode klusterlet manifestwork name.
+	HostedKlusterletManifestworkSuffix = "hosted-klusterlet"
 
-	// DetachedManagedKubeconfigManifestworkSuffix is a suffix of the detached mode managed custer kubeconfig manifestwork name.
-	DetachedManagedKubeconfigManifestworkSuffix = "detached-kubeconfig"
+	// HostedManagedKubeconfigManifestworkSuffix is a suffix of the hosted mode managed custer kubeconfig manifestwork name.
+	HostedManagedKubeconfigManifestworkSuffix = "hosted-kubeconfig"
 
 	// ManifestWorkFinalizer is used to delete all manifestworks before deleting a managed cluster.
 	ManifestWorkFinalizer = "managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup"
