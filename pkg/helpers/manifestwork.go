@@ -37,6 +37,11 @@ func AssertManifestWorkFinalizer(ctx context.Context, runtimeClient client.Clien
 		return nil
 	}
 
+	if !cluster.DeletionTimestamp.IsZero() {
+		// cluser is deleting, do nothing
+		return nil
+	}
+
 	// there are manifest works in the managed cluster namespace, make sure the managed cluster has the manifest work finalizer
 	patch := client.MergeFrom(cluster.DeepCopy())
 	modified := resourcemerge.BoolPtr(false)
