@@ -1,12 +1,12 @@
 [comment]: # ( Copyright Contributors to the Open Cluster Management project )
 
-# Import a cluster with klusterlet in Detached mode
+# Import a cluster with klusterlet in Hosted mode
 
-We can import a cluster with klusterlet in [Detached mode](https://github.com/open-cluster-management-io/registration-operator/tree/v0.6.0#deploy-spokeklusterlet-with-detached-mode), which means the Klusterlet(registration-agent, work-agent) will be deployed outside of the managed cluster but all addons' agents will remain in the managed cluster, and we define the cluster where the Klusterlet runs as management-cluster.
+We can import a cluster with klusterlet in [Hosted mode](https://github.com/open-cluster-management-io/registration-operator/tree/7aa41cda650f229614aeca84bef06f82539b81af#deploy-spokeklusterlet-with-hosted-mode), which means the Klusterlet(registration-agent, work-agent) will be deployed outside of the managed cluster but all addons' agents will remain in the managed cluster, and we define the cluster where the Klusterlet runs as management-cluster.
 
 ## Prerequisites
 
-A management cluster that will be used to deploy the Klusterlet(registration-agent, work-agent), and has already been imported to the hub cluster, and will not be detached from the hub before ALL Detached mode managed clusters are detached from the hub.
+A management cluster that will be used to deploy the Klusterlet(registration-agent, work-agent), and has already been imported to the hub cluster, and will not be detached from the hub before ALL Hosted mode managed clusters are detached from the hub.
 
 ## Import a managed cluster
 
@@ -18,7 +18,7 @@ A management cluster that will be used to deploy the Klusterlet(registration-age
     metadata:
       name: cluster1
       annotations:
-        import.open-cluster-management.io/klusterlet-deploy-mode: Detached
+        import.open-cluster-management.io/klusterlet-deploy-mode: Hosted
         import.open-cluster-management.io/management-cluster-name: local-cluster 
     spec:
       hubAcceptsClient: true
