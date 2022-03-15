@@ -151,7 +151,7 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret for
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			})
 
-			ginkgo.By(fmt.Sprintf("Create managed cluster %s", managedClusterName), func() {
+			ginkgo.By(fmt.Sprintf("Create hosted mode managed cluster %s", managedClusterName), func() {
 				_, err := util.CreateHostedManagedCluster(hubClusterClient, managedClusterName, localClusterName)
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			})
