@@ -102,7 +102,7 @@ clean-e2e-test:
 # Update vendor
 .PHONY: vendor
 vendor:
-	go mod tidy
+	go mod tidy -compat=1.17
 	go mod vendor
 
 # Copy CRDs

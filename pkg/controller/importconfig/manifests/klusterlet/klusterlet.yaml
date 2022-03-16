@@ -1,15 +1,15 @@
 apiVersion: operator.open-cluster-management.io/v1
 kind: Klusterlet
 metadata:
-  {{if eq .InstallMode "Detached"}}
+  {{if eq .InstallMode "Hosted"}}
   name: klusterlet-{{ .ManagedClusterNamespace }}
   {{ else }}
   name: klusterlet
   {{end}}
 spec:
   deployOption:
-    {{if eq .InstallMode "Detached"}}
-    mode: Detached
+    {{if eq .InstallMode "Hosted"}}
+    mode: Hosted
     {{ else }}
     mode: Default
     {{end}}

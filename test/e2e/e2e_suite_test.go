@@ -107,8 +107,8 @@ func assertManagedClusterImportSecretCreated(clusterName, createdVia string, mod
 	assertManagedClusterNameLabel(clusterName)
 	assertManagedClusterNamespaceLabel(clusterName)
 	assertManagedClusterRBAC(clusterName)
-	if len(mode) != 0 && mode[0] == constants.KlusterletDeployModeDetached {
-		assertDetachedManagedClusterImportSecret(clusterName)
+	if len(mode) != 0 && mode[0] == constants.KlusterletDeployModeHosted {
+		assertHostedManagedClusterImportSecret(clusterName)
 	} else {
 		assertManagedClusterImportSecret(clusterName)
 	}
@@ -238,6 +238,10 @@ func assertManagedClusterRBAC(managedClusterName string) {
 }
 
 func assertManagedClusterImportSecret(managedClusterName string) {
+	start := time.Now()
+	defer func() {
+		util.Logf("assert managed cluster import secret spending time: %.2f seconds", time.Since(start).Seconds())
+	}()
 	ginkgo.By("Should create the import secret", func() {
 		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
 			name := fmt.Sprintf("%s-import", managedClusterName)
@@ -258,7 +262,7 @@ func assertManagedClusterImportSecret(managedClusterName string) {
 	})
 }
 
-func assertDetachedManagedClusterImportSecret(managedClusterName string) {
+func assertHostedManagedClusterImportSecret(managedClusterName string) {
 	ginkgo.By("Should create the import secret", func() {
 		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
 			name := fmt.Sprintf("%s-import", managedClusterName)
@@ -270,7 +274,7 @@ func assertDetachedManagedClusterImportSecret(managedClusterName string) {
 				return false, err
 			}
 
-			if err := helpers.ValidateDetachedImportSecret(secret); err != nil {
+			if err := helpers.ValidateHostedImportSecret(secret); err != nil {
 				util.Logf("invalid import secret:%v", err)
 				return false, err
 			}
@@ -291,8 +295,8 @@ func assertManagedClusterDeleted(clusterName string) {
 	assertManagedClusterDeletedFromSpoke()
 }
 
-func assertDetachedManagedClusterDeleted(clusterName, managementCluster string) {
-	ginkgo.By(fmt.Sprintf("Delete the detached mode managed cluster %s", clusterName), func() {
+func assertHostedManagedClusterDeleted(clusterName, managementCluster string) {
+	ginkgo.By(fmt.Sprintf("Delete the hosted mode managed cluster %s", clusterName), func() {
 		err := hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), clusterName, metav1.DeleteOptions{})
 		if err != nil && !errors.IsNotFound(err) {
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
@@ -300,7 +304,7 @@ func assertDetachedManagedClusterDeleted(clusterName, managementCluster string) 
 	})
 
 	assertManagedClusterDeletedFromHub(clusterName)
-	assertDetachedManagedClusterDeletedFromSpoke(clusterName, managementCluster)
+	assertHostedManagedClusterDeletedFromSpoke(clusterName, managementCluster)
 }
 
 func assertManagedClusterDeletedFromHub(clusterName string) {
@@ -343,7 +347,7 @@ func assertManagedClusterDeletedFromSpoke() {
 			return false, err
 		})).ToNot(gomega.HaveOccurred())
 	})
-	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
+	util.Logf("delete the open-cluster-management-agent namespace spending time: %.2f seconds", time.Since(start).Seconds())
 
 	start = time.Now()
 	ginkgo.By("Should delete the klusterlet crd", func() {
@@ -357,10 +361,10 @@ func assertManagedClusterDeletedFromSpoke() {
 			return false, err
 		})).ToNot(gomega.HaveOccurred())
 	})
-	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
+	util.Logf("delete klusterlet crd spending time: %.2f seconds", time.Since(start).Seconds())
 }
 
-func assertDetachedManagedClusterDeletedFromSpoke(cluster, managementCluster string) {
+func assertHostedManagedClusterDeletedFromSpoke(cluster, managementCluster string) {
 	start := time.Now()
 	namespace := fmt.Sprintf("klusterlet-%s", cluster)
 	ginkgo.By(fmt.Sprintf("Should delete the %s namespace", namespace), func() {
@@ -390,14 +394,20 @@ func assertDetachedManagedClusterDeletedFromSpoke(cluster, managementCluster str
 }
 
 func assertManagedClusterImportSecretApplied(clusterName string, mode ...string) {
+	start := time.Now()
+	defer func() {
+		util.Logf("assert managed cluster %s import secret applied spending time: %.2f seconds", clusterName, time.Since(start).Seconds())
+	}()
 	ginkgo.By(fmt.Sprintf("Managed cluster %s should be imported", clusterName), func() {
 		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
 			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if err != nil {
+				util.Logf("assert managed cluster %s import secret applied get cluster error: %v", clusterName, err)
 				return false, err
 			}
 
-			if len(mode) != 0 && mode[0] == constants.KlusterletDeployModeDetached {
+			util.Logf("assert managed cluster %s import secret applied cluster conditions: %v", clusterName, cluster.Status.Conditions)
+			if len(mode) != 0 && mode[0] == constants.KlusterletDeployModeHosted {
 				return meta.IsStatusConditionTrue(cluster.Status.Conditions, "ExternalManagedKubeconfigCreatedSucceeded"), nil
 			}
 			return meta.IsStatusConditionTrue(cluster.Status.Conditions, "ManagedClusterImportSucceeded"), nil
@@ -406,6 +416,10 @@ func assertManagedClusterImportSecretApplied(clusterName string, mode ...string)
 }
 
 func assertManagedClusterAvailable(clusterName string) {
+	start := time.Now()
+	defer func() {
+		util.Logf("assert managed cluster %s available spending time: %.2f seconds", clusterName, time.Since(start).Seconds())
+	}()
 	ginkgo.By(fmt.Sprintf("Managed cluster %s should be available", clusterName), func() {
 		gomega.Expect(wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
 			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
@@ -446,7 +460,7 @@ func assertManagedClusterManifestWorks(clusterName string) {
 
 			return true, nil
 		})).ToNot(gomega.HaveOccurred())
-		util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
+		util.Logf("assert managed cluster manifestworks spending time: %.2f seconds", time.Since(start).Seconds())
 	})
 
 	util.Logf("wait for applied manifest works ready to avoid delete prematurely (10s)")
@@ -454,6 +468,11 @@ func assertManagedClusterManifestWorks(clusterName string) {
 }
 
 func assertAutoImportSecretDeleted(managedClusterName string) {
+	start := time.Now()
+	defer func() {
+		util.Logf("assert delete the auto-import-secret from managed cluster namespace %s spending time: %.2f seconds",
+			managedClusterName, time.Since(start).Seconds())
+	}()
 	ginkgo.By(fmt.Sprintf("Should delete the auto-import-secret from managed cluster namespace %s", managedClusterName), func() {
 		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
 			_, err := hubKubeClient.CoreV1().Secrets(managedClusterName).Get(context.TODO(), "auto-import-secret", metav1.GetOptions{})

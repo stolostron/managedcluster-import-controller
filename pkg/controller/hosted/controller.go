@@ -1,7 +1,7 @@
 // Copyright (c) Red Hat, Inc.
 // Copyright Contributors to the Open Cluster Management project
 
-package detached
+package hosted
 
 import (
 	"context"
@@ -35,12 +35,12 @@ import (
 //go:embed manifests
 var manifestFiles embed.FS
 
-var klusterletDetachedExternalKubeconfig = "manifests/external_managed_secret.yaml"
+var klusterletHostedExternalKubeconfig = "manifests/external_managed_secret.yaml"
 
 var log = logf.Log.WithName(controllerName)
 
-// ReconcileDetached reconciles the Detached mode ManagedClusters of the ManifestWorks object
-type ReconcileDetached struct {
+// ReconcileHosted reconciles the Hosted mode ManagedClusters of the ManifestWorks object
+type ReconcileHosted struct {
 	clientHolder *helpers.ClientHolder
 	scheme       *runtime.Scheme
 	client       client.Client
@@ -48,13 +48,13 @@ type ReconcileDetached struct {
 	recorder     events.Recorder
 }
 
-// blank assignment to verify that ReconcileDetached implements reconcile.Reconciler
-var _ reconcile.Reconciler = &ReconcileDetached{}
+// blank assignment to verify that ReconcileHosted implements reconcile.Reconciler
+var _ reconcile.Reconciler = &ReconcileHosted{}
 
-// Reconcile the detached mode ManagedClusters of the ManifestWorks.
-// - When a detached mode ManagedCluster created, we will create a klusterlet manifestwork to trigger the
+// Reconcile the hosted mode ManagedClusters of the ManifestWorks.
+// - When a hosted mode ManagedCluster created, we will create a klusterlet manifestwork to trigger the
 //   cluster importing process
-// - When an auto import secret created for the detached mode managed cluster, we create a managed
+// - When an auto import secret created for the hosted mode managed cluster, we create a managed
 //   kubeconfig manifestwork to create an external managed kubeconfig secret on the management cluster
 // - When the manifester works are created in one managed cluster namespace, we will add a manifest work
 //   finalizer to the managed cluster
@@ -63,7 +63,7 @@ var _ reconcile.Reconciler = &ReconcileDetached{}
 //
 // Note: The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileDetached) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Name", request.Name)
 
 	managedClusterName := request.Name
@@ -77,13 +77,13 @@ func (r *ReconcileDetached) Reconcile(ctx context.Context, request reconcile.Req
 		return reconcile.Result{}, err
 	}
 
-	if helpers.DetermineKlusterletMode(managedCluster) != constants.KlusterletDeployModeDetached {
+	if helpers.DetermineKlusterletMode(managedCluster) != constants.KlusterletDeployModeHosted {
 		return reconcile.Result{}, nil
 	}
 	// TODO(zhujian7): check if annotation management cluster is provided, check if the management cluster
 	// is a managed cluster of hub, and check its status.
 
-	reqLogger.Info("Reconciling the manifest works of the detached mode managed cluster")
+	reqLogger.Info("Reconciling the manifest works of the hosted mode managed cluster")
 
 	listOpts := &client.ListOptions{Namespace: managedClusterName}
 	manifestWorks := &workv1.ManifestWorkList{}
@@ -112,7 +112,7 @@ func (r *ReconcileDetached) Reconcile(ctx context.Context, request reconcile.Req
 		return reconcile.Result{}, err
 	}
 
-	if err := helpers.ValidateDetachedImportSecret(importSecret); err != nil {
+	if err := helpers.ValidateHostedImportSecret(importSecret); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -121,7 +121,7 @@ func (r *ReconcileDetached) Reconcile(ctx context.Context, request reconcile.Req
 		return reconcile.Result{}, err
 	}
 
-	manifestWork := createDetachedManifestWork(managedCluster.Name, importSecret, managementCluster)
+	manifestWork := createHostedManifestWork(managedCluster.Name, importSecret, managementCluster)
 	err = helpers.ApplyResources(r.clientHolder, r.recorder, r.scheme, managedCluster, manifestWork)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -189,7 +189,7 @@ func klusterletNamespace(managedCluster string) string {
 //      after the cluster is deleted.
 //   2. delete the manifest works that do not include klusterlet addon works
 //   3. delete the klusterlet and managed kubeconfig manifest works
-func (r *ReconcileDetached) deleteManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster, works []workv1.ManifestWork) error {
+func (r *ReconcileHosted) deleteManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster, works []workv1.ManifestWork) error {
 	if len(works) == 0 {
 		return nil
 	}
@@ -199,7 +199,7 @@ func (r *ReconcileDetached) deleteManifestWorks(ctx context.Context, cluster *cl
 		if err := helpers.ForceDeleteAllManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, works); err != nil {
 			return err
 		}
-		return r.deleteDetachedManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster)
+		return r.deleteHostedManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster)
 	}
 
 	// delete works that do not include klusterlet addon works, the addon works will be removed by
@@ -222,27 +222,27 @@ func (r *ReconcileDetached) deleteManifestWorks(ctx context.Context, cluster *cl
 		return nil
 	}
 
-	return r.deleteDetachedManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster)
+	return r.deleteHostedManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster)
 }
 
-// deleteDetachedManifestWorks delete klusterlet and managed kubeconfig manifest works in the management cluster namespace
-func (r *ReconcileDetached) deleteDetachedManifestWorks(ctx context.Context, runtimeClient client.Client,
+// deleteHostedManifestWorks delete klusterlet and managed kubeconfig manifest works in the management cluster namespace
+func (r *ReconcileHosted) deleteHostedManifestWorks(ctx context.Context, runtimeClient client.Client,
 	recorder events.Recorder, cluster *clusterv1.ManagedCluster) error {
 	managementCluster, err := helpers.GetManagementCluster(cluster)
 	if err != nil {
 		return err
 	}
 
-	err = helpers.DeleteManifestWork(ctx, runtimeClient, recorder, managementCluster, detachedKlusterletManifestWorkName(cluster.Name))
+	err = helpers.DeleteManifestWork(ctx, runtimeClient, recorder, managementCluster, hostedKlusterletManifestWorkName(cluster.Name))
 	if err != nil {
 		return err
 	}
 
-	return helpers.DeleteManifestWork(ctx, runtimeClient, recorder, managementCluster, detachedManagedKubeconfigManifestWorkName(cluster.Name))
+	return helpers.DeleteManifestWork(ctx, runtimeClient, recorder, managementCluster, hostedManagedKubeconfigManifestWorkName(cluster.Name))
 }
 
-// createDetachedManifestWork creates a manifestwork from import secret for detached mode cluster
-func createDetachedManifestWork(managedClusterName string,
+// createHostedManifestWork creates a manifestwork from import secret for hosted mode cluster
+func createHostedManifestWork(managedClusterName string,
 	importSecret *corev1.Secret, manifestWorkNamespace string) *workv1.ManifestWork {
 	manifests := []workv1.Manifest{}
 	importYaml := importSecret.Data[constants.ImportSecretImportYamlKey]
@@ -256,12 +256,12 @@ func createDetachedManifestWork(managedClusterName string,
 		})
 	}
 
-	// For detached mode, the klusterletManifestWork only contains a klusterlet CR
+	// For hosted mode, the klusterletManifestWork only contains a klusterlet CR
 	// and a bootstrap secret, delete it in foreground.
 	return &workv1.ManifestWork{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      detachedKlusterletManifestWorkName(managedClusterName),
+			Name:      hostedKlusterletManifestWorkName(managedClusterName),
 			Namespace: manifestWorkNamespace,
 		},
 		Spec: workv1.ManifestWorkSpec{
@@ -279,7 +279,7 @@ func createManagedKubeconfigManifestWork(managedClusterName string, importSecret
 	manifestWorkNamespace string) (*workv1.ManifestWork, error) {
 	kubeconfig := importSecret.Data["kubeconfig"]
 	if len(kubeconfig) == 0 {
-		return nil, fmt.Errorf("import secret invalid, the field kubeconfig must exist in the secret for detached mode")
+		return nil, fmt.Errorf("import secret invalid, the field kubeconfig must exist in the secret for hosted mode")
 	}
 
 	config := struct {
@@ -290,11 +290,11 @@ func createManagedKubeconfigManifestWork(managedClusterName string, importSecret
 		ExternalManagedKubeconfig: base64.StdEncoding.EncodeToString(kubeconfig),
 	}
 
-	template, err := manifestFiles.ReadFile(klusterletDetachedExternalKubeconfig)
+	template, err := manifestFiles.ReadFile(klusterletHostedExternalKubeconfig)
 	if err != nil {
 		return nil, err
 	}
-	externalKubeYAML := helpers.MustCreateAssetFromTemplate(klusterletDetachedExternalKubeconfig, template, config)
+	externalKubeYAML := helpers.MustCreateAssetFromTemplate(klusterletHostedExternalKubeconfig, template, config)
 	externalKubeJSON, err := yaml.YAMLToJSON(externalKubeYAML)
 	if err != nil {
 		return nil, err
@@ -309,7 +309,7 @@ func createManagedKubeconfigManifestWork(managedClusterName string, importSecret
 	mw := &workv1.ManifestWork{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      detachedManagedKubeconfigManifestWorkName(managedClusterName),
+			Name:      hostedManagedKubeconfigManifestWorkName(managedClusterName),
 			Namespace: manifestWorkNamespace,
 		},
 		Spec: workv1.ManifestWorkSpec{
@@ -317,7 +317,7 @@ func createManagedKubeconfigManifestWork(managedClusterName string, importSecret
 				Manifests: manifests,
 			},
 			DeleteOption: &workv1.DeleteOption{
-				// For detached mode, we will not delete the "external-managed-kubeconfig" since
+				// For hosted mode, we will not delete the "external-managed-kubeconfig" since
 				// klusterlet operator will use this secret to clean resources on the managed
 				// cluster, after the cleanup finished, the klusterlet operator will delete the
 				// secret.
@@ -329,10 +329,10 @@ func createManagedKubeconfigManifestWork(managedClusterName string, importSecret
 	return mw, nil
 }
 
-func detachedKlusterletManifestWorkName(managedClusterName string) string {
-	return fmt.Sprintf("%s-%s", managedClusterName, constants.DetachedKlusterletManifestworkSuffix)
+func hostedKlusterletManifestWorkName(managedClusterName string) string {
+	return fmt.Sprintf("%s-%s", managedClusterName, constants.HostedKlusterletManifestworkSuffix)
 }
 
-func detachedManagedKubeconfigManifestWorkName(managedClusterName string) string {
-	return fmt.Sprintf("%s-%s", managedClusterName, constants.DetachedManagedKubeconfigManifestworkSuffix)
+func hostedManagedKubeconfigManifestWorkName(managedClusterName string) string {
+	return fmt.Sprintf("%s-%s", managedClusterName, constants.HostedManagedKubeconfigManifestworkSuffix)
 }

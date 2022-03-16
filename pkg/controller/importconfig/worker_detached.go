@@ -18,13 +18,13 @@ import (
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 )
 
-type detachedWorker struct {
+type hostedWorker struct {
 	clientHolder *helpers.ClientHolder
 }
 
-var _ importWorker = &detachedWorker{}
+var _ importWorker = &hostedWorker{}
 
-func (w *detachedWorker) generateImportSecret(ctx context.Context, managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, error) {
+func (w *hostedWorker) generateImportSecret(ctx context.Context, managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, error) {
 	bootStrapSecret, err := getBootstrapSecret(ctx, w.clientHolder.KubeClient, managedCluster)
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func (w *detachedWorker) generateImportSecret(ctx context.Context, managedCluste
 		RegistrationImageName:   registrationImageName,
 		WorkImageName:           workImageName,
 		NodeSelector:            nodeSelector,
-		InstallMode:             string(operatorv1.InstallModeDetached),
+		InstallMode:             string(operatorv1.InstallModeHosted),
 	}
 
 	files := append([]string{}, klusterletFiles...)
@@ -86,7 +86,7 @@ func (w *detachedWorker) generateImportSecret(ctx context.Context, managedCluste
 				constants.ClusterImportSecretLabel: "",
 			},
 			Annotations: map[string]string{
-				constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeDetached,
+				constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
 			},
 		},
 		Data: map[string][]byte{

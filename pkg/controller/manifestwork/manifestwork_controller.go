@@ -140,14 +140,14 @@ func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster
 	// delete works that do not include klusterlet works and klusterlet addon works, the addon works will be removed by
 	// klusterlet-addon-controller, we need to wait the klusterlet-addon-controller delete them.
 	//
-	// if there are any Detached mode manifestworks we also wait for users to detach the managed cluster first.
+	// if there are any Hosted mode manifestworks we also wait for users to detach the managed cluster first.
 	ignoreKlusterletAndAddons := func(clusterName string, manifestWork workv1.ManifestWork) bool {
 		manifestWorkName := manifestWork.GetName()
 		switch {
 		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, klusterletSuffix):
 		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, klusterletCRDsSuffix):
-		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, constants.DetachedKlusterletManifestworkSuffix):
-		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, constants.DetachedManagedKubeconfigManifestworkSuffix):
+		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, constants.HostedKlusterletManifestworkSuffix):
+		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, constants.HostedManagedKubeconfigManifestworkSuffix):
 		case strings.HasPrefix(manifestWorkName, fmt.Sprintf("%s-klusterlet-addon", manifestWork.GetNamespace())):
 		case strings.HasPrefix(manifestWorkName, "addon-") && strings.HasSuffix(manifestWork.GetName(), "-deploy"):
 		case strings.HasPrefix(manifestWorkName, "addon-") && strings.HasSuffix(manifestWork.GetName(), "-pre-delete"):

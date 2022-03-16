@@ -182,7 +182,7 @@ spec:
     name: test
 EOF
 
-# prepare another managed cluster for detached mode testing
+# prepare another managed cluster for hosted mode testing
 echo "###### installing e2e test managed cluster"
 export KUBECONFIG="${WORK_DIR}/kubeconfig"
 ${KIND} delete cluster --name ${CLUSTER_NAME_MANAGED}
@@ -192,7 +192,7 @@ echo "managed cluster context is: ${cluster_context_managed}"
 # scale replicas to 1 to save resources
 ${KUBECTL} --context="${cluster_context_managed}" -n kube-system scale --replicas=1 deployment/coredns
 
-echo "###### prepare auto-import-secret for detached cluster"
+echo "###### prepare auto-import-secret for hosted cluster"
 ${KIND} get kubeconfig --name=${CLUSTER_NAME_MANAGED} --internal > "${WORK_DIR}"/e2e-managed-kubeconfig
 ${KUBECTL} config use-context "${cluster_context}"
 ${KUBECTL} delete secret e2e-managed-auto-import-secret -n open-cluster-management --ignore-not-found
