@@ -35,7 +35,6 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 	})
 
 	ginkgo.AfterEach(func() {
-		assertAutoImportSecretDeleted(managedClusterName)
 		assertManagedClusterDeleted(managedClusterName)
 	})
 
@@ -58,6 +57,8 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 		assertManagedClusterImportSecretApplied(managedClusterName)
 		assertManagedClusterAvailable(managedClusterName)
 		assertManagedClusterManifestWorks(managedClusterName)
+
+		assertAutoImportSecretDeleted(managedClusterName)
 	})
 
 	ginkgo.It("Should import the cluster with auto-import-secret with token", func() {
@@ -79,6 +80,8 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 		assertManagedClusterImportSecretApplied(managedClusterName)
 		assertManagedClusterAvailable(managedClusterName)
 		assertManagedClusterManifestWorks(managedClusterName)
+
+		assertAutoImportSecretDeleted(managedClusterName)
 	})
 
 	ginkgo.It("Should delete the invalid auto-import-secret after retry times exceeded", func() {
@@ -104,6 +107,38 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 
 				return meta.IsStatusConditionFalse(cluster.Status.Conditions, "ManagedClusterImportSucceeded"), nil
 			})).ToNot(gomega.HaveOccurred())
+		})
+
+		assertAutoImportSecretDeleted(managedClusterName)
+	})
+
+	ginkgo.It("Should keep the auto-import-secret after the cluster was imported", func() {
+		ginkgo.By(fmt.Sprintf("Create auto-import-secret for managed cluster %s with kubeconfig", managedClusterName), func() {
+			secret, err := util.NewAutoImportSecret(hubKubeClient, managedClusterName)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			secret.Annotations = map[string]string{"managedcluster-import-controller.open-cluster-management.io/keeping-auto-import-secret": ""}
+
+			_, err = hubKubeClient.CoreV1().Secrets(managedClusterName).Create(context.TODO(), secret, metav1.CreateOptions{})
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		})
+
+		ginkgo.By(fmt.Sprintf("Create managed cluster %s", managedClusterName), func() {
+			// using a local cluster to speed up cluster deletion
+			_, err := util.CreateManagedCluster(hubClusterClient, managedClusterName, util.NewLable("local-cluster", "true"))
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		})
+
+		assertManagedClusterImportSecretCreated(managedClusterName, "other")
+		assertManagedClusterImportSecretApplied(managedClusterName)
+		assertManagedClusterAvailable(managedClusterName)
+		assertManagedClusterManifestWorks(managedClusterName)
+
+		ginkgo.By(fmt.Sprintf("Should keep the auto-import-secret in managed cluster namespace %s", managedClusterName), func() {
+			gomega.Consistently(func() error {
+				_, err := hubKubeClient.CoreV1().Secrets(managedClusterName).Get(context.TODO(), "auto-import-secret", metav1.GetOptions{})
+				return err
+			}, 30*time.Second, 1*time.Second).ShouldNot(gomega.HaveOccurred())
 		})
 	})
 })
