@@ -103,7 +103,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	if len(errs) == 0 {
-		err := r.kubeClient.CoreV1().Secrets(autoImportSecret.Namespace).Delete(ctx, autoImportSecret.Name, metav1.DeleteOptions{})
+		err := helpers.DeleteAutoImportSecret(ctx, r.kubeClient, autoImportSecret)
 		if err != nil {
 			errs = append(errs, err)
 		}

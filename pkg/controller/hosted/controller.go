@@ -166,7 +166,7 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 		return reconcile.Result{}, err
 	}
 
-	err = r.kubeClient.CoreV1().Secrets(autoImportSecret.Namespace).Delete(ctx, autoImportSecret.Name, metav1.DeleteOptions{})
+	err = helpers.DeleteAutoImportSecret(ctx, r.kubeClient, autoImportSecret)
 	if err != nil {
 		return reconcile.Result{}, err
 	}

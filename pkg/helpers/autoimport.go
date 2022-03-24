@@ -17,6 +17,8 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 )
 
+const keepingAutoImportSecretAnnotation = "managedcluster-import-controller.open-cluster-management.io/keeping-auto-import-secret"
+
 // UpdateAutoImportRetryTimes minus 1 for the value of AutoImportRetryName in the auto import secret
 func UpdateAutoImportRetryTimes(ctx context.Context, kubeClient kubernetes.Interface, recorder events.Recorder, secret *corev1.Secret) error {
 	autoImportRetry, err := strconv.Atoi(string(secret.Data[constants.AutoImportRetryName]))
@@ -30,7 +32,7 @@ func UpdateAutoImportRetryTimes(ctx context.Context, kubeClient kubernetes.Inter
 	autoImportRetry--
 	if autoImportRetry < 0 {
 		// stop retry, delete the auto-import-secret
-		err := kubeClient.CoreV1().Secrets(secret.Namespace).Delete(ctx, secret.Name, metav1.DeleteOptions{})
+		err := DeleteAutoImportSecret(ctx, kubeClient, secret)
 		if err != nil {
 			return err
 		}
@@ -42,4 +44,13 @@ func UpdateAutoImportRetryTimes(ctx context.Context, kubeClient kubernetes.Inter
 	secret.Data[constants.AutoImportRetryName] = []byte(strconv.Itoa(autoImportRetry))
 	_, err = kubeClient.CoreV1().Secrets(secret.Namespace).Update(ctx, secret, metav1.UpdateOptions{})
 	return err
+}
+
+// DeleteAutoImportSecret delete the auto-import-secret if the secret does not have the keeping annotation
+func DeleteAutoImportSecret(ctx context.Context, kubeClient kubernetes.Interface, secret *corev1.Secret) error {
+	if _, ok := secret.Annotations[keepingAutoImportSecretAnnotation]; ok {
+		return nil
+	}
+
+	return kubeClient.CoreV1().Secrets(secret.Namespace).Delete(ctx, secret.Name, metav1.DeleteOptions{})
 }
