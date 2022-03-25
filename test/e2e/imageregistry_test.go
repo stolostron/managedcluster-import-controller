@@ -62,8 +62,8 @@ var _ = ginkgo.Describe("Using customized image registry", func() {
 
 				if obj.GetName() == "klusterlet" && obj.GetKind() == "Klusterlet" {
 					klusterlet := util.ToKlusterlet(obj)
-					if klusterlet.Spec.WorkImagePullSpec == "e2e.test/work:latest" &&
-						klusterlet.Spec.RegistrationImagePullSpec == "e2e.test/registration:latest" {
+					if klusterlet.Spec.WorkImagePullSpec == "e2e.test/work:v0.6.0" &&
+						klusterlet.Spec.RegistrationImagePullSpec == "e2e.test/registration:v0.6.0" {
 						hasCustomizedImage = true
 					}
 				}

@@ -39,8 +39,8 @@ spec:
             - name: DEFAULT_IMAGE_REGISTRY
               value: quay.io/open-cluster-management
             - name: REGISTRATION_OPERATOR_IMAGE
-              value: quay.io/open-cluster-management/registration-operator:latest
+              value: quay.io/open-cluster-management/registration-operator:v0.6.0
             - name: REGISTRATION_IMAGE
-              value: quay.io/open-cluster-management/registration:latest
+              value: quay.io/open-cluster-management/registration:v0.6.0
             - name: WORK_IMAGE
-              value: quay.io/open-cluster-management/work:latest
+              value: quay.io/open-cluster-management/work:v0.6.0

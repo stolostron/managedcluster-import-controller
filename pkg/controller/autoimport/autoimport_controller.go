@@ -26,7 +26,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-const autoImportRetryName string = "autoImportRetry"
+const (
+	autoImportRetryName               = "autoImportRetry"
+	keepingAutoImportSecretAnnotation = "managedcluster-import-controller.open-cluster-management.io/keeping-auto-import-secret"
+)
 
 var log = logf.Log.WithName(controllerName)
 
@@ -103,7 +106,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	if len(errs) == 0 {
-		err := r.kubeClient.CoreV1().Secrets(autoImportSecret.Namespace).Delete(ctx, autoImportSecret.Name, metav1.DeleteOptions{})
+		err := r.deleteAutoImportSecret(ctx, autoImportSecret)
 		if err != nil {
 			errs = append(errs, err)
 		}
@@ -131,7 +134,7 @@ func (r *ReconcileAutoImport) updateAutoImportRetryTimes(ctx context.Context, se
 	autoImportRetry--
 	if autoImportRetry < 0 {
 		// stop retry, delete the auto-import-secret
-		err := r.kubeClient.CoreV1().Secrets(secret.Namespace).Delete(ctx, secret.Name, metav1.DeleteOptions{})
+		err := r.deleteAutoImportSecret(ctx, secret)
 		if err != nil {
 			return err
 		}
@@ -143,4 +146,12 @@ func (r *ReconcileAutoImport) updateAutoImportRetryTimes(ctx context.Context, se
 	secret.Data[autoImportRetryName] = []byte(strconv.Itoa(autoImportRetry))
 	_, err = r.kubeClient.CoreV1().Secrets(secret.Namespace).Update(ctx, secret, metav1.UpdateOptions{})
 	return err
+}
+
+func (r *ReconcileAutoImport) deleteAutoImportSecret(ctx context.Context, secret *corev1.Secret) error {
+	if _, ok := secret.Annotations[keepingAutoImportSecretAnnotation]; ok {
+		return nil
+	}
+
+	return r.kubeClient.CoreV1().Secrets(secret.Namespace).Delete(ctx, secret.Name, metav1.DeleteOptions{})
 }
