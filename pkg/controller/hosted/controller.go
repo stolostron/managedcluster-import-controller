@@ -55,7 +55,7 @@ var _ reconcile.Reconciler = &ReconcileHosted{}
 // - When a hosted mode ManagedCluster created, we will create a klusterlet manifestwork to trigger the
 //   cluster importing process
 // - When an auto import secret created for the hosted mode managed cluster, we create a managed
-//   kubeconfig manifestwork to create an external managed kubeconfig secret on the management cluster
+//   kubeconfig manifestwork to create an external managed kubeconfig secret on the hosting cluster
 // - When the manifester works are created in one managed cluster namespace, we will add a manifest work
 //   finalizer to the managed cluster
 // - When a managed cluster is deleting, we delete the manifest works and remove the manifest work
@@ -80,7 +80,7 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 	if helpers.DetermineKlusterletMode(managedCluster) != constants.KlusterletDeployModeHosted {
 		return reconcile.Result{}, nil
 	}
-	// TODO(zhujian7): check if annotation management cluster is provided, check if the management cluster
+	// TODO(zhujian7): check if annotation hosting cluster is provided, check if the hosting cluster
 	// is a managed cluster of hub, and check its status.
 
 	reqLogger.Info("Reconciling the manifest works of the hosted mode managed cluster")
@@ -116,7 +116,7 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 		return reconcile.Result{}, err
 	}
 
-	managementCluster, err := helpers.GetManagementCluster(managedCluster)
+	managementCluster, err := helpers.GetHostingCluster(managedCluster)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -225,10 +225,10 @@ func (r *ReconcileHosted) deleteManifestWorks(ctx context.Context, cluster *clus
 	return r.deleteHostedManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster)
 }
 
-// deleteHostedManifestWorks delete klusterlet and managed kubeconfig manifest works in the management cluster namespace
+// deleteHostedManifestWorks delete klusterlet and managed kubeconfig manifest works in the hosting cluster namespace
 func (r *ReconcileHosted) deleteHostedManifestWorks(ctx context.Context, runtimeClient client.Client,
 	recorder events.Recorder, cluster *clusterv1.ManagedCluster) error {
-	managementCluster, err := helpers.GetManagementCluster(cluster)
+	managementCluster, err := helpers.GetHostingCluster(cluster)
 	if err != nil {
 		return err
 	}

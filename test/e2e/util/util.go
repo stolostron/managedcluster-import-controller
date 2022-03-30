@@ -61,7 +61,7 @@ func Logf(format string, args ...interface{}) {
 func CreateHostedManagedCluster(clusterClient clusterclient.Interface, name, management string) (*clusterv1.ManagedCluster, error) {
 	clusterAnnotations := map[string]string{}
 	clusterAnnotations[constants.KlusterletDeployModeAnnotation] = constants.KlusterletDeployModeHosted
-	clusterAnnotations[constants.ManagementClusterNameAnnotation] = management
+	clusterAnnotations[constants.HostingClusterNameAnnotation] = management
 	cluster, err := clusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		return clusterClient.ClusterV1().ManagedClusters().Create(

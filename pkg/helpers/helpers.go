@@ -558,13 +558,13 @@ func DetermineKlusterletMode(cluster *clusterv1.ManagedCluster) string {
 	return "Unknown"
 }
 
-// GetManagementCluster gets the management cluster name from the managed cluster annotation
-func GetManagementCluster(cluster *clusterv1.ManagedCluster) (string, error) {
-	if managementCluster, ok := cluster.Annotations[constants.ManagementClusterNameAnnotation]; ok {
+// GetHostingCluster gets the hosting cluster name from the managed cluster annotation
+func GetHostingCluster(cluster *clusterv1.ManagedCluster) (string, error) {
+	if managementCluster, ok := cluster.Annotations[constants.HostingClusterNameAnnotation]; ok {
 		return managementCluster, nil
 	}
 
-	return "", fmt.Errorf("annotation %s not found", constants.ManagementClusterNameAnnotation)
+	return "", fmt.Errorf("annotation %s not found", constants.HostingClusterNameAnnotation)
 }
 
 // ForceDeleteManagedClusterAddon will delete the managedClusterAddon regardless of finalizers.

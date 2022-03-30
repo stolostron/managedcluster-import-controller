@@ -144,7 +144,7 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 })
 
 var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret for Hosted mode", func() {
-	ginkgo.Context("Local-cluster as management cluster", func() {
+	ginkgo.Context("Local-cluster as hosting cluster", func() {
 		const localClusterName = "local-cluster"
 		var managedClusterName string
 		ginkgo.BeforeEach(func() {
