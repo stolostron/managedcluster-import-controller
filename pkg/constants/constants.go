@@ -39,14 +39,14 @@ const (
 
 const (
 	// KlusterletDeployModeAnnotation describe the klusterlet deploy mode when importing a managed cluster.
-	// If the value is "Hosted", the ManagementClusterNameAnnotation annotation will be required,
-	// we use ManagementClusterNameAnnotation to determine where to deploy the registration-agent and work-agent.
+	// If the value is "Hosted", the HostingClusterNameAnnotation annotation will be required,
+	// we use HostingClusterNameAnnotation to determine where to deploy the registration-agent and work-agent.
 	KlusterletDeployModeAnnotation string = "import.open-cluster-management.io/klusterlet-deploy-mode"
 
-	// ManagementClusterNameAnnotation is required in Hosted mode, and the management cluster MUST be one
+	// HostingClusterNameAnnotation is required in Hosted mode, and the hosting cluster MUST be one
 	// of the managed cluster of the hub. The value of the annotation should be the ManagedCluster name of
-	// the management cluster.
-	ManagementClusterNameAnnotation string = "import.open-cluster-management.io/management-cluster-name"
+	// the hosting cluster.
+	HostingClusterNameAnnotation string = "import.open-cluster-management.io/hosting-cluster-name"
 )
 
 const (
