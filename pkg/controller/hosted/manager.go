@@ -60,10 +60,19 @@ func add(importSecretInformer, autoImportSecretInformer cache.SharedIndexInforme
 	if err := c.Watch(
 		&runtimesource.Kind{Type: &workv1.ManifestWork{}},
 		handler.EnqueueRequestsFromMapFunc(func(o client.Object) []reconcile.Request {
+			managedClusterName := o.GetNamespace()
+			workName := o.GetName()
+			if strings.HasSuffix(workName, constants.HostedKlusterletManifestworkSuffix) {
+				managedClusterName = strings.TrimSuffix(workName, "-"+constants.HostedKlusterletManifestworkSuffix)
+			}
+			if strings.HasSuffix(workName, constants.HostedManagedKubeconfigManifestworkSuffix) {
+				managedClusterName = strings.TrimSuffix(workName, "-"+constants.HostedManagedKubeconfigManifestworkSuffix)
+			}
+
 			return []reconcile.Request{
 				{
 					NamespacedName: types.NamespacedName{
-						Name: o.GetNamespace(),
+						Name: managedClusterName,
 					},
 				},
 			}
