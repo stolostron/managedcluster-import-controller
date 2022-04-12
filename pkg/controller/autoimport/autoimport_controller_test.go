@@ -104,7 +104,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: true,
+			expectedErr: false,
 		},
 	}
 
