@@ -105,7 +105,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 	}{
 		ManagedClusterName:          managedCluster.Name,
 		ManagedClusterNamespace:     managedCluster.Name,
-		BootstrapServiceAccountName: fmt.Sprintf("%s-%s", managedCluster.Name, bootstrapSASuffix),
+		BootstrapServiceAccountName: getBootstrapSAName(managedCluster.Name),
 	}
 	objects := []runtime.Object{}
 	for _, file := range hubFiles {
