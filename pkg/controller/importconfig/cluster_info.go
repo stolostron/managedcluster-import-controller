@@ -28,12 +28,13 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	clientcmdlatest "k8s.io/client-go/tools/clientcmd/api/latest"
 
+	"k8s.io/apiserver/pkg/storage/names"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // getBootstrapSecret looks for the bootstrap secret from bootstrap sa
 func getBootstrapSecret(ctx context.Context, kubeClient kubernetes.Interface, managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, error) {
-	saName := fmt.Sprintf("%s-%s", managedCluster.Name, bootstrapSASuffix)
+	saName := getBootstrapSAName(managedCluster.Name)
 	sa, err := kubeClient.CoreV1().ServiceAccounts(managedCluster.Name).Get(ctx, saName, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
@@ -44,9 +45,12 @@ func getBootstrapSecret(ctx context.Context, kubeClient kubernetes.Interface, ma
 			continue
 		}
 
-		prefix := saName
-		if len(prefix) > 63 {
-			prefix = prefix[:37]
+		// refer definitions:
+		// https://github.com/kubernetes/kubernetes/blob/65178fec72df6275ed0aa3ede12c785ac79ab97a/pkg/controller/serviceaccount/tokens_controller.go#L392
+		// https://github.com/kubernetes/kubernetes/blob/65178fec72df6275ed0aa3ede12c785ac79ab97a/staging/src/k8s.io/apiserver/pkg/storage/names/generate.go#L49
+		prefix := saName + "-token-"
+		if len(prefix) > names.MaxGeneratedNameLength {
+			prefix = prefix[:names.MaxGeneratedNameLength]
 		}
 
 		if strings.HasPrefix(secretRef.Name, prefix) {
@@ -347,4 +351,12 @@ func getImage(customRegistry, envName string) (string, error) {
 	customImage := customRegistry + "/" + imageSegments[len(imageSegments)-1]
 
 	return customImage, nil
+}
+
+func getBootstrapSAName(clusterName string) string {
+	bootstrapSAName := fmt.Sprintf("%s-%s", clusterName, bootstrapSASuffix)
+	if len(bootstrapSAName) > 63 {
+		return fmt.Sprintf("%s-%s", clusterName[:63-len("-"+bootstrapSASuffix)], bootstrapSASuffix)
+	}
+	return bootstrapSAName
 }
