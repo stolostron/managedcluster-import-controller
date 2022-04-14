@@ -719,3 +719,31 @@ func TestGetImage(t *testing.T) {
 		t.Errorf("unexpected image: %v", newImage)
 	}
 }
+
+func TestGetBootstrapSAName(t *testing.T) {
+	cases := []struct {
+		name           string
+		clusterName    string
+		expectedSAName string
+		managedCluster *clusterv1.ManagedCluster
+	}{
+		{
+			name:           "short name",
+			clusterName:    "123456789",
+			expectedSAName: "123456789-bootstrap-sa",
+		},
+		{
+			name:           "long name",
+			clusterName:    "123456789-123456789-123456789-123456789-123456789-123456789",
+			expectedSAName: "123456789-123456789-123456789-123456789-123456789--bootstrap-sa",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if c.expectedSAName != getBootstrapSAName(c.clusterName) {
+				t.Errorf("expected sa %v, but got %v", c.expectedSAName, getBootstrapSAName(c.clusterName))
+			}
+		})
+	}
+}
