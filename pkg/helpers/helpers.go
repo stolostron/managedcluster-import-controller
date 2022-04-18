@@ -573,15 +573,6 @@ func ForceDeleteManagedClusterAddon(
 	runtimeClient client.Client,
 	recorder events.Recorder,
 	addon addonv1alpha1.ManagedClusterAddOn) error {
-	if addon.DeletionTimestamp.IsZero() {
-		if err := runtimeClient.Delete(ctx, &addon); err != nil {
-			if errors.IsNotFound(err) {
-				return nil
-			}
-			return err
-		}
-	}
-
 	if err := runtimeClient.Get(ctx, types.NamespacedName{Namespace: addon.Namespace, Name: addon.Name}, &addon); err != nil {
 		if errors.IsNotFound(err) {
 			return nil
@@ -593,6 +584,15 @@ func ForceDeleteManagedClusterAddon(
 		patch := client.MergeFrom(addon.DeepCopy())
 		addon.Finalizers = []string{}
 		if err := runtimeClient.Patch(ctx, &addon, patch); err != nil {
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			return err
+		}
+	}
+
+	if addon.DeletionTimestamp.IsZero() {
+		if err := runtimeClient.Delete(ctx, &addon); err != nil {
 			if errors.IsNotFound(err) {
 				return nil
 			}
