@@ -10,6 +10,7 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"net"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/ghodss/yaml"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
@@ -406,4 +408,43 @@ func newClusterdeployment(clusterName string) *unstructured.Unstructured {
 			},
 		},
 	}
+}
+
+func CreatePullSecret(kubeClient kubernetes.Interface, namespace, name string) error {
+	secret, err := kubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), name, metav1.GetOptions{})
+	Logf("create pull secret: get cluster error: %v, cluster: %s", err, secret)
+	if errors.IsNotFound(err) {
+		_, err = kubeClient.CoreV1().Secrets(namespace).Create(
+			context.TODO(),
+			&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name,
+					Namespace: namespace,
+				},
+				Data: map[string][]byte{corev1.DockerConfigJsonKey: []byte(`{"auths":{}}`)},
+				Type: corev1.SecretTypeDockerConfigJson,
+			},
+			metav1.CreateOptions{},
+		)
+		return err
+	}
+	return nil
+}
+
+func CreateClusterWithImageRegistries(clusterClient clusterclient.Interface, name string,
+	imageRegistries imageregistry.ImageRegistries) (*clusterv1.ManagedCluster, error) {
+	imageRegistriesData, _ := json.Marshal(imageRegistries)
+	return clusterClient.ClusterV1().ManagedClusters().Create(
+		context.TODO(),
+		&clusterv1.ManagedCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        name,
+				Annotations: map[string]string{"open-cluster-management.io/image-registries": string(imageRegistriesData)},
+			},
+			Spec: clusterv1.ManagedClusterSpec{
+				HubAcceptsClient: true,
+			},
+		},
+		metav1.CreateOptions{},
+	)
 }

@@ -14,7 +14,7 @@ import (
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	imgregistryv1alpha1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/imageregistry/v1alpha1"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
@@ -158,34 +158,37 @@ func getKubeAPIServerCertificate(ctx context.Context, kubeClient kubernetes.Inte
 }
 
 // getImagePullSecret get image pull secret from env
-func getImagePullSecret(ctx context.Context, clientHolder *helpers.ClientHolder, managedCluster *clusterv1.ManagedCluster) (string, *corev1.Secret, error) {
-	imageRegistry, err := getImageRegistry(ctx, clientHolder.RuntimeClient, managedCluster)
+func getImagePullSecret(ctx context.Context, clientHolder *helpers.ClientHolder, managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, error) {
+	secret, err := clientHolder.ImageRegistryClient.Cluster(managedCluster).PullSecret()
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
-
-	if imageRegistry != nil {
-		secret, err := clientHolder.KubeClient.CoreV1().Secrets(imageRegistry.Namespace).Get(ctx, imageRegistry.Spec.PullSecret.Name, metav1.GetOptions{})
-		if err != nil {
-			return "", nil, err
-		}
-
-		return imageRegistry.Spec.Registry, secret, nil
+	if secret != nil {
+		return secret, nil
 	}
 
 	defaultSecretName := os.Getenv(defaultImagePullSecretEnvVarName)
 	if defaultSecretName == "" {
 		log.Info(fmt.Sprintf("Cannot find the default image pull secret of the managed cluster %s from %s",
 			managedCluster.Name, defaultImagePullSecretEnvVarName))
-		return "", nil, nil
+		return nil, nil
 	}
 
 	ns := os.Getenv(constants.PodNamespaceEnvVarName)
-	secret, err := clientHolder.KubeClient.CoreV1().Secrets(ns).Get(ctx, defaultSecretName, metav1.GetOptions{})
+	secret, err = clientHolder.KubeClient.CoreV1().Secrets(ns).Get(ctx, defaultSecretName, metav1.GetOptions{})
 	if err != nil {
-		return "", nil, err
+		return nil, err
 	}
-	return "", secret, nil
+	return secret, nil
+}
+
+func getImage(managedCluster *clusterv1.ManagedCluster, envName string) (string, error) {
+	defaultImage := os.Getenv(envName)
+	if defaultImage == "" {
+		return "", fmt.Errorf("environment variable %s not defined", envName)
+	}
+
+	return imageregistry.OverrideImageByAnnotation(managedCluster.GetAnnotations(), defaultImage), nil
 }
 
 // getValidCertificatesFromURL dial to serverURL and get certificates
@@ -305,52 +308,6 @@ func createKubeconfigData(ctx context.Context, clientHolder *helpers.ClientHolde
 	}
 
 	return runtime.Encode(clientcmdlatest.Codec, &bootstrapConfig)
-}
-
-// getImageRegistry gets imageRegistry.
-// imageRegistryLabelValue format is namespace.imageRegistry
-func getImageRegistry(ctx context.Context,
-	client client.Client, managedCluster *clusterv1.ManagedCluster) (*imgregistryv1alpha1.ManagedClusterImageRegistry, error) {
-	imageRegistryLabelValue, ok := managedCluster.Labels[clusterImageRegistryLabel]
-	if !ok || imageRegistryLabelValue == "" {
-		return nil, nil
-	}
-
-	segments := strings.Split(imageRegistryLabelValue, ".")
-	if len(segments) != 2 {
-		return nil, fmt.Errorf("invalid format of image registry label value %s", imageRegistryLabelValue)
-	}
-
-	namespace := segments[0]
-	imageRegistryName := segments[1]
-	imageRegistry := &imgregistryv1alpha1.ManagedClusterImageRegistry{}
-	err := client.Get(ctx, types.NamespacedName{Namespace: namespace, Name: imageRegistryName}, imageRegistry)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get imageregistry %s/%s: %v", namespace, imageRegistryName, err)
-	}
-	return imageRegistry, nil
-}
-
-// getImage returns then image of components
-// if customRegistry is empty, return the default image
-// if customRegistry is not empty, replace the registry address of default image.
-func getImage(customRegistry, envName string) (string, error) {
-	defaultImage := os.Getenv(envName)
-	if defaultImage == "" {
-		return "", fmt.Errorf("environment variable %s not defined", envName)
-	}
-
-	if customRegistry == "" {
-		return defaultImage, nil
-	}
-
-	// image format: registryAddress/imageName@SHA256 or registryAddress/imageName:tag
-	// replace the registryAddress of image with customRegistry
-	customRegistry = strings.TrimSuffix(customRegistry, "/")
-	imageSegments := strings.Split(defaultImage, "/")
-	customImage := customRegistry + "/" + imageSegments[len(imageSegments)-1]
-
-	return customImage, nil
 }
 
 func getBootstrapSAName(clusterName string) string {

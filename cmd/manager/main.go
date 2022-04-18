@@ -13,6 +13,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -22,7 +23,6 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller"
 	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	imgregistryv1alpha1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/imageregistry/v1alpha1"
 
 	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -64,7 +64,6 @@ func init() {
 	utilruntime.Must(hivev1.AddToScheme(scheme))
 	utilruntime.Must(clusterv1.AddToScheme(scheme))
 	utilruntime.Must(workv1.AddToScheme(scheme))
-	utilruntime.Must(imgregistryv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(asv1beta1.AddToScheme(scheme))
 	utilruntime.Must(addonv1alpha1.AddToScheme(scheme))
 }
@@ -154,6 +153,7 @@ func main() {
 			APIExtensionsClient: apiExtensionsClient,
 			OperatorClient:      operatorClient,
 			RuntimeClient:       mgr.GetClient(),
+			ImageRegistryClient: imageregistry.NewClient(kubeClient),
 		},
 		importSecretInformer,
 		autoimportSecretInformer,

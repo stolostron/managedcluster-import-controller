@@ -101,7 +101,6 @@ sleep 5
 ${KUBECTL} -n open-cluster-management rollout status deploy managedcluster-import-controller --timeout=120s
 
 echo "###### prepare required crds"
-${KUBECTL} apply -f "$REPO_DIR/test/e2e/resources/ocm"
 ${KUBECTL} apply -f "$REPO_DIR/test/e2e/resources/hive"
 ${KUBECTL} apply -f "$REPO_DIR/test/e2e/resources/ocp"
 cat << EOF | ${KUBECTL} apply -f -
@@ -151,36 +150,6 @@ subjects:
     namespace: open-cluster-management
 EOF
 
-echo "###### prepare imageregistry"
-cat << EOF | ${KUBECTL} apply -f -
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: e2e-registry
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: e2e-pull-secret
-  namespace: e2e-registry
-data:
-  .dockerconfigjson: ewogICJhdXRocyI6IHsKICB9Cn0=
-type: kubernetes.io/dockerconfigjson
----
-apiVersion: imageregistry.open-cluster-management.io/v1alpha1
-kind: ManagedClusterImageRegistry
-metadata:
-  name: e2e-image-registry
-  namespace: e2e-registry
-spec:
-  registry: e2e.test
-  pullSecret:
-    name: e2e-pull-secret
-  placementRef:
-    group: cluster.open-cluster-management.io
-    resource: placement
-    name: test
-EOF
 
 # prepare another managed cluster for hosted mode testing
 echo "###### installing e2e test managed cluster"

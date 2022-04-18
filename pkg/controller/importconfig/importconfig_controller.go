@@ -21,8 +21,6 @@ import (
 
 const bootstrapSASuffix = "bootstrap-sa"
 
-const clusterImageRegistryLabel = "open-cluster-management.io/image-registry"
-
 /* #nosec */
 const (
 	registrationOperatorImageEnvVarName = "REGISTRATION_OPERATOR_IMAGE"

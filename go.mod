@@ -12,7 +12,6 @@ require (
 	github.com/openshift/hive/apis v0.0.0
 	github.com/openshift/library-go v0.0.0-20220112153822-ac82336bd076
 	github.com/spf13/pflag v1.0.5
-	github.com/stolostron/multicloud-operators-foundation v1.0.0-2021-10-26-20-16-14.0.20220110023249-172fb944faa9
 	k8s.io/api v0.23.3
 	k8s.io/apiextensions-apiserver v0.23.3
 	k8s.io/apimachinery v0.23.3
