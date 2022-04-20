@@ -11,7 +11,6 @@ import (
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -35,17 +34,12 @@ func (w *hostedWorker) generateImportSecret(ctx context.Context, managedCluster 
 		return nil, err
 	}
 
-	imageRegistry, _, err := getImagePullSecret(ctx, w.clientHolder, managedCluster)
+	registrationImageName, err := getImage(managedCluster, registrationImageEnvVarName)
 	if err != nil {
 		return nil, err
 	}
 
-	registrationImageName, err := getImage(imageRegistry, registrationImageEnvVarName)
-	if err != nil {
-		return nil, err
-	}
-
-	workImageName, err := getImage(imageRegistry, workImageEnvVarName)
+	workImageName, err := getImage(managedCluster, workImageEnvVarName)
 	if err != nil {
 		return nil, err
 	}

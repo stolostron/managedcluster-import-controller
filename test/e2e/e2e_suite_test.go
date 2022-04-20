@@ -295,6 +295,15 @@ func assertManagedClusterDeleted(clusterName string) {
 	assertManagedClusterDeletedFromSpoke()
 }
 
+func assertPullSecretDeleted(namespace, name string) {
+	ginkgo.By(fmt.Sprintf("Delete the pull secret %s/%s", name, namespace), func() {
+		err := hubKubeClient.CoreV1().Secrets(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
+		if err != nil && !errors.IsNotFound(err) {
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		}
+	})
+}
+
 func assertHostedManagedClusterDeleted(clusterName, managementCluster string) {
 	ginkgo.By(fmt.Sprintf("Delete the hosted mode managed cluster %s", clusterName), func() {
 		err := hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), clusterName, metav1.DeleteOptions{})

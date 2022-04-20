@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	imgregistryv1alpha1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/imageregistry/v1alpha1"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
@@ -640,6 +640,7 @@ func TestGetImagePullSecret(t *testing.T) {
 		clientObjs     []client.Object
 		secret         *corev1.Secret
 		managedCluster *clusterv1.ManagedCluster
+		expectedSecret *corev1.Secret
 	}{
 		{
 			name:       "no registry",
@@ -659,22 +660,16 @@ func TestGetImagePullSecret(t *testing.T) {
 					Name: "test",
 				},
 			},
-		},
-		{
-			name: "has registry",
-			clientObjs: []client.Object{
-				&imgregistryv1alpha1.ManagedClusterImageRegistry{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test2",
-						Namespace: "test1",
-					},
-					Spec: imgregistryv1alpha1.ImageRegistrySpec{
-						PullSecret: corev1.LocalObjectReference{
-							Name: "test",
-						},
-					},
+			expectedSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
+					Namespace: os.Getenv("POD_NAMESPACE"),
 				},
 			},
+		},
+		{
+			name:       "has registry",
+			clientObjs: []client.Object{},
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test",
@@ -691,6 +686,15 @@ func TestGetImagePullSecret(t *testing.T) {
 					Labels: map[string]string{
 						"open-cluster-management.io/image-registry": "test1.test2",
 					},
+					Annotations: map[string]string{
+						"open-cluster-management.io/image-registries": `{"pullSecret":"test1.test"}`,
+					},
+				},
+			},
+			expectedSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test1",
 				},
 			},
 		},
@@ -698,25 +702,20 @@ func TestGetImagePullSecret(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			kubeClient := kubefake.NewSimpleClientset(c.secret)
 			clientHolder := &helpers.ClientHolder{
-				RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.clientObjs...).Build(),
-				KubeClient:    kubefake.NewSimpleClientset(c.secret),
+				KubeClient:          kubeClient,
+				ImageRegistryClient: imageregistry.NewClient(kubeClient),
 			}
-			_, _, err := getImagePullSecret(context.Background(), clientHolder, c.managedCluster)
+
+			secret, err := getImagePullSecret(context.Background(), clientHolder, c.managedCluster)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
+			if secret.Name != c.expectedSecret.Name {
+				t.Errorf("expected secret %v, but got %v", c.expectedSecret.Name, secret.Name)
+			}
 		})
-	}
-}
-
-func TestGetImage(t *testing.T) {
-	newImage, err := getImage("test", workImageEnvVarName)
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-	if newImage != "test/work:latest" {
-		t.Errorf("unexpected image: %v", newImage)
 	}
 }
 

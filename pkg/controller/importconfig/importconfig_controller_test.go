@@ -11,7 +11,7 @@ import (
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	imgregistryv1alpha1 "github.com/stolostron/multicloud-operators-foundation/pkg/apis/imageregistry/v1alpha1"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
@@ -39,7 +39,6 @@ func init() {
 	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &hivev1.ClusterDeployment{})
 	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &configv1.Infrastructure{})
 	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &configv1.APIServer{})
-	testscheme.AddKnownTypes(imgregistryv1alpha1.GroupVersion, &imgregistryv1alpha1.ManagedClusterImageRegistry{})
 
 	os.Setenv(registrationOperatorImageEnvVarName, "quay.io/open-cluster-management/registration-operator:latest")
 	os.Setenv(workImageEnvVarName, "quay.io/open-cluster-management/work:latest")
@@ -299,9 +298,11 @@ func TestReconcile(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			kubeClient := kubefake.NewSimpleClientset(c.runtimeObjs...)
 			clientHolder := &helpers.ClientHolder{
-				KubeClient:    kubefake.NewSimpleClientset(c.runtimeObjs...),
-				RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.clientObjs...).Build(),
+				KubeClient:          kubeClient,
+				RuntimeClient:       fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.clientObjs...).Build(),
+				ImageRegistryClient: imageregistry.NewClient(kubeClient),
 			}
 
 			r := &ReconcileImportConfig{

@@ -9,6 +9,7 @@ import (
 
 	ginkgo "github.com/onsi/ginkgo"
 	gomega "github.com/onsi/gomega"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 
@@ -18,10 +19,19 @@ import (
 )
 
 var _ = ginkgo.Describe("Using customized image registry", func() {
-	var managedClusterName string
+	var (
+		managedClusterName string
+		pullSecretName     string
+	)
 
 	ginkgo.BeforeEach(func() {
 		managedClusterName = fmt.Sprintf("imageregistry-test-%s", rand.String(6))
+		pullSecretName = fmt.Sprintf("pull-secret-%s", rand.String(6))
+
+		ginkgo.By(fmt.Sprintf("Create pull secret %s", pullSecretName), func() {
+			err := util.CreatePullSecret(hubKubeClient, "default", pullSecretName)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		})
 
 		ginkgo.By(fmt.Sprintf("Create managed cluster namespace %s", managedClusterName), func() {
 			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: managedClusterName}}
@@ -30,14 +40,23 @@ var _ = ginkgo.Describe("Using customized image registry", func() {
 		})
 
 		ginkgo.By(fmt.Sprintf("Create managed cluster %s", managedClusterName), func() {
-			label := util.NewLable("open-cluster-management.io/image-registry", "e2e-registry.e2e-image-registry")
-			_, err := util.CreateManagedCluster(hubClusterClient, managedClusterName, label)
+			imageRegistries := imageregistry.ImageRegistries{
+				PullSecret: fmt.Sprintf("%s.%s", "default", pullSecretName),
+				Registries: []imageregistry.Registry{
+					{
+						Source: "quay.io/open-cluster-management",
+						Mirror: "quay.io/rhacm2",
+					},
+				},
+			}
+			_, err := util.CreateClusterWithImageRegistries(hubClusterClient, managedClusterName, imageRegistries)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 		})
 	})
 
 	ginkgo.AfterEach(func() {
 		assertManagedClusterDeleted(managedClusterName)
+		assertPullSecretDeleted("default", pullSecretName)
 	})
 
 	ginkgo.It("Should using customized image registry", func() {
@@ -62,8 +81,8 @@ var _ = ginkgo.Describe("Using customized image registry", func() {
 
 				if obj.GetName() == "klusterlet" && obj.GetKind() == "Klusterlet" {
 					klusterlet := util.ToKlusterlet(obj)
-					if klusterlet.Spec.WorkImagePullSpec == "e2e.test/work:latest" &&
-						klusterlet.Spec.RegistrationImagePullSpec == "e2e.test/registration:latest" {
+					if klusterlet.Spec.WorkImagePullSpec == "quay.io/rhacm2/work:latest" &&
+						klusterlet.Spec.RegistrationImagePullSpec == "quay.io/rhacm2/registration:latest" {
 						hasCustomizedImage = true
 					}
 				}
