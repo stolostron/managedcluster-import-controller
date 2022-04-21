@@ -188,7 +188,7 @@ func getImage(managedCluster *clusterv1.ManagedCluster, envName string) (string,
 		return "", fmt.Errorf("environment variable %s not defined", envName)
 	}
 
-	return imageregistry.OverrideImageByAnnotation(managedCluster.GetAnnotations(), defaultImage), nil
+	return imageregistry.OverrideImageByAnnotation(managedCluster.GetAnnotations(), defaultImage)
 }
 
 // getValidCertificatesFromURL dial to serverURL and get certificates
