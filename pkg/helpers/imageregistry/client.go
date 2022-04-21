@@ -56,13 +56,19 @@ func NewClient(kubeClient kubernetes.Interface) Interface {
 }
 
 func (c *Client) Cluster(cluster *clusterv1.ManagedCluster) Interface {
+	c.imageRegistries = ImageRegistries{}
+	if cluster == nil {
+		return c
+	}
 	annotations := cluster.GetAnnotations()
 	if len(annotations) == 0 {
-		c.imageRegistries = ImageRegistries{}
 		return c
 	}
 
-	_ = json.Unmarshal([]byte(annotations[ClusterImageRegistriesAnnotation]), &c.imageRegistries)
+	err := json.Unmarshal([]byte(annotations[ClusterImageRegistriesAnnotation]), &c.imageRegistries)
+	if err != nil {
+		klog.Errorf("failed to unmarshal imageRegistries from annotation. err: %v", err)
+	}
 	return c
 }
 
