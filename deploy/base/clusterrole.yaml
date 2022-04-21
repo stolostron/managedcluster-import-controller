@@ -191,15 +191,6 @@ rules:
   - watch
   - escalate
 - apiGroups:
-    - imageregistry.open-cluster-management.io
-  resources:
-    - managedclusterimageregistries
-    - managedclusterimageregistries/status
-  verbs:
-    - get
-    - list
-    - watch
-- apiGroups:
   - coordination.k8s.io
   resources:
   - leases
