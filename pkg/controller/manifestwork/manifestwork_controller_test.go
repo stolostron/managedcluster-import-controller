@@ -10,6 +10,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
+	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	operatorfake "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
@@ -36,6 +37,8 @@ func init() {
 	testscheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
 	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWork{})
 	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWorkList{})
+	testscheme.AddKnownTypes(addonv1alpha1.SchemeGroupVersion, &addonv1alpha1.ManagedClusterAddOn{})
+	testscheme.AddKnownTypes(addonv1alpha1.SchemeGroupVersion, &addonv1alpha1.ManagedClusterAddOnList{})
 }
 
 func TestReconcile(t *testing.T) {
@@ -353,6 +356,133 @@ func TestReconcile(t *testing.T) {
 				}
 				if len(manifestWorks.Items) != 3 {
 					t.Errorf("expected 3 works, but failed %v", len(manifestWorks.Items))
+				}
+			},
+		},
+		{
+			name: "managed clusters is deleting and there are managed cluster addons",
+			startObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: v1.ObjectMeta{
+						Name:              "test",
+						Finalizers:        []string{constants.ManifestWorkFinalizer},
+						DeletionTimestamp: &now,
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []v1.Condition{
+							{
+								Type:   clusterv1.ManagedClusterConditionAvailable,
+								Status: v1.ConditionTrue,
+							},
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: v1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: "test",
+					},
+					Status: workv1.ManifestWorkStatus{
+						Conditions: []v1.Condition{
+							{
+								Type:   "Applied",
+								Status: v1.ConditionTrue,
+							},
+						},
+					},
+				},
+				&addonv1alpha1.ManagedClusterAddOn{
+					ObjectMeta: v1.ObjectMeta{
+						Name:      "work-manager",
+						Namespace: "test",
+					},
+				},
+			},
+			secrets: []runtime.Object{},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, runtimeClient client.Client) {
+				manifestWorks := &workv1.ManifestWorkList{}
+				if err := runtimeClient.List(context.TODO(), manifestWorks, &client.ListOptions{Namespace: "test"}); err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if len(manifestWorks.Items) != 0 {
+					t.Errorf("expected 0 works, but failed %v", len(manifestWorks.Items))
+				}
+
+				managedClusterAddons, err := helpers.ListManagedClusterAddons(context.TODO(), runtimeClient, "test")
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if len(managedClusterAddons.Items) != 0 {
+					t.Errorf("expected 0 managedClusterAddons, but failed %v", len(managedClusterAddons.Items))
+				}
+			},
+		},
+		{
+			name: "managed clusters is deleting and waiting for managed cluster addon deletion",
+			startObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: v1.ObjectMeta{
+						Name:              "test",
+						Finalizers:        []string{constants.ManifestWorkFinalizer},
+						DeletionTimestamp: &now,
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []v1.Condition{
+							{
+								Type:   clusterv1.ManagedClusterConditionAvailable,
+								Status: v1.ConditionTrue,
+							},
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: v1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: "test",
+					},
+					Status: workv1.ManifestWorkStatus{
+						Conditions: []v1.Condition{
+							{
+								Type:   "Applied",
+								Status: v1.ConditionTrue,
+							},
+						},
+					},
+				},
+				&addonv1alpha1.ManagedClusterAddOn{
+					ObjectMeta: v1.ObjectMeta{
+						Name:       "work-manager",
+						Namespace:  "test",
+						Finalizers: []string{"test"},
+					},
+				},
+			},
+			secrets: []runtime.Object{},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, runtimeClient client.Client) {
+				manifestWorks := &workv1.ManifestWorkList{}
+				if err := runtimeClient.List(context.TODO(), manifestWorks, &client.ListOptions{Namespace: "test"}); err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if len(manifestWorks.Items) != 1 {
+					t.Errorf("expected 1 works, but failed %v", len(manifestWorks.Items))
+				}
+
+				managedClusterAddons, err := helpers.ListManagedClusterAddons(context.TODO(), runtimeClient, "test")
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if len(managedClusterAddons.Items) != 1 {
+					t.Errorf("expected 1 managedclusteraddon, but failed %v", len(managedClusterAddons.Items))
 				}
 			},
 		},

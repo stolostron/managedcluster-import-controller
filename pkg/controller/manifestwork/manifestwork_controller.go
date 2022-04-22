@@ -10,20 +10,18 @@ import (
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 
-	"github.com/openshift/library-go/pkg/operator/events"
-
 	"github.com/ghodss/yaml"
-
+	"github.com/openshift/library-go/pkg/operator/events"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -81,6 +79,9 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 	}
 
 	if !managedCluster.DeletionTimestamp.IsZero() {
+		if err := r.deleteAddons(ctx, managedClusterName); err != nil {
+			return reconcile.Result{}, err
+		}
 		// the managed cluster is deleting, delete its manifestworks
 		return reconcile.Result{}, r.deleteManifestWorks(ctx, managedCluster, manifestWorks.Items)
 	}
@@ -113,6 +114,10 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func (r *ReconcileManifestWork) deleteAddons(ctx context.Context, namespace string) error {
+	return r.clientHolder.RuntimeClient.DeleteAllOf(ctx, &addonv1alpha1.ManagedClusterAddOn{}, client.InNamespace(namespace))
 }
 
 // deleteManifestWorks deletes manifest works when a managed cluster is deleting
@@ -161,16 +166,25 @@ func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster
 		return err
 	}
 
+	noAddons, err := helpers.NoManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, cluster.GetName())
+	if err != nil {
+		return err
+	}
+	if !noAddons {
+		// wait for addons deletion
+		return nil
+	}
+
 	// check whether there are only klusterlet manifestworks
 	ignoreKlusterlet := func(clusterName string, manifestWork workv1.ManifestWork) bool {
 		return manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, klusterletSuffix) ||
 			manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, klusterletCRDsSuffix)
 	}
-	noPending, err := helpers.NoPendingManifestWorks(ctx, r.clientHolder.RuntimeClient, log, cluster.GetName(), ignoreKlusterlet)
+	noPendingManifestWorks, err := helpers.NoPendingManifestWorks(ctx, r.clientHolder.RuntimeClient, log, cluster.GetName(), ignoreKlusterlet)
 	if err != nil {
 		return err
 	}
-	if !noPending {
+	if !noPendingManifestWorks {
 		// still have other works, do nothing
 		return nil
 	}
