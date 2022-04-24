@@ -102,6 +102,9 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 	}
 
 	if !managedCluster.DeletionTimestamp.IsZero() {
+		if err := helpers.DeleteManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, managedClusterName); err != nil {
+			return reconcile.Result{}, err
+		}
 		// the managed cluster is deleting, delete its manifestworks
 		return reconcile.Result{}, r.deleteManifestWorks(ctx, managedCluster, manifestWorks.Items, hostedManifestWorks)
 	}
@@ -238,14 +241,31 @@ func (r *ReconcileHosted) deleteManifestWorks(ctx context.Context, cluster *clus
 		return helpers.ForceDeleteAllManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, append(works, hostedWorks...))
 	}
 
-	// delete works that do not include klusterlet addon works, the addon works will be removed by
-	// klusterlet-addon-controller, we need to wait the klusterlet-addon-controller delete them
+	// delete works that do not include klusterlet works and klusterlet addon works, the addon works was removed
+	// above, we need to wait them to be deleted.
 	ignoreAddons := func(clusterName string, manifestWork workv1.ManifestWork) bool {
-		return strings.HasPrefix(manifestWork.GetName(), fmt.Sprintf("%s-klusterlet-addon", manifestWork.GetNamespace()))
+		manifestWorkName := manifestWork.GetName()
+		switch {
+		case strings.HasPrefix(manifestWorkName, fmt.Sprintf("%s-klusterlet-addon", manifestWork.GetNamespace())):
+		case strings.HasPrefix(manifestWorkName, "addon-") && strings.HasSuffix(manifestWork.GetName(), "-deploy"):
+		case strings.HasPrefix(manifestWorkName, "addon-") && strings.HasSuffix(manifestWork.GetName(), "-pre-delete"):
+		default:
+			return false
+		}
+		return true
 	}
 	err := helpers.DeleteManifestWorkWithSelector(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster, works, ignoreAddons)
 	if err != nil {
 		return err
+	}
+
+	noAddons, err := helpers.NoManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, cluster.GetName())
+	if err != nil {
+		return err
+	}
+	if !noAddons {
+		// wait for addons deletion
+		return nil
 	}
 
 	ignoreNothing := func(_ string, _ workv1.ManifestWork) bool { return false }

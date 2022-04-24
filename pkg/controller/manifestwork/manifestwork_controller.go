@@ -10,7 +10,6 @@ import (
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 
@@ -79,7 +78,7 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 	}
 
 	if !managedCluster.DeletionTimestamp.IsZero() {
-		if err := r.deleteAddons(ctx, managedClusterName); err != nil {
+		if err := helpers.DeleteManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, managedClusterName); err != nil {
 			return reconcile.Result{}, err
 		}
 		// the managed cluster is deleting, delete its manifestworks
@@ -116,10 +115,6 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 	return reconcile.Result{}, nil
 }
 
-func (r *ReconcileManifestWork) deleteAddons(ctx context.Context, namespace string) error {
-	return r.clientHolder.RuntimeClient.DeleteAllOf(ctx, &addonv1alpha1.ManagedClusterAddOn{}, client.InNamespace(namespace))
-}
-
 // deleteManifestWorks deletes manifest works when a managed cluster is deleting
 // If the managed cluster is unavailable, we will force delete all manifest works
 // If the managed cluster is available, we will
@@ -142,8 +137,8 @@ func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster
 		return helpers.ForceDeleteAllManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, works)
 	}
 
-	// delete works that do not include klusterlet works and klusterlet addon works, the addon works will be removed by
-	// klusterlet-addon-controller, we need to wait the klusterlet-addon-controller delete them.
+	// delete works that do not include klusterlet works and klusterlet addon works, the addon works was removed
+	// above, we need to wait them to be deleted.
 	//
 	// if there are any Hosted mode manifestworks we also wait for users to detach the managed cluster first.
 	ignoreKlusterletAndAddons := func(clusterName string, manifestWork workv1.ManifestWork) bool {

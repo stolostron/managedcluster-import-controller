@@ -39,7 +39,7 @@ func AssertManifestWorkFinalizer(ctx context.Context, runtimeClient client.Clien
 	}
 
 	if !cluster.DeletionTimestamp.IsZero() {
-		// cluser is deleting, do nothing
+		// cluster is deleting, do nothing
 		return nil
 	}
 
@@ -181,6 +181,11 @@ func NoManagedClusterAddons(ctx context.Context, runtimeClient client.Client, cl
 	}
 
 	return len(managedclusteraddons.Items) == 0, nil
+}
+
+// DeleteManagedClusterAddons deletes all managedclusteraddons for the managed cluster
+func DeleteManagedClusterAddons(ctx context.Context, runtimeClient client.Client, clusterName string) error {
+	return runtimeClient.DeleteAllOf(ctx, &addonv1alpha1.ManagedClusterAddOn{}, client.InNamespace(clusterName))
 }
 
 // DeleteManifestWorkWithSelector deletes manifestworks but ignores the ignoredSelector selected manifestworks
