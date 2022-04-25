@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
-	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 
@@ -128,26 +127,6 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 			},
 		}),
 	); err != nil {
-		return err
-	}
-
-	if err := c.Watch(
-		&runtimesource.Kind{Type: &addonv1alpha1.ManagedClusterAddOn{}},
-		handler.EnqueueRequestsFromMapFunc(func(o client.Object) []reconcile.Request {
-			return []reconcile.Request{
-				{
-					NamespacedName: types.NamespacedName{
-						Name: o.GetNamespace(),
-					},
-				},
-			}
-		}),
-		predicate.Predicate(predicate.Funcs{
-			GenericFunc: func(e event.GenericEvent) bool { return false },
-			DeleteFunc:  func(e event.DeleteEvent) bool { return true },
-			CreateFunc:  func(e event.CreateEvent) bool { return false },
-			UpdateFunc:  func(e event.UpdateEvent) bool { return false },
-		})); err != nil {
 		return err
 	}
 

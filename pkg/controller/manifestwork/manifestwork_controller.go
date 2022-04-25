@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/ghodss/yaml"
 	"github.com/openshift/library-go/pkg/operator/events"
+	operatorhelpers "github.com/openshift/library-go/pkg/operator/v1helpers"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -78,11 +80,8 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 	}
 
 	if !managedCluster.DeletionTimestamp.IsZero() {
-		if err := helpers.DeleteManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, managedClusterName); err != nil {
-			return reconcile.Result{}, err
-		}
-		// the managed cluster is deleting, delete its manifestworks
-		return reconcile.Result{}, r.deleteManifestWorks(ctx, managedCluster, manifestWorks.Items)
+		// the managed cluster is deleting, delete its addons and manifestworks
+		return r.deleteAddonsAndWorks(ctx, managedCluster, manifestWorks.Items)
 	}
 
 	if !meta.IsStatusConditionTrue(managedCluster.Status.Conditions, clusterv1.ManagedClusterConditionJoined) {
@@ -115,6 +114,25 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 	return reconcile.Result{}, nil
 }
 
+func (r *ReconcileManifestWork) deleteAddonsAndWorks(
+	ctx context.Context, cluster *clusterv1.ManagedCluster, works []workv1.ManifestWork) (
+	reconcile.Result, error) {
+	errs := make([]error, 0)
+
+	err := helpers.DeleteManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, cluster.GetName())
+	if err != nil {
+		// continue to delete manifestworks
+		errs = append(errs, err)
+	}
+
+	// the managed cluster is deleting, delete its manifestworks
+	result, err := r.deleteManifestWorks(ctx, cluster, works)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	return result, operatorhelpers.NewMultiLineAggregate(errs)
+}
+
 // deleteManifestWorks deletes manifest works when a managed cluster is deleting
 // If the managed cluster is unavailable, we will force delete all manifest works
 // If the managed cluster is available, we will
@@ -127,14 +145,15 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 //      crds will be deleted from the managed cluster, then the kube system will delete the klusterlet
 //      cr from the managed cluster, once the klusterlet cr is deleted, the klusterlet operator will
 //      clean up the klusterlet on the managed cluster
-func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster, works []workv1.ManifestWork) error {
+func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster, works []workv1.ManifestWork) (
+	reconcile.Result, error) {
 	if len(works) == 0 {
-		return nil
+		return reconcile.Result{}, nil
 	}
 
 	if helpers.IsClusterUnavailable(cluster) {
 		// the managed cluster is offline, force delete all manifest works
-		return helpers.ForceDeleteAllManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, works)
+		return reconcile.Result{}, helpers.ForceDeleteAllManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, works)
 	}
 
 	// delete works that do not include klusterlet works and klusterlet addon works, the addon works was removed
@@ -158,16 +177,16 @@ func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster
 	}
 	err := helpers.DeleteManifestWorkWithSelector(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster, works, ignoreKlusterletAndAddons)
 	if err != nil {
-		return err
+		return reconcile.Result{}, err
 	}
 
 	noAddons, err := helpers.NoManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, cluster.GetName())
 	if err != nil {
-		return err
+		return reconcile.Result{}, err
 	}
 	if !noAddons {
 		// wait for addons deletion
-		return nil
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	// check whether there are only klusterlet manifestworks
@@ -177,11 +196,11 @@ func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster
 	}
 	noPendingManifestWorks, err := helpers.NoPendingManifestWorks(ctx, r.clientHolder.RuntimeClient, log, cluster.GetName(), ignoreKlusterlet)
 	if err != nil {
-		return err
+		return reconcile.Result{}, err
 	}
 	if !noPendingManifestWorks {
 		// still have other works, do nothing
-		return nil
+		return reconcile.Result{}, nil
 	}
 
 	// only have klusterlet manifest works, delete klusterlet manifest works
@@ -190,11 +209,11 @@ func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster
 	err = r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Namespace: cluster.Name, Name: klusterletName}, klusterletWork)
 	if errors.IsNotFound(err) {
 		// the klusterlet work could be deleted, ensure the klusterlet crds work is deleted
-		return helpers.ForceDeleteManifestWork(ctx, r.clientHolder.RuntimeClient, r.recorder,
+		return reconcile.Result{}, helpers.ForceDeleteManifestWork(ctx, r.clientHolder.RuntimeClient, r.recorder,
 			cluster.Name, fmt.Sprintf("%s-%s", cluster.Name, klusterletCRDsSuffix))
 	}
 	if err != nil {
-		return err
+		return reconcile.Result{}, err
 	}
 
 	// if the manifest work is not applied, we do nothing to avoid to delete the cluster prematurely
@@ -202,10 +221,10 @@ func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster
 	// this will cause that the klusterlet work cannot be deleted, we need user to handle this manually
 	if !meta.IsStatusConditionTrue(klusterletWork.Status.Conditions, workv1.WorkApplied) {
 		log.Info(fmt.Sprintf("delete the manifest work %s until it is applied ...", klusterletWork.Name))
-		return nil
+		return reconcile.Result{}, nil
 	}
 
-	return helpers.DeleteManifestWork(ctx, r.clientHolder.RuntimeClient, r.recorder, klusterletWork.Namespace, klusterletWork.Name)
+	return reconcile.Result{}, helpers.DeleteManifestWork(ctx, r.clientHolder.RuntimeClient, r.recorder, klusterletWork.Namespace, klusterletWork.Name)
 }
 
 func createKlusterletCRDsManifestWork(managedCluster *clusterv1.ManagedCluster, importSecret *corev1.Secret) *workv1.ManifestWork {

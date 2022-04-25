@@ -9,16 +9,17 @@ import (
 	"encoding/base64"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+
+	"github.com/openshift/library-go/pkg/operator/events"
+	operatorhelpers "github.com/openshift/library-go/pkg/operator/v1helpers"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 
-	"github.com/openshift/library-go/pkg/operator/events"
-
 	"github.com/ghodss/yaml"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -26,7 +27,6 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/kubernetes"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -102,11 +102,8 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 	}
 
 	if !managedCluster.DeletionTimestamp.IsZero() {
-		if err := helpers.DeleteManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, managedClusterName); err != nil {
-			return reconcile.Result{}, err
-		}
-		// the managed cluster is deleting, delete its manifestworks
-		return reconcile.Result{}, r.deleteManifestWorks(ctx, managedCluster, manifestWorks.Items, hostedManifestWorks)
+		// the managed cluster is deleting, delete its addons and manifestworks
+		return r.deleteAddonsAndWorks(ctx, managedCluster, manifestWorks.Items, hostedManifestWorks)
 	}
 
 	// apply klusterlet manifest works klustelet to the management namespace from import secret to trigger the joining process.
@@ -224,6 +221,25 @@ func (r *ReconcileHosted) getHostedManifestWork(ctx context.Context, namespace, 
 	return append(works, *manifestWork), nil
 }
 
+func (r *ReconcileHosted) deleteAddonsAndWorks(
+	ctx context.Context, cluster *clusterv1.ManagedCluster, works, hostedWorks []workv1.ManifestWork) (
+	reconcile.Result, error) {
+	errs := make([]error, 0)
+
+	err := helpers.DeleteManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, cluster.GetName())
+	if err != nil {
+		// continue to delete manifestworks
+		errs = append(errs, err)
+	}
+
+	// the managed cluster is deleting, delete its manifestworks
+	result, err := r.deleteManifestWorks(ctx, cluster, works, hostedWorks)
+	if err != nil {
+		errs = append(errs, err)
+	}
+	return result, operatorhelpers.NewMultiLineAggregate(errs)
+}
+
 // deleteManifestWorks deletes manifest works when a managed cluster is deleting
 // If the managed cluster is unavailable, we will force delete all manifest works
 // If the managed cluster is available, we will
@@ -231,14 +247,15 @@ func (r *ReconcileHosted) getHostedManifestWork(ctx context.Context, namespace, 
 //      after the cluster is deleted.
 //   2. delete the manifest works that do not include klusterlet addon works
 //   3. delete the klusterlet and managed kubeconfig manifest works
-func (r *ReconcileHosted) deleteManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster, works, hostedWorks []workv1.ManifestWork) error {
+func (r *ReconcileHosted) deleteManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster, works, hostedWorks []workv1.ManifestWork) (
+	reconcile.Result, error) {
 	if (len(works) + len(hostedWorks)) == 0 {
-		return nil
+		return reconcile.Result{}, nil
 	}
 
 	if helpers.IsClusterUnavailable(cluster) {
 		// the managed cluster is offline, force delete all manifest works
-		return helpers.ForceDeleteAllManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, append(works, hostedWorks...))
+		return reconcile.Result{}, helpers.ForceDeleteAllManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, append(works, hostedWorks...))
 	}
 
 	// delete works that do not include klusterlet works and klusterlet addon works, the addon works was removed
@@ -256,29 +273,29 @@ func (r *ReconcileHosted) deleteManifestWorks(ctx context.Context, cluster *clus
 	}
 	err := helpers.DeleteManifestWorkWithSelector(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster, works, ignoreAddons)
 	if err != nil {
-		return err
+		return reconcile.Result{}, err
 	}
 
 	noAddons, err := helpers.NoManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, cluster.GetName())
 	if err != nil {
-		return err
+		return reconcile.Result{}, err
 	}
 	if !noAddons {
 		// wait for addons deletion
-		return nil
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 	}
 
 	ignoreNothing := func(_ string, _ workv1.ManifestWork) bool { return false }
 	noPending, err := helpers.NoPendingManifestWorks(ctx, r.clientHolder.RuntimeClient, log, cluster.GetName(), ignoreNothing)
 	if err != nil {
-		return err
+		return reconcile.Result{}, err
 	}
 	if !noPending {
 		// still have other works, do nothing
-		return nil
+		return reconcile.Result{}, nil
 	}
 
-	return r.deleteHostedManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster)
+	return reconcile.Result{}, r.deleteHostedManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster)
 }
 
 // deleteHostedManifestWorks delete klusterlet and managed kubeconfig manifest works in the hosting cluster namespace
