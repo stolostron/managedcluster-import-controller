@@ -423,6 +423,85 @@ func TestReconcile(t *testing.T) {
 			},
 		},
 		{
+			name: "managed clusters is deleting, cluster unavailable, force delete addons and manifestworks",
+			startObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: v1.ObjectMeta{
+						Name:              "test",
+						Finalizers:        []string{constants.ManifestWorkFinalizer},
+						DeletionTimestamp: &now,
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []v1.Condition{
+							{
+								Type:   clusterv1.ManagedClusterConditionAvailable,
+								Status: v1.ConditionFalse,
+							},
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: v1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: "test",
+					},
+					Status: workv1.ManifestWorkStatus{
+						Conditions: []v1.Condition{
+							{
+								Type:   "Applied",
+								Status: v1.ConditionTrue,
+							},
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: v1.ObjectMeta{
+						Name:       "test-should-be-force-deleted",
+						Namespace:  "test",
+						Finalizers: []string{"test"},
+					},
+					Status: workv1.ManifestWorkStatus{
+						Conditions: []v1.Condition{
+							{
+								Type:   "Applied",
+								Status: v1.ConditionTrue,
+							},
+						},
+					},
+				},
+				&addonv1alpha1.ManagedClusterAddOn{
+					ObjectMeta: v1.ObjectMeta{
+						Name:       "work-manager",
+						Namespace:  "test",
+						Finalizers: []string{"test"},
+					},
+				},
+			},
+			secrets: []runtime.Object{},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, runtimeClient client.Client) {
+				manifestWorks := &workv1.ManifestWorkList{}
+				if err := runtimeClient.List(context.TODO(), manifestWorks, &client.ListOptions{Namespace: "test"}); err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if len(manifestWorks.Items) != 0 {
+					t.Errorf("expected 0 works, but failed %v", len(manifestWorks.Items))
+				}
+
+				managedClusterAddons, err := helpers.ListManagedClusterAddons(context.TODO(), runtimeClient, "test")
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if len(managedClusterAddons.Items) != 0 {
+					t.Errorf("expected 0 managedClusterAddons, but failed %v", len(managedClusterAddons.Items))
+				}
+			},
+		},
+		{
 			name: "managed clusters is deleting and waiting for managed cluster addon deletion",
 			startObjs: []client.Object{
 				&clusterv1.ManagedCluster{

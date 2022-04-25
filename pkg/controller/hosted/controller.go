@@ -226,7 +226,7 @@ func (r *ReconcileHosted) deleteAddonsAndWorks(
 	reconcile.Result, error) {
 	errs := make([]error, 0)
 
-	err := helpers.DeleteManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, cluster.GetName())
+	err := helpers.DeleteManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster)
 	if err != nil {
 		// continue to delete manifestworks
 		errs = append(errs, err)
@@ -247,7 +247,10 @@ func (r *ReconcileHosted) deleteAddonsAndWorks(
 //      after the cluster is deleted.
 //   2. delete the manifest works that do not include klusterlet addon works
 //   3. delete the klusterlet and managed kubeconfig manifest works
-func (r *ReconcileHosted) deleteManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster, works, hostedWorks []workv1.ManifestWork) (
+func (r *ReconcileHosted) deleteManifestWorks(
+	ctx context.Context,
+	cluster *clusterv1.ManagedCluster,
+	works, hostedWorks []workv1.ManifestWork) (
 	reconcile.Result, error) {
 	if (len(works) + len(hostedWorks)) == 0 {
 		return reconcile.Result{}, nil
@@ -255,10 +258,11 @@ func (r *ReconcileHosted) deleteManifestWorks(ctx context.Context, cluster *clus
 
 	if helpers.IsClusterUnavailable(cluster) {
 		// the managed cluster is offline, force delete all manifest works
-		return reconcile.Result{}, helpers.ForceDeleteAllManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, append(works, hostedWorks...))
+		return reconcile.Result{}, helpers.ForceDeleteAllManifestWorks(
+			ctx, r.clientHolder.RuntimeClient, r.recorder, append(works, hostedWorks...))
 	}
 
-	// delete works that do not include klusterlet works and klusterlet addon works, the addon works was removed
+	// delete works that do not include klusterlet works and klusterlet addon works, the addon works were removed
 	// above, we need to wait them to be deleted.
 	ignoreAddons := func(clusterName string, manifestWork workv1.ManifestWork) bool {
 		manifestWorkName := manifestWork.GetName()

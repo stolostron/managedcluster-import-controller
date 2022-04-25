@@ -119,7 +119,7 @@ func (r *ReconcileManifestWork) deleteAddonsAndWorks(
 	reconcile.Result, error) {
 	errs := make([]error, 0)
 
-	err := helpers.DeleteManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, cluster.GetName())
+	err := helpers.DeleteManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster)
 	if err != nil {
 		// continue to delete manifestworks
 		errs = append(errs, err)
@@ -145,7 +145,10 @@ func (r *ReconcileManifestWork) deleteAddonsAndWorks(
 //      crds will be deleted from the managed cluster, then the kube system will delete the klusterlet
 //      cr from the managed cluster, once the klusterlet cr is deleted, the klusterlet operator will
 //      clean up the klusterlet on the managed cluster
-func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster, works []workv1.ManifestWork) (
+func (r *ReconcileManifestWork) deleteManifestWorks(
+	ctx context.Context,
+	cluster *clusterv1.ManagedCluster,
+	works []workv1.ManifestWork) (
 	reconcile.Result, error) {
 	if len(works) == 0 {
 		return reconcile.Result{}, nil
@@ -156,7 +159,7 @@ func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster
 		return reconcile.Result{}, helpers.ForceDeleteAllManifestWorks(ctx, r.clientHolder.RuntimeClient, r.recorder, works)
 	}
 
-	// delete works that do not include klusterlet works and klusterlet addon works, the addon works was removed
+	// delete works that do not include klusterlet works and klusterlet addon works, the addon works were removed
 	// above, we need to wait them to be deleted.
 	//
 	// if there are any Hosted mode manifestworks we also wait for users to detach the managed cluster first.
@@ -194,7 +197,8 @@ func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster
 		return manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, klusterletSuffix) ||
 			manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, klusterletCRDsSuffix)
 	}
-	noPendingManifestWorks, err := helpers.NoPendingManifestWorks(ctx, r.clientHolder.RuntimeClient, log, cluster.GetName(), ignoreKlusterlet)
+	noPendingManifestWorks, err := helpers.NoPendingManifestWorks(
+		ctx, r.clientHolder.RuntimeClient, log, cluster.GetName(), ignoreKlusterlet)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -224,7 +228,8 @@ func (r *ReconcileManifestWork) deleteManifestWorks(ctx context.Context, cluster
 		return reconcile.Result{}, nil
 	}
 
-	return reconcile.Result{}, helpers.DeleteManifestWork(ctx, r.clientHolder.RuntimeClient, r.recorder, klusterletWork.Namespace, klusterletWork.Name)
+	return reconcile.Result{}, helpers.DeleteManifestWork(
+		ctx, r.clientHolder.RuntimeClient, r.recorder, klusterletWork.Namespace, klusterletWork.Name)
 }
 
 func createKlusterletCRDsManifestWork(managedCluster *clusterv1.ManagedCluster, importSecret *corev1.Secret) *workv1.ManifestWork {

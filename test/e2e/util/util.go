@@ -84,6 +84,31 @@ func CreateHostedManagedCluster(clusterClient clusterclient.Interface, name, man
 	return cluster, err
 }
 
+func CreateHostedManagedClusterWithShortLeaseDuration(clusterClient clusterclient.Interface, name, management string) (*clusterv1.ManagedCluster, error) {
+	clusterAnnotations := map[string]string{}
+	clusterAnnotations[constants.KlusterletDeployModeAnnotation] = constants.KlusterletDeployModeHosted
+	clusterAnnotations[constants.HostingClusterNameAnnotation] = management
+	cluster, err := clusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		return clusterClient.ClusterV1().ManagedClusters().Create(
+			context.TODO(),
+			&clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        name,
+					Annotations: clusterAnnotations,
+				},
+				Spec: clusterv1.ManagedClusterSpec{
+					HubAcceptsClient:     true,
+					LeaseDurationSeconds: 5,
+				},
+			},
+			metav1.CreateOptions{},
+		)
+	}
+
+	return cluster, err
+}
+
 func CreateManagedCluster(clusterClient clusterclient.Interface, name string, labels ...Label) (*clusterv1.ManagedCluster, error) {
 	clusterLabels := map[string]string{}
 	for _, label := range labels {
@@ -111,14 +136,21 @@ func CreateManagedCluster(clusterClient clusterclient.Interface, name string, la
 	return cluster, err
 }
 
-func CreateManagedClusterWithShortLeaseDuration(clusterClient clusterclient.Interface, name string) (*clusterv1.ManagedCluster, error) {
+func CreateManagedClusterWithShortLeaseDuration(clusterClient clusterclient.Interface, name string, labels ...Label) (*clusterv1.ManagedCluster, error) {
+	clusterLabels := map[string]string{}
+	for _, label := range labels {
+		clusterLabels[label.key] = label.value
+	}
+
 	cluster, err := clusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), name, metav1.GetOptions{})
+	Logf("create short lease duration managed cluster get cluster error: %v, cluster: %s", err, cluster)
 	if errors.IsNotFound(err) {
 		return clusterClient.ClusterV1().ManagedClusters().Create(
 			context.TODO(),
 			&clusterv1.ManagedCluster{
 				ObjectMeta: metav1.ObjectMeta{
-					Name: name,
+					Name:   name,
+					Labels: clusterLabels,
 				},
 				Spec: clusterv1.ManagedClusterSpec{
 					HubAcceptsClient:     true,

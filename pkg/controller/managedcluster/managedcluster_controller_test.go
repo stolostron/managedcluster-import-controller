@@ -138,7 +138,7 @@ func TestReconcile(t *testing.T) {
 			},
 		},
 		{
-			name: "managed clusters is deleting, but there are some pods in its namesapce",
+			name: "managed clusters is deleting, but there are some pods in its namespace",
 			startObjs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
@@ -237,7 +237,7 @@ func TestReconcile(t *testing.T) {
 			},
 			validateFunc: func(t *testing.T, runtimeClient client.Client) {
 				addon := &v1alpha1.ManagedClusterAddOn{}
-				if err := runtimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, addon); !errors.IsNotFound(err) {
+				if err := runtimeClient.Get(context.TODO(), types.NamespacedName{Namespace: "test", Name: "test"}, addon); !errors.IsNotFound(err) {
 					t.Errorf("unexpected not found, but failed, %v", err)
 				}
 				ns := &corev1.Namespace{}

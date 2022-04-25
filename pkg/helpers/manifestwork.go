@@ -165,7 +165,8 @@ func NoPendingManifestWorks(ctx context.Context, runtimeClient client.Client, lo
 }
 
 // ListManagedClusterAddons lists all managedclusteraddons for the managed cluster
-func ListManagedClusterAddons(ctx context.Context, runtimeClient client.Client, clusterName string) (*addonv1alpha1.ManagedClusterAddOnList, error) {
+func ListManagedClusterAddons(ctx context.Context, runtimeClient client.Client, clusterName string) (
+	*addonv1alpha1.ManagedClusterAddOnList, error) {
 	managedClusterAddons := &addonv1alpha1.ManagedClusterAddOnList{}
 	if err := runtimeClient.List(ctx, managedClusterAddons, client.InNamespace(clusterName)); err != nil {
 		return nil, err
@@ -184,8 +185,17 @@ func NoManagedClusterAddons(ctx context.Context, runtimeClient client.Client, cl
 }
 
 // DeleteManagedClusterAddons deletes all managedclusteraddons for the managed cluster
-func DeleteManagedClusterAddons(ctx context.Context, runtimeClient client.Client, clusterName string) error {
-	return runtimeClient.DeleteAllOf(ctx, &addonv1alpha1.ManagedClusterAddOn{}, client.InNamespace(clusterName))
+func DeleteManagedClusterAddons(
+	ctx context.Context,
+	runtimeClient client.Client,
+	recorder events.Recorder,
+	cluster *clusterv1.ManagedCluster) error {
+	if IsClusterUnavailable(cluster) {
+		// the managed cluster is offline, force delete all managed cluster addons
+		return ForceDeleteAllManagedClusterAddons(ctx, runtimeClient, recorder, cluster.GetName())
+	}
+
+	return runtimeClient.DeleteAllOf(ctx, &addonv1alpha1.ManagedClusterAddOn{}, client.InNamespace(cluster.GetName()))
 }
 
 // DeleteManifestWorkWithSelector deletes manifestworks but ignores the ignoredSelector selected manifestworks
