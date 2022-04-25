@@ -223,6 +223,7 @@ func (r *ReconcileManagedCluster) deleteManagedClusterNamespace(
 
 	// force delete addons before delete cluster namespace in this case the addon is in deleting with finalizer.
 	// otherwise, the deleting addon may prevent the cluster namespace from being deleted.
+	// TODO: consider to delete this since addons should be deleted by the manifestwork controller.
 	addons := &v1alpha1.ManagedClusterAddOnList{}
 	if err := r.client.List(ctx, addons, client.InNamespace(clusterName)); err != nil {
 		return err

@@ -332,7 +332,7 @@ func assertManagedClusterDeletedFromHub(clusterName string) {
 
 	start = time.Now()
 	ginkgo.By(fmt.Sprintf("Should delete the managed cluster namespace %s", clusterName), func() {
-		gomega.Expect(wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
+		gomega.Expect(wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
 			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
 				return true, nil

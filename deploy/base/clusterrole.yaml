@@ -191,14 +191,6 @@ rules:
   - watch
   - escalate
 - apiGroups:
-  - coordination.k8s.io
-  resources:
-  - leases
-  verbs:
-  - get
-  - create
-  - update
-- apiGroups:
     - agent-install.openshift.io
   resources:
     - infraenvs
@@ -206,6 +198,14 @@ rules:
     - get
     - list
     - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - get
+  - create
+  - update
 - apiGroups:
     - addon.open-cluster-management.io
   resources:
@@ -218,3 +218,4 @@ rules:
     - patch
     - update
     - delete
+    - deletecollection

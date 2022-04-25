@@ -606,3 +606,21 @@ func ForceDeleteManagedClusterAddon(
 		fmt.Sprintf("The managedClusterAddon %s/%s is force deleted", addon.Namespace, addon.Name))
 	return nil
 }
+
+// ForceDeleteAllManagedClusterAddons delete all managed cluster addons forcefully
+func ForceDeleteAllManagedClusterAddons(
+	ctx context.Context,
+	runtimeClient client.Client,
+	recorder events.Recorder,
+	clusterName string) error {
+	addons, err := ListManagedClusterAddons(ctx, runtimeClient, clusterName)
+	if err != nil {
+		return err
+	}
+	for _, item := range addons.Items {
+		if err := ForceDeleteManagedClusterAddon(ctx, runtimeClient, recorder, item); err != nil {
+			return err
+		}
+	}
+	return nil
+}

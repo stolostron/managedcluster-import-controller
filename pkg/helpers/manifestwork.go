@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
+	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 )
@@ -38,7 +39,7 @@ func AssertManifestWorkFinalizer(ctx context.Context, runtimeClient client.Clien
 	}
 
 	if !cluster.DeletionTimestamp.IsZero() {
-		// cluser is deleting, do nothing
+		// cluster is deleting, do nothing
 		return nil
 	}
 
@@ -161,6 +162,40 @@ func NoPendingManifestWorks(ctx context.Context, runtimeClient client.Client, lo
 	}
 
 	return true, nil
+}
+
+// ListManagedClusterAddons lists all managedclusteraddons for the managed cluster
+func ListManagedClusterAddons(ctx context.Context, runtimeClient client.Client, clusterName string) (
+	*addonv1alpha1.ManagedClusterAddOnList, error) {
+	managedClusterAddons := &addonv1alpha1.ManagedClusterAddOnList{}
+	if err := runtimeClient.List(ctx, managedClusterAddons, client.InNamespace(clusterName)); err != nil {
+		return nil, err
+	}
+	return managedClusterAddons, nil
+}
+
+// // NoManagedClusterAddons checks whether there are managedclusteraddons for the managed cluster
+func NoManagedClusterAddons(ctx context.Context, runtimeClient client.Client, clusterName string) (bool, error) {
+	managedclusteraddons, err := ListManagedClusterAddons(ctx, runtimeClient, clusterName)
+	if err != nil {
+		return false, err
+	}
+
+	return len(managedclusteraddons.Items) == 0, nil
+}
+
+// DeleteManagedClusterAddons deletes all managedclusteraddons for the managed cluster
+func DeleteManagedClusterAddons(
+	ctx context.Context,
+	runtimeClient client.Client,
+	recorder events.Recorder,
+	cluster *clusterv1.ManagedCluster) error {
+	if IsClusterUnavailable(cluster) {
+		// the managed cluster is offline, force delete all managed cluster addons
+		return ForceDeleteAllManagedClusterAddons(ctx, runtimeClient, recorder, cluster.GetName())
+	}
+
+	return runtimeClient.DeleteAllOf(ctx, &addonv1alpha1.ManagedClusterAddOn{}, client.InNamespace(cluster.GetName()))
 }
 
 // DeleteManifestWorkWithSelector deletes manifestworks but ignores the ignoredSelector selected manifestworks
