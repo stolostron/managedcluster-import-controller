@@ -127,17 +127,17 @@ status:
 EOF
 
 echo "creating managed cluster"
-kind create cluster --name ${CLUSTER_NAME}-managed --config "${FUNCT_TEST_TMPDIR}/kind-config/kind-managed-config.yaml"
+kind create cluster --name ${CLUSTER_NAME}-managed --config "${FUNCT_TEST_TMPDIR}/kind-config/kind-managed-config.yaml" --image kindest/node:v1.19.1
 # setup kubeconfig
 kind get kubeconfig --name ${CLUSTER_NAME}-managed > ${KIND_MANAGED_KUBECONFIG}
 kind get kubeconfig --name ${CLUSTER_NAME}-managed --internal > ${KIND_MANAGED_KUBECONFIG_INTERNAL}
 echo "creating hub cluster"
-kind create cluster --name ${CLUSTER_NAME} --config "${FUNCT_TEST_TMPDIR}/kind-config/kind-config.yaml"
+kind create cluster --name ${CLUSTER_NAME} --config "${FUNCT_TEST_TMPDIR}/kind-config/kind-config.yaml" --image kindest/node:v1.19.1
 
 # setup kubeconfig
 kind get kubeconfig --name ${CLUSTER_NAME} > ${KIND_KUBECONFIG}
 kind get kubeconfig --name ${CLUSTER_NAME} --internal > ${KIND_KUBECONFIG_INTERNAL}
-API_SERVER_URL=$(cat ${KIND_KUBECONFIG_INTERNAL}| grep "server:" |cut -d ":" -f2 -f3 -f4 | sed 's/^ //')
+API_SERVER_URL=$(cat ${KIND_KUBECONFIG_INTERNAL}| grep "server:" | awk '{print $2}')
 
 # load image if possible
 kind load docker-image ${DOCKER_IMAGE_AND_TAG} --name=${CLUSTER_NAME} -v 99 || echo "failed to load image locally, will use imagePullSecret"
@@ -186,4 +186,3 @@ else
 
   go tool cover -html "${FUNCT_TEST_COVERAGE}/cover-functional.out" -o ${PROJECT_DIR}/test/functional/coverage/cover-functional.html
 fi
-
