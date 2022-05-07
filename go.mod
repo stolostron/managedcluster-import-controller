@@ -103,6 +103,7 @@ require (
 
 // required by multicloud-operators-foundation
 replace (
+	github.com/hashicorp/go-getter => github.com/hashicorp/go-getter v1.5.2 // CVE-2022-29810
 	github.com/kubevirt/terraform-provider-kubevirt => github.com/nirarg/terraform-provider-kubevirt v0.0.0-20201222125919-101cee051ed3
 	github.com/metal3-io/baremetal-operator => github.com/openshift/baremetal-operator v0.0.0-20200715132148-0f91f62a41fe
 	github.com/metal3-io/cluster-api-provider-baremetal => github.com/openshift/cluster-api-provider-baremetal v0.0.0-20190821174549-a2a477909c1d
