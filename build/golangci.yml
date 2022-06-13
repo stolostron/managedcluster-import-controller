@@ -40,21 +40,23 @@ linters:
     - gocritic
     - gofmt
     - goimports
-    - golint
     - gosec
     - gosimple
     - govet
     - ineffassign
     - lll
     - misspell
-    - staticcheck
-    - structcheck
-    - stylecheck
     - typecheck
     - unconvert
-    - unparam
-    - unused
     - varcheck
+    # disable in go 1.18
+    # - golint
+    # - unparam
+    # - unused
+    # - gosimple
+    # - staticcheck
+    # - structcheck
+    # - stylecheck
   # don't enable:
   # - gocyclo
   # - bodyclose
