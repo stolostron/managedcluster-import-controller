@@ -17,11 +17,11 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v2
       with:
-        go-version: 1.17
+        go-version: 1.18
 
     - name: E2E Tests
       run: make e2e-test
-  
+
     - if:  ${{ failure() }}
       name: Logs after Tests Failed
       run: kubectl --kubeconfig=_output/kubeconfig -n open-cluster-management logs -l name=managedcluster-import-controller --tail=-1

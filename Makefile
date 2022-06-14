@@ -66,7 +66,7 @@ build:
 ## Builds controller image
 .PHONY: build-image
 build-image:
-	$(DOCKER_BUILDER) build -f $(DOCKER_FILE) . -t $(DOCKER_IMAGE) 
+	$(DOCKER_BUILDER) build -f $(DOCKER_FILE) . -t $(DOCKER_IMAGE)
 
 ## Builds controller image with coverage
 .PHONY: build-image-coverage
@@ -102,11 +102,10 @@ clean-e2e-test:
 # Update vendor
 .PHONY: vendor
 vendor:
-	go mod tidy -compat=1.17
+	go mod tidy -compat=1.18
 	go mod vendor
 
 # Copy CRDs
 .PHONY: copy-crd
 copy-crd: vendor
 	bash -x hack/copy-crds.sh
-
