@@ -13,6 +13,8 @@ import (
 	ginkgo "github.com/onsi/ginkgo"
 	gomega "github.com/onsi/gomega"
 
+	"github.com/google/go-cmp/cmp"
+
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
@@ -23,7 +25,9 @@ import (
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 
+	corev1 "k8s.io/api/core/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -503,6 +507,52 @@ func assertManagedClusterNamespace(managedClusterName string) {
 			if err != nil {
 				return false, err
 			}
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
+	})
+}
+
+func assertKlusterletNodePlacement(nodeSelecor map[string]string, tolerations []corev1.Toleration) {
+	ginkgo.By("Should create the managedCluster namespace", func() {
+		gomega.Expect(wait.Poll(1*time.Second, 60*time.Second, func() (bool, error) {
+			klusterlet, err := hubOperatorClient.OperatorV1().Klusterlets().Get(context.TODO(), "klusterlet", metav1.GetOptions{})
+			if err != nil && errors.IsNotFound(err) {
+				return true, nil
+			}
+
+			if err != nil {
+				return false, err
+			}
+
+			deploy, err := hubKubeClient.AppsV1().Deployments("open-cluster-management-agent").Get(context.TODO(), "klusterlet", metav1.GetOptions{})
+			if err != nil && errors.IsNotFound(err) {
+				return true, nil
+			}
+
+			if err != nil {
+				return false, err
+			}
+
+			if !equality.Semantic.DeepEqual(klusterlet.Spec.NodePlacement.NodeSelector, nodeSelecor) {
+				util.Logf(cmp.Diff(klusterlet.Spec.NodePlacement.NodeSelector, nodeSelecor))
+				return false, nil
+			}
+
+			if !equality.Semantic.DeepEqual(deploy.Spec.Template.Spec.NodeSelector, nodeSelecor) {
+				util.Logf(cmp.Diff(klusterlet.Spec.NodePlacement.NodeSelector, nodeSelecor))
+				return false, nil
+			}
+
+			if !equality.Semantic.DeepEqual(klusterlet.Spec.NodePlacement.Tolerations, tolerations) {
+				util.Logf(cmp.Diff(klusterlet.Spec.NodePlacement.Tolerations, tolerations))
+				return false, nil
+			}
+
+			if !equality.Semantic.DeepEqual(deploy.Spec.Template.Spec.Tolerations, tolerations) {
+				util.Logf(cmp.Diff(klusterlet.Spec.NodePlacement.Tolerations, tolerations))
+				return false, nil
+			}
+
 			return true, nil
 		})).ToNot(gomega.HaveOccurred())
 	})

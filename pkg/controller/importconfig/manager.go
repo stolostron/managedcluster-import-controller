@@ -61,8 +61,10 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 			DeleteFunc:  func(e event.DeleteEvent) bool { return false },
 			CreateFunc:  func(e event.CreateEvent) bool { return true },
 			UpdateFunc: func(e event.UpdateEvent) bool {
-				// only handle the labels changes for image registry
-				return !equality.Semantic.DeepEqual(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels())
+				// handle the labels changes for image registry
+				// handle the annotations changes for node placement
+				return !equality.Semantic.DeepEqual(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels()) ||
+					!equality.Semantic.DeepEqual(e.ObjectOld.GetAnnotations(), e.ObjectNew.GetAnnotations())
 			},
 		}),
 	); err != nil {

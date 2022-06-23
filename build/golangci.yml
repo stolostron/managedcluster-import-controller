@@ -23,6 +23,7 @@ run:
   skip-files:
     - ".*\\.pb\\.go"
     - ".*\\.gen\\.go"
+    - ".*_test\\.go"
 issues:
   # We want to make sure we get a full report every time. Setting these
   # to zero disables the limit.

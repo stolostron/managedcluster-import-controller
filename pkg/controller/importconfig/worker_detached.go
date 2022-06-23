@@ -49,6 +49,11 @@ func (w *hostedWorker) generateImportSecret(ctx context.Context, managedCluster 
 		return nil, err
 	}
 
+	tolerations, err := helpers.GetTolerations(managedCluster)
+	if err != nil {
+		return nil, err
+	}
+
 	config := KlusterletRenderConfig{
 		ManagedClusterNamespace: managedCluster.Name,
 		KlusterletNamespace:     klusterletNamespace,
@@ -56,6 +61,7 @@ func (w *hostedWorker) generateImportSecret(ctx context.Context, managedCluster 
 		RegistrationImageName:   registrationImageName,
 		WorkImageName:           workImageName,
 		NodeSelector:            nodeSelector,
+		Tolerations:             tolerations,
 		InstallMode:             string(operatorv1.InstallModeHosted),
 	}
 

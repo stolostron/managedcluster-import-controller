@@ -294,6 +294,75 @@ func TestReconcile(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "nodeSelector and tolerations",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							"open-cluster-management/nodeSelector": "{\"kubernetes.io/os\":\"linux\"}",
+							"open-cluster-management/tolerations":  "[{\"key\":\"foo\",\"operator\":\"Exists\",\"effect\":\"NoExecute\",\"tolerationSeconds\":20}]",
+						},
+					},
+				},
+				&configv1.Infrastructure{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "cluster",
+					},
+				},
+			},
+			runtimeObjs: []runtime.Object{
+				&corev1.ServiceAccount{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa",
+						Namespace: "test",
+					},
+					Secrets: []corev1.ObjectReference{
+						{
+							Name:      "test-bootstrap-sa-token-5pw5c",
+							Namespace: "test",
+						},
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa-token-5pw5c",
+						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"token": []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeServiceAccountToken,
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
+						Namespace: os.Getenv("POD_NAMESPACE"),
+					},
+					Data: map[string][]byte{
+						corev1.DockerConfigJsonKey: []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeDockerConfigJson,
+				},
+			},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, client runtimeclient.Client, kubeClient kubernetes.Interface) {
+				_, err := kubeClient.CoreV1().Secrets("test").Get(context.TODO(), "test-import", metav1.GetOptions{})
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+			},
+		},
 	}
 
 	for _, c := range cases {

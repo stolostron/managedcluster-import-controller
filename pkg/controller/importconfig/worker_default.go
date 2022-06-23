@@ -81,6 +81,11 @@ func (w *defaultWorker) generateImportSecret(ctx context.Context, managedCluster
 		return nil, err
 	}
 
+	tolerations, err := helpers.GetTolerations(managedCluster)
+	if err != nil {
+		return nil, err
+	}
+
 	type DefaultRenderConfig struct {
 		KlusterletRenderConfig
 		UseImagePullSecret        bool
@@ -98,6 +103,7 @@ func (w *defaultWorker) generateImportSecret(ctx context.Context, managedCluster
 			RegistrationImageName:   registrationImageName,
 			WorkImageName:           workImageName,
 			NodeSelector:            nodeSelector,
+			Tolerations:             tolerations,
 			InstallMode:             string(operatorv1.InstallModeDefault),
 		},
 

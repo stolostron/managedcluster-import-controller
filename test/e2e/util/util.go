@@ -136,6 +136,50 @@ func CreateManagedCluster(clusterClient clusterclient.Interface, name string, la
 	return cluster, err
 }
 
+func CreateManagedClusterWithAnnotations(
+	clusterClient clusterclient.Interface,
+	name string,
+	annotations map[string]string,
+	labels ...Label) (*clusterv1.ManagedCluster, error) {
+	clusterLabels := map[string]string{}
+	for _, label := range labels {
+		clusterLabels[label.key] = label.value
+	}
+
+	cluster, err := clusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), name, metav1.GetOptions{})
+	Logf("create managed cluster get cluster error: %v, cluster: %s", err, cluster)
+	if errors.IsNotFound(err) {
+		return clusterClient.ClusterV1().ManagedClusters().Create(
+			context.TODO(),
+			&clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        name,
+					Labels:      clusterLabels,
+					Annotations: annotations,
+				},
+				Spec: clusterv1.ManagedClusterSpec{
+					HubAcceptsClient: true,
+				},
+			},
+			metav1.CreateOptions{},
+		)
+	}
+
+	return cluster, err
+}
+
+func RemoveManagedClusterAnnotations(clusterClient clusterclient.Interface, name string) error {
+	cluster, err := clusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), name, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	cluster.Annotations = map[string]string{}
+
+	_, err = clusterClient.ClusterV1().ManagedClusters().Update(context.TODO(), cluster, metav1.UpdateOptions{})
+	return err
+}
+
 func CreateManagedClusterWithShortLeaseDuration(clusterClient clusterclient.Interface, name string, labels ...Label) (*clusterv1.ManagedCluster, error) {
 	clusterLabels := map[string]string{}
 	for _, label := range labels {

@@ -14,6 +14,9 @@ import (
 	"strings"
 	"text/template"
 
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
@@ -40,6 +43,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
@@ -54,8 +58,10 @@ import (
 
 const maxConcurrentReconcilesEnvVarName = "MAX_CONCURRENT_RECONCILES"
 
-// AnnotationNodeSelector key name of nodeSelector annotation synced from mch
-const AnnotationNodeSelector = "open-cluster-management/nodeSelector"
+const (
+	nodeSelectorAnnotation = "open-cluster-management/nodeSelector"
+	tolerationsAnnotation  = "open-cluster-management/tolerations"
+)
 
 var v1APIExtensionMinVersion = version.MustParseGeneric("v1.16.0")
 
@@ -491,7 +497,7 @@ func reportEvent(recorder events.Recorder, metaObj metav1.Object, objKind, actio
 		name = fmt.Sprintf("%s/%s", metaObj.GetNamespace(), metaObj.GetName())
 	}
 
-	recorder.Eventf(fmt.Sprintf("%s%s", objKind, strings.Title(action)), "%s is %s", name, action)
+	recorder.Eventf(fmt.Sprintf("%s%s", objKind, cases.Title(language.English).String(action)), "%s is %s", name, action)
 }
 
 func NewEventRecorder(kubeClient kubernetes.Interface, controllerName string) events.Recorder {
@@ -522,24 +528,48 @@ func GetComponentNamespace() (string, error) {
 }
 
 func GetNodeSelector(cluster *clusterv1.ManagedCluster) (map[string]string, error) {
-	// This part is to support running pods related local-cluster on specified nodes,like infra nodes.
 	nodeSelector := map[string]string{}
-	if cluster.GetName() != "local-cluster" {
-		return nodeSelector, nil
-	}
 
-	annotations := cluster.GetAnnotations()
-	nodeSelectorString, ok := annotations[AnnotationNodeSelector]
+	nodeSelectorString, ok := cluster.Annotations[nodeSelectorAnnotation]
 	if !ok {
 		return nodeSelector, nil
 	}
 
 	if err := json.Unmarshal([]byte(nodeSelectorString), &nodeSelector); err != nil {
-		klog.Errorf("failed to unmarshal nodeSelector annotation of cluster %v. err=%v", cluster.GetName(), err)
-		return nodeSelector, err
+		return nil, fmt.Errorf("invalid nodeSelector annotation of cluster %s, %v", cluster.Name, err)
+	}
+
+	if err := validateNodeSelector(nodeSelector); err != nil {
+		return nil, fmt.Errorf("invalid nodeSelector annotation of cluster %s, %v", cluster.Name, err)
 	}
 
 	return nodeSelector, nil
+}
+
+func GetTolerations(cluster *clusterv1.ManagedCluster) ([]corev1.Toleration, error) {
+	tolerations := []corev1.Toleration{}
+
+	tolerationsString, ok := cluster.Annotations[tolerationsAnnotation]
+	if !ok {
+		// return a defautl toleration
+		return []corev1.Toleration{
+			{
+				Effect:   corev1.TaintEffectNoSchedule,
+				Key:      "node-role.kubernetes.io/infra",
+				Operator: corev1.TolerationOpExists,
+			},
+		}, nil
+	}
+
+	if err := json.Unmarshal([]byte(tolerationsString), &tolerations); err != nil {
+		return nil, fmt.Errorf("invalid tolerations annotation of cluster %s, %v", cluster.Name, err)
+	}
+
+	if err := validateTolerations(tolerations); err != nil {
+		return nil, fmt.Errorf("invalid tolerations annotation of cluster %s, %v", cluster.Name, err)
+	}
+
+	return tolerations, nil
 }
 
 // DetermineKlusterletMode gets the klusterlet deploy mode for the managed cluster.
@@ -623,4 +653,70 @@ func ForceDeleteAllManagedClusterAddons(
 		}
 	}
 	return nil
+}
+
+// refer to https://github.com/kubernetes/kubernetes/blob/master/pkg/apis/core/validation/validation.go#L3498
+func validateNodeSelector(nodeSelector map[string]string) error {
+	errs := []error{}
+	for key, val := range nodeSelector {
+		if errMsgs := validation.IsQualifiedName(key); len(errMsgs) != 0 {
+			errs = append(errs, fmt.Errorf(strings.Join(errMsgs, ";")))
+		}
+		if errMsgs := validation.IsValidLabelValue(val); len(errMsgs) != 0 {
+			errs = append(errs, fmt.Errorf(strings.Join(errMsgs, ";")))
+		}
+	}
+	return utilerrors.NewAggregate(errs)
+}
+
+// refer to https://github.com/kubernetes/kubernetes/blob/master/pkg/apis/core/validation/validation.go#L3330
+func validateTolerations(tolerations []corev1.Toleration) error {
+	errs := []error{}
+	for _, toleration := range tolerations {
+		// validate the toleration key
+		if len(toleration.Key) > 0 {
+			if errMsgs := validation.IsQualifiedName(toleration.Key); len(errMsgs) != 0 {
+				errs = append(errs, fmt.Errorf(strings.Join(errMsgs, ";")))
+			}
+		}
+
+		// empty toleration key with Exists operator and empty value means match all taints
+		if len(toleration.Key) == 0 && toleration.Operator != corev1.TolerationOpExists {
+			if len(toleration.Operator) == 0 {
+				errs = append(errs, fmt.Errorf(
+					"operator must be Exists when `key` is empty, which means \"match all values and all keys\""))
+			}
+		}
+
+		if toleration.TolerationSeconds != nil && toleration.Effect != corev1.TaintEffectNoExecute {
+			errs = append(errs, fmt.Errorf("effect must be 'NoExecute' when `tolerationSeconds` is set"))
+		}
+
+		// validate toleration operator and value
+		switch toleration.Operator {
+		// empty operator means Equal
+		case corev1.TolerationOpEqual, "":
+			if errMsgs := validation.IsValidLabelValue(toleration.Value); len(errMsgs) != 0 {
+				errs = append(errs, fmt.Errorf(strings.Join(errMsgs, ";")))
+			}
+		case corev1.TolerationOpExists:
+			if len(toleration.Value) > 0 {
+				errs = append(errs, fmt.Errorf("value must be empty when `operator` is 'Exists'"))
+			}
+		default:
+			errs = append(errs, fmt.Errorf("the operator %q is not supported", toleration.Operator))
+		}
+
+		// validate toleration effect, empty toleration effect means match all taint effects
+		if len(toleration.Effect) > 0 {
+			switch toleration.Effect {
+			case corev1.TaintEffectNoSchedule, corev1.TaintEffectPreferNoSchedule, corev1.TaintEffectNoExecute:
+				// allowed values are NoSchedule, PreferNoSchedule and NoExecute
+			default:
+				errs = append(errs, fmt.Errorf("the effect %q is not supported", toleration.Effect))
+			}
+		}
+	}
+
+	return utilerrors.NewAggregate(errs)
 }
