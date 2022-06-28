@@ -48,6 +48,7 @@ func init() {
 }
 
 func TestReconcile(t *testing.T) {
+	testKlusterletNamespace := "open-cluster-management-agent-test"
 	cases := []struct {
 		name         string
 		clientObjs   []runtimeclient.Object
@@ -159,8 +160,8 @@ func TestReconcile(t *testing.T) {
 					if !ok {
 						t.Errorf("import secret data %s, the first element is not namespace", constants.ImportSecretImportYamlKey)
 					}
-					if ns.Name != klusterletNamespace {
-						t.Errorf("import secret data %s, the namespace name %s is not %s", constants.ImportSecretImportYamlKey, ns.Name, klusterletNamespace)
+					if ns.Name != defaultKlusterletNamespace {
+						t.Errorf("import secret data %s, the namespace name %s is not %s", constants.ImportSecretImportYamlKey, ns.Name, defaultKlusterletNamespace)
 					}
 					pullSecret, ok := objs[8].(*corev1.Secret)
 					if !ok {
@@ -192,6 +193,9 @@ func TestReconcile(t *testing.T) {
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
+						Annotations: map[string]string{
+							constants.KlusterletNamespaceAnnotation: testKlusterletNamespace,
+						},
 					},
 				},
 				&configv1.Infrastructure{
@@ -272,8 +276,8 @@ func TestReconcile(t *testing.T) {
 					if !ok {
 						t.Errorf("import secret data %s, the first element is not namespace", constants.ImportSecretImportYamlKey)
 					}
-					if ns.Name != klusterletNamespace {
-						t.Errorf("import secret data %s, the namespace name %s is not %s", constants.ImportSecretImportYamlKey, ns.Name, klusterletNamespace)
+					if ns.Name != testKlusterletNamespace {
+						t.Errorf("import secret data %s, the namespace name %s is not %s", constants.ImportSecretImportYamlKey, ns.Name, testKlusterletNamespace)
 					}
 					pullSecret, ok := objs[8].(*corev1.Secret)
 					if !ok {
