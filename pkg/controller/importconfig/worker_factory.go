@@ -48,5 +48,6 @@ type KlusterletRenderConfig struct {
 	RegistrationImageName   string
 	WorkImageName           string
 	NodeSelector            map[string]string
+	Tolerations             []corev1.Toleration
 	InstallMode             string
 }

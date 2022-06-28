@@ -24,10 +24,18 @@ spec:
         "{{ $key }}": "{{ $value }}"
       {{- end }}
 {{- end }}
+{{- if .Tolerations }}
       tolerations:
-        - effect: NoSchedule
-          key: node-role.kubernetes.io/infra
-          operator: Exists
+      {{- range $toleration := .Tolerations }}
+      - key: "{{ $toleration.Key }}"
+        value: "{{ $toleration.Value }}"
+        effect: "{{ $toleration.Effect }}"
+        operator: "{{ $toleration.Operator }}"
+        {{- if $toleration.TolerationSeconds }}
+        tolerationSeconds: {{ $toleration.TolerationSeconds }}
+        {{- end }}
+      {{- end }}
+{{- end }}
       containers:
       - name: klusterlet
         image: {{ .RegistrationOperatorImage }}

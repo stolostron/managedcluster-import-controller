@@ -1,30 +1,40 @@
 apiVersion: operator.open-cluster-management.io/v1
 kind: Klusterlet
 metadata:
-  {{if eq .InstallMode "Hosted"}}
+{{- if eq .InstallMode "Hosted"}}
   name: klusterlet-{{ .ManagedClusterNamespace }}
-  {{ else }}
+{{- else }}
   name: klusterlet
-  {{end}}
+{{- end}}
 spec:
   deployOption:
-    {{if eq .InstallMode "Hosted"}}
+{{- if eq .InstallMode "Hosted"}}
     mode: Hosted
-    {{ else }}
+{{- else }}
     mode: Default
-    {{end}}
+{{- end}}
   registrationImagePullSpec: "{{ .RegistrationImageName }}"
   workImagePullSpec: "{{ .WorkImageName }}"
   clusterName: "{{ .ManagedClusterNamespace }}"
   namespace: "{{ .KlusterletNamespace }}"
+{{- if or .NodeSelector .Tolerations }}
   nodePlacement:
+{{- end }}
 {{- if .NodeSelector }}
     nodeSelector:
     {{- range $key, $value := .NodeSelector }}
       "{{ $key }}": "{{ $value }}"
     {{- end }}
 {{- end }}
+{{- if .Tolerations }}
     tolerations:
-    - effect: NoSchedule
-      key: node-role.kubernetes.io/infra
-      operator: Exists
+    {{- range $toleration := .Tolerations }}
+    - key: "{{ $toleration.Key }}"
+      value: "{{ $toleration.Value }}"
+      effect: "{{ $toleration.Effect }}"
+      operator: "{{ $toleration.Operator }}"
+      {{- if $toleration.TolerationSeconds }}
+      tolerationSeconds: {{ $toleration.TolerationSeconds }}
+      {{- end }}
+    {{- end }}
+{{- end }}
