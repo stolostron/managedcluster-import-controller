@@ -56,7 +56,7 @@ func (w *hostedWorker) generateImportSecret(ctx context.Context, managedCluster 
 
 	config := KlusterletRenderConfig{
 		ManagedClusterNamespace: managedCluster.Name,
-		KlusterletNamespace:     klusterletNamespace,
+		KlusterletNamespace:     klusterletNamespace(managedCluster),
 		BootstrapKubeconfig:     base64.StdEncoding.EncodeToString(bootstrapKubeconfigData),
 		RegistrationImageName:   registrationImageName,
 		WorkImageName:           workImageName,

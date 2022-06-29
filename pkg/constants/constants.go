@@ -47,6 +47,13 @@ const (
 	// of the managed cluster of the hub. The value of the annotation should be the ManagedCluster name of
 	// the hosting cluster.
 	HostingClusterNameAnnotation string = "import.open-cluster-management.io/hosting-cluster-name"
+
+	// KlusterletNamespaceAnnotation is used to customize the namespace to deploy the agent on the managed
+	// cluster. The namespace must have a prefix of "open-cluster-management-", and if it is not set,
+	// the namespace of "open-cluster-management-agent" is used to deploy agent.
+	// In the Hosted mode, this namespace still exists on the managed cluster to contain
+	// necessary resources, like service accounts, roles and rolebindings.
+	KlusterletNamespaceAnnotation string = "import.open-cluster-management.io/klusterlet-namespace"
 )
 
 const (

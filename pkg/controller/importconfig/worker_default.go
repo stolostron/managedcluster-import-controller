@@ -98,7 +98,7 @@ func (w *defaultWorker) generateImportSecret(ctx context.Context, managedCluster
 	config := DefaultRenderConfig{
 		KlusterletRenderConfig: KlusterletRenderConfig{
 			ManagedClusterNamespace: managedCluster.Name,
-			KlusterletNamespace:     klusterletNamespace,
+			KlusterletNamespace:     klusterletNamespace(managedCluster),
 			BootstrapKubeconfig:     base64.StdEncoding.EncodeToString(bootstrapKubeconfigData),
 			RegistrationImageName:   registrationImageName,
 			WorkImageName:           workImageName,

@@ -16,6 +16,7 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 )
 
@@ -29,7 +30,7 @@ const (
 	defaultImagePullSecretEnvVarName    = "DEFAULT_IMAGE_PULL_SECRET"
 )
 
-const klusterletNamespace = "open-cluster-management-agent"
+const defaultKlusterletNamespace = "open-cluster-management-agent"
 
 const managedClusterImagePullSecretName = "open-cluster-management-image-pull-credentials"
 
@@ -135,4 +136,12 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 	}
 
 	return reconcile.Result{}, nil
+}
+
+func klusterletNamespace(managedCluster *clusterv1.ManagedCluster) string {
+	if klusterletNamespace, ok := managedCluster.Annotations[constants.KlusterletNamespaceAnnotation]; ok {
+		return klusterletNamespace
+	}
+
+	return defaultKlusterletNamespace
 }
