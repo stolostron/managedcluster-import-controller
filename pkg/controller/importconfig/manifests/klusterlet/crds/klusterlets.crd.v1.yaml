@@ -3,6 +3,8 @@ kind: CustomResourceDefinition
 metadata:
   name: klusterlets.operator.open-cluster-management.io
 spec:
+  conversion:
+    strategy: None
   group: operator.open-cluster-management.io
   names:
     kind: Klusterlet

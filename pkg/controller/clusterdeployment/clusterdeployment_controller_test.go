@@ -7,10 +7,13 @@ import (
 	"context"
 	"testing"
 
-	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 
 	corev1 "k8s.io/api/core/v1"
@@ -31,6 +34,8 @@ var testscheme = scheme.Scheme
 func init() {
 	testscheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
 	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &hivev1.ClusterDeployment{})
+	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWork{})
+	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWorkList{})
 }
 
 func TestReconcile(t *testing.T) {
@@ -125,6 +130,24 @@ func TestReconcile(t *testing.T) {
 							AdminKubeconfigSecretRef: corev1.LocalObjectReference{
 								Name: "test",
 							},
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
 						},
 					},
 				},

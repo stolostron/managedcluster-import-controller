@@ -63,32 +63,6 @@ func TestReconcile(t *testing.T) {
 			},
 		},
 		{
-			name: "no manifest works",
-			startObjs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: v1.ObjectMeta{
-						Name:       "test",
-						Finalizers: []string{constants.ManifestWorkFinalizer},
-					},
-				},
-			},
-			secrets: []runtime.Object{},
-			request: reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name: "test",
-				},
-			},
-			validateFunc: func(t *testing.T, runtimeClient client.Client) {
-				managedCluster := &clusterv1.ManagedCluster{}
-				if err := runtimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, managedCluster); err != nil {
-					t.Errorf("unexpected error: %v", err)
-				}
-				if len(managedCluster.Finalizers) != 0 {
-					t.Errorf("expected no finalizers, but failed")
-				}
-			},
-		},
-		{
 			name: "manifest works are created",
 			startObjs: []client.Object{
 				&clusterv1.ManagedCluster{
@@ -103,7 +77,9 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			secrets: []runtime.Object{},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+			},
 			request: reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: "test",
@@ -242,8 +218,8 @@ func TestReconcile(t *testing.T) {
 				if err := runtimeClient.List(context.TODO(), manifestWorks, &client.ListOptions{Namespace: "test"}); err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
-				if len(manifestWorks.Items) != 1 {
-					t.Errorf("expected one work, but failed %d", len(manifestWorks.Items))
+				if len(manifestWorks.Items) != 0 {
+					t.Errorf("expected no works, but failed %d", len(manifestWorks.Items))
 				}
 			},
 		},

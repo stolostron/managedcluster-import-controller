@@ -446,6 +446,30 @@ func assertManagedClusterAvailable(clusterName string) {
 }
 
 func assertManagedClusterManifestWorks(clusterName string) {
+	ginkgo.By(fmt.Sprintf("Managed cluster %s manifest works should be created", clusterName), func() {
+		start := time.Now()
+		gomega.Expect(wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
+			klusterletCRDsName := fmt.Sprintf("%s-klusterlet-crds", clusterName)
+			klusterletName := fmt.Sprintf("%s-klusterlet", clusterName)
+			manifestWorks := hubWorkClient.WorkV1().ManifestWorks(clusterName)
+
+			if _, err := manifestWorks.Get(context.TODO(), klusterletCRDsName, metav1.GetOptions{}); err != nil {
+				return false, err
+			}
+
+			if _, err := manifestWorks.Get(context.TODO(), klusterletName, metav1.GetOptions{}); err != nil {
+				return false, err
+			}
+
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
+		util.Logf("assert managed cluster manifestworks spending time: %.2f seconds", time.Since(start).Seconds())
+	})
+
+	assertManagedClusterFinalizer(clusterName, "managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup")
+}
+
+func assertManagedClusterManifestWorksAvailable(clusterName string) {
 	assertManagedClusterFinalizer(clusterName, "managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup")
 
 	ginkgo.By(fmt.Sprintf("Managed cluster %s manifest works should be available", clusterName), func() {

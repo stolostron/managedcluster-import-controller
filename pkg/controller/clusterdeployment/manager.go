@@ -4,6 +4,11 @@
 package clusterdeployment
 
 import (
+	"strings"
+
+	workv1 "open-cluster-management.io/api/work/v1"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
@@ -52,6 +57,7 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 		return err
 	}
 
+	// watch the clusterdeployment
 	if err := c.Watch(
 		&runtimesource.Kind{Type: &hivev1.ClusterDeployment{}},
 		handler.EnqueueRequestsFromMapFunc(func(o client.Object) []reconcile.Request {
@@ -66,6 +72,7 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 		return err
 	}
 
+	// watch the import secret
 	if err := c.Watch(
 		source.NewImportSecretSource(importSecretInformer),
 		&source.ManagedClusterSecretEventHandler{},
@@ -78,6 +85,52 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 				old, okOld := e.ObjectOld.(*corev1.Secret)
 				if okNew && okOld {
 					return !equality.Semantic.DeepEqual(old.Data, new.Data)
+				}
+
+				return false
+			},
+		}),
+	); err != nil {
+		return err
+	}
+
+	// watch the klusterlet manifest works
+	if err := c.Watch(
+		&runtimesource.Kind{Type: &workv1.ManifestWork{}},
+		handler.EnqueueRequestsFromMapFunc(func(o client.Object) []reconcile.Request {
+			return []reconcile.Request{
+				{
+					NamespacedName: types.NamespacedName{
+						Name: o.GetNamespace(),
+					},
+				},
+			}
+		}),
+		predicate.Predicate(predicate.Funcs{
+			GenericFunc: func(e event.GenericEvent) bool { return false },
+			DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+			CreateFunc: func(e event.CreateEvent) bool {
+				workName := e.Object.GetName()
+				// only watch klusterlet manifest works
+				if !strings.HasSuffix(workName, constants.KlusterletCRDsSuffix) &&
+					!strings.HasSuffix(workName, constants.KlusterletSuffix) {
+					return false
+				}
+
+				return true
+			},
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				workName := e.ObjectNew.GetName()
+				// only watch klusterlet manifest works
+				if !strings.HasSuffix(workName, constants.KlusterletCRDsSuffix) &&
+					!strings.HasSuffix(workName, constants.KlusterletSuffix) {
+					return false
+				}
+
+				new, okNew := e.ObjectNew.(*workv1.ManifestWork)
+				old, okOld := e.ObjectOld.(*workv1.ManifestWork)
+				if okNew && okOld {
+					return !helpers.ManifestsEqual(new.Spec.Workload.Manifests, old.Spec.Workload.Manifests)
 				}
 
 				return false

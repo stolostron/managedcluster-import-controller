@@ -10,17 +10,21 @@ import (
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 
 	"github.com/openshift/library-go/pkg/operator/events"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -81,6 +85,20 @@ func (r *ReconcileLocalCluster) Reconcile(ctx context.Context, request reconcile
 	}
 	if err != nil {
 		return reconcile.Result{}, err
+	}
+
+	// ensure the klusterlet manifest works exist
+	listOpts := &client.ListOptions{
+		Namespace:     request.Name,
+		LabelSelector: labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: "true"}),
+	}
+	manifestWorks := &workv1.ManifestWorkList{}
+	if err := r.clientHolder.RuntimeClient.List(ctx, manifestWorks, listOpts); err != nil {
+		return reconcile.Result{}, err
+	}
+	if len(manifestWorks.Items) != 2 {
+		reqLogger.Info(fmt.Sprintf("Waiting for klusterlet manifest works for managed cluster %s", request.Name))
+		return reconcile.Result{}, nil
 	}
 
 	importCondition := metav1.Condition{

@@ -7,14 +7,17 @@ import (
 	"context"
 	"fmt"
 
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
+
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	"github.com/openshift/library-go/pkg/operator/events"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 
@@ -55,7 +58,11 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	// TODO: we will use list instead of get to reduce the request in the future
+	if helpers.DetermineKlusterletMode(managedCluster) != constants.KlusterletDeployModeDefault {
+		return reconcile.Result{}, nil
+	}
+
+	// TODO: we will use lister instead of get to reduce the request in the future
 	autoImportSecret, err := r.kubeClient.CoreV1().Secrets(managedClusterName).Get(ctx, constants.AutoImportSecretName, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		// the auto import secret could have been deleted, do nothing
@@ -63,10 +70,6 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	}
 	if err != nil {
 		return reconcile.Result{}, err
-	}
-
-	if helpers.DetermineKlusterletMode(managedCluster) != constants.KlusterletDeployModeDefault {
-		return reconcile.Result{}, nil
 	}
 
 	importSecretName := fmt.Sprintf("%s-%s", managedClusterName, constants.ImportSecretNameSuffix)
@@ -77,6 +80,20 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	}
 	if err != nil {
 		return reconcile.Result{}, err
+	}
+
+	// ensure the klusterlet manifest works exist
+	listOpts := &client.ListOptions{
+		Namespace:     managedClusterName,
+		LabelSelector: labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: "true"}),
+	}
+	manifestWorks := &workv1.ManifestWorkList{}
+	if err := r.client.List(ctx, manifestWorks, listOpts); err != nil {
+		return reconcile.Result{}, err
+	}
+	if len(manifestWorks.Items) != 2 {
+		reqLogger.Info(fmt.Sprintf("Waiting for klusterlet manifest works for managed cluster %s", managedClusterName))
+		return reconcile.Result{}, nil
 	}
 
 	importCondition := metav1.Condition{
