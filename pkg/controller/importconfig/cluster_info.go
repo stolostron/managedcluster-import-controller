@@ -32,55 +32,54 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// getBootstrapSecret looks for the bootstrap secret from bootstrap sa
+// getBootstrapSecret lists the secrets from the managed cluster namespace to look
+// for the managed cluster bootstrap token secret.
+//
+// Note: this function depends on the OCP service account feature.
+// Starting with kube 1.24 (ocp 4.11), the k8s won't generate secrets any longer
+// automatically for ServiceAccounts, for OCP, when a service account is created,
+// the OCP will create two secrets, one stores dockercfg with name format (<sa name>-dockercfg-<random>)
+// and the other stores the servcie account token  with name format (<sa name>-token-<random>),
+// but the service account secrets won't list in the service account any longger.
 func getBootstrapSecret(ctx context.Context, kubeClient kubernetes.Interface, managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, error) {
 	saName := getBootstrapSAName(managedCluster.Name)
-	sa, err := kubeClient.CoreV1().ServiceAccounts(managedCluster.Name).Get(ctx, saName, metav1.GetOptions{})
+
+	secrets, err := kubeClient.CoreV1().Secrets(managedCluster.Name).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
 
-	for _, secretRef := range sa.Secrets {
-		if secretRef.Namespace != "" && secretRef.Namespace != managedCluster.Name {
+	for _, secret := range secrets.Items {
+		if secret.Type != corev1.SecretTypeServiceAccountToken {
 			continue
 		}
 
 		// refer definitions:
-		// https://github.com/kubernetes/kubernetes/blob/65178fec72df6275ed0aa3ede12c785ac79ab97a/pkg/controller/serviceaccount/tokens_controller.go#L392
-		// https://github.com/kubernetes/kubernetes/blob/65178fec72df6275ed0aa3ede12c785ac79ab97a/staging/src/k8s.io/apiserver/pkg/storage/names/generate.go#L49
+		// https://github.com/kubernetes/kubernetes/blob/v1.11.0/pkg/controller/serviceaccount/tokens_controller.go#L386
+		// https://github.com/kubernetes/kubernetes/blob/v1.11.0/staging/src/k8s.io/apiserver/pkg/storage/names/generate.go#L49
 		prefix := saName + "-token-"
 		if len(prefix) > names.MaxGeneratedNameLength {
 			prefix = prefix[:names.MaxGeneratedNameLength]
 		}
 
-		if strings.HasPrefix(secretRef.Name, prefix) {
-			secret, err := kubeClient.CoreV1().Secrets(managedCluster.Name).Get(ctx, secretRef.Name, metav1.GetOptions{})
-			if err != nil {
-				continue
-			}
-
-			if secret.Type != corev1.SecretTypeServiceAccountToken {
-				continue
-			}
-
-			token, ok := secret.Data["token"]
-			if !ok {
-				continue
-			}
-			if len(token) == 0 {
-				continue
-			}
-
-			return secret, nil
+		if !strings.HasPrefix(secret.Name, prefix) {
+			continue
 		}
+
+		token, ok := secret.Data["token"]
+		if !ok {
+			continue
+		}
+
+		if len(token) == 0 {
+			continue
+		}
+
+		return &secret, nil
 	}
 
-	return nil, fmt.Errorf("secret with prefix %s and type %s not found in service account %s/%s",
-		saName,
-		corev1.SecretTypeServiceAccountToken,
-		managedCluster.Name,
-		saName,
-	)
+	return nil, fmt.Errorf("managed cluster %s bootstrap token secret can not be found with its service account %s",
+		managedCluster.Name, saName)
 }
 
 // getKubeAPIServerAddress get the kube-apiserver URL from ocp infrastructure
