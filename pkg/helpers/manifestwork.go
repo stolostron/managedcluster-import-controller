@@ -1,6 +1,7 @@
 // Copyright (c) Red Hat, Inc.
 // Copyright Contributors to the Open Cluster Management project
 
+// TODO add unit test for the following functions, right now they are only covered in e2e
 package helpers
 
 import (
