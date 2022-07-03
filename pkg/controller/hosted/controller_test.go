@@ -1,3 +1,6 @@
+// Copyright (c) Red Hat, Inc.
+// Copyright Contributors to the Open Cluster Management project
+
 package hosted
 
 import (
@@ -143,7 +146,7 @@ func TestReconcile(t *testing.T) {
 		},
 		// managedcluster is Hosted mode, and managedCluster is deleting
 		{
-			name: "managedcluster is Hosted mode, and managedCluster is deleting",
+			name: "managedcluster is Hosted mode, and managedCluster is deleted",
 			runtimeObjs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
@@ -152,7 +155,7 @@ func TestReconcile(t *testing.T) {
 							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
 							constants.HostingClusterNameAnnotation:   "cluster1",
 						},
-						DeletionTimestamp: &metav1.Time{Time: time.Now()}, // managedCluster is deleting
+						DeletionTimestamp: &metav1.Time{Time: time.Now()}, // managedCluster is deleted
 					},
 				},
 				// manifestworks
@@ -189,7 +192,7 @@ func TestReconcile(t *testing.T) {
 					t.Errorf("expect no finalizer added, but get %v", managedcluster.Finalizers)
 				}
 
-				// expect hosted manifestwork are delete
+				// expect hosted manifestworks are deleted
 				manifestworks := &workv1.ManifestWorkList{}
 				err = ch.RuntimeClient.List(context.TODO(), manifestworks, client.InNamespace("cluster1"))
 				if err != nil {
@@ -244,7 +247,7 @@ func TestReconcile(t *testing.T) {
 		},
 		// managedcluster is Hosted mode, but import secret don't have data
 		{
-			name: "managedcluster is Hosted mode, and managedCluster is deleting",
+			name: "managedcluster is Hosted mode, but import secret don't have data",
 			runtimeObjs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
@@ -292,7 +295,7 @@ func TestReconcile(t *testing.T) {
 		},
 		// managedcluster is Hosted mode, and import secret have the data
 		{
-			name: "managedcluster is Hosted mode, and managedCluster is deleting",
+			name: "managedcluster is Hosted mode, and import secret have the data",
 			runtimeObjs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
@@ -336,18 +339,6 @@ metadata:
   name: foo1`),
 					},
 				},
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      constants.AutoImportSecretName,
-						Namespace: "test",
-					},
-					Data: map[string][]byte{
-						constants.ImportSecretImportYamlKey: []byte(`apiVersion: v1
-kind: Namespace
-metadata:
-  name: foo1`),
-					},
-				},
 			},
 			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
 			vaildateFunc: func(t *testing.T, reconcileResult reconcile.Result, reconcileErr error, ch *helpers.ClientHolder) {
@@ -356,6 +347,7 @@ metadata:
 				}
 			},
 		},
+		// TODO: add auto import secret test cases
 	}
 
 	for _, c := range cases {
