@@ -26,7 +26,6 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -43,8 +42,6 @@ var log = logf.Log.WithName(controllerName)
 type ReconcileHosted struct {
 	clientHolder *helpers.ClientHolder
 	scheme       *runtime.Scheme
-	client       client.Client
-	kubeClient   kubernetes.Interface
 	recorder     events.Recorder
 }
 
@@ -132,7 +129,7 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 		return reconcile.Result{}, err
 	}
 
-	autoImportSecret, err := r.kubeClient.CoreV1().Secrets(managedClusterName).Get(ctx, constants.AutoImportSecretName, metav1.GetOptions{})
+	autoImportSecret, err := r.clientHolder.KubeClient.CoreV1().Secrets(managedClusterName).Get(ctx, constants.AutoImportSecretName, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		// the auto import secret has not be created or has been deleted, do nothing
 		return reconcile.Result{}, nil
@@ -147,7 +144,7 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 	}
 	err = helpers.ApplyResources(r.clientHolder, r.recorder, r.scheme, managedCluster, manifestWork)
 	if err != nil {
-		errStatus := helpers.UpdateManagedClusterStatus(r.client, r.recorder, managedClusterName, metav1.Condition{
+		errStatus := helpers.UpdateManagedClusterStatus(r.clientHolder.RuntimeClient, r.recorder, managedClusterName, metav1.Condition{
 			Type:    "ExternalManagedKubeconfigCreatedSucceeded",
 			Status:  metav1.ConditionFalse,
 			Message: fmt.Sprintf("Unable to create external managed kubeconfig for %s: %s", managedCluster.Name, err.Error()),
@@ -157,11 +154,11 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 			return reconcile.Result{}, errStatus
 		}
 
-		errRetry := helpers.UpdateAutoImportRetryTimes(ctx, r.kubeClient, r.recorder, autoImportSecret.DeepCopy())
+		errRetry := helpers.UpdateAutoImportRetryTimes(ctx, r.clientHolder.KubeClient, r.recorder, autoImportSecret.DeepCopy())
 		return reconcile.Result{}, utilerrors.NewAggregate([]error{err, errRetry})
 	}
 
-	err = helpers.UpdateManagedClusterStatus(r.client, r.recorder, managedClusterName, metav1.Condition{
+	err = helpers.UpdateManagedClusterStatus(r.clientHolder.RuntimeClient, r.recorder, managedClusterName, metav1.Condition{
 		Type:    "ExternalManagedKubeconfigCreatedSucceeded",
 		Status:  metav1.ConditionTrue,
 		Message: "Created succeeded",
@@ -171,7 +168,7 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 		return reconcile.Result{}, err
 	}
 
-	err = helpers.DeleteAutoImportSecret(ctx, r.kubeClient, autoImportSecret)
+	err = helpers.DeleteAutoImportSecret(ctx, r.clientHolder.KubeClient, autoImportSecret)
 	if err != nil {
 		return reconcile.Result{}, err
 	}

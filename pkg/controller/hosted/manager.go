@@ -41,8 +41,6 @@ func newReconciler(mgr manager.Manager, clientHolder *helpers.ClientHolder) reco
 	return &ReconcileHosted{
 		clientHolder: clientHolder,
 		scheme:       mgr.GetScheme(),
-		client:       clientHolder.RuntimeClient,
-		kubeClient:   clientHolder.KubeClient,
 		recorder:     helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
 	}
 }
