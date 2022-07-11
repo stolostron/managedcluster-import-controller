@@ -141,7 +141,7 @@ func getKubeAPIServerCertificate(ctx context.Context, kubeClient kubernetes.Inte
 	secret, err := kubeClient.CoreV1().Secrets("openshift-config").Get(ctx, secretName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
-			log.Info("Failed to get secret", fmt.Sprintf("openshift-config/%s", secretName))
+			log.Info(fmt.Sprintf("Failed to get secret openshift-config/%s", secretName))
 			return nil, nil
 		}
 
