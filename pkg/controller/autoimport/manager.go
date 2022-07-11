@@ -14,8 +14,10 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
 
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -98,7 +100,16 @@ func add(importSecretInformer, autoImportSecretInformer cache.SharedIndexInforme
 	// watch the klusterlet manifest works
 	if err := c.Watch(
 		&runtimesource.Kind{Type: &workv1.ManifestWork{}},
-		&handler.EnqueueRequestForObject{},
+		handler.EnqueueRequestsFromMapFunc(func(o client.Object) []reconcile.Request {
+			return []reconcile.Request{
+				{
+					NamespacedName: types.NamespacedName{
+						Namespace: o.GetNamespace(),
+						Name:      o.GetNamespace(),
+					},
+				},
+			}
+		}),
 		predicate.Predicate(predicate.Funcs{
 			GenericFunc: func(e event.GenericEvent) bool { return false },
 			DeleteFunc:  func(e event.DeleteEvent) bool { return false },

@@ -64,7 +64,8 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 			return []reconcile.Request{
 				{
 					NamespacedName: types.NamespacedName{
-						Name: o.GetNamespace(),
+						Namespace: o.GetNamespace(),
+						Name:      o.GetNamespace(),
 					},
 				},
 			}
@@ -101,7 +102,8 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 			return []reconcile.Request{
 				{
 					NamespacedName: types.NamespacedName{
-						Name: o.GetNamespace(),
+						Namespace: o.GetNamespace(),
+						Name:      o.GetNamespace(),
 					},
 				},
 			}
