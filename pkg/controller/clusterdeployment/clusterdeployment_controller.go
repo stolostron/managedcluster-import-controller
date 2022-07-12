@@ -7,9 +7,10 @@ import (
 	"context"
 	"fmt"
 
-	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
 
@@ -19,6 +20,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/kubernetes"
@@ -118,6 +120,20 @@ func (r *ReconcileClusterDeployment) Reconcile(ctx context.Context, request reco
 	}
 	if err != nil {
 		return reconcile.Result{}, err
+	}
+
+	// ensure the klusterlet manifest works exist
+	listOpts := &client.ListOptions{
+		Namespace:     clusterName,
+		LabelSelector: labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: "true"}),
+	}
+	manifestWorks := &workv1.ManifestWorkList{}
+	if err := r.client.List(ctx, manifestWorks, listOpts); err != nil {
+		return reconcile.Result{}, err
+	}
+	if len(manifestWorks.Items) != 2 {
+		reqLogger.Info(fmt.Sprintf("Waiting for klusterlet manifest works for managed cluster %s", clusterName))
+		return reconcile.Result{}, nil
 	}
 
 	importCondition := metav1.Condition{

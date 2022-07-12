@@ -7,8 +7,11 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
+
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 
@@ -29,6 +32,8 @@ var testscheme = scheme.Scheme
 
 func init() {
 	testscheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
+	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWork{})
+	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWorkList{})
 }
 
 func TestReconcile(t *testing.T) {
@@ -87,6 +92,24 @@ func TestReconcile(t *testing.T) {
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
 					},
 				},
 			},

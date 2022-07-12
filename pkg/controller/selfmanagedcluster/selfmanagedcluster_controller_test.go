@@ -7,11 +7,14 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
+
 	operatorfake "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 
@@ -53,6 +56,8 @@ func init() {
 	testscheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
 	testscheme.AddKnownTypes(crdv1beta1.SchemeGroupVersion, &crdv1beta1.CustomResourceDefinition{})
 	testscheme.AddKnownTypes(operatorv1.SchemeGroupVersion, &operatorv1.Klusterlet{})
+	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWork{})
+	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWorkList{})
 }
 
 func TestReconcile(t *testing.T) {
@@ -157,6 +162,24 @@ func TestReconcile(t *testing.T) {
 						Name: "local-cluster",
 						Labels: map[string]string{
 							"local-cluster": "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "local-cluster-klusterlet-crds",
+						Namespace: "local-cluster",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "local-cluster-klusterlet",
+						Namespace: "local-cluster",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
 						},
 					},
 				},

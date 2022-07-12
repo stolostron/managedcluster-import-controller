@@ -29,11 +29,6 @@ import (
 
 const controllerName = "manifestwork-controller"
 
-const (
-	klusterletSuffix     = "klusterlet"
-	klusterletCRDsSuffix = "klusterlet-crds"
-)
-
 // Add creates a new manifestwork controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder,
@@ -66,7 +61,8 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 			return []reconcile.Request{
 				{
 					NamespacedName: types.NamespacedName{
-						Name: o.GetNamespace(),
+						Namespace: o.GetNamespace(),
+						Name:      o.GetNamespace(),
 					},
 				},
 			}
@@ -78,8 +74,8 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				workName := e.ObjectNew.GetName()
 				// for update event, only watch klusterlet manifest works
-				if !strings.HasSuffix(workName, klusterletCRDsSuffix) &&
-					!strings.HasSuffix(workName, klusterletSuffix) {
+				if !strings.HasSuffix(workName, constants.KlusterletCRDsSuffix) &&
+					!strings.HasSuffix(workName, constants.KlusterletSuffix) {
 					return false
 				}
 
@@ -115,7 +111,7 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 		predicate.Predicate(predicate.Funcs{
 			GenericFunc: func(e event.GenericEvent) bool { return false },
 			DeleteFunc:  func(e event.DeleteEvent) bool { return false },
-			CreateFunc:  func(e event.CreateEvent) bool { return false },
+			CreateFunc:  func(e event.CreateEvent) bool { return true },
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				new, okNew := e.ObjectNew.(*corev1.Secret)
 				old, okOld := e.ObjectOld.(*corev1.Secret)

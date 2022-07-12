@@ -457,6 +457,12 @@ func TestApplyResources(t *testing.T) {
 						Namespace: "test_cluster",
 					},
 				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "label_test_cluster",
+						Namespace: "label_test_cluster",
+					},
+				},
 			},
 			requiredObjs: []runtime.Object{
 				&corev1.ServiceAccount{
@@ -542,6 +548,15 @@ func TestApplyResources(t *testing.T) {
 									RawExtension: runtime.RawExtension{Raw: []byte("{\"test\":\"test1\"}")},
 								},
 							},
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "label_test_cluster",
+						Namespace: "label_test_cluster",
+						Labels: map[string]string{
+							"test": "test",
 						},
 					},
 				},
