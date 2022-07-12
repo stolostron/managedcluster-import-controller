@@ -31,9 +31,10 @@ var _ = ginkgo.Describe("Importing a self managed cluster", func() {
 
 		ginkgo.It("Should import the local-cluster", func() {
 			assertManagedClusterImportSecretCreated(localClusterName, "other")
+			assertManagedClusterManifestWorks(localClusterName)
 			assertManagedClusterImportSecretApplied(localClusterName)
 			assertManagedClusterAvailable(localClusterName)
-			assertManagedClusterManifestWorks(localClusterName)
+			assertManagedClusterManifestWorksAvailable(localClusterName)
 		})
 	})
 
@@ -67,9 +68,10 @@ var _ = ginkgo.Describe("Importing a self managed cluster", func() {
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			})
 
+			assertManagedClusterManifestWorks(managedClusterName)
 			assertManagedClusterImportSecretApplied(managedClusterName)
 			assertManagedClusterAvailable(managedClusterName)
-			assertManagedClusterManifestWorks(managedClusterName)
+			assertManagedClusterManifestWorksAvailable(managedClusterName)
 		})
 	})
 })

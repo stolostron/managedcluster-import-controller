@@ -19,7 +19,10 @@ const ImportFinalizer string = "managedcluster-import-controller.open-cluster-ma
 
 const SelfManagedLabel string = "local-cluster"
 
-const ClusterImportSecretLabel = "managedcluster-import-controller.open-cluster-management.io/import-secret"
+const (
+	ClusterImportSecretLabel = "managedcluster-import-controller.open-cluster-management.io/import-secret"
+	KlusterletWorksLabel     = "import.open-cluster-management.io/klusterlet-works"
+)
 
 const (
 	CreatedViaAnnotation = "open-cluster-management/created-via"
@@ -79,4 +82,9 @@ const (
 
 	// ManifestWorkPostponeDeleteTime is the postponed time to delete manifest work with postpone-delete annotation
 	ManifestWorkPostponeDeleteTime = 10 * time.Minute
+)
+
+const (
+	KlusterletSuffix     = "klusterlet"
+	KlusterletCRDsSuffix = "klusterlet-crds"
 )

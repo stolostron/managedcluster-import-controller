@@ -40,7 +40,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", fun
 			assertManagedClusterImportSecretCreated(localClusterName, "other")
 			assertManagedClusterImportSecretApplied(localClusterName)
 			assertManagedClusterAvailable(localClusterName)
-			assertManagedClusterManifestWorks(localClusterName)
+			assertManagedClusterManifestWorksAvailable(localClusterName)
 		})
 
 		ginkgo.AfterEach(func() {
@@ -222,7 +222,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", fun
 				}
 
 				return helpers.IsClusterUnavailable(cluster)
-			}, 5*time.Minute, 5*time.Second).ShouldNot(gomega.BeFalse())
+			}, 10*time.Minute, 5*time.Second).ShouldNot(gomega.BeFalse())
 
 			// the addon should be force deleted when the cluster is unavailable
 			ginkgo.By(fmt.Sprintf("the addon %s for cluster %s should be deleted", addon.Name, managedClusterName))
@@ -273,7 +273,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached in Ho
 			assertManagedClusterImportSecretCreated(localClusterName, "other")
 			assertManagedClusterImportSecretApplied(localClusterName)
 			assertManagedClusterAvailable(localClusterName)
-			assertManagedClusterManifestWorks(localClusterName)
+			assertManagedClusterManifestWorksAvailable(localClusterName)
 		})
 
 		ginkgo.JustBeforeEach(func() {

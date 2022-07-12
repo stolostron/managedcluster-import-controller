@@ -98,7 +98,7 @@ func getKubeAPIServerSecretName(ctx context.Context, client client.Client, dnsNa
 	apiserver := &ocinfrav1.APIServer{}
 	if err := client.Get(ctx, types.NamespacedName{Name: "cluster"}, apiserver); err != nil {
 		if errors.IsNotFound(err) {
-			log.Info("Failed to get ocp apiserver cluster")
+			log.Info("Ignore ocp apiserver, it is not found")
 			return "", nil
 		}
 		return "", err
@@ -168,7 +168,7 @@ func getImagePullSecret(ctx context.Context, clientHolder *helpers.ClientHolder,
 
 	defaultSecretName := os.Getenv(defaultImagePullSecretEnvVarName)
 	if defaultSecretName == "" {
-		log.Info(fmt.Sprintf("Cannot find the default image pull secret of the managed cluster %s from %s",
+		log.Info(fmt.Sprintf("Ignore the image pull secret for %s, it can neither be found from image registry nor from env %s",
 			managedCluster.Name, defaultImagePullSecretEnvVarName))
 		return nil, nil
 	}

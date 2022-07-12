@@ -20,7 +20,7 @@ var _ = ginkgo.Describe("Adding node placement to the klusterlet", func() {
 	var managedClusterName string
 
 	ginkgo.BeforeEach(func() {
-		managedClusterName = fmt.Sprintf("nodeplacement-test-%s", rand.String(6))
+		managedClusterName = fmt.Sprintf("klusterlet-node-placement-test-%s", rand.String(6))
 
 		ginkgo.By(fmt.Sprintf("Create managed cluster namespace %s", managedClusterName), func() {
 			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: managedClusterName}}
@@ -34,14 +34,6 @@ var _ = ginkgo.Describe("Adding node placement to the klusterlet", func() {
 	})
 
 	ginkgo.It("Should deploy the klusterlet without node placement", func() {
-		ginkgo.By(fmt.Sprintf("Create auto-import-secret for managed cluster %s with kubeconfig", managedClusterName), func() {
-			secret, err := util.NewAutoImportSecret(hubKubeClient, managedClusterName)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-
-			_, err = hubKubeClient.CoreV1().Secrets(managedClusterName).Create(context.TODO(), secret, metav1.CreateOptions{})
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-		})
-
 		ginkgo.By(fmt.Sprintf("Create managed cluster %s", managedClusterName), func() {
 			// using a local cluster to speed up cluster deletion
 			_, err := util.CreateManagedClusterWithAnnotations(
@@ -60,22 +52,10 @@ var _ = ginkgo.Describe("Adding node placement to the klusterlet", func() {
 		assertManagedClusterImportSecretApplied(managedClusterName)
 		assertKlusterletNodePlacement(map[string]string{}, []corev1.Toleration{})
 		assertManagedClusterAvailable(managedClusterName)
-		assertManagedClusterManifestWorks(managedClusterName)
-
-		assertAutoImportSecretDeleted(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
 	})
 
 	ginkgo.It("Should update the klusterlet node placement", func() {
-		ginkgo.By(fmt.Sprintf("Create auto-import-secret for managed cluster %s with kubeconfig", managedClusterName), func() {
-			secret, err := util.NewAutoImportSecret(hubKubeClient, managedClusterName)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-
-			secret.Annotations = map[string]string{"managedcluster-import-controller.open-cluster-management.io/keeping-auto-import-secret": ""}
-
-			_, err = hubKubeClient.CoreV1().Secrets(managedClusterName).Create(context.TODO(), secret, metav1.CreateOptions{})
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-		})
-
 		ginkgo.By(fmt.Sprintf("Create managed cluster %s", managedClusterName), func() {
 			_, err := util.CreateManagedClusterWithAnnotations(
 				hubClusterClient,
@@ -120,6 +100,6 @@ var _ = ginkgo.Describe("Adding node placement to the klusterlet", func() {
 		)
 
 		assertManagedClusterAvailable(managedClusterName)
-		assertManagedClusterManifestWorks(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
 	})
 })

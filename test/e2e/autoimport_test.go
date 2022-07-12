@@ -54,9 +54,10 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 		})
 
 		assertManagedClusterImportSecretCreated(managedClusterName, "other")
+		assertManagedClusterManifestWorks(managedClusterName)
 		assertManagedClusterImportSecretApplied(managedClusterName)
 		assertManagedClusterAvailable(managedClusterName)
-		assertManagedClusterManifestWorks(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
 
 		assertAutoImportSecretDeleted(managedClusterName)
 	})
@@ -77,9 +78,10 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 		})
 
 		assertManagedClusterImportSecretCreated(managedClusterName, "other")
+		assertManagedClusterManifestWorks(managedClusterName)
 		assertManagedClusterImportSecretApplied(managedClusterName)
 		assertManagedClusterAvailable(managedClusterName)
-		assertManagedClusterManifestWorks(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
 
 		assertAutoImportSecretDeleted(managedClusterName)
 	})
@@ -130,9 +132,10 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 		})
 
 		assertManagedClusterImportSecretCreated(managedClusterName, "other")
+		assertManagedClusterManifestWorks(managedClusterName)
 		assertManagedClusterImportSecretApplied(managedClusterName)
 		assertManagedClusterAvailable(managedClusterName)
-		assertManagedClusterManifestWorks(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
 
 		ginkgo.By(fmt.Sprintf("Should keep the auto-import-secret in managed cluster namespace %s", managedClusterName), func() {
 			gomega.Consistently(func() error {
@@ -156,7 +159,7 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret for
 			assertManagedClusterImportSecretCreated(localClusterName, "other")
 			assertManagedClusterImportSecretApplied(localClusterName)
 			assertManagedClusterAvailable(localClusterName)
-			assertManagedClusterManifestWorks(localClusterName)
+			assertManagedClusterManifestWorksAvailable(localClusterName)
 		})
 
 		ginkgo.JustBeforeEach(func() {
