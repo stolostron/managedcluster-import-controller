@@ -19,7 +19,6 @@ import (
 	operatorhelpers "github.com/openshift/library-go/pkg/operator/v1helpers"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -84,14 +83,15 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 		return r.deleteAddonsAndWorks(ctx, managedCluster, manifestWorks.Items)
 	}
 
-	if !meta.IsStatusConditionTrue(managedCluster.Status.Conditions, clusterv1.ManagedClusterConditionJoined) {
-		// managed cluster does not join, do nothing
-		return reconcile.Result{}, nil
-	}
-
-	// after managed cluster joined, apply klusterlet manifest works from import secret
+	// apply klusterlet manifest works from import secret
+	// Note: create the klusterlet manifest works before importing cluster to avoid the klusterlet applied manifest
+	// works are deleted from managed cluster if the restored hub has same host with the backup hub in the
+	// backup-restore case.
 	importSecretName := fmt.Sprintf("%s-%s", managedClusterName, constants.ImportSecretNameSuffix)
 	importSecret, err := r.clientHolder.KubeClient.CoreV1().Secrets(managedClusterName).Get(ctx, importSecretName, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		return reconcile.Result{}, nil
+	}
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -166,8 +166,8 @@ func (r *ReconcileManifestWork) deleteManifestWorks(
 	ignoreKlusterletAndAddons := func(clusterName string, manifestWork workv1.ManifestWork) bool {
 		manifestWorkName := manifestWork.GetName()
 		switch {
-		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, klusterletSuffix):
-		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, klusterletCRDsSuffix):
+		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, constants.KlusterletSuffix):
+		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, constants.KlusterletCRDsSuffix):
 		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, constants.HostedKlusterletManifestworkSuffix):
 		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, constants.HostedManagedKubeconfigManifestworkSuffix):
 		case strings.HasPrefix(manifestWorkName, fmt.Sprintf("%s-klusterlet-addon", manifestWork.GetNamespace())):
@@ -194,8 +194,8 @@ func (r *ReconcileManifestWork) deleteManifestWorks(
 
 	// check whether there are only klusterlet manifestworks
 	ignoreKlusterlet := func(clusterName string, manifestWork workv1.ManifestWork) bool {
-		return manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, klusterletSuffix) ||
-			manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, klusterletCRDsSuffix)
+		return manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, constants.KlusterletSuffix) ||
+			manifestWork.GetName() == fmt.Sprintf("%s-%s", clusterName, constants.KlusterletCRDsSuffix)
 	}
 	noPendingManifestWorks, err := helpers.NoPendingManifestWorks(
 		ctx, r.clientHolder.RuntimeClient, log, cluster.GetName(), ignoreKlusterlet)
@@ -208,25 +208,21 @@ func (r *ReconcileManifestWork) deleteManifestWorks(
 	}
 
 	// only have klusterlet manifest works, delete klusterlet manifest works
-	klusterletName := fmt.Sprintf("%s-%s", cluster.Name, klusterletSuffix)
+	klusterletName := fmt.Sprintf("%s-%s", cluster.Name, constants.KlusterletSuffix)
 	klusterletWork := &workv1.ManifestWork{}
 	err = r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Namespace: cluster.Name, Name: klusterletName}, klusterletWork)
 	if errors.IsNotFound(err) {
 		// the klusterlet work could be deleted, ensure the klusterlet crds work is deleted
 		return reconcile.Result{}, helpers.ForceDeleteManifestWork(ctx, r.clientHolder.RuntimeClient, r.recorder,
-			cluster.Name, fmt.Sprintf("%s-%s", cluster.Name, klusterletCRDsSuffix))
+			cluster.Name, fmt.Sprintf("%s-%s", cluster.Name, constants.KlusterletCRDsSuffix))
 	}
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
-	// if the manifest work is not applied, we do nothing to avoid to delete the cluster prematurely
-	// Note: there is a corner case, the registration-agent is availabel, but the work-agent is unavailablel,
-	// this will cause that the klusterlet work cannot be deleted, we need user to handle this manually
-	if !meta.IsStatusConditionTrue(klusterletWork.Status.Conditions, workv1.WorkApplied) {
-		log.Info(fmt.Sprintf("delete the manifest work %s until it is applied ...", klusterletWork.Name))
-		return reconcile.Result{}, nil
-	}
+	// Note: we don't wait for the manifest work is applied, so there is a corner case: when the cluster is availabel
+	// but the klusterlet works is not applied, in this time, user delete the cluster, this will cause that the
+	// klusterlet cannot be deleted from the mangaed cluser, we need user to handle this manually
 
 	return reconcile.Result{}, helpers.DeleteManifestWork(
 		ctx, r.clientHolder.RuntimeClient, r.recorder, klusterletWork.Namespace, klusterletWork.Name)
@@ -234,8 +230,9 @@ func (r *ReconcileManifestWork) deleteManifestWorks(
 
 func createKlusterletCRDsManifestWork(managedCluster *clusterv1.ManagedCluster, importSecret *corev1.Secret) *workv1.ManifestWork {
 	crdsKey := constants.ImportSecretCRDSV1YamlKey
-	if !helpers.IsAPIExtensionV1Supported(managedCluster.Status.Version.Kubernetes) {
-		log.Info("crd v1 is not supported, add v1beta1")
+	if managedCluster.Status.Version.Kubernetes != "" &&
+		!helpers.IsAPIExtensionV1Supported(managedCluster.Status.Version.Kubernetes) {
+		log.Info("crd v1 is not supported, put v1beta1 to manifest work")
 		crdsKey = constants.ImportSecretCRDSV1beta1YamlKey
 	}
 
@@ -248,8 +245,11 @@ func createKlusterletCRDsManifestWork(managedCluster *clusterv1.ManagedCluster, 
 	return &workv1.ManifestWork{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-%s", managedCluster.Name, klusterletCRDsSuffix),
+			Name:      fmt.Sprintf("%s-%s", managedCluster.Name, constants.KlusterletCRDsSuffix),
 			Namespace: managedCluster.Name,
+			Labels: map[string]string{
+				constants.KlusterletWorksLabel: "true",
+			},
 		},
 		Spec: workv1.ManifestWorkSpec{
 			Workload: workv1.ManifestsTemplate{
@@ -277,8 +277,11 @@ func createKlusterletManifestWork(managedCluster *clusterv1.ManagedCluster, impo
 	return &workv1.ManifestWork{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-%s", managedCluster.Name, klusterletSuffix),
+			Name:      fmt.Sprintf("%s-%s", managedCluster.Name, constants.KlusterletSuffix),
 			Namespace: managedCluster.Name,
+			Labels: map[string]string{
+				constants.KlusterletWorksLabel: "true",
+			},
 		},
 		Spec: workv1.ManifestWorkSpec{
 			Workload: workv1.ManifestsTemplate{

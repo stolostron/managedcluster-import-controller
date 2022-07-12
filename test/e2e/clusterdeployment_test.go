@@ -49,9 +49,10 @@ var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", fu
 		})
 
 		assertManagedClusterImportSecretCreated(managedClusterName, "hive")
+		assertManagedClusterManifestWorks(managedClusterName)
 		assertManagedClusterImportSecretApplied(managedClusterName)
 		assertManagedClusterAvailable(managedClusterName)
-		assertManagedClusterManifestWorks(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
 	})
 
 	ginkgo.It(fmt.Sprintf("Should destroy the managed cluster %s", managedClusterName), func() {

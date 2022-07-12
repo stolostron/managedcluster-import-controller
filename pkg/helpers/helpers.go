@@ -23,6 +23,7 @@ import (
 
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/resource/resourceapply"
+	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
 
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -463,7 +464,13 @@ func applyManifestWork(client client.Client, recorder events.Recorder, required 
 		return err
 	}
 
-	if ManifestsEqual(existing.Spec.Workload.Manifests, required.Spec.Workload.Manifests) {
+	modified := resourcemerge.BoolPtr(false)
+	resourcemerge.EnsureObjectMeta(modified, &existing.ObjectMeta, required.ObjectMeta)
+	if !ManifestsEqual(existing.Spec.Workload.Manifests, required.Spec.Workload.Manifests) {
+		*modified = true
+	}
+
+	if !*modified {
 		return nil
 	}
 
