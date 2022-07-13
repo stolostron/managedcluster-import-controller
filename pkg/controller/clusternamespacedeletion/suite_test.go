@@ -1,0 +1,106 @@
+// Copyright (c) Red Hat, Inc.
+// Copyright Contributors to the Open Cluster Management project
+
+package clusternamespacedeletion
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+
+	. "github.com/onsi/ginkgo"
+	. "github.com/onsi/gomega"
+	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
+	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+)
+
+// These tests use Ginkgo (BDD-style Go testing framework). Refer to
+// http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
+var (
+	cfg       *rest.Config
+	testEnv   *envtest.Environment
+	k8sClient kubernetes.Interface
+	setupLog  = ctrl.Log.WithName("test")
+)
+
+func TestAPIs(t *testing.T) {
+	RegisterFailHandler(Fail)
+
+	RunSpecsWithDefaultAndCustomReporters(t,
+		"Controller Suite",
+		[]Reporter{printer.NewlineReporter{}})
+}
+
+var _ = BeforeSuite(func(done Done) {
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+
+	By("bootstrapping test environment")
+	testEnv = &envtest.Environment{
+		CRDDirectoryPaths: []string{
+			filepath.Join("../../", "test", "resources", "hive"),
+			filepath.Join("../../", "test", "resources", "assisted-service"),
+		},
+	}
+
+	var err error
+	cfg, err = testEnv.Start()
+	Expect(err).ToNot(HaveOccurred())
+	Expect(cfg).ToNot(BeNil())
+
+	err = asv1beta1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+	err = hivev1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+	err = corev1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+	err = clusterv1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+	err = addonv1alpha1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	opts := ctrl.Options{
+		Scheme: scheme.Scheme,
+	}
+
+	k8sClient, err = kubernetes.NewForConfig(cfg)
+	Expect(err).NotTo(HaveOccurred())
+
+	mgr, err := ctrl.NewManager(cfg, opts)
+
+	clientHolder := &helpers.ClientHolder{
+		RuntimeClient: mgr.GetClient(),
+		KubeClient:    k8sClient,
+	}
+
+	_, err = Add(mgr, clientHolder, nil, nil)
+	Expect(err).NotTo(HaveOccurred())
+
+	go func() {
+		if err := mgr.Start(ctrl.SetupSignalHandler()); err != nil {
+			setupLog.Error(err, "problem running controllers")
+			os.Exit(1)
+		}
+		fmt.Printf("failed to start manager, %v\n", err)
+		Expect(err).ToNot(HaveOccurred())
+	}()
+
+	close(done)
+}, 60)
+
+var _ = AfterSuite(func() {
+	By("tearing down the test environment")
+	err := testEnv.Stop()
+	Expect(err).ToNot(HaveOccurred())
+})
