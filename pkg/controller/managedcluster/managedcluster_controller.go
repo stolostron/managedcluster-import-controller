@@ -5,16 +5,12 @@ package managedcluster
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
-	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
-
-	hivev1 "github.com/openshift/hive/apis/hive/v1"
 
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
@@ -30,16 +26,10 @@ import (
 
 const clusterNameLabel = "name"
 
-const clusterLabel = "cluster.open-cluster-management.io/managedCluster"
+const ClusterLabel = "cluster.open-cluster-management.io/managedCluster"
 
 const (
 	createdViaOther = "other"
-)
-
-const (
-	curatorJobPrefix  string = "curator-job"
-	postHookJobPrefix string = "posthookjob"
-	preHookJobPrefix  string = "prehookjob"
 )
 
 var log = logf.Log.WithName(controllerName)
@@ -90,7 +80,7 @@ func (r *ReconcileManagedCluster) Reconcile(ctx context.Context, request reconci
 		}
 
 		modified := resourcemerge.BoolPtr(false)
-		resourcemerge.MergeMap(modified, &ns.Labels, map[string]string{clusterLabel: managedCluster.Name})
+		resourcemerge.MergeMap(modified, &ns.Labels, map[string]string{ClusterLabel: managedCluster.Name})
 
 		if !*modified {
 			return reconcile.Result{}, nil
@@ -120,7 +110,7 @@ func (r *ReconcileManagedCluster) Reconcile(ctx context.Context, request reconci
 	}
 
 	// managed cluster is deleting, remove its namespace
-	if err = r.deleteManagedClusterNamespace(ctx, managedCluster); err != nil {
+	if err = r.deleteManagedClusterAddon(ctx, managedCluster); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -167,7 +157,7 @@ func (r *ReconcileManagedCluster) ensureManagedClusterMetaObj(ctx context.Contex
 	return nil
 }
 
-func (r *ReconcileManagedCluster) deleteManagedClusterNamespace(
+func (r *ReconcileManagedCluster) deleteManagedClusterAddon(
 	ctx context.Context, managedCluster *clusterv1.ManagedCluster) error {
 	clusterName := managedCluster.Name
 	ns := &corev1.Namespace{}
@@ -177,48 +167,6 @@ func (r *ReconcileManagedCluster) deleteManagedClusterNamespace(
 	}
 	if err != nil {
 		return err
-	}
-	if ns.DeletionTimestamp != nil {
-		log.Info(fmt.Sprintf("namespace %s is already in deletion", clusterName))
-		return nil
-	}
-
-	clusterDeployment := &hivev1.ClusterDeployment{}
-	err = r.client.Get(ctx, types.NamespacedName{Namespace: clusterName, Name: clusterName}, clusterDeployment)
-	if err == nil && clusterDeployment.DeletionTimestamp.IsZero() {
-		// there is a clusterdeployment in the managed cluster namespace and the clusterdeployment is not in deletion
-		// the managed cluster is detached, we need to keep the managed cluster namespace
-		r.recorder.Warningf("ManagedClusterNamespaceRemained", "There is a clusterdeployment in namespace %s", clusterName)
-		return nil
-	}
-	if err != nil && !errors.IsNotFound(err) {
-		return err
-	}
-
-	infraEnvList := &asv1beta1.InfraEnvList{}
-	err = r.client.List(ctx, infraEnvList, client.InNamespace(clusterName))
-	if err == nil && len(infraEnvList.Items) != 0 {
-		// there are infraEnvs in the managed cluster namespace.
-		// the managed cluster is deleted, we need to keep the managed cluster namespace.
-		// TODO: find a proper way to hand the deletion of the managed cluster namespace.
-		r.recorder.Warningf("ManagedClusterNamespaceRemained", "There are infraEnvs in namespace %s", clusterName)
-		return nil
-	}
-	if err != nil && !errors.IsNotFound(err) && !strings.Contains(err.Error(), "no matches for kind \"InfraEnv\"") {
-		return err
-	}
-
-	pods := &corev1.PodList{}
-	if err := r.client.List(ctx, pods, client.InNamespace(clusterName)); err != nil {
-		return err
-	}
-	for _, pod := range pods.Items {
-		if !strings.HasPrefix(pod.Name, curatorJobPrefix) &&
-			!strings.HasPrefix(pod.Name, postHookJobPrefix) &&
-			!strings.HasPrefix(pod.Name, preHookJobPrefix) {
-			r.recorder.Warningf("ManagedClusterNamespaceRemained", "There are non curator pods in namespace %s", clusterName)
-			return nil
-		}
 	}
 
 	// force delete addons before delete cluster namespace in this case the addon is in deleting with finalizer.
@@ -232,11 +180,6 @@ func (r *ReconcileManagedCluster) deleteManagedClusterNamespace(
 		if err = helpers.ForceDeleteManagedClusterAddon(ctx, r.client, r.recorder, addon); err != nil {
 			return err
 		}
-	}
-
-	err = r.client.Delete(ctx, ns)
-	if err != nil {
-		return err
 	}
 
 	r.recorder.Eventf("ManagedClusterNamespaceDeleted", "The managed cluster %s namespace is deleted", managedCluster.Name)

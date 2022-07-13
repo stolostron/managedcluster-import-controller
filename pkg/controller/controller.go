@@ -13,6 +13,7 @@ import (
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/autoimport"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/clusterdeployment"
+	"github.com/stolostron/managedcluster-import-controller/pkg/controller/clusternamespacedeletion"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/csr"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/hosted"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/importconfig"
@@ -40,6 +41,7 @@ var AddToManagerFuncs = []AddToManagerFunc{
 	selfmanagedcluster.Add,
 	autoimport.Add,
 	clusterdeployment.Add,
+	clusternamespacedeletion.Add,
 }
 
 // AddToManager adds all controllers to the manager
