@@ -15,12 +15,14 @@ import (
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/envtest/printer"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -29,10 +31,12 @@ import (
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
 // http://onsi.github.io/ginkgo/ to learn more about Ginkgo.
 var (
-	cfg       *rest.Config
-	testEnv   *envtest.Environment
-	k8sClient kubernetes.Interface
-	setupLog  = ctrl.Log.WithName("test")
+	cfg              *rest.Config
+	testEnv          *envtest.Environment
+	k8sClient        kubernetes.Interface
+	hubDynamicClient dynamic.Interface
+	runtimeClient    client.Client
+	setupLog         = ctrl.Log.WithName("test")
 )
 
 func TestAPIs(t *testing.T) {
@@ -49,8 +53,9 @@ var _ = BeforeSuite(func(done Done) {
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
 		CRDDirectoryPaths: []string{
-			filepath.Join("../../", "test", "resources", "hive"),
-			filepath.Join("../../", "test", "resources", "assisted-service"),
+			filepath.Join("../../../", "test", "e2e", "resources", "hive"),
+			filepath.Join("../../../", "test", "e2e", "resources", "assisted-service"),
+			filepath.Join("../../../", "test", "e2e", "resources", "ocm"),
 		},
 	}
 
@@ -77,10 +82,14 @@ var _ = BeforeSuite(func(done Done) {
 	k8sClient, err = kubernetes.NewForConfig(cfg)
 	Expect(err).NotTo(HaveOccurred())
 
+	hubDynamicClient, err = dynamic.NewForConfig(cfg)
+	Expect(err).NotTo(HaveOccurred())
+
 	mgr, err := ctrl.NewManager(cfg, opts)
+	runtimeClient = mgr.GetClient()
 
 	clientHolder := &helpers.ClientHolder{
-		RuntimeClient: mgr.GetClient(),
+		RuntimeClient: runtimeClient,
 		KubeClient:    k8sClient,
 	}
 

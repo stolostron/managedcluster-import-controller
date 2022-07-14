@@ -109,7 +109,7 @@ func (r *ReconcileManagedCluster) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, nil
 	}
 
-	// managed cluster is deleting, remove its namespace
+	// managed cluster is deleting, remove all addons
 	if err = r.deleteManagedClusterAddon(ctx, managedCluster); err != nil {
 		return reconcile.Result{}, err
 	}

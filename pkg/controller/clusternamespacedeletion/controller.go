@@ -32,7 +32,7 @@ const (
 	postHookJobPrefix string = "posthookjob"
 	preHookJobPrefix  string = "prehookjob"
 
-	deletionGracePeriod = 10 * time.Minute
+	deletionGracePeriod = 10 * time.Second
 )
 
 // ReconcileClusterNamespaceDeletion delete cluster namespace when
@@ -151,7 +151,7 @@ func filterPods(pods []corev1.Pod, namespace string) []corev1.Pod {
 		}
 
 		// this is weird code from curator code
-		if pod.Status.Phase != "" && pod.Status.Phase == "Running" {
+		if pod.Status.Phase == "Running" {
 			if !strings.Contains(pod.Name, namespace+"-uninstall") {
 				validPods = append(validPods, pod)
 			}
