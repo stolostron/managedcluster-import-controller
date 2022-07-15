@@ -14,9 +14,11 @@ import (
 
 	ginkgo "github.com/onsi/ginkgo"
 	gomega "github.com/onsi/gomega"
+	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"open-cluster-management.io/api/addon/v1alpha1"
@@ -249,6 +251,71 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", fun
 				}
 				return fmt.Errorf("expected no addon manifestwork, but got %v", manifestwork.Name)
 			}, 30*time.Second, 3*time.Second).ShouldNot(gomega.HaveOccurred())
+		})
+
+		// This case will take about several minutes to wait for the cluster state to become unavailable,
+		ginkgo.It("should keep the ns when infraenv exists", func() {
+			managedClusterName := localClusterName
+			assertManagedClusterNamespace(managedClusterName)
+
+			infraGVR := asv1beta1.GroupVersion.WithResource("infraenvs")
+
+			//create a infraenv in the cluster namespace
+			infra := &asv1beta1.InfraEnv{
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "agent-install.openshift.io/v1beta1",
+					Kind:       "InfraEnv",
+				},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-infra",
+					Namespace: managedClusterName,
+				},
+				Spec: asv1beta1.InfraEnvSpec{
+					PullSecretRef: &corev1.LocalObjectReference{
+						Name: "test",
+					},
+				},
+			}
+
+			unstructuredInfra := &unstructured.Unstructured{}
+			object, err := runtime.DefaultUnstructuredConverter.ToUnstructured(infra)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			unstructuredInfra.Object = object
+			_, err = hubDynamicClient.Resource(infraGVR).Namespace(managedClusterName).Create(context.TODO(), unstructuredInfra, metav1.CreateOptions{})
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			err = hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), managedClusterName, metav1.DeleteOptions{})
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			gomega.Eventually(func() error {
+				_, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
+				if err != nil {
+					if errors.IsNotFound(err) {
+						return nil
+					}
+					return err
+				}
+				return fmt.Errorf("expected no cluster, but got %v", managedClusterName)
+			}, 30*time.Second, 3*time.Second).ShouldNot(gomega.HaveOccurred())
+
+			checkCount := 0
+			gomega.Eventually(func() error {
+				_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
+				if err != nil {
+					return err
+				}
+				checkCount++
+				if checkCount > 4 {
+					return nil
+				}
+				return fmt.Errorf("wait 20s to check if manifestwork is deleted")
+			}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
+
+			err = hubDynamicClient.Resource(infraGVR).Namespace(managedClusterName).Delete(context.TODO(), infra.Name, metav1.DeleteOptions{})
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			assertManagedClusterDeletedFromHub(managedClusterName)
 		})
 	})
 

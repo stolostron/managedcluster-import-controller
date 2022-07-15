@@ -240,38 +240,6 @@ func TestReconcile(t *testing.T) {
 				if err := runtimeClient.Get(context.TODO(), types.NamespacedName{Namespace: "test", Name: "test"}, addon); !errors.IsNotFound(err) {
 					t.Errorf("unexpected not found, but failed, %v", err)
 				}
-				ns := &corev1.Namespace{}
-				if err := runtimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, ns); !errors.IsNotFound(err) {
-					t.Errorf("unexpected not found, but failed, %v", err)
-				}
-			},
-		},
-		{
-			name: "managed clusters is deleting",
-			startObjs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:              "test",
-						Finalizers:        []string{constants.ImportFinalizer},
-						DeletionTimestamp: &now,
-					},
-				},
-				&corev1.Namespace{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
-					},
-				},
-			},
-			request: reconcile.Request{
-				NamespacedName: types.NamespacedName{
-					Name: "test",
-				},
-			},
-			validateFunc: func(t *testing.T, runtimeClient client.Client) {
-				ns := &corev1.Namespace{}
-				if err := runtimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, ns); err == nil {
-					t.Errorf("expected error, but failed")
-				}
 			},
 		},
 	}
