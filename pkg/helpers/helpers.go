@@ -14,11 +14,11 @@ import (
 	"strings"
 	"text/template"
 
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
-
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
+	apiextclientv1beta1 "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1beta1"
 	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
@@ -372,24 +372,24 @@ func ApplyResources(clientHolder *ClientHolder, recorder events.Recorder,
 
 		switch required := obj.(type) {
 		case *corev1.ServiceAccount:
-			_, _, err := resourceapply.ApplyServiceAccount(clientHolder.KubeClient.CoreV1(), recorder, required)
+			_, _, err := resourceapply.ApplyServiceAccount(context.TODO(), clientHolder.KubeClient.CoreV1(), recorder, required)
 			errs = append(errs, err)
 		case *corev1.Secret:
-			_, _, err := resourceapply.ApplySecret(clientHolder.KubeClient.CoreV1(), recorder, required)
+			_, _, err := resourceapply.ApplySecret(context.TODO(), clientHolder.KubeClient.CoreV1(), recorder, required)
 			errs = append(errs, err)
 		case *corev1.Namespace:
-			_, _, err := resourceapply.ApplyNamespace(clientHolder.KubeClient.CoreV1(), recorder, required)
+			_, _, err := resourceapply.ApplyNamespace(context.TODO(), clientHolder.KubeClient.CoreV1(), recorder, required)
 			errs = append(errs, err)
 		case *appsv1.Deployment:
 			errs = append(errs, applyDeployment(clientHolder, recorder, required))
 		case *rbacv1.ClusterRole:
-			_, _, err := resourceapply.ApplyClusterRole(clientHolder.KubeClient.RbacV1(), recorder, required)
+			_, _, err := resourceapply.ApplyClusterRole(context.TODO(), clientHolder.KubeClient.RbacV1(), recorder, required)
 			errs = append(errs, err)
 		case *rbacv1.ClusterRoleBinding:
-			_, _, err := resourceapply.ApplyClusterRoleBinding(clientHolder.KubeClient.RbacV1(), recorder, required)
+			_, _, err := resourceapply.ApplyClusterRoleBinding(context.TODO(), clientHolder.KubeClient.RbacV1(), recorder, required)
 			errs = append(errs, err)
 		case *crdv1beta1.CustomResourceDefinition:
-			_, _, err := resourceapply.ApplyCustomResourceDefinitionV1Beta1(
+			_, _, err := ApplyCustomResourceDefinitionV1Beta1(
 				clientHolder.APIExtensionsClient.ApiextensionsV1beta1(),
 				recorder,
 				required,
@@ -397,6 +397,7 @@ func ApplyResources(clientHolder *ClientHolder, recorder events.Recorder,
 			errs = append(errs, err)
 		case *crdv1.CustomResourceDefinition:
 			_, _, err := resourceapply.ApplyCustomResourceDefinitionV1(
+				context.TODO(),
 				clientHolder.APIExtensionsClient.ApiextensionsV1(),
 				recorder,
 				required,
@@ -417,14 +418,14 @@ func applyDeployment(clientHolder *ClientHolder, recorder events.Recorder, requi
 	existing := &appsv1.Deployment{}
 	err := clientHolder.RuntimeClient.Get(context.TODO(), key, existing)
 	if errors.IsNotFound(err) {
-		_, _, err := resourceapply.ApplyDeployment(clientHolder.KubeClient.AppsV1(), recorder, required, -1)
+		_, _, err := resourceapply.ApplyDeployment(context.TODO(), clientHolder.KubeClient.AppsV1(), recorder, required, -1)
 		return err
 	}
 	if err != nil {
 		return err
 	}
 
-	_, _, err = resourceapply.ApplyDeployment(clientHolder.KubeClient.AppsV1(), recorder, required, existing.Generation)
+	_, _, err = resourceapply.ApplyDeployment(context.TODO(), clientHolder.KubeClient.AppsV1(), recorder, required, existing.Generation)
 	return err
 }
 
@@ -513,7 +514,7 @@ func NewEventRecorder(kubeClient kubernetes.Interface, controllerName string) ev
 		klog.Warningf("unable to identify the current namespace for events: %v", err)
 	}
 
-	controllerRef, err := events.GetControllerReferenceForCurrentPod(kubeClient, namespace, nil)
+	controllerRef, err := events.GetControllerReferenceForCurrentPod(context.TODO(), kubeClient, namespace, nil)
 	if err != nil {
 		klog.Warningf("unable to get owner reference (falling back to namespace): %v", err)
 	}
@@ -726,4 +727,35 @@ func validateTolerations(tolerations []corev1.Toleration) error {
 	}
 
 	return utilerrors.NewAggregate(errs)
+}
+
+//In order to support ocp 311, copy this func from old library-go
+func ApplyCustomResourceDefinitionV1Beta1(client apiextclientv1beta1.CustomResourceDefinitionsGetter,
+	recorder events.Recorder,
+	required *crdv1beta1.CustomResourceDefinition) (*crdv1beta1.CustomResourceDefinition, bool, error) {
+	existing, err := client.CustomResourceDefinitions().Get(context.TODO(), required.Name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		actual, err := client.CustomResourceDefinitions().Create(context.TODO(), required, metav1.CreateOptions{})
+		reportEvent(recorder, required, "CustomResourceDefinition", "created")
+		return actual, true, err
+	}
+	if err != nil {
+		return nil, false, err
+	}
+
+	modified := resourcemerge.BoolPtr(false)
+	existingCopy := existing.DeepCopy()
+	resourcemerge.EnsureCustomResourceDefinitionV1Beta1(modified, existingCopy, *required)
+	if !*modified {
+		return existing, false, nil
+	}
+
+	if klog.V(4).Enabled() {
+		klog.Infof("CustomResourceDefinition %q changes: %s", existing.Name, resourceapply.JSONPatchNoError(existing, existingCopy))
+	}
+
+	actual, err := client.CustomResourceDefinitions().Update(context.TODO(), existingCopy, metav1.UpdateOptions{})
+	reportEvent(recorder, required, "CustomResourceDefinition", "updated")
+
+	return actual, true, err
 }
