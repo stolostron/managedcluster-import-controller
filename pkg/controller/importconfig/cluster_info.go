@@ -11,6 +11,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
@@ -19,6 +20,7 @@ import (
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
 
+	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,26 +29,22 @@ import (
 	"k8s.io/client-go/kubernetes"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	clientcmdlatest "k8s.io/client-go/tools/clientcmd/api/latest"
+	"k8s.io/utils/pointer"
 
 	"k8s.io/apiserver/pkg/storage/names"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// getBootstrapSecret lists the secrets from the managed cluster namespace to look
-// for the managed cluster bootstrap token secret.
-//
-// Note: this function depends on the OCP service account feature.
-// Starting with kube 1.24 (ocp 4.11), the k8s won't generate secrets any longer
-// automatically for ServiceAccounts, for OCP, when a service account is created,
-// the OCP will create two secrets, one stores dockercfg with name format (<sa name>-dockercfg-<random>)
-// and the other stores the servcie account token  with name format (<sa name>-token-<random>),
-// but the service account secrets won't list in the service account any longger.
-func getBootstrapSecret(ctx context.Context, kubeClient kubernetes.Interface, managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, error) {
+// getBootstrapSecret lists the secrets from the managed cluster namespace to look for the managed cluster
+// bootstrap token firstly (compatibility with the ocp that version is less than 4.11), if there is no
+// token found, uses tokenrequest to request token.
+func getBootstrapToken(ctx context.Context,
+	kubeClient kubernetes.Interface, managedCluster *clusterv1.ManagedCluster) ([]byte, []byte, error) {
 	saName := getBootstrapSAName(managedCluster.Name)
 
 	secrets, err := kubeClient.CoreV1().Secrets(managedCluster.Name).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	for _, secret := range secrets.Items {
@@ -75,11 +73,29 @@ func getBootstrapSecret(ctx context.Context, kubeClient kubernetes.Interface, ma
 			continue
 		}
 
-		return &secret, nil
+		return token, nil, nil
 	}
 
-	return nil, fmt.Errorf("managed cluster %s bootstrap token secret can not be found with its service account %s",
-		managedCluster.Name, saName)
+	tokenRequest, err := kubeClient.CoreV1().ServiceAccounts(managedCluster.Name).CreateToken(
+		ctx,
+		saName,
+		&authv1.TokenRequest{
+			Spec: authv1.TokenRequestSpec{
+				ExpirationSeconds: pointer.Int64Ptr(8640 * 3600),
+			},
+		},
+		metav1.CreateOptions{},
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	expiration, err := tokenRequest.Status.ExpirationTimestamp.MarshalText()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return []byte(tokenRequest.Status.Token), expiration, nil
 }
 
 // getKubeAPIServerAddress get the kube-apiserver URL from ocp infrastructure
@@ -231,59 +247,84 @@ func getValidCertificatesFromURL(serverURL string, rootCAs *x509.CertPool) ([]*x
 	return retCerts, nil
 }
 
+func getBootstrapKubeConfigData(ctx context.Context, clientHolder *helpers.ClientHolder, cluster *clusterv1.ManagedCluster) ([]byte, []byte, error) {
+	importSecretName := fmt.Sprintf("%s-%s", cluster.Name, constants.ImportSecretNameSuffix)
+	importSecret, err := clientHolder.KubeClient.CoreV1().Secrets(cluster.Name).Get(ctx, importSecretName, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		// create bootstrap kubeconfig
+		return createKubeConfig(ctx, clientHolder, cluster)
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+
+	kubeConifgData := getBootstrapKubeConfigDataFromImportSecret(importSecret)
+	expiration := importSecret.Data[constants.ImportSecretTokenExpiration]
+	if validateToken(kubeConifgData, expiration) {
+		// valid token, return the current kubeconfig
+		return kubeConifgData, expiration, nil
+	}
+
+	// recreate bootstrap kubeconfig
+	return createKubeConfig(ctx, clientHolder, cluster)
+}
+
+func getBootstrapKubeConfigDataFromImportSecret(importSecret *corev1.Secret) []byte {
+	importYaml, ok := importSecret.Data[constants.ImportSecretImportYamlKey]
+	if !ok {
+		return nil
+	}
+
+	for _, yaml := range helpers.SplitYamls(importYaml) {
+		obj := helpers.MustCreateObject(yaml)
+		switch secret := obj.(type) {
+		case *corev1.Secret:
+			if secret.Name == "bootstrap-hub-kubeconfig" {
+				return secret.Data["kubeconfig"]
+			}
+		}
+	}
+
+	return nil
+}
+
+func validateToken(kubeConfigData, expiration []byte) bool {
+	if len(kubeConfigData) == 0 {
+		// no bootstrap kubeconfig in the import secret
+		return false
+	}
+
+	if len(expiration) == 0 {
+		// bootstrap kubeconfig is from the service account token secret
+		return true
+	}
+
+	expirationTime, err := time.Parse(time.RFC3339, string(expiration))
+	if err != nil {
+		return false
+	}
+
+	now := metav1.Now()
+	refreshThreshold := 8640 * time.Hour / 5
+	lifetime := expirationTime.Sub(now.Time)
+	return lifetime > refreshThreshold
+}
+
 // create kubeconfig from bootstrap secret
-func createKubeconfigData(ctx context.Context, clientHolder *helpers.ClientHolder, bootStrapSecret *corev1.Secret) ([]byte, error) {
-	saToken := bootStrapSecret.Data["token"]
+func createKubeConfig(ctx context.Context, clientHolder *helpers.ClientHolder, cluster *clusterv1.ManagedCluster) ([]byte, []byte, error) {
+	token, expiration, err := getBootstrapToken(ctx, clientHolder.KubeClient, cluster)
+	if err != nil {
+		return nil, nil, err
+	}
 
 	kubeAPIServer, err := getKubeAPIServerAddress(ctx, clientHolder.RuntimeClient)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	var certData []byte
-	if u, err := url.Parse(kubeAPIServer); err == nil {
-		// get the ca cert from ocp apiserver firstly
-		apiServerCertSecretName, err := getKubeAPIServerSecretName(ctx, clientHolder.RuntimeClient, u.Hostname())
-		if err != nil {
-			return nil, err
-		}
-
-		if len(apiServerCertSecretName) > 0 {
-			apiServerCert, err := getKubeAPIServerCertificate(ctx, clientHolder.KubeClient, apiServerCertSecretName)
-			if err != nil {
-				return nil, err
-			}
-			certData = apiServerCert
-		}
-	}
-
-	if len(certData) == 0 {
-		// fallback to service account token ca.crt
-		if _, ok := bootStrapSecret.Data["ca.crt"]; ok {
-			certData = bootStrapSecret.Data["ca.crt"]
-		} else {
-			log.Info(fmt.Sprintf("No ca.crt in the bootstrap secret %s/%s", bootStrapSecret.Namespace, bootStrapSecret.Name))
-		}
-
-		// if it's ocp && it's on ibm cloud, we treat it as roks
-		isROKS, err := checkIsIBMCloud(ctx, clientHolder.RuntimeClient)
-		if err != nil {
-			return nil, err
-		}
-
-		if isROKS {
-			// ROKS should have a certificate that is signed by trusted CA
-			if certs, err := getValidCertificatesFromURL(kubeAPIServer, nil); err != nil {
-				// should retry if failed to connect to apiserver
-				return nil, err
-			} else if len(certs) > 0 {
-				// simply don't give any certs as the apiserver is using certs signed by known CAs
-				log.Info("Using certs signed by known CAs cas on the ROKS.")
-				certData = nil
-			} else {
-				log.Info("No additional valid certificate found for APIserver on the ROKS. Skipping.")
-			}
-		}
+	certData, err := getBootstrapCAData(ctx, clientHolder, cluster, kubeAPIServer)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	bootstrapConfig := clientcmdapi.Config{
@@ -295,7 +336,7 @@ func createKubeconfigData(ctx context.Context, clientHolder *helpers.ClientHolde
 		}},
 		// Define auth based on the obtained client cert.
 		AuthInfos: map[string]*clientcmdapi.AuthInfo{"default-auth": {
-			Token: string(saToken),
+			Token: string(token),
 		}},
 		// Define a context that connects the auth info and cluster, and set it as the default
 		Contexts: map[string]*clientcmdapi.Context{"default-context": {
@@ -306,7 +347,61 @@ func createKubeconfigData(ctx context.Context, clientHolder *helpers.ClientHolde
 		CurrentContext: "default-context",
 	}
 
-	return runtime.Encode(clientcmdlatest.Codec, &bootstrapConfig)
+	boostrapConfigData, err := runtime.Encode(clientcmdlatest.Codec, &bootstrapConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return boostrapConfigData, expiration, err
+}
+
+func getBootstrapCAData(ctx context.Context, clientHolder *helpers.ClientHolder, cluster *clusterv1.ManagedCluster, kubeAPIServer string) ([]byte, error) {
+	// get the ca cert from ocp apiserver firstly
+	if u, err := url.Parse(kubeAPIServer); err == nil {
+		apiServerCertSecretName, err := getKubeAPIServerSecretName(ctx, clientHolder.RuntimeClient, u.Hostname())
+		if err != nil {
+			return nil, err
+		}
+
+		if len(apiServerCertSecretName) > 0 {
+			certData, err := getKubeAPIServerCertificate(ctx, clientHolder.KubeClient, apiServerCertSecretName)
+			if err != nil {
+				return nil, err
+			}
+
+			if len(certData) != 0 {
+				return certData, nil
+			}
+		}
+	}
+
+	// failed to get the ca from ocp apiserver, if the cluster is on ibm cloud, we treat it as roks
+	isROKS, err := checkIsIBMCloud(ctx, clientHolder.RuntimeClient)
+	if err != nil {
+		return nil, err
+	}
+	if isROKS {
+		// ROKS should have a certificate that is signed by trusted CA
+		if certs, err := getValidCertificatesFromURL(kubeAPIServer, nil); err != nil {
+			// should retry if failed to connect to apiserver
+			return nil, err
+		} else if len(certs) > 0 {
+			// simply don't give any certs as the apiserver is using certs signed by known CAs
+			log.Info("Using certs signed by known CAs cas on the ROKS.")
+			return nil, nil
+		} else {
+			log.Info("No additional valid certificate found for APIserver on the ROKS. Skipping.")
+		}
+	}
+
+	// failed to get the ca from ocp, fallback to the kube-root-ca.crt configmap
+	log.Info(fmt.Sprintf("No ca.crt was found, fallback to the %s/kube-root-ca.crt", cluster.Name))
+	rootCA, err := clientHolder.KubeClient.CoreV1().ConfigMaps(cluster.Name).Get(ctx, "kube-root-ca.crt", metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	return []byte(rootCA.Data["ca.crt"]), nil
 }
 
 func getBootstrapSAName(clusterName string) string {

@@ -406,13 +406,13 @@ func newClusterDeploymentImportSecret(kubeClient kubernetes.Interface, clusterNa
 }
 
 func getServerAndToken(kubeClient kubernetes.Interface, dynamicClient dynamic.Interface, saName string) (server, token []byte, err error) {
-	sa, err := kubeClient.CoreV1().ServiceAccounts(ocmNamespace).Get(context.TODO(), saName, metav1.GetOptions{})
+	secrets, err := kubeClient.CoreV1().Secrets(ocmNamespace).List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return nil, nil, err
 	}
 
 	var tokenSecret *corev1.Secret
-	for _, ref := range sa.Secrets {
+	for _, ref := range secrets.Items {
 		if strings.HasPrefix(ref.Name, saName) {
 			tokenSecret, err = kubeClient.CoreV1().Secrets(ocmNamespace).Get(context.TODO(), ref.Name, metav1.GetOptions{})
 			if err != nil {

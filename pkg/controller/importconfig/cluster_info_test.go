@@ -4,26 +4,33 @@
 package importconfig
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
+	"encoding/base64"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"reflect"
 	"testing"
+	"time"
 
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
 
+	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
 	kubefake "k8s.io/client-go/kubernetes/fake"
+	clienttesting "k8s.io/client-go/testing"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	clientcmdlatest "k8s.io/client-go/tools/clientcmd/api/latest"
 
@@ -294,7 +301,30 @@ func TestCheckIsIBMCloud(t *testing.T) {
 	}
 }
 
-func TestCreateKubeconfigData(t *testing.T) {
+func TestGetBootstrapKubeConfigData(t *testing.T) {
+	cluster := &clusterv1.ManagedCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "testcluster",
+		},
+	}
+
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "testcluster-bootstrap-sa",
+			Namespace: "testcluster",
+		},
+	}
+
+	cm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "kube-root-ca.crt",
+			Namespace: "testcluster",
+		},
+		Data: map[string]string{
+			"ca.crt": "fake-root-ca",
+		},
+	}
+
 	testInfraConfigIP := &ocinfrav1.Infrastructure{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "cluster",
@@ -317,8 +347,8 @@ func TestCreateKubeconfigData(t *testing.T) {
 
 	testTokenSecret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-sa-token",
-			Namespace: "test-namespace",
+			Name:      "testcluster-bootstrap-sa-token-xxxx",
+			Namespace: "testcluster",
 		},
 		Data: map[string][]byte{
 			"token":  []byte("fake-token"),
@@ -383,10 +413,6 @@ func TestCreateKubeconfigData(t *testing.T) {
 	testInfraServerStopped := testInfraConfigDNS.DeepCopy()
 	testInfraServerStopped.Status.APIServerURL = serverStopped.URL
 
-	type args struct {
-		clientHolder *helpers.ClientHolder
-		secret       *corev1.Secret
-	}
 	type wantData struct {
 		serverURL   string
 		useInsecure bool
@@ -394,37 +420,28 @@ func TestCreateKubeconfigData(t *testing.T) {
 		token       string
 	}
 	tests := []struct {
-		name    string
-		args    args
-		want    wantData
-		wantErr bool
+		name        string
+		clientObjs  []client.Object
+		runtimeObjs []runtime.Object
+		want        wantData
+		wantErr     bool
 	}{
 		{
-			name: "use default certificate",
-			args: args{
-				clientHolder: &helpers.ClientHolder{
-					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraConfigIP).Build(),
-					KubeClient:    kubefake.NewSimpleClientset(),
-				},
-				secret: testTokenSecret,
-			},
+			name:        "use default certificate",
+			clientObjs:  []client.Object{testInfraConfigIP},
+			runtimeObjs: []runtime.Object{testTokenSecret, cm},
 			want: wantData{
 				serverURL:   "http://127.0.0.1:6443",
 				useInsecure: false,
-				certData:    []byte("default-cert-data"),
+				certData:    []byte("fake-root-ca"),
 				token:       "fake-token",
 			},
 			wantErr: false,
 		},
 		{
-			name: "use named certificate",
-			args: args{
-				clientHolder: &helpers.ClientHolder{
-					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraConfigDNS, apiserverConfig).Build(),
-					KubeClient:    kubefake.NewSimpleClientset(secretCorrect),
-				},
-				secret: testTokenSecret,
-			},
+			name:        "use named certificate",
+			clientObjs:  []client.Object{testInfraConfigDNS, apiserverConfig},
+			runtimeObjs: []runtime.Object{testTokenSecret, secretCorrect},
 			want: wantData{
 				serverURL:   "https://my-dns-name.com:6443",
 				useInsecure: false,
@@ -434,31 +451,21 @@ func TestCreateKubeconfigData(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "use default when cert not found",
-			args: args{
-				clientHolder: &helpers.ClientHolder{
-					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraConfigDNS, apiserverConfig).Build(),
-					KubeClient:    kubefake.NewSimpleClientset(),
-				},
-				secret: testTokenSecret,
-			},
+			name:        "use default when cert not found",
+			clientObjs:  []client.Object{testInfraConfigDNS, apiserverConfig},
+			runtimeObjs: []runtime.Object{testTokenSecret, cm},
 			want: wantData{
 				serverURL:   "https://my-dns-name.com:6443",
 				useInsecure: false,
-				certData:    []byte("default-cert-data"),
+				certData:    []byte("fake-root-ca"),
 				token:       "fake-token",
 			},
 			wantErr: false,
 		},
 		{
-			name: "return error cert malformat",
-			args: args{
-				clientHolder: &helpers.ClientHolder{
-					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraConfigDNS, apiserverConfig).Build(),
-					KubeClient:    kubefake.NewSimpleClientset(secretWrong),
-				},
-				secret: testTokenSecret,
-			},
+			name:        "return error cert malformat",
+			clientObjs:  []client.Object{testInfraConfigDNS, apiserverConfig},
+			runtimeObjs: []runtime.Object{testTokenSecret, secretWrong},
 			want: wantData{
 				serverURL:   "",
 				useInsecure: false,
@@ -468,13 +475,9 @@ func TestCreateKubeconfigData(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "roks failed to connect return error",
-			args: args{
-				clientHolder: &helpers.ClientHolder{
-					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraServerStopped, apiserverConfig, node).Build(),
-				},
-				secret: testTokenSecret,
-			},
+			name:        "roks failed to connect return error",
+			clientObjs:  []client.Object{testInfraServerStopped, apiserverConfig, node},
+			runtimeObjs: []runtime.Object{testTokenSecret},
 			want: wantData{
 				serverURL:   serverStopped.URL,
 				useInsecure: false,
@@ -484,17 +487,49 @@ func TestCreateKubeconfigData(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "roks with no valid cert use default",
-			args: args{
-				clientHolder: &helpers.ClientHolder{
-					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testInfraServerTLS, apiserverConfig, node).Build(),
-				},
-				secret: testTokenSecret,
-			},
+			name:        "roks with no valid cert use default",
+			clientObjs:  []client.Object{testInfraServerTLS, apiserverConfig, node},
+			runtimeObjs: []runtime.Object{testTokenSecret, cm},
 			want: wantData{
 				serverURL:   serverTLS.URL,
 				useInsecure: false,
-				certData:    []byte("default-cert-data"),
+				certData:    []byte("fake-root-ca"),
+				token:       "fake-token",
+			},
+			wantErr: false,
+		},
+		{
+			name:        "no token secrets",
+			clientObjs:  []client.Object{testInfraConfigIP},
+			runtimeObjs: []runtime.Object{sa, cm},
+			want: wantData{
+				serverURL:   "http://127.0.0.1:6443",
+				useInsecure: false,
+				certData:    []byte("fake-root-ca"),
+				token:       "fake-token",
+			},
+			wantErr: false,
+		},
+		{
+			name:        "token is valid",
+			clientObjs:  []client.Object{},
+			runtimeObjs: []runtime.Object{mockImportSecret(t, time.Now().Add(8640*time.Hour))},
+			want: wantData{
+				serverURL:   "http://fake-server:6443",
+				useInsecure: false,
+				certData:    []byte("fake-ca"),
+				token:       "fake-token",
+			},
+			wantErr: false,
+		},
+		{
+			name:        "token is expired",
+			clientObjs:  []client.Object{testInfraConfigIP},
+			runtimeObjs: []runtime.Object{sa, mockImportSecret(t, time.Now().Add(-1*time.Hour)), cm},
+			want: wantData{
+				serverURL:   "http://127.0.0.1:6443",
+				useInsecure: false,
+				certData:    []byte("fake-root-ca"),
 				token:       "fake-token",
 			},
 			wantErr: false,
@@ -503,7 +538,26 @@ func TestCreateKubeconfigData(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Test name: %s", tt.name)
-			kubeconfigData, err := createKubeconfigData(context.Background(), tt.args.clientHolder, tt.args.secret)
+
+			fakeKubeClinet := kubefake.NewSimpleClientset(tt.runtimeObjs...)
+
+			fakeKubeClinet.PrependReactor(
+				"create",
+				"serviceaccounts/token",
+				func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
+					return true,
+						&authv1.TokenRequest{
+							Status: authv1.TokenRequestStatus{Token: "fake-token", ExpirationTimestamp: metav1.Now()},
+						}, nil
+				},
+			)
+
+			clientHolder := &helpers.ClientHolder{
+				RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(tt.clientObjs...).Build(),
+				KubeClient:    fakeKubeClinet,
+			}
+
+			kubeconfigData, _, err := getBootstrapKubeConfigData(context.Background(), clientHolder, cluster)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createKubeconfigData() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -545,8 +599,8 @@ func TestCreateKubeconfigData(t *testing.T) {
 			if !reflect.DeepEqual(clusterConfig.CertificateAuthorityData, tt.want.certData) {
 				t.Errorf(
 					"createKubeconfigData() returns wrong cert. want %v, got %v",
-					tt.want.certData,
-					clusterConfig.CertificateAuthorityData,
+					string(tt.want.certData),
+					string(clusterConfig.CertificateAuthorityData),
 				)
 			}
 
@@ -559,7 +613,6 @@ func TestCreateKubeconfigData(t *testing.T) {
 			}
 		})
 	}
-
 }
 
 func TestGetValidCertificatesFromURL(t *testing.T) {
@@ -744,5 +797,62 @@ func TestGetBootstrapSAName(t *testing.T) {
 				t.Errorf("expected sa %v, but got %v", c.expectedSAName, getBootstrapSAName(c.clusterName))
 			}
 		})
+	}
+}
+
+func mockImportSecret(t *testing.T, expirationTime time.Time) *corev1.Secret {
+	bootstrapConfig := clientcmdapi.Config{
+		Clusters: map[string]*clientcmdapi.Cluster{"default-cluster": {
+			Server:                   "http://fake-server:6443",
+			InsecureSkipTLSVerify:    false,
+			CertificateAuthorityData: []byte("fake-ca"),
+		}},
+		AuthInfos: map[string]*clientcmdapi.AuthInfo{"default-auth": {
+			Token: "fake-token",
+		}},
+		Contexts: map[string]*clientcmdapi.Context{"default-context": {
+			Cluster:   "default-cluster",
+			AuthInfo:  "default-auth",
+			Namespace: "default",
+		}},
+		CurrentContext: "default-context",
+	}
+
+	boostrapConfigData, err := runtime.Encode(clientcmdlatest.Codec, &bootstrapConfig)
+	if err != nil {
+		t.Fatal(err)
+		return nil
+	}
+
+	template, err := manifestFiles.ReadFile("manifests/klusterlet/bootstrap_secret.yaml")
+	if err != nil {
+		t.Fatal(err)
+		return nil
+	}
+	config := KlusterletRenderConfig{
+		KlusterletNamespace: "test",
+		BootstrapKubeconfig: base64.StdEncoding.EncodeToString(boostrapConfigData),
+		InstallMode:         string(operatorv1.InstallModeDefault),
+	}
+	raw := helpers.MustCreateAssetFromTemplate("bootstrap_secret", template, config)
+
+	importYAML := new(bytes.Buffer)
+	importYAML.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, string(raw)))
+
+	expiration, err := expirationTime.MarshalText()
+	if err != nil {
+		t.Fatal(err)
+		return nil
+	}
+
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "testcluster-import",
+			Namespace: "testcluster",
+		},
+		Data: map[string][]byte{
+			"import.yaml": importYAML.Bytes(),
+			"expiration":  expiration,
+		},
 	}
 }
