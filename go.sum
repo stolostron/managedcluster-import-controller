@@ -869,8 +869,8 @@ github.com/openshift/cluster-api-provider-gcp v0.0.1-0.20201201000827-1117a4fc43
 github.com/openshift/custom-resource-status v1.1.0 h1:EjSh0f3vF6eaS3zAToVHUXcS7N2jVEosUFJ0sRKvmZ0=
 github.com/openshift/custom-resource-status v1.1.0/go.mod h1:GDjWl0tX6FNIj82vIxeudWeSx2Ff6nDZ8uJn0ohUFvo=
 github.com/openshift/hive/apis v0.0.0-20210506000654-5c038fb05190/go.mod h1:Ujw9ImzSYvo9VlUX6Gjy7zPFP7xYUAU50tdf1wPpN6c=
-github.com/openshift/hive/apis v0.0.0-20220715150811-b87d3cb0a987 h1:pbRKhX0nRHG21AZOQ5m0yVHwa+ysnCrnnxQo0MEKo+4=
-github.com/openshift/hive/apis v0.0.0-20220715150811-b87d3cb0a987/go.mod h1:XWo9dsulk75E9xkfxS/GNpJrL5UHgn3wuSyPeO39NME=
+github.com/openshift/hive/apis v0.0.0-20220726120844-e78dfd39116d h1:IePF0Xi/yLRN7bLXex12mLzWptYlE9HnQVoh2tVwkW0=
+github.com/openshift/hive/apis v0.0.0-20220726120844-e78dfd39116d/go.mod h1:XWo9dsulk75E9xkfxS/GNpJrL5UHgn3wuSyPeO39NME=
 github.com/openshift/library-go v0.0.0-20200512120242-21a1ff978534/go.mod h1:2kWwXTkpoQJUN3jZ3QW88EIY1hdRMqxgRs2hheEW/pg=
 github.com/openshift/library-go v0.0.0-20200909173121-1d055d971916/go.mod h1:6vwp+YhYOIlj8MpkQKkebTTSn2TuYyvgiAFQ206jIEQ=
 github.com/openshift/library-go v0.0.0-20201215165635-4ee79b1caed5/go.mod h1:udseDnqxn5ON8i+NBjDp00fBTK0JRu1/6Y6tf6EivDE=
@@ -1908,8 +1908,8 @@ k8s.io/utils v0.0.0-20210111153108-fddb29f9d009/go.mod h1:jPW/WVKK9YHAvNhRxK0md/
 k8s.io/utils v0.0.0-20210527160623-6fdb442a123b/go.mod h1:jPW/WVKK9YHAvNhRxK0md/EJ228hCsBRufyofKtW8HA=
 k8s.io/utils v0.0.0-20210802155522-efc7438f0176/go.mod h1:jPW/WVKK9YHAvNhRxK0md/EJ228hCsBRufyofKtW8HA=
 k8s.io/utils v0.0.0-20220210201930-3a6ce19ff2f9/go.mod h1:jPW/WVKK9YHAvNhRxK0md/EJ228hCsBRufyofKtW8HA=
-k8s.io/utils v0.0.0-20220713171938-56c0de1e6f5e h1:W1yba+Bpkwb5BatGKZALQ1yylhwnuD6CkYmrTibyLDM=
-k8s.io/utils v0.0.0-20220713171938-56c0de1e6f5e/go.mod h1:jPW/WVKK9YHAvNhRxK0md/EJ228hCsBRufyofKtW8HA=
+k8s.io/utils v0.0.0-20220725171434-9bab9ef40391 h1:1MPbIQv9SykLDytzVuV+Pl6V40NCQrB2AkCk65P4IU0=
+k8s.io/utils v0.0.0-20220725171434-9bab9ef40391/go.mod h1:jPW/WVKK9YHAvNhRxK0md/EJ228hCsBRufyofKtW8HA=
 modernc.org/cc v1.0.0/go.mod h1:1Sk4//wdnYJiUIxnW8ddKpaOJCF37yAdqYnkxUpaYxw=
 modernc.org/golex v1.0.0/go.mod h1:b/QX9oBD/LhixY6NDh+IdGv17hgB+51fET1i2kPSmvk=
 modernc.org/mathutil v1.0.0/go.mod h1:wU0vUrJsVWBZ4P6e7xtFJEhFSNsfRLJ8H458uRjg03k=

@@ -10,7 +10,7 @@ require (
 	github.com/onsi/gomega v1.20.0
 	github.com/openshift/api v3.9.1-0.20191111211345-a27ff30ebf09+incompatible
 	github.com/openshift/assisted-service v1.0.10-0.20211007120927-ad88cd9a8817
-	github.com/openshift/hive/apis v0.0.0-20220715150811-b87d3cb0a987
+	github.com/openshift/hive/apis v0.0.0-20220726120844-e78dfd39116d
 	github.com/openshift/library-go v0.0.0-20220713145611-ca167a8bd342
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/text v0.3.7
@@ -21,7 +21,7 @@ require (
 	k8s.io/client-go v12.0.0+incompatible
 	k8s.io/component-base v0.24.3
 	k8s.io/klog/v2 v2.70.1
-	k8s.io/utils v0.0.0-20220713171938-56c0de1e6f5e
+	k8s.io/utils v0.0.0-20220725171434-9bab9ef40391
 	open-cluster-management.io/api v0.8.0
 	sigs.k8s.io/controller-runtime v0.12.3
 )
