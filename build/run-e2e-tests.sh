@@ -26,10 +26,10 @@ REPO_DIR="$(dirname "$BUILD_DIR")"
 WORK_DIR="${REPO_DIR}/_output"
 COVERAGE_DIR="${REPO_DIR}/_output/coverage"
 
-KIND_VERSION="v0.11.1"
+KIND_VERSION="v0.14.0"
 KIND="${WORK_DIR}/bin/kind"
 
-KUBE_VERSION="v1.20.2"
+KUBE_VERSION="v1.24.0"
 KUBECTL="${WORK_DIR}/bin/kubectl"
 
 CLUSTER_NAME="e2e-test-cluster"
@@ -131,11 +131,29 @@ metadata:
   name: managed-cluster-import-e2e-sa
   namespace: open-cluster-management
 ---
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/service-account-token
+metadata:
+  name: managed-cluster-import-e2e-sa-token
+  namespace: open-cluster-management
+  annotations:
+    kubernetes.io/service-account.name: "managed-cluster-import-e2e-sa"
+---
 kind: ServiceAccount
 apiVersion: v1
 metadata:
   name: managed-cluster-import-e2e-limited-sa
   namespace: open-cluster-management
+---
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/service-account-token
+metadata:
+  name: managed-cluster-import-e2e-limited-sa-token
+  namespace: open-cluster-management
+  annotations:
+    kubernetes.io/service-account.name: "managed-cluster-import-e2e-limited-sa"
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1

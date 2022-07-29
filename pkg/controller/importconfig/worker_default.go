@@ -24,12 +24,7 @@ type defaultWorker struct {
 var _ importWorker = &defaultWorker{}
 
 func (w *defaultWorker) generateImportSecret(ctx context.Context, managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, error) {
-	bootStrapSecret, err := getBootstrapSecret(ctx, w.clientHolder.KubeClient, managedCluster)
-	if err != nil {
-		return nil, err
-	}
-
-	bootstrapKubeconfigData, err := createKubeconfigData(ctx, w.clientHolder, bootStrapSecret)
+	bootstrapKubeconfigData, expiration, err := getBootstrapKubeConfigData(ctx, w.clientHolder, managedCluster)
 	if err != nil {
 		return nil, err
 	}
@@ -163,6 +158,10 @@ func (w *defaultWorker) generateImportSecret(ctx context.Context, managedCluster
 			constants.ImportSecretCRDSV1YamlKey:      crdsV1YAML.Bytes(),
 			constants.ImportSecretCRDSV1beta1YamlKey: crdsV1beta1YAML.Bytes(),
 		},
+	}
+
+	if len(expiration) != 0 {
+		secret.Data[constants.ImportSecretTokenExpiration] = expiration
 	}
 
 	return secret, nil

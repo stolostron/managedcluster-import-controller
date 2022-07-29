@@ -38,6 +38,7 @@ const (
 	ImportSecretCRDSYamlKey        = "crds.yaml"
 	ImportSecretCRDSV1YamlKey      = "crdsv1.yaml"
 	ImportSecretCRDSV1beta1YamlKey = "crdsv1beta1.yaml"
+	ImportSecretTokenExpiration    = "expiration"
 )
 
 const (

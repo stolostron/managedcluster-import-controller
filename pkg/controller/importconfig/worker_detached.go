@@ -24,12 +24,7 @@ type hostedWorker struct {
 var _ importWorker = &hostedWorker{}
 
 func (w *hostedWorker) generateImportSecret(ctx context.Context, managedCluster *clusterv1.ManagedCluster) (*corev1.Secret, error) {
-	bootStrapSecret, err := getBootstrapSecret(ctx, w.clientHolder.KubeClient, managedCluster)
-	if err != nil {
-		return nil, err
-	}
-
-	bootstrapKubeconfigData, err := createKubeconfigData(ctx, w.clientHolder, bootStrapSecret)
+	bootstrapKubeconfigData, expiration, err := getBootstrapKubeConfigData(ctx, w.clientHolder, managedCluster)
 	if err != nil {
 		return nil, err
 	}
@@ -92,6 +87,10 @@ func (w *hostedWorker) generateImportSecret(ctx context.Context, managedCluster 
 		Data: map[string][]byte{
 			constants.ImportSecretImportYamlKey: importYAML.Bytes(),
 		},
+	}
+
+	if len(expiration) != 0 {
+		secret.Data[constants.ImportSecretTokenExpiration] = expiration
 	}
 
 	return secret, nil

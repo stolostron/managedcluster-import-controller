@@ -33,6 +33,12 @@ rules:
   - list
   - watch
 - apiGroups:
+  - ""
+  resources:
+  - serviceaccounts/token
+  verbs:
+  - create
+- apiGroups:
   - monitoring.coreos.com
   resources:
   - servicemonitors
@@ -219,3 +225,9 @@ rules:
     - update
     - delete
     - deletecollection
+- apiGroups:
+    - authentication.k8s.io
+  resources:
+    - tokenrequests
+  verbs:
+    - create

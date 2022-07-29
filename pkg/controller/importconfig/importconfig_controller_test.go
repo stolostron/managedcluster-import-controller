@@ -121,6 +121,15 @@ func TestReconcile(t *testing.T) {
 					},
 					Type: corev1.SecretTypeDockerConfigJson,
 				},
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "kube-root-ca.crt",
+						Namespace: "test",
+					},
+					Data: map[string]string{
+						"ca.crt": "fake-root-ca",
+					},
+				},
 			},
 			request: reconcile.Request{
 				NamespacedName: types.NamespacedName{
@@ -237,6 +246,15 @@ func TestReconcile(t *testing.T) {
 					},
 					Type: corev1.SecretTypeDockercfg,
 				},
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "kube-root-ca.crt",
+						Namespace: "test",
+					},
+					Data: map[string]string{
+						"ca.crt": "fake-root-ca",
+					},
+				},
 			},
 			request: reconcile.Request{
 				NamespacedName: types.NamespacedName{
@@ -316,6 +334,15 @@ func TestReconcile(t *testing.T) {
 						corev1.DockerConfigKey: []byte("fake-token"),
 					},
 					Type: corev1.SecretTypeDockercfg,
+				},
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "kube-root-ca.crt",
+						Namespace: "test",
+					},
+					Data: map[string]string{
+						"ca.crt": "fake-root-ca",
+					},
 				},
 			},
 			request: reconcile.Request{
@@ -433,6 +460,15 @@ func TestReconcile(t *testing.T) {
 						corev1.DockerConfigJsonKey: []byte("fake-token"),
 					},
 					Type: corev1.SecretTypeDockerConfigJson,
+				},
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "kube-root-ca.crt",
+						Namespace: "test",
+					},
+					Data: map[string]string{
+						"ca.crt": "fake-root-ca",
+					},
 				},
 			},
 			request: reconcile.Request{
