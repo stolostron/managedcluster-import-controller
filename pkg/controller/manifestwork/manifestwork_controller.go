@@ -6,7 +6,6 @@ package manifestwork
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
@@ -163,22 +162,8 @@ func (r *ReconcileManifestWork) deleteManifestWorks(
 	// above, we need to wait them to be deleted.
 	//
 	// if there are any Hosted mode manifestworks we also wait for users to detach the managed cluster first.
-	ignoreKlusterletAndAddons := func(clusterName string, manifestWork workv1.ManifestWork) bool {
-		manifestWorkName := manifestWork.GetName()
-		switch {
-		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, constants.KlusterletSuffix):
-		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, constants.KlusterletCRDsSuffix):
-		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, constants.HostedKlusterletManifestworkSuffix):
-		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, constants.HostedManagedKubeconfigManifestworkSuffix):
-		case strings.HasPrefix(manifestWorkName, fmt.Sprintf("%s-klusterlet-addon", manifestWork.GetNamespace())):
-		case strings.HasPrefix(manifestWorkName, "addon-") && strings.HasSuffix(manifestWork.GetName(), "-deploy"):
-		case strings.HasPrefix(manifestWorkName, "addon-") && strings.HasSuffix(manifestWork.GetName(), "-pre-delete"):
-		default:
-			return false
-		}
-		return true
-	}
-	err := helpers.DeleteManifestWorkWithSelector(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster, works, ignoreKlusterletAndAddons)
+	err := helpers.DeleteManifestWorkWithSelector(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster, works,
+		helpers.IgnoreKlusterletAndAddonsSelector)
 	if err != nil {
 		return reconcile.Result{}, err
 	}

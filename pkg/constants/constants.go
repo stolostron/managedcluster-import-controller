@@ -83,6 +83,11 @@ const (
 
 	// ManifestWorkPostponeDeleteTime is the postponed time to delete manifest work with postpone-delete annotation
 	ManifestWorkPostponeDeleteTime = 10 * time.Minute
+
+	// AddonLabel is the label for addon name
+	AddonLabel = "open-cluster-management.io/addon-name"
+	// AddonNamespaceLabel is the label for addon namespace
+	AddonNamespaceLabel = "open-cluster-management.io/addon-namespace"
 )
 
 const (

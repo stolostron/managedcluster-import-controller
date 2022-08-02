@@ -199,6 +199,44 @@ func DeleteManagedClusterAddons(
 	return runtimeClient.DeleteAllOf(ctx, &addonv1alpha1.ManagedClusterAddOn{}, client.InNamespace(cluster.GetName()))
 }
 
+// IgnoreAddonsSelector return true when matching addon manifestwork
+func IgnoreAddonsSelector(clusterName string, manifestWork workv1.ManifestWork) bool {
+	manifestWorkName := manifestWork.GetName()
+	switch {
+	case strings.HasPrefix(manifestWorkName, fmt.Sprintf("%s-klusterlet-addon", manifestWork.GetNamespace())),
+		strings.HasPrefix(manifestWorkName, "addon-") && strings.HasSuffix(manifestWorkName, "-deploy"),
+		strings.HasPrefix(manifestWorkName, "addon-") && strings.HasSuffix(manifestWorkName, "-pre-delete"):
+		return true
+
+	case len(manifestWork.GetLabels()[constants.AddonLabel]) != 0 &&
+		len(manifestWork.GetLabels()[constants.AddonNamespaceLabel]) != 0:
+		// match addon hosting manifestwork in Hosted mode by labels
+		return true
+
+	default:
+		return false
+	}
+}
+
+// IgnoreKlusterletAndAddonsSelector return true when matching klusterlet or addon manifestwork
+func IgnoreKlusterletAndAddonsSelector(clusterName string, manifestWork workv1.ManifestWork) bool {
+	if IgnoreAddonsSelector(clusterName, manifestWork) {
+		return true
+	}
+
+	manifestWorkName := manifestWork.GetName()
+	switch {
+	case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, constants.KlusterletSuffix),
+		manifestWorkName == fmt.Sprintf("%s-%s", clusterName, constants.KlusterletCRDsSuffix),
+		manifestWorkName == fmt.Sprintf("%s-%s", clusterName, constants.HostedKlusterletManifestworkSuffix),
+		manifestWorkName == fmt.Sprintf("%s-%s", clusterName, constants.HostedManagedKubeconfigManifestworkSuffix):
+		return true
+
+	default:
+		return false
+	}
+}
+
 // DeleteManifestWorkWithSelector deletes manifestworks but ignores the ignoredSelector selected manifestworks
 func DeleteManifestWorkWithSelector(ctx context.Context, runtimeClient client.Client, recorder events.Recorder,
 	cluster *clusterv1.ManagedCluster, works []workv1.ManifestWork,

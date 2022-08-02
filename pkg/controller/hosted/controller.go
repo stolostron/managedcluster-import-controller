@@ -8,7 +8,6 @@ import (
 	"embed"
 	"encoding/base64"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
@@ -261,18 +260,8 @@ func (r *ReconcileHosted) deleteManifestWorks(
 
 	// delete works that do not include klusterlet works and klusterlet addon works, the addon works were removed
 	// above, we need to wait them to be deleted.
-	ignoreAddons := func(clusterName string, manifestWork workv1.ManifestWork) bool {
-		manifestWorkName := manifestWork.GetName()
-		switch {
-		case strings.HasPrefix(manifestWorkName, fmt.Sprintf("%s-klusterlet-addon", manifestWork.GetNamespace())):
-		case strings.HasPrefix(manifestWorkName, "addon-") && strings.HasSuffix(manifestWork.GetName(), "-deploy"):
-		case strings.HasPrefix(manifestWorkName, "addon-") && strings.HasSuffix(manifestWork.GetName(), "-pre-delete"):
-		default:
-			return false
-		}
-		return true
-	}
-	err := helpers.DeleteManifestWorkWithSelector(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster, works, ignoreAddons)
+	err := helpers.DeleteManifestWorkWithSelector(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster, works,
+		helpers.IgnoreAddonsSelector)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
