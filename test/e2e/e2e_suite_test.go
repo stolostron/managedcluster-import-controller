@@ -12,6 +12,8 @@ import (
 
 	ginkgo "github.com/onsi/ginkgo"
 	gomega "github.com/onsi/gomega"
+	"github.com/openshift/library-go/pkg/operator/events"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
 	"github.com/google/go-cmp/cmp"
 
@@ -36,6 +38,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var (
@@ -47,6 +50,9 @@ var (
 	hubWorkClient     workclient.Interface
 	hubOperatorClient operatorclient.Interface
 	addonClient       addonclient.Interface
+	hubRuntimeClient  crclient.Client
+	hubRecorder       events.Recorder
+	hubMapper         meta.RESTMapper
 )
 
 func TestE2E(t *testing.T) {
@@ -98,6 +104,18 @@ var _ = ginkgo.BeforeSuite(func() {
 		if err != nil {
 			return err
 		}
+
+		hubRuntimeClient, err = crclient.New(clusterCfg, crclient.Options{})
+		if err != nil {
+			return err
+		}
+
+		hubRecorder = helpers.NewEventRecorder(hubKubeClient, "e2e-test")
+		hubMapper, err = apiutil.NewDiscoveryRESTMapper(clusterCfg)
+		if err != nil {
+			return err
+		}
+
 		return nil
 	}()
 
