@@ -1457,8 +1457,9 @@ github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd h1:TRLaZ9cD/w
 github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
 github.com/modern-go/reflect2 v0.0.0-20180320133207-05fbef0ca5da/go.mod h1:bx2lNnkwVCuqBIxFjflWJWanXIb3RllmbCylyMrvgv0=
 github.com/modern-go/reflect2 v0.0.0-20180701023420-4b7aa43c6742/go.mod h1:bx2lNnkwVCuqBIxFjflWJWanXIb3RllmbCylyMrvgv0=
-github.com/modern-go/reflect2 v1.0.1 h1:9f412s+6RmYXLWZSEzVVgPGK7C2PphHj5RJrvfx9AWI=
 github.com/modern-go/reflect2 v1.0.1/go.mod h1:bx2lNnkwVCuqBIxFjflWJWanXIb3RllmbCylyMrvgv0=
+github.com/modern-go/reflect2 v1.0.2 h1:xBagoLtFs94CBntxluKeaWgTMpvLxC4ur3nMaC9Gz0M=
+github.com/modern-go/reflect2 v1.0.2/go.mod h1:yWuevngMOJpCy52FWWMvUC8ws7m/LJsjYzDa0/r8luk=
 github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00/go.mod h1:Pm3mSP3c5uWn86xMLZ5Sa7JB9GsEZySvHYXCTK4E9q4=
 github.com/montanaflynn/stats v0.0.0-20171201202039-1bf9dbcd8cbe/go.mod h1:wL8QJuTMNUDYhXwkmfOly8iTdp5TEcJFWZD2D7SIkUc=
 github.com/morikuni/aec v0.0.0-20170113033406-39771216ff4c/go.mod h1:BbKIizmSmc5MMPqRYbxO4ZU0S0+P200+tUnFx7PXmsc=
@@ -1605,8 +1606,8 @@ github.com/openshift/custom-resource-status v1.1.0/go.mod h1:GDjWl0tX6FNIj82vIxe
 github.com/openshift/generic-admission-server v1.14.1-0.20200903115324-4ddcdd976480/go.mod h1:OAHL5WnZphlhVEf5fTdeGLvNwMu1B2zCWpmxJpCA35o=
 github.com/openshift/hive v1.1.12 h1:HZR0ZK0gMN/2nBoZegV8EFwZsuEC+XjzT7mmiE+j0Gg=
 github.com/openshift/hive v1.1.12/go.mod h1:ulDBek5P1mvGMAVufpkWLOigpWVJZgDp/LtdK32rC5o=
-github.com/openshift/hive/apis v0.0.0-20220221165319-b389a65758da h1:WcsEoNGq9onQdFCoVTDCryT8nq0wjg2GeaTwbvW0xnk=
-github.com/openshift/hive/apis v0.0.0-20220221165319-b389a65758da/go.mod h1:77ODrnaHiDlfbqQgvk5nUWuqf2AsGY/99QlfNTiqHwI=
+github.com/openshift/hive/apis v0.0.0-20220815155411-ba519850c166 h1:u/pXQZMOwWsrmGjCFUYsFltSq6BjFGGIOCkrbQzKgac=
+github.com/openshift/hive/apis v0.0.0-20220815155411-ba519850c166/go.mod h1:77ODrnaHiDlfbqQgvk5nUWuqf2AsGY/99QlfNTiqHwI=
 github.com/openshift/installer v0.9.0-master.0.20210211002944-d237b9dee575/go.mod h1:SWnBsRHNJNZCUJUMyyWbxljcePsR/hCUEY38GwhSIA8=
 github.com/openshift/library-go v0.0.0-20200918101923-1e4c94603efe h1:MJqGN0NVONnTLDYPVIEH4uo6i3gAK7LAkhLnyFO8Je0=
 github.com/openshift/library-go v0.0.0-20200918101923-1e4c94603efe/go.mod h1:NI6xOQGuTnLXeHW8Z2glKSFhF7X+YxlAlqlBMaK0zEM=

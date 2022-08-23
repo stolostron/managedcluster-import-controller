@@ -9,7 +9,7 @@ require (
 	github.com/open-cluster-management/multicloud-operators-foundation v0.0.0-20210824054957-51557a572f11
 	github.com/openshift/api v3.9.1-0.20191111211345-a27ff30ebf09+incompatible
 	github.com/openshift/assisted-service v1.0.10-0.20211007120927-ad88cd9a8817
-	github.com/openshift/hive/apis v3.9.1-0.20191111211345-a27ff30ebf09+incompatible
+	github.com/openshift/hive/apis v0.0.0
 	github.com/openshift/library-go v0.0.0-20210330121802-ebbc677c82a5
 	k8s.io/api v0.21.2
 	k8s.io/apiextensions-apiserver v0.21.2
@@ -68,7 +68,7 @@ require (
 	github.com/matttproud/golang_protobuf_extensions v1.0.2-0.20181231171920-c182affec369 // indirect
 	github.com/mitchellh/mapstructure v1.3.3 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
-	github.com/modern-go/reflect2 v1.0.1 // indirect
+	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/openshift/custom-resource-status v1.1.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
@@ -109,7 +109,7 @@ replace (
 	github.com/metal3-io/cluster-api-provider-baremetal => github.com/openshift/cluster-api-provider-baremetal v0.0.0-20190821174549-a2a477909c1d
 	github.com/open-cluster-management/multicloud-operators-foundation => github.com/stolostron/multicloud-operators-foundation v0.0.0-20210824054957-51557a572f11
 	github.com/openshift/api => github.com/openshift/api v0.0.0-20210331193751-3acddb19d360
-	github.com/openshift/hive/apis => github.com/openshift/hive/apis v0.0.0-20220221165319-b389a65758da
+	github.com/openshift/hive/apis => github.com/openshift/hive/apis v0.0.0-20220815155411-ba519850c166
 	github.com/openshift/library-go => github.com/openshift/library-go v0.0.0-20200918101923-1e4c94603efe
 	github.com/terraform-providers/terraform-provider-ignition/v2 => github.com/community-terraform-providers/terraform-provider-ignition/v2 v2.1.0
 	k8s.io/client-go => k8s.io/client-go v0.21.0
