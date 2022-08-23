@@ -189,7 +189,7 @@ functional-test:
 
 .PHONY: functional-test-full
 functional-test-full: build-image-coverage
-	build/run-functional-tests.sh $(DOCKER_IMAGE_COVERAGE)
+	sh -x build/run-functional-tests.sh $(DOCKER_IMAGE_COVERAGE)
 
 .PHONY: clean-functional-test-full
 clean-functional-test-full: 

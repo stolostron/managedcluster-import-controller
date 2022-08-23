@@ -14,34 +14,29 @@ KIND_MANAGED_KUBECONFIG="${CURR_FOLDER_PATH}/../kind_kubeconfig_mc.yaml"
 KIND_MANAGED_KUBECONFIG_INTERNAL="${CURR_FOLDER_PATH}/../kind_kubeconfig_internal_mc.yaml"
 CLUSTER_NAME=$PROJECT_NAME-functional-test
 
+KIND_VERSION="v0.9.0"
+KIND="/usr/local/bin/kind"
+
 export KUBECONFIG=${KIND_KUBECONFIG}
 export DOCKER_IMAGE_AND_TAG=${1}
 
 export FUNCT_TEST_TMPDIR="${CURR_FOLDER_PATH}/../test/functional/tmp"
 export FUNCT_TEST_COVERAGE="${CURR_FOLDER_PATH}/../test/functional/coverage"
 
+echo "###### installing kind"
+curl -LO https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-linux-amd64 && chmod +x kind-linux-amd64 && sudo mv kind-linux-amd64 /usr/local/bin/kind
 
 echo "installing kubectl"
 curl -LO https://storage.googleapis.com/kubernetes-release/release/v1.21.0/bin/linux/amd64/kubectl && chmod +x kubectl && sudo mv kubectl /usr/local/bin/
 
-if ! which kind > /dev/null; then
-    echo "installing kind"
-    curl -Lo ./kind https://github.com/kubernetes-sigs/kind/releases/download/v0.7.0/kind-$(uname)-amd64
-    chmod +x ./kind
-    sudo mv ./kind /usr/local/bin/kind
-fi
 if ! which ginkgo > /dev/null; then
     echo "Installing ginkgo ..."
-    pushd $(mktemp -d) 
     GOSUMDB=off go get github.com/onsi/ginkgo/ginkgo
     GOSUMDB=off go get github.com/onsi/gomega/...
-    popd
 fi
 if ! which gocovmerge > /dev/null; then
   echo "Installing gocovmerge..."
-  pushd $(mktemp -d) 
   GOSUMDB=off go get -u github.com/wadey/gocovmerge
-  popd
 fi
 
 echo "setting up test tmp folder"
@@ -127,20 +122,20 @@ status:
 EOF
 
 echo "creating managed cluster"
-kind create cluster --name ${CLUSTER_NAME}-managed --config "${FUNCT_TEST_TMPDIR}/kind-config/kind-managed-config.yaml" --image kindest/node:v1.19.1
+$KIND create cluster --name ${CLUSTER_NAME}-managed --config "${FUNCT_TEST_TMPDIR}/kind-config/kind-managed-config.yaml" --image kindest/node:v1.19.1
 # setup kubeconfig
-kind get kubeconfig --name ${CLUSTER_NAME}-managed > ${KIND_MANAGED_KUBECONFIG}
-kind get kubeconfig --name ${CLUSTER_NAME}-managed --internal > ${KIND_MANAGED_KUBECONFIG_INTERNAL}
+$KIND get kubeconfig --name ${CLUSTER_NAME}-managed > ${KIND_MANAGED_KUBECONFIG}
+$KIND get kubeconfig --name ${CLUSTER_NAME}-managed --internal > ${KIND_MANAGED_KUBECONFIG_INTERNAL}
 echo "creating hub cluster"
-kind create cluster --name ${CLUSTER_NAME} --config "${FUNCT_TEST_TMPDIR}/kind-config/kind-config.yaml" --image kindest/node:v1.19.1
+$KIND create cluster --name ${CLUSTER_NAME} --config "${FUNCT_TEST_TMPDIR}/kind-config/kind-config.yaml" --image kindest/node:v1.19.1
 
 # setup kubeconfig
-kind get kubeconfig --name ${CLUSTER_NAME} > ${KIND_KUBECONFIG}
-kind get kubeconfig --name ${CLUSTER_NAME} --internal > ${KIND_KUBECONFIG_INTERNAL}
+$KIND get kubeconfig --name ${CLUSTER_NAME} > ${KIND_KUBECONFIG}
+$KIND get kubeconfig --name ${CLUSTER_NAME} --internal > ${KIND_KUBECONFIG_INTERNAL}
 API_SERVER_URL=$(cat ${KIND_KUBECONFIG_INTERNAL}| grep "server:" | awk '{print $2}')
 
 # load image if possible
-kind load docker-image ${DOCKER_IMAGE_AND_TAG} --name=${CLUSTER_NAME} -v 99 || echo "failed to load image locally, will use imagePullSecret"
+$KIND load docker-image ${DOCKER_IMAGE_AND_TAG} --name=${CLUSTER_NAME} -v 99 || echo "failed to load image locally, will use imagePullSecret"
 
 echo "install cluster"
 # setup cluster
@@ -170,8 +165,8 @@ echo "Wait 10 sec for copy to AWS"
 sleep 10
 
 echo "delete clusters"
-kind delete cluster --name ${CLUSTER_NAME}
-kind delete cluster --name ${CLUSTER_NAME}-managed
+$KIND delete cluster --name ${CLUSTER_NAME}
+$KIND delete cluster --name ${CLUSTER_NAME}-managed
 
 if [ `find $FUNCT_TEST_COVERAGE -prune -empty 2>/dev/null` ]; then
   echo "no coverage files found. skipping"

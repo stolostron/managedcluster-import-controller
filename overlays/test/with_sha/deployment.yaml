@@ -22,11 +22,11 @@ spec:
         - name: DEFAULT_IMAGE_PULL_SECRET
           value: multiclusterhub-operator-pull-secret
         - name: REGISTRATION_OPERATOR_IMAGE
-          value: "quay.io/open-cluster-management/registration-operator:latest"
+          value: "quay.io/open-cluster-management/registration-operator:2.3.6-SNAPSHOT-2021-12-22-22-56-34"
         - name: REGISTRATION_IMAGE
-          value: "quay.io/open-cluster-management/registration:latest"
+          value: "quay.io/open-cluster-management/registration:2.3.6-SNAPSHOT-2021-12-22-22-56-34"
         - name: WORK_IMAGE
-          value: "quay.io/open-cluster-management/work:latest"
+          value: "quay.io/open-cluster-management/work:2.3.6-SNAPSHOT-2021-12-22-22-56-34"
       volumes:
         - name: coverage-dir
           hostPath:

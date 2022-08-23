@@ -10,7 +10,7 @@ require (
 	github.com/open-cluster-management/applier v0.0.0-20210422205113-6c10f923726b
 	github.com/open-cluster-management/library-go v0.0.0-20210325215722-d989f79194f6
 	github.com/openshift/api v3.9.1-0.20191112184635-86def77f6f90+incompatible
-	github.com/openshift/hive/apis v0.0.0-20210506000654-5c038fb05190
+	github.com/openshift/hive/apis v0.0.0-20220815220535-60b8a9aace22
 	github.com/operator-framework/operator-sdk v0.18.1
 	github.com/spf13/pflag v1.0.5
 	k8s.io/api v0.20.5
@@ -56,7 +56,7 @@ require (
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
-	github.com/modern-go/reflect2 v1.0.1 // indirect
+	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/nxadm/tail v1.4.4 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.7.1 // indirect
@@ -101,7 +101,6 @@ replace (
 	github.com/Azure/go-autorest => github.com/Azure/go-autorest v14.2.0+incompatible // Required by OLM
 	github.com/go-logr/logr => github.com/go-logr/logr v0.2.1
 	github.com/go-logr/zapr => github.com/go-logr/zapr v0.2.0
-
 	github.com/metal3-io/baremetal-operator => github.com/openshift/baremetal-operator v0.0.0-20200715132148-0f91f62a41fe
 	github.com/metal3-io/cluster-api-provider-baremetal => github.com/openshift/cluster-api-provider-baremetal v0.0.0-20190821174549-a2a477909c1d
 	github.com/munnerz/goautoneg => github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
