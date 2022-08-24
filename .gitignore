@@ -39,3 +39,6 @@ kind_kubeconfig_internal.yaml
 kind_kubeconfig_internal_mc.yaml
 
 report.json
+
+kind-linux-amd64
+kubectl
