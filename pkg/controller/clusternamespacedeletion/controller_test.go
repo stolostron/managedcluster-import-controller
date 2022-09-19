@@ -34,6 +34,9 @@ var _ = Describe("cluster namespace deletion controller", func() {
 		cluster = &clusterv1.ManagedCluster{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: clusterName,
+				Finalizers: []string{
+					constants.ImportFinalizer,
+				},
 			},
 			Spec: clusterv1.ManagedClusterSpec{
 				HubAcceptsClient: true,
@@ -65,10 +68,7 @@ var _ = Describe("cluster namespace deletion controller", func() {
 					return err
 				}
 
-				currentcluster.Finalizers = []string{
-					constants.ImportFinalizer,
-					"test.open-cluster-management.io/test",
-				}
+				currentcluster.Finalizers = append(currentcluster.Finalizers, "test.open-cluster-management.io/test")
 
 				return runtimeClient.Update(context.TODO(), currentcluster)
 			}, timeout, interval).ShouldNot(HaveOccurred())
@@ -327,6 +327,44 @@ var _ = Describe("cluster namespace deletion controller", func() {
 					return nil
 				}
 				return fmt.Errorf("namespace still exist with err: %v", err)
+			}, timeout, interval).ShouldNot(HaveOccurred())
+		})
+	})
+
+	Context("creating cluster ns", func() {
+		var ns *corev1.Namespace
+
+		BeforeEach(func() {
+			clusterName := "noncluster-" + utilrand.String(5)
+			ns = &corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: clusterName,
+					Labels: map[string]string{
+						clustercontroller.ClusterLabel: clusterName,
+					},
+				},
+			}
+			_, err := k8sClient.CoreV1().Namespaces().Create(context.Background(), ns, metav1.CreateOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		AfterEach(func() {
+			err := k8sClient.CoreV1().Namespaces().Delete(context.Background(), ns.Name, metav1.DeleteOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		It("Should allow to create a cluster ns before the cluster is created", func() {
+			Eventually(func() error {
+				ns, err := k8sClient.CoreV1().Namespaces().Get(context.TODO(), cluster.Name, metav1.GetOptions{})
+				if err != nil {
+					return fmt.Errorf("failed to find namespace: %v", err)
+				}
+
+				if !ns.DeletionTimestamp.IsZero() {
+					return fmt.Errorf("unexpacted namesapce was deleted")
+				}
+
+				return nil
 			}, timeout, interval).ShouldNot(HaveOccurred())
 		})
 	})

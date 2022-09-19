@@ -20,7 +20,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 )
 
-var _ = ginkgo.Describe("Importing a managed cluster manually", func() {
+var _ = ginkgo.Describe("Creating a managed cluster", func() {
 	var managedClusterName string
 
 	ginkgo.BeforeEach(func() {
@@ -107,6 +107,7 @@ var _ = ginkgo.Describe("Importing a managed cluster manually", func() {
 
 		ginkgo.By("Recover after delete", func() { assertManagedClusterImportSecret(managedClusterName) })
 	})
+
 	ginkgo.It("Should postpone delete manifest with postpone-delete annotation", func() {
 		assertManagedClusterNamespace(managedClusterName)
 

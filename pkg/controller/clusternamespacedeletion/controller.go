@@ -70,7 +70,10 @@ func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, reque
 	managedCluster := &clusterv1.ManagedCluster{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: request.Name}, managedCluster)
 	// Do nothing if the cluster is not deleting or deleted
-	if err != nil && !errors.IsNotFound(err) {
+	if errors.IsNotFound(err) {
+		return reconcile.Result{}, nil
+	}
+	if err != nil {
 		return reconcile.Result{}, err
 	}
 	if err == nil {
