@@ -56,6 +56,21 @@ func TestReconcile(t *testing.T) {
 			expectedErr: false,
 		},
 		{
+			name: "hosted cluster",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+						},
+					},
+				},
+			},
+			secrets:     []runtime.Object{},
+			expectedErr: false,
+		},
+		{
 			name: "no auto-import-secret",
 			objs: []client.Object{
 				&clusterv1.ManagedCluster{
@@ -81,6 +96,31 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "auto-import-secret",
 						Namespace: "test",
+					},
+				},
+			},
+			expectedErr: false,
+		},
+		{
+			name: "no manifest works",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"autoImportRetry": []byte("0"),
+						"token":           []byte(config.BearerToken),
+						"server":          []byte(config.Host),
 					},
 				},
 			},
@@ -119,6 +159,52 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "auto-import-secret",
 						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"autoImportRetry": []byte("0"),
+						"token":           []byte(config.BearerToken),
+						"server":          []byte(config.Host),
+					},
+				},
+			},
+			expectedErr: false,
+		},
+		{
+			name: "only update the bootstrap secret",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: "test",
+						Labels: map[string]string{
+							restoreLabel: "true",
+						},
 					},
 					Data: map[string][]byte{
 						"autoImportRetry": []byte("0"),

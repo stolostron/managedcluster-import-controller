@@ -144,6 +144,53 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 			}, 30*time.Second, 1*time.Second).ShouldNot(gomega.HaveOccurred())
 		})
 	})
+
+	ginkgo.It("Should only update the bootstrap secret", func() {
+		ginkgo.By(fmt.Sprintf("Create auto-import-secret for managed cluster %s with token", managedClusterName), func() {
+			secret, err := util.NewAutoImportSecretWithToken(hubKubeClient, hubDynamicClient, managedClusterName)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			_, err = hubKubeClient.CoreV1().Secrets(managedClusterName).Create(context.TODO(), secret, metav1.CreateOptions{})
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		})
+
+		ginkgo.By(fmt.Sprintf("Create managed cluster %s", managedClusterName), func() {
+			// using a local cluster to speed up cluster deletion
+			_, err := util.CreateManagedCluster(hubClusterClient, managedClusterName, util.NewLable("local-cluster", "true"))
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		})
+
+		assertManagedClusterImportSecretCreated(managedClusterName, "other")
+		assertManagedClusterManifestWorks(managedClusterName)
+		assertManagedClusterImportSecretApplied(managedClusterName)
+		assertManagedClusterAvailable(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
+
+		assertAutoImportSecretDeleted(managedClusterName)
+
+		ginkgo.By(fmt.Sprintf("Create restore auto-import-secret for managed cluster %s", managedClusterName), func() {
+			secret, err := util.NewRestoreAutoImportSecret(hubKubeClient, hubDynamicClient, managedClusterName)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			_, err = hubKubeClient.CoreV1().Secrets(managedClusterName).Create(context.TODO(), secret, metav1.CreateOptions{})
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		})
+
+		// make sure no errors happened
+		ginkgo.By(fmt.Sprintf("Managed cluster %s should be imported", managedClusterName), func() {
+			gomega.Consistently(func() bool {
+				cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
+				if err != nil {
+					util.Logf("failed to get cluster %v", err)
+					return false
+				}
+
+				return meta.IsStatusConditionTrue(cluster.Status.Conditions, "ManagedClusterImportSucceeded")
+			}, time.Second*30, time.Second*1).Should(gomega.BeTrue())
+		})
+
+		assertAutoImportSecretDeleted(managedClusterName)
+	})
 })
 
 var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret for Hosted mode", func() {

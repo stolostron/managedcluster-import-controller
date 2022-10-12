@@ -172,7 +172,7 @@ func TestReconcile(t *testing.T) {
 					if ns.Name != defaultKlusterletNamespace {
 						t.Errorf("import secret data %s, the namespace name %s is not %s", constants.ImportSecretImportYamlKey, ns.Name, defaultKlusterletNamespace)
 					}
-					pullSecret, ok := objs[8].(*corev1.Secret)
+					pullSecret, ok := objs[9].(*corev1.Secret)
 					if !ok {
 						t.Errorf("import secret data %s, the last element is not secret", constants.ImportSecretImportYamlKey)
 					}
@@ -186,8 +186,8 @@ func TestReconcile(t *testing.T) {
 					}
 				}
 
-				if len(strings.Split(strings.Replace(string(data), constants.YamlSperator, "", 1), constants.YamlSperator)) != 9 {
-					t.Errorf("expect 9 files, but failed")
+				if len(strings.Split(strings.Replace(string(data), constants.YamlSperator, "", 1), constants.YamlSperator)) != 10 {
+					t.Errorf("expect 10 files, but failed")
 				}
 			},
 		},
@@ -386,7 +386,7 @@ func TestReconcile(t *testing.T) {
 					if ns.Name != testKlusterletNamespace {
 						t.Errorf("import secret data %s, the namespace name %s is not %s", constants.ImportSecretImportYamlKey, ns.Name, testKlusterletNamespace)
 					}
-					pullSecret, ok := objs[8].(*corev1.Secret)
+					pullSecret, ok := objs[9].(*corev1.Secret)
 					if !ok {
 						t.Errorf("import secret data %s, the last element is not secret", constants.ImportSecretImportYamlKey)
 					}
@@ -400,8 +400,8 @@ func TestReconcile(t *testing.T) {
 					}
 				}
 
-				if len(strings.Split(strings.Replace(string(data), constants.YamlSperator, "", 1), constants.YamlSperator)) != 9 {
-					t.Errorf("expect 9 files, but failed")
+				if len(strings.Split(strings.Replace(string(data), constants.YamlSperator, "", 1), constants.YamlSperator)) != 10 {
+					t.Errorf("expect 10 files, but failed")
 				}
 			},
 		},

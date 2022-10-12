@@ -6,6 +6,7 @@ package autoimport
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
@@ -25,6 +26,8 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
+
+const restoreLabel = "cluster.open-cluster-management.io/restore-auto-import-secret"
 
 var log = logf.Log.WithName(controllerName)
 
@@ -108,7 +111,12 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	case importErr != nil:
 		// failed to generate import client with auto-import sercet, will reduce the auto-import secret retry times and reconcile again
 	case importErr == nil:
-		importErr = helpers.ImportManagedClusterFromSecret(importClient, restMapper, r.recorder, importSecret)
+		if val, ok := autoImportSecret.Labels[restoreLabel]; ok && strings.EqualFold(val, "true") {
+			// only update the bootstrap secret on the managed cluster with the auto-import-secret
+			importErr = helpers.UpdateManagedClusterBootstrapSecret(importClient, importSecret, r.recorder)
+		} else {
+			importErr = helpers.ImportManagedClusterFromSecret(importClient, restMapper, r.recorder, importSecret)
+		}
 	}
 
 	if importErr != nil {
@@ -130,11 +138,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	if err := helpers.DeleteAutoImportSecret(ctx, r.kubeClient, autoImportSecret); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	r.recorder.Eventf("AutoImportSecretDeleted",
-		fmt.Sprintf("The managed cluster %s is imported, delete its auto import secret", managedClusterName))
-	return reconcile.Result{}, nil
+	r.recorder.Eventf("ManagedClusterImported",
+		fmt.Sprintf("delete its auto import secret %s/%s", autoImportSecret.Namespace, autoImportSecret.Name))
+	return reconcile.Result{}, helpers.DeleteAutoImportSecret(ctx, r.kubeClient, autoImportSecret, r.recorder)
 }
