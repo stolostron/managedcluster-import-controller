@@ -49,6 +49,7 @@ var klusterletOperatorFiles = []string{
 	"manifests/klusterlet/namespace.yaml",
 	"manifests/klusterlet/service_account.yaml",
 	"manifests/klusterlet/cluster_role.yaml",
+	"manifests/klusterlet/clusterrole_bootstrap.yaml",
 	"manifests/klusterlet/clusterrole_aggregate.yaml",
 	"manifests/klusterlet/cluster_role_binding.yaml",
 	"manifests/klusterlet/operator.yaml",

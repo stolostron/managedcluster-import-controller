@@ -168,15 +168,9 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 		return reconcile.Result{}, err
 	}
 
-	err = helpers.DeleteAutoImportSecret(ctx, r.clientHolder.KubeClient, autoImportSecret)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	r.recorder.Eventf("AutoImportSecretDeleted",
-		fmt.Sprintf("The managed cluster %s is imported, delete its auto import secret", managedClusterName))
-
-	return reconcile.Result{}, nil
+	r.recorder.Eventf("ExternalManagedKubeconfigCreated",
+		fmt.Sprintf("delete its auto import secret %s/%s", autoImportSecret.Namespace, autoImportSecret.Name))
+	return reconcile.Result{}, helpers.DeleteAutoImportSecret(ctx, r.clientHolder.KubeClient, autoImportSecret, r.recorder)
 
 }
 

@@ -25,6 +25,7 @@ import (
 	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	crdv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -718,6 +719,68 @@ func TestImportManagedClusterFromSecret(t *testing.T) {
 			if err != nil {
 				t.Errorf("unexpect err %v", err)
 			}
+		})
+	}
+}
+
+var badImportYaml = `
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: klusterlet
+`
+
+func TestUpdateManagedClusterBootstrapSecret(t *testing.T) {
+	cases := []struct {
+		name         string
+		importSecret *corev1.Secret
+		expectedErr  bool
+		verifyFunc   func(t *testing.T, clientHolder *ClientHolder)
+	}{
+		{
+			name: "bad import secret",
+			importSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-import",
+					Namespace: "test",
+				},
+				Data: map[string][]byte{
+					"import.yaml": []byte(badImportYaml),
+				},
+			},
+			expectedErr: true,
+			verifyFunc: func(t *testing.T, clientHolder *ClientHolder) {
+				_, err := clientHolder.KubeClient.CoreV1().Secrets("open-cluster-management-agent").Get(context.TODO(), "bootstrap-hub-kubeconfig", metav1.GetOptions{})
+				if !errors.IsNotFound(err) {
+					t.Errorf("unexpect err %v", err)
+				}
+			},
+		},
+		{
+			name:         "update import secret",
+			importSecret: testinghelpers.GetImportSecret("test"),
+			expectedErr:  false,
+			verifyFunc: func(t *testing.T, clientHolder *ClientHolder) {
+				_, err := clientHolder.KubeClient.CoreV1().Secrets("open-cluster-management-agent").Get(context.TODO(), "bootstrap-hub-kubeconfig", metav1.GetOptions{})
+				if err != nil {
+					t.Errorf("unexpect err %v", err)
+				}
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			clientHolder := &ClientHolder{
+				KubeClient: kubefake.NewSimpleClientset(),
+			}
+
+			err := UpdateManagedClusterBootstrapSecret(clientHolder, c.importSecret, eventstesting.NewTestingEventRecorder(t))
+			if !c.expectedErr && err != nil {
+				t.Errorf("unexpect err %v", err)
+			}
+
+			c.verifyFunc(t, clientHolder)
 		})
 	}
 }

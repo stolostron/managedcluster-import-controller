@@ -155,6 +155,21 @@ metadata:
   annotations:
     kubernetes.io/service-account.name: "managed-cluster-import-e2e-limited-sa"
 ---
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: managed-cluster-import-e2e-restore-sa
+  namespace: open-cluster-management
+---
+apiVersion: v1
+kind: Secret
+type: kubernetes.io/service-account-token
+metadata:
+  name: managed-cluster-import-e2e-restore-sa-token
+  namespace: open-cluster-management
+  annotations:
+    kubernetes.io/service-account.name: "managed-cluster-import-e2e-restore-sa"
+---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -166,6 +181,19 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: managed-cluster-import-e2e-sa
+    namespace: open-cluster-management
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: managed-cluster-import-e2e-restore
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: klusterlet-bootstrap-kubeconfig
+subjects:
+  - kind: ServiceAccount
+    name: managed-cluster-import-e2e-restore-sa
     namespace: open-cluster-management
 EOF
 

@@ -299,6 +299,28 @@ func NewAutoImportSecretWithToken(kubeClient kubernetes.Interface, dynamicClient
 	}, nil
 }
 
+func NewRestoreAutoImportSecret(kubeClient kubernetes.Interface, dynamicClient dynamic.Interface, clusterName string) (*corev1.Secret, error) {
+	server, token, err := getServerAndToken(kubeClient, dynamicClient, "managed-cluster-import-e2e-sa")
+	if err != nil {
+		return nil, err
+	}
+
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "auto-import-secret",
+			Namespace: clusterName,
+			Labels: map[string]string{
+				"cluster.open-cluster-management.io/restore-auto-import-secret": "true",
+			},
+		},
+		Data: map[string][]byte{
+			"autoImportRetry": []byte("0"),
+			"token":           token,
+			"server":          server,
+		},
+	}, nil
+}
+
 func NewInvalidAutoImportSecret(kubeClient kubernetes.Interface, dynamicClient dynamic.Interface, clusterName string) (*corev1.Secret, error) {
 	server, token, err := getServerAndToken(kubeClient, dynamicClient, "managed-cluster-import-e2e-limited-sa")
 	if err != nil {

@@ -295,6 +295,26 @@ func ImportManagedClusterFromSecret(client *ClientHolder, restMapper meta.RESTMa
 	return ApplyResources(client, recorder, nil, nil, objs...)
 }
 
+// UpdateManagedClusterBootstrapSecret update the bootstrap secret on the managed cluster
+func UpdateManagedClusterBootstrapSecret(client *ClientHolder, importSecret *corev1.Secret, recorder events.Recorder) error {
+	var obj runtime.Object
+	for _, yaml := range SplitYamls(importSecret.Data[constants.ImportSecretImportYamlKey]) {
+		obj = MustCreateObject(yaml)
+		// bootstrap-hub-kubeconfig
+		secret, ok := obj.(*corev1.Secret)
+		if !ok {
+			continue
+		}
+		if secret.Name == "bootstrap-hub-kubeconfig" {
+			break
+		}
+	}
+	if obj == nil {
+		return fmt.Errorf("failed to find bootstrap-hub-kubeconfig in import secret %s/%s", importSecret.Namespace, importSecret.Name)
+	}
+	return ApplyResources(client, recorder, nil, nil, obj)
+}
+
 // SplitYamls split yamls with sperator `---`
 func SplitYamls(yamls []byte) [][]byte {
 	bYamls := [][]byte{}
