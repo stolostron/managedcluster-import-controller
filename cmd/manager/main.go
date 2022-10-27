@@ -9,6 +9,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"os"
 	"time"
@@ -69,8 +70,13 @@ func init() {
 }
 
 func main() {
+	var leaderElectionNamespace string = ""
+	pflag.StringVar(&leaderElectionNamespace, "leader-election-namespace", "", "required when the process is not running in cluster")
 	pflag.CommandLine.SetNormalizeFunc(utilflag.WordSepNormalizeFunc)
+	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	features.DefaultMutableFeatureGate.AddFlag(pflag.CommandLine)
+
+	logs.AddFlags(pflag.CommandLine)
 	pflag.Parse()
 
 	logs.InitLogs()
@@ -135,10 +141,11 @@ func main() {
 
 	// Create controller-runtime manager
 	mgr, err := ctrl.NewManager(cfg, manager.Options{
-		Scheme:             scheme,
-		MetricsBindAddress: fmt.Sprintf(":%d", metricsPort),
-		LeaderElection:     true,
-		LeaderElectionID:   "managedcluster-import-controller.open-cluster-management.io",
+		Scheme:                  scheme,
+		MetricsBindAddress:      fmt.Sprintf(":%d", metricsPort),
+		LeaderElection:          true,
+		LeaderElectionID:        "managedcluster-import-controller.open-cluster-management.io",
+		LeaderElectionNamespace: leaderElectionNamespace,
 	})
 	if err != nil {
 		setupLog.Error(err, "failed to create manager")
