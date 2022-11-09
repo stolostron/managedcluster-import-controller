@@ -1,6 +1,6 @@
 [comment]: # ( Copyright Contributors to the Open Cluster Management project )
 
-# Detatching a managed cluster
+# Detaching a managed cluster
 
 ## User action
 

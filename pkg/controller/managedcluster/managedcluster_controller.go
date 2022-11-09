@@ -44,9 +44,9 @@ type ReconcileManagedCluster struct {
 var _ reconcile.Reconciler = &ReconcileManagedCluster{}
 
 // Reconcile the ManagedCluster.
-// - When a new managed cluster is created, we will add the required meta data to the managed cluster
-// - When a managed cluster is deleting, we will wait the other components to delete their finalizers, after
-//   there is only the import finalizer on managed cluster, we will delete the managed cluster namespace.
+//   - When a new managed cluster is created, we will add the required meta data to the managed cluster
+//   - When a managed cluster is deleting, we will wait the other components to delete their finalizers, after
+//     there is only the import finalizer on managed cluster, we will delete the managed cluster namespace.
 //
 // Note: The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
