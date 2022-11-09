@@ -49,14 +49,14 @@ type ReconcileHosted struct {
 var _ reconcile.Reconciler = &ReconcileHosted{}
 
 // Reconcile the hosted mode ManagedClusters of the ManifestWorks.
-// - When a hosted mode ManagedCluster created, we will create a klusterlet manifestwork to trigger the
-//   cluster importing process
-// - When an auto import secret created for the hosted mode managed cluster, we create a managed
-//   kubeconfig manifestwork to create an external managed kubeconfig secret on the hosting cluster
-// - When the manifester works are created in one managed cluster namespace, we will add a manifest work
-//   finalizer to the managed cluster
-// - When a managed cluster is deleting, we delete the manifest works and remove the manifest work
-//   finalizer from the managed cluster
+//   - When a hosted mode ManagedCluster created, we will create a klusterlet manifestwork to trigger the
+//     cluster importing process
+//   - When an auto import secret created for the hosted mode managed cluster, we create a managed
+//     kubeconfig manifestwork to create an external managed kubeconfig secret on the hosting cluster
+//   - When the manifester works are created in one managed cluster namespace, we will add a manifest work
+//     finalizer to the managed cluster
+//   - When a managed cluster is deleting, we delete the manifest works and remove the manifest work
+//     finalizer from the managed cluster
 //
 // Note: The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
@@ -234,10 +234,10 @@ func (r *ReconcileHosted) deleteAddonsAndWorks(
 // deleteManifestWorks deletes manifest works when a managed cluster is deleting
 // If the managed cluster is unavailable, we will force delete all manifest works
 // If the managed cluster is available, we will
-//   1. delete the manifest work with the postpone-delete annotation until 10 min
-//      after the cluster is deleted.
-//   2. delete the manifest works that do not include klusterlet addon works
-//   3. delete the klusterlet and managed kubeconfig manifest works
+//  1. delete the manifest work with the postpone-delete annotation until 10 min
+//     after the cluster is deleted.
+//  2. delete the manifest works that do not include klusterlet addon works
+//  3. delete the klusterlet and managed kubeconfig manifest works
 func (r *ReconcileHosted) deleteManifestWorks(
 	ctx context.Context,
 	cluster *clusterv1.ManagedCluster,

@@ -749,7 +749,7 @@ func validateTolerations(tolerations []corev1.Toleration) error {
 	return utilerrors.NewAggregate(errs)
 }
 
-//In order to support ocp 311, copy this func from old library-go
+// In order to support ocp 311, copy this func from old library-go
 func ApplyCustomResourceDefinitionV1Beta1(client apiextclientv1beta1.CustomResourceDefinitionsGetter,
 	recorder events.Recorder,
 	required *crdv1beta1.CustomResourceDefinition) (*crdv1beta1.CustomResourceDefinition, bool, error) {
