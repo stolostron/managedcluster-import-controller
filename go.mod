@@ -10,7 +10,7 @@ require (
 	github.com/onsi/gomega v1.24.0
 	github.com/openshift/api v3.9.1-0.20191111211345-a27ff30ebf09+incompatible
 	github.com/openshift/assisted-service v1.0.10-0.20211007120927-ad88cd9a8817
-	github.com/openshift/hive/apis v0.0.0-20220726120844-e78dfd39116d
+	github.com/openshift/hive/apis v0.0.0-20221110093336-443b7d70c311
 	github.com/openshift/library-go v0.0.0-20220713145611-ca167a8bd342
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/text v0.4.0
@@ -41,7 +41,7 @@ require (
 	github.com/blang/semver/v4 v4.0.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
-	github.com/emicklei/go-restful v2.12.0+incompatible // indirect
+	github.com/emicklei/go-restful v2.15.0+incompatible // indirect
 	github.com/evanphx/json-patch v5.6.0+incompatible // indirect
 	github.com/form3tech-oss/jwt-go v3.2.3+incompatible // indirect
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
@@ -73,7 +73,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/openshift/custom-resource-status v1.1.0 // indirect
+	github.com/openshift/custom-resource-status v1.1.3-0.20220503160415-f2fdb4999d87 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_golang v1.12.1 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
