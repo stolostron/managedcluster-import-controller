@@ -80,6 +80,13 @@ func (r *ReconcileClusterDeployment) Reconcile(ctx context.Context, request reco
 
 	if !clusterDeployment.Spec.Installed {
 		// cluster deployment is not installed yet, do nothing
+		reqLogger.Info(fmt.Sprintf("The hive managed cluster %s is not installed, skipped", clusterName))
+		return reconcile.Result{}, nil
+	}
+
+	if clusterDeployment.Spec.ClusterPoolRef != nil && clusterDeployment.Spec.ClusterPoolRef.ClaimedTimestamp.IsZero() {
+		// cluster deployment is not claimed yet, do nothing
+		reqLogger.Info(fmt.Sprintf("The hive managed cluster %s is not claimed, skipped", clusterName))
 		return reconcile.Result{}, nil
 	}
 

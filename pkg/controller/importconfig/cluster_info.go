@@ -157,7 +157,7 @@ func getKubeAPIServerCertificate(ctx context.Context, kubeClient kubernetes.Inte
 	secret, err := kubeClient.CoreV1().Secrets("openshift-config").Get(ctx, secretName, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
-			log.Info(fmt.Sprintf("Failed to get secret openshift-config/%s", secretName))
+			log.Info(fmt.Sprintf("Failed to get secret openshift-config/%s, skipping", secretName))
 			return nil, nil
 		}
 
@@ -370,6 +370,7 @@ func getBootstrapCAData(ctx context.Context, clientHolder *helpers.ClientHolder,
 			}
 
 			if len(certData) != 0 {
+				log.Info(fmt.Sprintf("Using openshift-config/%s as the bootstrap ca for cluster %s", apiServerCertSecretName, cluster.Name))
 				return certData, nil
 			}
 		}
@@ -390,7 +391,7 @@ func getBootstrapCAData(ctx context.Context, clientHolder *helpers.ClientHolder,
 			log.Info("Using certs signed by known CAs cas on the ROKS.")
 			return nil, nil
 		} else {
-			log.Info("No additional valid certificate found for APIserver on the ROKS. Skipping.")
+			log.Info("No additional valid certificate found for APIserver on the ROKS, skipping.")
 		}
 	}
 
