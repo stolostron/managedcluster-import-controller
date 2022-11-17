@@ -84,6 +84,21 @@ func TestReconcile(t *testing.T) {
 			},
 		},
 		{
+			name: "clusterdeployment is not claimed",
+			objs: []client.Object{
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed:      true,
+						ClusterPoolRef: &hivev1.ClusterPoolReference{},
+					},
+				},
+			},
+		},
+		{
 			name: "import cluster with auto-import secret",
 			objs: []client.Object{
 				&clusterv1.ManagedCluster{
