@@ -7,15 +7,14 @@ import (
 	"context"
 	"fmt"
 
-	ginkgo "github.com/onsi/ginkgo"
-	gomega "github.com/onsi/gomega"
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
-
-	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
-
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/rand"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
+	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 )
 
 var _ = ginkgo.Describe("Using customized image registry", func() {

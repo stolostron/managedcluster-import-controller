@@ -10,23 +10,10 @@ import (
 	"testing"
 	"time"
 
-	ginkgo "github.com/onsi/ginkgo"
-	gomega "github.com/onsi/gomega"
-	"github.com/openshift/library-go/pkg/operator/events"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-
 	"github.com/google/go-cmp/cmp"
-
-	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
-	addonclient "open-cluster-management.io/api/client/addon/clientset/versioned"
-	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
-	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
-	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	workv1 "open-cluster-management.io/api/work/v1"
-
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
+	"github.com/openshift/library-go/pkg/operator/events"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -38,7 +25,18 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	addonclient "open-cluster-management.io/api/client/addon/clientset/versioned"
+	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
+	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
+	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 )
 
 var (

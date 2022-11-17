@@ -7,13 +7,12 @@ import (
 	"context"
 	"time"
 
-	ginkgo "github.com/onsi/ginkgo"
-	gomega "github.com/onsi/gomega"
-
-	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
-
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 	certificatesv1 "k8s.io/api/certificates/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 )
 
 var _ = ginkgo.Describe("Invalid CSR", func() {
