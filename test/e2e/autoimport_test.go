@@ -8,17 +8,16 @@ import (
 	"fmt"
 	"time"
 
-	ginkgo "github.com/onsi/ginkgo"
-	gomega "github.com/onsi/gomega"
-
-	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
-	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
-
+	"github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/apimachinery/pkg/util/wait"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 )
 
 var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", func() {
