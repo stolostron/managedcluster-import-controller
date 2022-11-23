@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
+	"go.uber.org/zap/zapcore"
+
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -76,7 +78,12 @@ func main() {
 	logs.InitLogs()
 	defer logs.FlushLogs()
 
-	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+	ctrl.SetLogger(zap.New(func(o *zap.Options) {
+		o.Development = true
+		o.TimeEncoder = func(ts time.Time, encoder zapcore.PrimitiveArrayEncoder) {
+			encoder.AppendString(ts.UTC().Format(time.RFC3339Nano))
+		}
+	}))
 
 	ctx := ctrl.SetupSignalHandler()
 

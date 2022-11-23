@@ -20,6 +20,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
+	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/kubernetes"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -129,7 +130,8 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		}
 
 		// failed to apply the import secrect, reduce the retry times and reconcile again
-		return reconcile.Result{}, helpers.UpdateAutoImportRetryTimes(ctx, r.kubeClient, r.recorder, autoImportSecret.DeepCopy())
+		retryErr := helpers.UpdateAutoImportRetryTimes(ctx, r.kubeClient, r.recorder, autoImportSecret.DeepCopy())
+		return reconcile.Result{}, utilerrors.NewAggregate([]error{importErr, retryErr})
 	}
 
 	// TODO enhancment: check klusterlet status from managed cluster
