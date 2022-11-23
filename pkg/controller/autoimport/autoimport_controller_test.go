@@ -167,7 +167,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: false,
+			expectedErr: true,
 		},
 		{
 			name: "only update the bootstrap secret",
@@ -213,7 +213,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: false,
+			expectedErr: true,
 		},
 	}
 

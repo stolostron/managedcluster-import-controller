@@ -13,6 +13,7 @@ require (
 	github.com/openshift/hive/apis v0.0.0-20221110093336-443b7d70c311
 	github.com/openshift/library-go v0.0.0-20220713145611-ca167a8bd342
 	github.com/spf13/pflag v1.0.5
+	go.uber.org/zap v1.19.1
 	golang.org/x/text v0.4.0
 	k8s.io/api v0.24.3
 	k8s.io/apiextensions-apiserver v0.24.3
@@ -83,7 +84,6 @@ require (
 	go.mongodb.org/mongo-driver v1.3.4 // indirect
 	go.uber.org/atomic v1.8.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
-	go.uber.org/zap v1.19.1 // indirect
 	golang.org/x/crypto v0.0.0-20220214200702-86341886e292 // indirect
 	golang.org/x/net v0.1.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5 // indirect
