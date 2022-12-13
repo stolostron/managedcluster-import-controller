@@ -83,7 +83,6 @@ var _ reconcile.Reconciler = &ReconcileImportConfig{}
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Name", request.Name)
-	reqLogger.Info("Reconciling managed cluster import secret")
 
 	managedCluster := &clusterv1.ManagedCluster{}
 	err := r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: request.Name}, managedCluster)
@@ -93,6 +92,8 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+
+	reqLogger.Info("Reconciling managed cluster import secret")
 
 	mode := helpers.DetermineKlusterletMode(managedCluster)
 	worker, err := r.workerFactory.newWorker(mode)

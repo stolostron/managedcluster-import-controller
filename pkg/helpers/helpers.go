@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
@@ -20,6 +19,7 @@ import (
 	"golang.org/x/text/language"
 	apiextclientv1beta1 "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1beta1"
 	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
+	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
@@ -90,6 +90,7 @@ type ClientHolder struct {
 	OperatorClient      operatorclient.Interface
 	RuntimeClient       client.Client
 	ImageRegistryClient imageregistry.Interface
+	WorkClient          workclient.Interface
 }
 
 // GetMaxConcurrentReconciles get the max concurrent reconciles from MAX_CONCURRENT_RECONCILES env,
@@ -424,7 +425,7 @@ func ApplyResources(clientHolder *ClientHolder, recorder events.Recorder,
 			)
 			errs = append(errs, err)
 		case *workv1.ManifestWork:
-			errs = append(errs, applyManifestWork(clientHolder.RuntimeClient, recorder, required))
+			errs = append(errs, applyManifestWork(clientHolder.WorkClient, recorder, required))
 		case *operatorv1.Klusterlet:
 			errs = append(errs, applyKlusterlet(clientHolder.OperatorClient, recorder, required))
 		}
@@ -476,11 +477,11 @@ func applyKlusterlet(client operatorclient.Interface, recorder events.Recorder, 
 	return nil
 }
 
-func applyManifestWork(client client.Client, recorder events.Recorder, required *workv1.ManifestWork) error {
-	existing := &workv1.ManifestWork{}
-	err := client.Get(context.TODO(), types.NamespacedName{Namespace: required.Namespace, Name: required.Name}, existing)
+func applyManifestWork(workClient workclient.Interface, recorder events.Recorder, required *workv1.ManifestWork) error {
+	existing, err := workClient.WorkV1().ManifestWorks(required.Namespace).Get(context.TODO(), required.Name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
-		if err := client.Create(context.TODO(), required); err != nil {
+		_, err := workClient.WorkV1().ManifestWorks(required.Namespace).Create(context.TODO(), required, metav1.CreateOptions{})
+		if err != nil {
 			return err
 		}
 
@@ -502,7 +503,7 @@ func applyManifestWork(client client.Client, recorder events.Recorder, required 
 	}
 
 	existing.Spec = required.Spec
-	if err := client.Update(context.TODO(), existing); err != nil {
+	if _, err := workClient.WorkV1().ManifestWorks(required.Namespace).Update(context.TODO(), existing, metav1.UpdateOptions{}); err != nil {
 		return err
 	}
 	reportEvent(recorder, required, "ManifestWork", "updated")
@@ -548,7 +549,7 @@ func GetComponentNamespace() (string, error) {
 	if len(namespace) > 0 {
 		return namespace, nil
 	}
-	nsBytes, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
+	nsBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
 	if err != nil {
 		return "", err
 	}

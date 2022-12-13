@@ -6,12 +6,19 @@ package manifestwork
 import (
 	"context"
 	"testing"
+	"time"
+
+	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
+
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	operatorfake "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
+	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
+	workfake "open-cluster-management.io/api/client/work/clientset/versioned/fake"
+	workinformers "open-cluster-management.io/api/client/work/informers/externalversions"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 
@@ -20,6 +27,7 @@ import (
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/informers"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 
@@ -35,8 +43,6 @@ var (
 
 func init() {
 	testscheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
-	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWork{})
-	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWorkList{})
 	testscheme.AddKnownTypes(addonv1alpha1.SchemeGroupVersion, &addonv1alpha1.ManagedClusterAddOn{})
 	testscheme.AddKnownTypes(addonv1alpha1.SchemeGroupVersion, &addonv1alpha1.ManagedClusterAddOnList{})
 }
@@ -45,20 +51,22 @@ func TestReconcile(t *testing.T) {
 	cases := []struct {
 		name         string
 		startObjs    []client.Object
+		works        []runtime.Object
 		secrets      []runtime.Object
 		request      reconcile.Request
-		validateFunc func(t *testing.T, runtimeClient client.Client)
+		validateFunc func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface)
 	}{
 		{
 			name:      "no managed clusters",
 			startObjs: []client.Object{},
+			works:     []runtime.Object{},
 			secrets:   []runtime.Object{},
 			request: reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: "test",
 				},
 			},
-			validateFunc: func(t *testing.T, runtimeClient client.Client) {
+			validateFunc: func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface) {
 				// do nothing
 			},
 		},
@@ -70,10 +78,24 @@ func TestReconcile(t *testing.T) {
 						Name: "test",
 					},
 				},
+			},
+			works: []runtime.Object{
 				&workv1.ManifestWork{
 					ObjectMeta: v1.ObjectMeta{
-						Name:      "test",
+						Name:      "test-klusterlet",
 						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: v1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
 					},
 				},
 			},
@@ -85,7 +107,7 @@ func TestReconcile(t *testing.T) {
 					Name: "test",
 				},
 			},
-			validateFunc: func(t *testing.T, runtimeClient client.Client) {
+			validateFunc: func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface) {
 				managedCluster := &clusterv1.ManagedCluster{}
 				if err := runtimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, managedCluster); err != nil {
 					t.Errorf("unexpected error: %v", err)
@@ -105,6 +127,8 @@ func TestReconcile(t *testing.T) {
 						DeletionTimestamp: &now,
 					},
 				},
+			},
+			works: []runtime.Object{
 				&workv1.ManifestWork{
 					ObjectMeta: v1.ObjectMeta{
 						Name:      "test1",
@@ -115,12 +139,18 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: v1.ObjectMeta{
 						Name:      "test-klusterlet-crds",
 						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
 					},
 				},
 				&workv1.ManifestWork{
 					ObjectMeta: v1.ObjectMeta{
 						Name:      "test-klusterlet",
 						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
 					},
 					Status: workv1.ManifestWorkStatus{
 						Conditions: []v1.Condition{
@@ -138,12 +168,12 @@ func TestReconcile(t *testing.T) {
 					Name: "test",
 				},
 			},
-			validateFunc: func(t *testing.T, runtimeClient client.Client) {
-				manifestWorks := &workv1.ManifestWorkList{}
-				if err := runtimeClient.List(context.TODO(), manifestWorks, &client.ListOptions{Namespace: "test"}); err != nil {
+			validateFunc: func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface) {
+				manifestWorks, err := workClient.WorkV1().ManifestWorks("test").List(context.TODO(), v1.ListOptions{})
+				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
-				if len(manifestWorks.Items) != 1 {
+				if len(manifestWorks.Items) != 2 {
 					t.Errorf("expected one work, but failed %d", len(manifestWorks.Items))
 				}
 			},
@@ -161,16 +191,15 @@ func TestReconcile(t *testing.T) {
 						DeletionTimestamp: &now,
 					},
 				},
-				&workv1.ManifestWork{
-					ObjectMeta: v1.ObjectMeta{
-						Name:      "test1",
-						Namespace: "test",
-					},
-				},
+			},
+			works: []runtime.Object{
 				&workv1.ManifestWork{
 					ObjectMeta: v1.ObjectMeta{
 						Name:      "test-klusterlet-crds",
 						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
 					},
 				},
 			},
@@ -180,9 +209,9 @@ func TestReconcile(t *testing.T) {
 					Name: "test",
 				},
 			},
-			validateFunc: func(t *testing.T, runtimeClient client.Client) {
-				manifestWorks := &workv1.ManifestWorkList{}
-				if err := runtimeClient.List(context.TODO(), manifestWorks, &client.ListOptions{Namespace: "test"}); err != nil {
+			validateFunc: func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface) {
+				manifestWorks, err := workClient.WorkV1().ManifestWorks("test").List(context.TODO(), v1.ListOptions{})
+				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
 				if len(manifestWorks.Items) != 0 {
@@ -200,10 +229,15 @@ func TestReconcile(t *testing.T) {
 						DeletionTimestamp: &now,
 					},
 				},
+			},
+			works: []runtime.Object{
 				&workv1.ManifestWork{
 					ObjectMeta: v1.ObjectMeta{
 						Name:      "test-klusterlet",
 						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
 					},
 				},
 			},
@@ -213,9 +247,9 @@ func TestReconcile(t *testing.T) {
 					Name: "test",
 				},
 			},
-			validateFunc: func(t *testing.T, runtimeClient client.Client) {
-				manifestWorks := &workv1.ManifestWorkList{}
-				if err := runtimeClient.List(context.TODO(), manifestWorks, &client.ListOptions{Namespace: "test"}); err != nil {
+			validateFunc: func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface) {
+				manifestWorks, err := workClient.WorkV1().ManifestWorks("test").List(context.TODO(), v1.ListOptions{})
+				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
 				if len(manifestWorks.Items) != 0 {
@@ -241,6 +275,8 @@ func TestReconcile(t *testing.T) {
 						},
 					},
 				},
+			},
+			works: []runtime.Object{
 				&workv1.ManifestWork{
 					ObjectMeta: v1.ObjectMeta{
 						Name:       "test",
@@ -260,6 +296,9 @@ func TestReconcile(t *testing.T) {
 						Name:       "test-klusterlet",
 						Namespace:  "test",
 						Finalizers: []string{"test"},
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
 					},
 				},
 			},
@@ -269,9 +308,9 @@ func TestReconcile(t *testing.T) {
 					Name: "test",
 				},
 			},
-			validateFunc: func(t *testing.T, runtimeClient client.Client) {
-				manifestWorks := &workv1.ManifestWorkList{}
-				if err := runtimeClient.List(context.TODO(), manifestWorks, &client.ListOptions{Namespace: "test"}); err != nil {
+			validateFunc: func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface) {
+				manifestWorks, err := workClient.WorkV1().ManifestWorks("test").List(context.TODO(), v1.ListOptions{})
+				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
 				if len(manifestWorks.Items) != 0 {
@@ -289,6 +328,8 @@ func TestReconcile(t *testing.T) {
 						DeletionTimestamp: &now,
 					},
 				},
+			},
+			works: []runtime.Object{
 				&workv1.ManifestWork{
 					ObjectMeta: v1.ObjectMeta{
 						Name:      "test",
@@ -307,6 +348,9 @@ func TestReconcile(t *testing.T) {
 						Name:       "test-klusterlet",
 						Namespace:  "test",
 						Finalizers: []string{"test"},
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
 					},
 				},
 				&workv1.ManifestWork{
@@ -325,12 +369,12 @@ func TestReconcile(t *testing.T) {
 					Name: "test",
 				},
 			},
-			validateFunc: func(t *testing.T, runtimeClient client.Client) {
-				manifestWorks := &workv1.ManifestWorkList{}
-				if err := runtimeClient.List(context.TODO(), manifestWorks, &client.ListOptions{Namespace: "test"}); err != nil {
+			validateFunc: func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface) {
+				manifestWorks, err := workClient.WorkV1().ManifestWorks("test").List(context.TODO(), v1.ListOptions{})
+				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
-				if len(manifestWorks.Items) != 3 {
+				if len(manifestWorks.Items) != 2 {
 					t.Errorf("expected 3 works, but failed %v", len(manifestWorks.Items))
 				}
 			},
@@ -353,10 +397,21 @@ func TestReconcile(t *testing.T) {
 						},
 					},
 				},
+				&addonv1alpha1.ManagedClusterAddOn{
+					ObjectMeta: v1.ObjectMeta{
+						Name:      "work-manager",
+						Namespace: "test",
+					},
+				},
+			},
+			works: []runtime.Object{
 				&workv1.ManifestWork{
 					ObjectMeta: v1.ObjectMeta{
 						Name:      "test-klusterlet",
 						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
 					},
 					Status: workv1.ManifestWorkStatus{
 						Conditions: []v1.Condition{
@@ -367,12 +422,6 @@ func TestReconcile(t *testing.T) {
 						},
 					},
 				},
-				&addonv1alpha1.ManagedClusterAddOn{
-					ObjectMeta: v1.ObjectMeta{
-						Name:      "work-manager",
-						Namespace: "test",
-					},
-				},
 			},
 			secrets: []runtime.Object{},
 			request: reconcile.Request{
@@ -380,9 +429,9 @@ func TestReconcile(t *testing.T) {
 					Name: "test",
 				},
 			},
-			validateFunc: func(t *testing.T, runtimeClient client.Client) {
-				manifestWorks := &workv1.ManifestWorkList{}
-				if err := runtimeClient.List(context.TODO(), manifestWorks, &client.ListOptions{Namespace: "test"}); err != nil {
+			validateFunc: func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface) {
+				manifestWorks, err := workClient.WorkV1().ManifestWorks("test").List(context.TODO(), v1.ListOptions{})
+				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
 				if len(manifestWorks.Items) != 0 {
@@ -416,10 +465,22 @@ func TestReconcile(t *testing.T) {
 						},
 					},
 				},
+				&addonv1alpha1.ManagedClusterAddOn{
+					ObjectMeta: v1.ObjectMeta{
+						Name:       "work-manager",
+						Namespace:  "test",
+						Finalizers: []string{"test"},
+					},
+				},
+			},
+			works: []runtime.Object{
 				&workv1.ManifestWork{
 					ObjectMeta: v1.ObjectMeta{
 						Name:      "test-klusterlet",
 						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
 					},
 					Status: workv1.ManifestWorkStatus{
 						Conditions: []v1.Condition{
@@ -445,13 +506,6 @@ func TestReconcile(t *testing.T) {
 						},
 					},
 				},
-				&addonv1alpha1.ManagedClusterAddOn{
-					ObjectMeta: v1.ObjectMeta{
-						Name:       "work-manager",
-						Namespace:  "test",
-						Finalizers: []string{"test"},
-					},
-				},
 			},
 			secrets: []runtime.Object{},
 			request: reconcile.Request{
@@ -459,9 +513,9 @@ func TestReconcile(t *testing.T) {
 					Name: "test",
 				},
 			},
-			validateFunc: func(t *testing.T, runtimeClient client.Client) {
-				manifestWorks := &workv1.ManifestWorkList{}
-				if err := runtimeClient.List(context.TODO(), manifestWorks, &client.ListOptions{Namespace: "test"}); err != nil {
+			validateFunc: func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface) {
+				manifestWorks, err := workClient.WorkV1().ManifestWorks("test").List(context.TODO(), v1.ListOptions{})
+				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
 				if len(manifestWorks.Items) != 0 {
@@ -495,10 +549,22 @@ func TestReconcile(t *testing.T) {
 						},
 					},
 				},
+				&addonv1alpha1.ManagedClusterAddOn{
+					ObjectMeta: v1.ObjectMeta{
+						Name:       "work-manager",
+						Namespace:  "test",
+						Finalizers: []string{"test"},
+					},
+				},
+			},
+			works: []runtime.Object{
 				&workv1.ManifestWork{
 					ObjectMeta: v1.ObjectMeta{
 						Name:      "test-klusterlet",
 						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
 					},
 					Status: workv1.ManifestWorkStatus{
 						Conditions: []v1.Condition{
@@ -509,13 +575,6 @@ func TestReconcile(t *testing.T) {
 						},
 					},
 				},
-				&addonv1alpha1.ManagedClusterAddOn{
-					ObjectMeta: v1.ObjectMeta{
-						Name:       "work-manager",
-						Namespace:  "test",
-						Finalizers: []string{"test"},
-					},
-				},
 			},
 			secrets: []runtime.Object{},
 			request: reconcile.Request{
@@ -523,9 +582,9 @@ func TestReconcile(t *testing.T) {
 					Name: "test",
 				},
 			},
-			validateFunc: func(t *testing.T, runtimeClient client.Client) {
-				manifestWorks := &workv1.ManifestWorkList{}
-				if err := runtimeClient.List(context.TODO(), manifestWorks, &client.ListOptions{Namespace: "test"}); err != nil {
+			validateFunc: func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface) {
+				manifestWorks, err := workClient.WorkV1().ManifestWorks("test").List(context.TODO(), v1.ListOptions{})
+				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
 				if len(manifestWorks.Items) != 1 {
@@ -560,6 +619,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
+			works: []runtime.Object{},
 			secrets: []runtime.Object{
 				testinghelpers.GetImportSecret("test"),
 			},
@@ -568,17 +628,44 @@ func TestReconcile(t *testing.T) {
 					Name: "test",
 				},
 			},
-			validateFunc: func(t *testing.T, runtimeClient client.Client) {},
+			validateFunc: func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface) {
+				manifestWorks, err := workClient.WorkV1().ManifestWorks("test").List(context.TODO(), v1.ListOptions{})
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if len(manifestWorks.Items) != 2 {
+					t.Errorf("expected one work, but failed %d", len(manifestWorks.Items))
+				}
+			},
 		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			kubeClient := kubefake.NewSimpleClientset(c.secrets...)
+			kubeInformerFactory := informers.NewSharedInformerFactory(kubeClient, 10*time.Minute)
+			secretInformer := kubeInformerFactory.Core().V1().Secrets().Informer()
+			for _, secret := range c.secrets {
+				secretInformer.GetStore().Add(secret)
+			}
+
+			workClient := workfake.NewSimpleClientset(c.works...)
+			workInformerFactory := workinformers.NewSharedInformerFactory(workClient, 10*time.Minute)
+			workInformer := workInformerFactory.Work().V1().ManifestWorks().Informer()
+			for _, work := range c.works {
+				workInformer.GetStore().Add(work)
+			}
+
 			r := &ReconcileManifestWork{
 				clientHolder: &helpers.ClientHolder{
 					RuntimeClient:  fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.startObjs...).Build(),
 					OperatorClient: operatorfake.NewSimpleClientset(),
-					KubeClient:     kubefake.NewSimpleClientset(c.secrets...),
+					KubeClient:     kubeClient,
+					WorkClient:     workClient,
+				},
+				informerHolder: &source.InformerHolder{
+					ImportSecretLister:   kubeInformerFactory.Core().V1().Secrets().Lister(),
+					KlusterletWorkLister: workInformerFactory.Work().V1().ManifestWorks().Lister(),
 				},
 				scheme:   testscheme,
 				recorder: eventstesting.NewTestingEventRecorder(t),
@@ -589,7 +676,7 @@ func TestReconcile(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 
-			c.validateFunc(t, r.clientHolder.RuntimeClient)
+			c.validateFunc(t, r.clientHolder.RuntimeClient, r.clientHolder.WorkClient)
 		})
 	}
 }

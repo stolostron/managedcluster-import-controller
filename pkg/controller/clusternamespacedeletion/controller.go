@@ -5,6 +5,7 @@ package clusternamespacedeletion
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -18,7 +19,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/klog/v2"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -50,7 +50,6 @@ var _ reconcile.Reconciler = &ReconcileClusterNamespaceDeletion{}
 
 func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Name", request.Name)
-	reqLogger.Info("Reconciling the managed cluster namespace deletion")
 
 	ns := &corev1.Namespace{}
 	err := r.client.Get(ctx, types.NamespacedName{Name: request.Name}, ns)
@@ -66,6 +65,8 @@ func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, reque
 	if !ns.DeletionTimestamp.IsZero() {
 		return reconcile.Result{}, nil
 	}
+
+	reqLogger.Info("Reconciling the managed cluster namespace deletion")
 
 	managedCluster := &clusterv1.ManagedCluster{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: request.Name}, managedCluster)
@@ -97,7 +98,7 @@ func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, reque
 		return reconcile.Result{}, client.IgnoreNotFound(err)
 	}
 	if len(addons.Items) > 0 {
-		klog.Warningf("ManagedClusterNamespaceRemained", "There are %d addon in namespace %s", len(addons.Items), ns.Name)
+		reqLogger.Info(fmt.Sprintf("Waiting for addons, there are %d addon in namespace %s", len(addons.Items), ns.Name))
 		return reconcile.Result{}, nil
 	}
 
@@ -108,7 +109,8 @@ func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, reque
 	if len(clusterDeploymentList.Items) != 0 {
 		// there are clusterDeployments in the managed cluster namespace.
 		// the managed cluster is deleted, we need to keep the managed cluster namespace.
-		klog.Warningf("ManagedClusterNamespaceRemained", "There are %d clusterDeployement in namespace %s", len(clusterDeploymentList.Items), ns.Name)
+		reqLogger.Info(fmt.Sprintf("Waiting for cluster deployments, there are %d clusterDeployement in namespace %s",
+			len(clusterDeploymentList.Items), ns.Name))
 		return reconcile.Result{}, nil
 	}
 
@@ -119,7 +121,8 @@ func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, reque
 	if len(infraEnvList.Items) != 0 {
 		// there are infraEnvs in the managed cluster namespace.
 		// the managed cluster is deleted, we need to keep the managed cluster namespace.
-		klog.Warningf("ManagedClusterNamespaceRemained", "There are %d infraEnvs in namespace %s", len(infraEnvList.Items), ns.Name)
+		reqLogger.Info(fmt.Sprintf("Waiting for infra envs, there are %d infraEnvs in namespace %s",
+			len(infraEnvList.Items), ns.Name))
 		return reconcile.Result{}, nil
 	}
 
@@ -129,7 +132,7 @@ func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, reque
 	}
 	validPods := filterPods(pods.Items, ns.Name)
 	if len(validPods) > 0 {
-		klog.Warningf("ManagedClusterNamespaceRemained", "There are some pods remaining in namespace %s", ns.Name)
+		reqLogger.Info(fmt.Sprintf("Waiting for pods, there are some pods remaining in namespace %s", ns.Name))
 		return reconcile.Result{RequeueAfter: deletionGracePeriod}, nil
 	}
 

@@ -13,28 +13,32 @@ import (
 	"os"
 	"time"
 
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/spf13/pflag"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller"
 	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
+	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
+	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
+	informersworkv1 "open-cluster-management.io/api/client/work/informers/externalversions/work/v1"
+	listersworkv1 "open-cluster-management.io/api/client/work/listers/work/v1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	workv1 "open-cluster-management.io/api/work/v1"
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
 	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 
-	"github.com/spf13/pflag"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -43,6 +47,7 @@ import (
 	informerscorev1 "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
 	k8sscheme "k8s.io/client-go/kubernetes/scheme"
+	listerscorev1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	utilflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/logs"
@@ -65,7 +70,6 @@ func init() {
 	utilruntime.Must(ocinfrav1.AddToScheme(scheme))
 	utilruntime.Must(hivev1.AddToScheme(scheme))
 	utilruntime.Must(clusterv1.AddToScheme(scheme))
-	utilruntime.Must(workv1.AddToScheme(scheme))
 	utilruntime.Must(asv1beta1.AddToScheme(scheme))
 	utilruntime.Must(addonv1alpha1.AddToScheme(scheme))
 }
@@ -108,7 +112,13 @@ func main() {
 
 	operatorClient, err := operatorclient.NewForConfig(cfg)
 	if err != nil {
-		setupLog.Error(err, "failed to create api extensions client")
+		setupLog.Error(err, "failed to create registration operator client")
+		os.Exit(1)
+	}
+
+	workClient, err := workclient.NewForConfig(cfg)
+	if err != nil {
+		setupLog.Error(err, "failed to create work client")
 		os.Exit(1)
 	}
 
@@ -140,6 +150,42 @@ func main() {
 		},
 	)
 
+	klusterletWorksInformer := informersworkv1.NewFilteredManifestWorkInformer(
+		workClient,
+		metav1.NamespaceAll,
+		10*time.Minute,
+		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
+		func(listOptions *metav1.ListOptions) {
+			selector := &metav1.LabelSelector{
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{
+						Key:      constants.KlusterletWorksLabel,
+						Operator: metav1.LabelSelectorOpExists,
+					},
+				},
+			}
+			listOptions.LabelSelector = metav1.FormatLabelSelector(selector)
+		},
+	)
+
+	hostedWorksInformer := informersworkv1.NewFilteredManifestWorkInformer(
+		workClient,
+		metav1.NamespaceAll,
+		10*time.Minute,
+		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
+		func(listOptions *metav1.ListOptions) {
+			selector := &metav1.LabelSelector{
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					{
+						Key:      constants.HostedWorksLabel,
+						Operator: metav1.LabelSelectorOpExists,
+					},
+				},
+			}
+			listOptions.LabelSelector = metav1.FormatLabelSelector(selector)
+		},
+	)
+
 	// Create controller-runtime manager
 	mgr, err := ctrl.NewManager(cfg, manager.Options{
 		Scheme:             scheme,
@@ -161,9 +207,18 @@ func main() {
 			OperatorClient:      operatorClient,
 			RuntimeClient:       mgr.GetClient(),
 			ImageRegistryClient: imageregistry.NewClient(kubeClient),
+			WorkClient:          workClient,
 		},
-		importSecretInformer,
-		autoimportSecretInformer,
+		&source.InformerHolder{
+			ImportSecretInformer:     importSecretInformer,
+			ImportSecretLister:       listerscorev1.NewSecretLister(importSecretInformer.GetIndexer()),
+			AutoImportSecretInformer: autoimportSecretInformer,
+			AutoImportSecretLister:   listerscorev1.NewSecretLister(autoimportSecretInformer.GetIndexer()),
+			KlusterletWorkInformer:   klusterletWorksInformer,
+			KlusterletWorkLister:     listersworkv1.NewManifestWorkLister(klusterletWorksInformer.GetIndexer()),
+			HostedWorkInformer:       hostedWorksInformer,
+			HostedWorkLister:         listersworkv1.NewManifestWorkLister(hostedWorksInformer.GetIndexer()),
+		},
 	); err != nil {
 		setupLog.Error(err, "failed to register controller")
 		os.Exit(1)
@@ -171,6 +226,8 @@ func main() {
 
 	go importSecretInformer.Run(ctx.Done())
 	go autoimportSecretInformer.Run(ctx.Done())
+	go klusterletWorksInformer.Run(ctx.Done())
+	go hostedWorksInformer.Run(ctx.Done())
 
 	setupLog.Info("Starting Controller Manager")
 	if err := mgr.Start(ctx); err != nil {

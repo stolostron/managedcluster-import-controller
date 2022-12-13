@@ -9,10 +9,10 @@ import (
 	"strings"
 
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	workv1 "open-cluster-management.io/api/work/v1"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
 	"github.com/openshift/library-go/pkg/operator/events"
 
@@ -34,9 +34,10 @@ var log = logf.Log.WithName(controllerName)
 
 // ReconcileAutoImport reconciles the managed cluster auto import secret to import the managed cluster
 type ReconcileAutoImport struct {
-	client     client.Client
-	kubeClient kubernetes.Interface
-	recorder   events.Recorder
+	client         client.Client
+	kubeClient     kubernetes.Interface
+	informerHolder *source.InformerHolder
+	recorder       events.Recorder
 }
 
 // blank assignment to verify that ReconcileAutoImport implements reconcile.Reconciler
@@ -49,7 +50,6 @@ var _ reconcile.Reconciler = &ReconcileAutoImport{}
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace)
-	reqLogger.Info("Reconciling auto import secret")
 
 	managedClusterName := request.Namespace
 	managedCluster := &clusterv1.ManagedCluster{}
@@ -66,8 +66,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, nil
 	}
 
-	// TODO: we will use lister instead of get to reduce the request in the future
-	autoImportSecret, err := r.kubeClient.CoreV1().Secrets(managedClusterName).Get(ctx, constants.AutoImportSecretName, metav1.GetOptions{})
+	autoImportSecret, err := r.informerHolder.AutoImportSecretLister.Secrets(managedClusterName).Get(constants.AutoImportSecretName)
 	if errors.IsNotFound(err) {
 		// the auto import secret could have been deleted, do nothing
 		return reconcile.Result{}, nil
@@ -76,8 +75,10 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
+	reqLogger.Info("Reconciling auto import secret")
+
 	importSecretName := fmt.Sprintf("%s-%s", managedClusterName, constants.ImportSecretNameSuffix)
-	importSecret, err := r.kubeClient.CoreV1().Secrets(managedClusterName).Get(ctx, importSecretName, metav1.GetOptions{})
+	importSecret, err := r.informerHolder.ImportSecretLister.Secrets(managedClusterName).Get(importSecretName)
 	if errors.IsNotFound(err) {
 		// there is no import secret, do nothing
 		return reconcile.Result{}, nil
@@ -87,15 +88,12 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	// ensure the klusterlet manifest works exist
-	listOpts := &client.ListOptions{
-		Namespace:     managedClusterName,
-		LabelSelector: labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: "true"}),
-	}
-	manifestWorks := &workv1.ManifestWorkList{}
-	if err := r.client.List(ctx, manifestWorks, listOpts); err != nil {
+	workSelector := labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: "true"})
+	manifestWorks, err := r.informerHolder.KlusterletWorkLister.ManifestWorks(managedClusterName).List(workSelector)
+	if err != nil {
 		return reconcile.Result{}, err
 	}
-	if len(manifestWorks.Items) != 2 {
+	if len(manifestWorks) != 2 {
 		reqLogger.Info(fmt.Sprintf("Waiting for klusterlet manifest works for managed cluster %s", managedClusterName))
 		return reconcile.Result{}, nil
 	}
@@ -140,7 +138,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	r.recorder.Eventf("ManagedClusterImported",
-		fmt.Sprintf("delete its auto import secret %s/%s", autoImportSecret.Namespace, autoImportSecret.Name))
+	reqLogger.Info(fmt.Sprintf("Managed cluster is imported, try to delete its auto import secret %s/%s",
+		autoImportSecret.Namespace, autoImportSecret.Name))
 	return reconcile.Result{}, helpers.DeleteAutoImportSecret(ctx, r.kubeClient, autoImportSecret, r.recorder)
 }

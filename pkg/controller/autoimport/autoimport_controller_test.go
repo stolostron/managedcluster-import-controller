@@ -6,10 +6,14 @@ package autoimport
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
+	workfake "open-cluster-management.io/api/client/work/clientset/versioned/fake"
+	workinformers "open-cluster-management.io/api/client/work/informers/externalversions"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 
@@ -19,6 +23,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/informers"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 
@@ -32,8 +37,6 @@ var testscheme = scheme.Scheme
 
 func init() {
 	testscheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
-	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWork{})
-	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWorkList{})
 }
 
 func TestReconcile(t *testing.T) {
@@ -47,6 +50,7 @@ func TestReconcile(t *testing.T) {
 	cases := []struct {
 		name        string
 		objs        []client.Object
+		works       []runtime.Object
 		secrets     []runtime.Object
 		expectedErr bool
 	}{
@@ -67,6 +71,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
+			works:       []runtime.Object{},
 			secrets:     []runtime.Object{},
 			expectedErr: false,
 		},
@@ -79,6 +84,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
+			works:       []runtime.Object{},
 			secrets:     []runtime.Object{},
 			expectedErr: false,
 		},
@@ -91,6 +97,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
+			works: []runtime.Object{},
 			secrets: []runtime.Object{
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
@@ -110,6 +117,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
+			works: []runtime.Object{},
 			secrets: []runtime.Object{
 				testinghelpers.GetImportSecret("test"),
 				&corev1.Secret{
@@ -134,6 +142,8 @@ func TestReconcile(t *testing.T) {
 						Name: "test",
 					},
 				},
+			},
+			works: []runtime.Object{
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-klusterlet-crds",
@@ -177,6 +187,8 @@ func TestReconcile(t *testing.T) {
 						Name: "test",
 					},
 				},
+			},
+			works: []runtime.Object{
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-klusterlet-crds",
@@ -219,10 +231,29 @@ func TestReconcile(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			kubeClient := kubefake.NewSimpleClientset(c.secrets...)
+			kubeInformerFactory := informers.NewSharedInformerFactory(kubeClient, 10*time.Minute)
+			secretInformer := kubeInformerFactory.Core().V1().Secrets().Informer()
+			for _, secret := range c.secrets {
+				secretInformer.GetStore().Add(secret)
+			}
+
+			workClient := workfake.NewSimpleClientset()
+			workInformerFactory := workinformers.NewSharedInformerFactory(workClient, 10*time.Minute)
+			workInformer := workInformerFactory.Work().V1().ManifestWorks().Informer()
+			for _, work := range c.works {
+				workInformer.GetStore().Add(work)
+			}
+
 			r := &ReconcileAutoImport{
 				client:     fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).Build(),
-				kubeClient: kubefake.NewSimpleClientset(c.secrets...),
-				recorder:   eventstesting.NewTestingEventRecorder(t),
+				kubeClient: kubeClient,
+				informerHolder: &source.InformerHolder{
+					AutoImportSecretLister: kubeInformerFactory.Core().V1().Secrets().Lister(),
+					ImportSecretLister:     kubeInformerFactory.Core().V1().Secrets().Lister(),
+					KlusterletWorkLister:   workInformerFactory.Work().V1().ManifestWorks().Lister(),
+				},
+				recorder: eventstesting.NewTestingEventRecorder(t),
 			}
 
 			req := reconcile.Request{NamespacedName: types.NamespacedName{Namespace: "test"}}

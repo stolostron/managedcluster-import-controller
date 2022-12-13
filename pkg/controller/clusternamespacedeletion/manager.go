@@ -8,12 +8,12 @@ import (
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	clustercontroller "github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/cache"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -22,38 +22,27 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"sigs.k8s.io/controller-runtime/pkg/source"
+	runtimesource "sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 const controllerName = "clusternamespacedeletion-controller"
 
 // Add creates a new managedcluster controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
-func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder,
-	importSecretInformer, autoImportSecretInformer cache.SharedIndexInformer) (string, error) {
-	return controllerName, add(mgr, newReconciler(clientHolder))
-}
-
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(clientHolder *helpers.ClientHolder) reconcile.Reconciler {
-	return &ReconcileClusterNamespaceDeletion{
-		client:   clientHolder.RuntimeClient,
-		recorder: helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
-	}
-}
-
-// adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(mgr manager.Manager, r reconcile.Reconciler) error {
+func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, _ *source.InformerHolder) (string, error) {
 	c, err := controller.New(controllerName, mgr, controller.Options{
-		Reconciler:              r,
+		Reconciler: &ReconcileClusterNamespaceDeletion{
+			client:   clientHolder.RuntimeClient,
+			recorder: helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
+		},
 		MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
 	})
 	if err != nil {
-		return err
+		return controllerName, err
 	}
 
 	if err := c.Watch(
-		&source.Kind{Type: &clusterv1.ManagedCluster{}},
+		&runtimesource.Kind{Type: &clusterv1.ManagedCluster{}},
 		handler.EnqueueRequestsFromMapFunc(func(o client.Object) []reconcile.Request {
 			return []reconcile.Request{
 				{
@@ -75,11 +64,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			},
 		}),
 	); err != nil {
-		return err
+		return controllerName, err
 	}
 
 	if err := c.Watch(
-		&source.Kind{Type: &corev1.Namespace{}},
+		&runtimesource.Kind{Type: &corev1.Namespace{}},
 		handler.EnqueueRequestsFromMapFunc(func(o client.Object) []reconcile.Request {
 			return []reconcile.Request{
 				{
@@ -117,11 +106,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			},
 		}),
 	); err != nil {
-		return err
+		return controllerName, err
 	}
 
 	if err := c.Watch(
-		&source.Kind{Type: &hivev1.ClusterDeployment{}},
+		&runtimesource.Kind{Type: &hivev1.ClusterDeployment{}},
 		handler.EnqueueRequestsFromMapFunc(func(o client.Object) []reconcile.Request {
 			return []reconcile.Request{
 				{
@@ -143,11 +132,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			},
 		}),
 	); err != nil {
-		return err
+		return controllerName, err
 	}
 
 	if err := c.Watch(
-		&source.Kind{Type: &addonv1alpha1.ManagedClusterAddOn{}},
+		&runtimesource.Kind{Type: &addonv1alpha1.ManagedClusterAddOn{}},
 		handler.EnqueueRequestsFromMapFunc(func(o client.Object) []reconcile.Request {
 			return []reconcile.Request{
 				{
@@ -169,11 +158,11 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			},
 		}),
 	); err != nil {
-		return err
+		return controllerName, err
 	}
 
 	if err := c.Watch(
-		&source.Kind{Type: &asv1beta1.InfraEnv{}},
+		&runtimesource.Kind{Type: &asv1beta1.InfraEnv{}},
 		handler.EnqueueRequestsFromMapFunc(func(o client.Object) []reconcile.Request {
 			return []reconcile.Request{
 				{
@@ -195,8 +184,8 @@ func add(mgr manager.Manager, r reconcile.Reconciler) error {
 			},
 		}),
 	); err != nil {
-		return err
+		return controllerName, err
 	}
 
-	return nil
+	return controllerName, nil
 }

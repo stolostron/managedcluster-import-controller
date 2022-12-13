@@ -22,9 +22,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 )
+
+type WorkSelector func(string, workv1.ManifestWork) bool
 
 // AssertManifestWorkFinalizer add/remove manifest finalizer for a managed cluster,
 // this func will send request to api server to update managed cluster.
@@ -56,16 +59,16 @@ func AssertManifestWorkFinalizer(ctx context.Context, runtimeClient client.Clien
 		return err
 	}
 
-	recorder.Eventf("ManagedClusterMetaObjModified",
-		"The managed cluster %s meta data is modified: manifestwork finalizer is added", cluster.Name)
+	recorder.Eventf("ManagedClusterFinalizerAdded",
+		"The managed cluster %s manifestwork finalizer is added", cluster.Name)
 	return nil
 }
 
 // ForceDeleteAllManifestWorks delete all manifestworks forcefully
-func ForceDeleteAllManifestWorks(ctx context.Context, runtimeClient client.Client, recorder events.Recorder,
+func ForceDeleteAllManifestWorks(ctx context.Context, workClient workclient.Interface, recorder events.Recorder,
 	manifestWorks []workv1.ManifestWork) error {
 	for _, item := range manifestWorks {
-		if err := ForceDeleteManifestWork(ctx, runtimeClient, recorder, item.Namespace, item.Name); err != nil {
+		if err := ForceDeleteManifestWork(ctx, workClient, recorder, item.Namespace, item.Name); err != nil {
 			return err
 		}
 	}
@@ -73,11 +76,9 @@ func ForceDeleteAllManifestWorks(ctx context.Context, runtimeClient client.Clien
 }
 
 // ForceDeleteManifestWork will delete the manifestwork regardless of finalizers.
-func ForceDeleteManifestWork(ctx context.Context, runtimeClient client.Client, recorder events.Recorder,
+func ForceDeleteManifestWork(ctx context.Context, workClient workclient.Interface, recorder events.Recorder,
 	namespace, name string) error {
-	manifestWorkKey := types.NamespacedName{Namespace: namespace, Name: name}
-	manifestWork := &workv1.ManifestWork{}
-	err := runtimeClient.Get(ctx, manifestWorkKey, manifestWork)
+	_, err := workClient.WorkV1().ManifestWorks(namespace).Get(ctx, name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		return nil
 	}
@@ -85,12 +86,12 @@ func ForceDeleteManifestWork(ctx context.Context, runtimeClient client.Client, r
 		return err
 	}
 
-	if err := runtimeClient.Delete(ctx, manifestWork); err != nil {
+	if err := workClient.WorkV1().ManifestWorks(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 
 	// reload the manifest work
-	err = runtimeClient.Get(ctx, manifestWorkKey, manifestWork)
+	manifestWork, err := workClient.WorkV1().ManifestWorks(namespace).Get(ctx, name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		return nil
 	}
@@ -100,9 +101,9 @@ func ForceDeleteManifestWork(ctx context.Context, runtimeClient client.Client, r
 
 	// if the manifest work is not deleted, force remove its finalizers
 	if len(manifestWork.Finalizers) != 0 {
-		patch := client.MergeFrom(manifestWork.DeepCopy())
-		manifestWork.Finalizers = []string{}
-		if err := runtimeClient.Patch(ctx, manifestWork, patch); err != nil {
+		patch := "{\"metadata\": {\"finalizers\":[]}}"
+		if _, err := workClient.WorkV1().ManifestWorks(namespace).Patch(
+			ctx, name, types.MergePatchType, []byte(patch), metav1.PatchOptions{}); err != nil {
 			return err
 		}
 	}
@@ -113,10 +114,9 @@ func ForceDeleteManifestWork(ctx context.Context, runtimeClient client.Client, r
 }
 
 // DeleteManifestWork triggers the deletion action of the manifestwork
-func DeleteManifestWork(ctx context.Context, runtimeClient client.Client, recorder events.Recorder,
+func DeleteManifestWork(ctx context.Context, workClient workclient.Interface, recorder events.Recorder,
 	namespace, name string) error {
-	manifestWork := &workv1.ManifestWork{}
-	err := runtimeClient.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, manifestWork)
+	manifestWork, err := workClient.WorkV1().ManifestWorks(namespace).Get(ctx, name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		return nil
 	}
@@ -129,7 +129,7 @@ func DeleteManifestWork(ctx context.Context, runtimeClient client.Client, record
 		return nil
 	}
 
-	if err := runtimeClient.Delete(ctx, manifestWork); err != nil {
+	if err := workClient.WorkV1().ManifestWorks(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
 		return err
 	}
 
@@ -138,17 +138,12 @@ func DeleteManifestWork(ctx context.Context, runtimeClient client.Client, record
 }
 
 // NoPendingManifestWorks checks whether there are pending manifestworks for the managed cluster
-func NoPendingManifestWorks(ctx context.Context, runtimeClient client.Client, log logr.Logger, clusterName string,
-	ignoredSelector func(clusterName string, manifestWork workv1.ManifestWork) bool) (bool, error) {
-	listOpts := &client.ListOptions{Namespace: clusterName}
-	manifestWorks := &workv1.ManifestWorkList{}
-	if err := runtimeClient.List(ctx, manifestWorks, listOpts); err != nil {
-		return false, err
-	}
-
+func NoPendingManifestWorks(ctx context.Context, log logr.Logger,
+	clusterName string, manifestWorks []workv1.ManifestWork,
+	ignoredSelector WorkSelector) (bool, error) {
 	manifestWorkNames := []string{}
 	ignoredManifestWorkNames := []string{}
-	for _, manifestWork := range manifestWorks.Items {
+	for _, manifestWork := range manifestWorks {
 		if ignoredSelector(clusterName, manifestWork) {
 			ignoredManifestWorkNames = append(ignoredManifestWorkNames, manifestWork.GetName())
 		} else {
@@ -175,7 +170,7 @@ func ListManagedClusterAddons(ctx context.Context, runtimeClient client.Client, 
 	return managedClusterAddons, nil
 }
 
-// // NoManagedClusterAddons checks whether there are managedclusteraddons for the managed cluster
+// NoManagedClusterAddons checks whether there are managedclusteraddons for the managed cluster
 func NoManagedClusterAddons(ctx context.Context, runtimeClient client.Client, clusterName string) (bool, error) {
 	managedclusteraddons, err := ListManagedClusterAddons(ctx, runtimeClient, clusterName)
 	if err != nil {
@@ -200,7 +195,7 @@ func DeleteManagedClusterAddons(
 }
 
 // DeleteManifestWorkWithSelector deletes manifestworks but ignores the ignoredSelector selected manifestworks
-func DeleteManifestWorkWithSelector(ctx context.Context, runtimeClient client.Client, recorder events.Recorder,
+func DeleteManifestWorkWithSelector(ctx context.Context, workClient workclient.Interface, recorder events.Recorder,
 	cluster *clusterv1.ManagedCluster, works []workv1.ManifestWork,
 	ignoredSelector func(clusterName string, manifestWork workv1.ManifestWork) bool) error {
 
@@ -215,7 +210,7 @@ func DeleteManifestWorkWithSelector(ctx context.Context, runtimeClient client.Cl
 				continue
 			}
 		}
-		if err := DeleteManifestWork(ctx, runtimeClient, recorder, manifestWork.Namespace, manifestWork.Name); err != nil {
+		if err := DeleteManifestWork(ctx, workClient, recorder, manifestWork.Namespace, manifestWork.Name); err != nil {
 			return err
 		}
 	}
