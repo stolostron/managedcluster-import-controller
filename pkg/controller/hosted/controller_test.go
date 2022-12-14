@@ -11,17 +11,25 @@ import (
 	"time"
 
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
+
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
+
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/informers"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
+
 	"open-cluster-management.io/api/addon/v1alpha1"
+	workfake "open-cluster-management.io/api/client/work/clientset/versioned/fake"
+	workinformers "open-cluster-management.io/api/client/work/informers/externalversions"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -35,9 +43,6 @@ func init() {
 	testscheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
 	testscheme.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.ManagedClusterAddOnList{})
 	testscheme.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.ManagedClusterAddOn{})
-
-	testscheme.AddKnownTypes(v1alpha1.SchemeGroupVersion, &workv1.ManifestWork{})
-	testscheme.AddKnownTypes(v1alpha1.GroupVersion, &workv1.ManifestWorkList{})
 }
 
 func TestReconcile(t *testing.T) {
@@ -45,6 +50,7 @@ func TestReconcile(t *testing.T) {
 		name         string
 		runtimeObjs  []client.Object  // used by clientHolder.RuntimeClient
 		kubeObjs     []runtime.Object // used by clientHolder.KubeClient
+		workObjs     []runtime.Object
 		request      reconcile.Request
 		vaildateFunc func(t *testing.T, reconcileResult reconcile.Result, reconcoleErr error, clientHolder *helpers.ClientHolder)
 	}{
@@ -53,6 +59,7 @@ func TestReconcile(t *testing.T) {
 			name:        "managedcluster is not found",
 			runtimeObjs: []client.Object{},
 			kubeObjs:    []runtime.Object{},
+			workObjs:    []runtime.Object{},
 			request:     reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
 			vaildateFunc: func(t *testing.T, reconcileResult reconcile.Result, reconcileErr error, ch *helpers.ClientHolder) {
 				if reconcileErr != nil {
@@ -74,6 +81,7 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			kubeObjs: []runtime.Object{},
+			workObjs: []runtime.Object{},
 			request:  reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
 			vaildateFunc: func(t *testing.T, reconcileResult reconcile.Result, reconcileErr error, ch *helpers.ClientHolder) {
 				if reconcileErr != nil {
@@ -98,6 +106,9 @@ func TestReconcile(t *testing.T) {
 						Name: "test",
 					},
 				},
+			},
+			kubeObjs: []runtime.Object{},
+			workObjs: []runtime.Object{
 				// manifestworks
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
@@ -106,8 +117,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			kubeObjs: []runtime.Object{},
-			request:  reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
 			vaildateFunc: func(t *testing.T, reconcileResult reconcile.Result, reconcileErr error, ch *helpers.ClientHolder) {
 				if reconcileErr == nil || !strings.Contains(reconcileErr.Error(), fmt.Sprintf("annotation %s not found", constants.HostingClusterNameAnnotation)) {
 					t.Errorf("expect err annotation %s not found, but get %v", constants.HostingClusterNameAnnotation, reconcileErr)
@@ -130,6 +140,7 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			kubeObjs: []runtime.Object{},
+			workObjs: []runtime.Object{},
 			request:  reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
 			vaildateFunc: func(t *testing.T, reconcileResult reconcile.Result, reconcileErr error, ch *helpers.ClientHolder) {
 				managedcluster := &clusterv1.ManagedCluster{}
@@ -158,28 +169,30 @@ func TestReconcile(t *testing.T) {
 						DeletionTimestamp: &metav1.Time{Time: time.Now()}, // managedCluster is deleted
 					},
 				},
+			},
+			kubeObjs: []runtime.Object{},
+			workObjs: []runtime.Object{
 				// manifestworks
-				&workv1.ManifestWork{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "test",
-						Name:      "manifest1",
-					},
-				},
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: "cluster1",
 						Name:      "test-hosted-klusterlet",
+						Labels: map[string]string{
+							constants.HostedWorksLabel: "true",
+						},
 					},
 				},
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: "cluster1",
 						Name:      "test-hosted-kubeconfig",
+						Labels: map[string]string{
+							constants.HostedWorksLabel: "true",
+						},
 					},
 				},
 			},
-			kubeObjs: []runtime.Object{},
-			request:  reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
 			vaildateFunc: func(t *testing.T, reconcileResult reconcile.Result, reconcileErr error, ch *helpers.ClientHolder) {
 				managedcluster := &clusterv1.ManagedCluster{}
 				err := ch.RuntimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, managedcluster)
@@ -193,8 +206,7 @@ func TestReconcile(t *testing.T) {
 				}
 
 				// expect hosted manifestworks are deleted
-				manifestworks := &workv1.ManifestWorkList{}
-				err = ch.RuntimeClient.List(context.TODO(), manifestworks, client.InNamespace("cluster1"))
+				manifestworks, err := ch.WorkClient.WorkV1().ManifestWorks("cluster1").List(context.TODO(), metav1.ListOptions{})
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 					return
@@ -217,6 +229,9 @@ func TestReconcile(t *testing.T) {
 						},
 					},
 				},
+			},
+			kubeObjs: []runtime.Object{},
+			workObjs: []runtime.Object{
 				// manifestworks
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
@@ -228,17 +243,22 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: "cluster1",
 						Name:      "test-hosted-klusterlet",
+						Labels: map[string]string{
+							constants.HostedWorksLabel: "true",
+						},
 					},
 				},
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: "cluster1",
 						Name:      "test-hosted-kubeconfig",
+						Labels: map[string]string{
+							constants.HostedWorksLabel: "true",
+						},
 					},
 				},
 			},
-			kubeObjs: []runtime.Object{},
-			request:  reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
 			vaildateFunc: func(t *testing.T, reconcileResult reconcile.Result, reconcileErr error, ch *helpers.ClientHolder) {
 				if reconcileErr != nil {
 					t.Errorf("unexpected error: %v", reconcileErr)
@@ -258,6 +278,16 @@ func TestReconcile(t *testing.T) {
 						},
 					},
 				},
+			},
+			kubeObjs: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-import",
+						Namespace: "test",
+					},
+				},
+			},
+			workObjs: []runtime.Object{
 				// manifestworks
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
@@ -269,20 +299,18 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: "cluster1",
 						Name:      "test-hosted-klusterlet",
+						Labels: map[string]string{
+							constants.HostedWorksLabel: "true",
+						},
 					},
 				},
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
 						Namespace: "cluster1",
 						Name:      "test-hosted-kubeconfig",
-					},
-				},
-			},
-			kubeObjs: []runtime.Object{
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-import",
-						Namespace: "test",
+						Labels: map[string]string{
+							constants.HostedWorksLabel: "true",
+						},
 					},
 				},
 			},
@@ -306,25 +334,6 @@ func TestReconcile(t *testing.T) {
 						},
 					},
 				},
-				// manifestworks
-				&workv1.ManifestWork{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "test",
-						Name:      "manifest1",
-					},
-				},
-				&workv1.ManifestWork{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "cluster1",
-						Name:      "test-hosted-klusterlet",
-					},
-				},
-				&workv1.ManifestWork{
-					ObjectMeta: metav1.ObjectMeta{
-						Namespace: "cluster1",
-						Name:      "test-hosted-kubeconfig",
-					},
-				},
 			},
 			kubeObjs: []runtime.Object{
 				&corev1.Secret{
@@ -340,6 +349,33 @@ metadata:
 					},
 				},
 			},
+			workObjs: []runtime.Object{
+				// manifestworks
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "manifest1",
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "cluster1",
+						Name:      "test-hosted-klusterlet",
+						Labels: map[string]string{
+							constants.HostedWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "cluster1",
+						Name:      "test-hosted-kubeconfig",
+						Labels: map[string]string{
+							constants.HostedWorksLabel: "true",
+						},
+					},
+				},
+			},
 			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
 			vaildateFunc: func(t *testing.T, reconcileResult reconcile.Result, reconcileErr error, ch *helpers.ClientHolder) {
 				if reconcileErr != nil {
@@ -352,11 +388,31 @@ metadata:
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			kubeClient := kubefake.NewSimpleClientset(c.kubeObjs...)
+			kubeInformerFactory := informers.NewSharedInformerFactory(kubeClient, 10*time.Minute)
+			secretInformer := kubeInformerFactory.Core().V1().Secrets().Informer()
+			for _, secret := range c.kubeObjs {
+				secretInformer.GetStore().Add(secret)
+			}
+
+			workClient := workfake.NewSimpleClientset(c.workObjs...)
+			workInformerFactory := workinformers.NewSharedInformerFactory(workClient, 10*time.Minute)
+			workInformer := workInformerFactory.Work().V1().ManifestWorks().Informer()
+			for _, work := range c.workObjs {
+				workInformer.GetStore().Add(work)
+			}
+
 			r := &ReconcileHosted{
 				clientHolder: &helpers.ClientHolder{
 					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).
 						WithObjects(c.runtimeObjs...).Build(),
-					KubeClient: kubefake.NewSimpleClientset(c.kubeObjs...),
+					KubeClient: kubeClient,
+					WorkClient: workClient,
+				},
+				informerHolder: &source.InformerHolder{
+					ImportSecretLister:     kubeInformerFactory.Core().V1().Secrets().Lister(),
+					AutoImportSecretLister: kubeInformerFactory.Core().V1().Secrets().Lister(),
+					HostedWorkLister:       workInformerFactory.Work().V1().ManifestWorks().Lister(),
 				},
 				recorder: eventstesting.NewTestingEventRecorder(t),
 				scheme:   testscheme,

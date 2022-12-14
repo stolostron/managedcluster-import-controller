@@ -12,8 +12,6 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
-	"k8s.io/apimachinery/pkg/types"
-	"k8s.io/client-go/tools/cache"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 
@@ -23,7 +21,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	runtimesource "sigs.k8s.io/controller-runtime/pkg/source"
 )
 
@@ -31,42 +28,23 @@ const controllerName = "manifestwork-controller"
 
 // Add creates a new manifestwork controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
-func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder,
-	importSecretInformer, autoImportSecretInformer cache.SharedIndexInformer) (string, error) {
-	return controllerName, add(importSecretInformer, mgr, newReconciler(mgr, clientHolder))
-}
-
-// newReconciler returns a new reconcile.Reconciler
-func newReconciler(mgr manager.Manager, clientHolder *helpers.ClientHolder) reconcile.Reconciler {
-	return &ReconcileManifestWork{
-		clientHolder: clientHolder,
-		scheme:       mgr.GetScheme(),
-		recorder:     helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
-	}
-}
-
-// adds a new Controller to mgr with r as the reconcile.Reconciler
-func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r reconcile.Reconciler) error {
+func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder *source.InformerHolder) (string, error) {
 	c, err := controller.New(controllerName, mgr, controller.Options{
-		Reconciler:              r,
+		Reconciler: &ReconcileManifestWork{
+			clientHolder:   clientHolder,
+			informerHolder: informerHolder,
+			scheme:         mgr.GetScheme(),
+			recorder:       helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
+		},
 		MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
 	})
 	if err != nil {
-		return err
+		return controllerName, err
 	}
 
 	if err := c.Watch(
-		&runtimesource.Kind{Type: &workv1.ManifestWork{}},
-		handler.EnqueueRequestsFromMapFunc(func(o client.Object) []reconcile.Request {
-			return []reconcile.Request{
-				{
-					NamespacedName: types.NamespacedName{
-						Namespace: o.GetNamespace(),
-						Name:      o.GetNamespace(),
-					},
-				},
-			}
-		}),
+		source.NewKlusterletWorkSource(informerHolder.KlusterletWorkInformer),
+		&source.ManagedClusterResourceEventHandler{},
 		predicate.Predicate(predicate.Funcs{
 			GenericFunc: func(e event.GenericEvent) bool { return false },
 			CreateFunc:  func(e event.CreateEvent) bool { return true },
@@ -82,15 +60,14 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 				new, okNew := e.ObjectNew.(*workv1.ManifestWork)
 				old, okOld := e.ObjectOld.(*workv1.ManifestWork)
 				if okNew && okOld {
-					return !helpers.ManifestsEqual(new.Spec.Workload.Manifests, old.Spec.Workload.Manifests) ||
-						!equality.Semantic.DeepEqual(new.Status, old.Status)
+					return !helpers.ManifestsEqual(new.Spec.Workload.Manifests, old.Spec.Workload.Manifests)
 				}
 
 				return false
 			},
 		}),
 	); err != nil {
-		return err
+		return controllerName, err
 	}
 
 	if err := c.Watch(
@@ -102,12 +79,12 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 			CreateFunc:  func(e event.CreateEvent) bool { return isDefaultModeObject(e.Object) },
 			UpdateFunc:  func(e event.UpdateEvent) bool { return isDefaultModeObject(e.ObjectNew) },
 		})); err != nil {
-		return err
+		return controllerName, err
 	}
 
 	if err := c.Watch(
-		source.NewImportSecretSource(importSecretInformer),
-		&source.ManagedClusterSecretEventHandler{},
+		source.NewImportSecretSource(informerHolder.ImportSecretInformer),
+		&source.ManagedClusterResourceEventHandler{},
 		predicate.Predicate(predicate.Funcs{
 			GenericFunc: func(e event.GenericEvent) bool { return false },
 			DeleteFunc:  func(e event.DeleteEvent) bool { return false },
@@ -123,10 +100,10 @@ func add(importSecretInformer cache.SharedIndexInformer, mgr manager.Manager, r 
 			},
 		}),
 	); err != nil {
-		return err
+		return controllerName, err
 	}
 
-	return nil
+	return controllerName, nil
 }
 
 func isDefaultModeObject(object client.Object) bool {

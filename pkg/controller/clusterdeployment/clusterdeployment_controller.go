@@ -8,7 +8,6 @@ import (
 	"fmt"
 
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	workv1 "open-cluster-management.io/api/work/v1"
 
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	"github.com/openshift/library-go/pkg/operator/events"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -34,9 +34,10 @@ var log = logf.Log.WithName(controllerName)
 // ReconcileClusterDeployment reconciles the clusterdeployment that is in the managed cluster namespace
 // to import the managed cluster
 type ReconcileClusterDeployment struct {
-	client     client.Client
-	kubeClient kubernetes.Interface
-	recorder   events.Recorder
+	client         client.Client
+	kubeClient     kubernetes.Interface
+	informerHolder *source.InformerHolder
+	recorder       events.Recorder
 }
 
 // blank assignment to verify that ReconcileClusterDeployment implements reconcile.Reconciler
@@ -48,7 +49,6 @@ var _ reconcile.Reconciler = &ReconcileClusterDeployment{}
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileClusterDeployment) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Name", request.Name)
-	reqLogger.Info("Reconciling clusterdeployment")
 
 	clusterName := request.Name
 
@@ -60,6 +60,8 @@ func (r *ReconcileClusterDeployment) Reconcile(ctx context.Context, request reco
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+
+	reqLogger.Info("Reconciling clusterdeployment")
 
 	if !clusterDeployment.DeletionTimestamp.IsZero() {
 		// We do not set this finalizer anymore, but we still need to remove it for backward compatible
@@ -96,7 +98,7 @@ func (r *ReconcileClusterDeployment) Reconcile(ctx context.Context, request reco
 	}
 
 	// if there is an auto import secret in the managed cluster namespce, we will use the auto import secret to import the cluster
-	_, err = r.kubeClient.CoreV1().Secrets(clusterName).Get(ctx, constants.AutoImportSecretName, metav1.GetOptions{})
+	_, err = r.informerHolder.AutoImportSecretLister.Secrets(clusterName).Get(constants.AutoImportSecretName)
 	if err == nil {
 		reqLogger.Info(fmt.Sprintf("The hive managed cluster %s has auto import secret, skipped", clusterName))
 		return reconcile.Result{}, nil
@@ -116,7 +118,7 @@ func (r *ReconcileClusterDeployment) Reconcile(ctx context.Context, request reco
 	}
 
 	importSecretName := fmt.Sprintf("%s-%s", clusterName, constants.ImportSecretNameSuffix)
-	importSecret, err := r.kubeClient.CoreV1().Secrets(clusterName).Get(ctx, importSecretName, metav1.GetOptions{})
+	importSecret, err := r.informerHolder.ImportSecretLister.Secrets(clusterName).Get(importSecretName)
 	if errors.IsNotFound(err) {
 		return reconcile.Result{}, nil
 	}
@@ -125,15 +127,12 @@ func (r *ReconcileClusterDeployment) Reconcile(ctx context.Context, request reco
 	}
 
 	// ensure the klusterlet manifest works exist
-	listOpts := &client.ListOptions{
-		Namespace:     clusterName,
-		LabelSelector: labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: "true"}),
-	}
-	manifestWorks := &workv1.ManifestWorkList{}
-	if err := r.client.List(ctx, manifestWorks, listOpts); err != nil {
+	workSelector := labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: "true"})
+	manifestWorks, err := r.informerHolder.KlusterletWorkLister.ManifestWorks(clusterName).List(workSelector)
+	if err != nil {
 		return reconcile.Result{}, err
 	}
-	if len(manifestWorks.Items) != 2 {
+	if len(manifestWorks) != 2 {
 		reqLogger.Info(fmt.Sprintf("Waiting for klusterlet manifest works for managed cluster %s", clusterName))
 		return reconcile.Result{}, nil
 	}

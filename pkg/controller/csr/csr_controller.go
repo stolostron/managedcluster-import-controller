@@ -76,7 +76,6 @@ var _ reconcile.Reconciler = &ReconcileCSR{}
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileCSR) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Name", request.Name)
-	reqLogger.Info("Reconciling CSR")
 
 	csrReq := r.clientHolder.KubeClient.CertificatesV1().CertificateSigningRequests()
 
@@ -102,7 +101,8 @@ func (r *ReconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 		return reconcile.Result{}, err
 	}
 
-	reqLogger.Info("Approving CSR")
+	reqLogger.Info("Reconciling CSR")
+
 	csr = csr.DeepCopy()
 	csr.Status.Conditions = append(csr.Status.Conditions, certificatesv1.CertificateSigningRequestCondition{
 		Type:           certificatesv1.CertificateApproved,

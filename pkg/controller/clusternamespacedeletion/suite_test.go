@@ -90,7 +90,7 @@ var _ = ginkgo.BeforeSuite(func() {
 		KubeClient:    k8sClient,
 	}
 
-	_, err = Add(mgr, clientHolder, nil, nil)
+	_, err = Add(mgr, clientHolder, nil)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 	go func() {

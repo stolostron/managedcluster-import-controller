@@ -52,7 +52,6 @@ var _ reconcile.Reconciler = &ReconcileManagedCluster{}
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
 func (r *ReconcileManagedCluster) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Name", request.Name)
-	reqLogger.Info("Reconciling the managed cluster meta object")
 
 	managedCluster := &clusterv1.ManagedCluster{}
 	err := r.client.Get(ctx, types.NamespacedName{Name: request.Name}, managedCluster)
@@ -63,6 +62,8 @@ func (r *ReconcileManagedCluster) Reconcile(ctx context.Context, request reconci
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+
+	reqLogger.Info("Reconciling the managed cluster meta object")
 
 	if managedCluster.DeletionTimestamp.IsZero() {
 		if err := r.ensureManagedClusterMetaObj(ctx, managedCluster); err != nil {
@@ -102,10 +103,6 @@ func (r *ReconcileManagedCluster) Reconcile(ctx context.Context, request reconci
 	}
 
 	if len(managedCluster.Finalizers) == 0 || managedCluster.Finalizers[0] != constants.ImportFinalizer {
-		// managed cluster import finalizer is missed, this should not be happened,
-		// if happened, we ask user to handle this manually
-		r.recorder.Warningf("ManagedClusterImportFinalizerMissed",
-			"The namespace of managed cluster %s will not be deleted due to import finalizer is missed", managedCluster.Name)
 		return reconcile.Result{}, nil
 	}
 

@@ -44,3 +44,5 @@ spec:
               value: quay.io/open-cluster-management/registration:latest
             - name: WORK_IMAGE
               value: quay.io/open-cluster-management/work:latest
+            - name: GOMEMLIMIT
+              value: "1750MiB"

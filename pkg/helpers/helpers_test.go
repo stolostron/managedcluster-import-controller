@@ -12,6 +12,7 @@ import (
 
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	operatorfake "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
+	workfake "open-cluster-management.io/api/client/work/clientset/versioned/fake"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
@@ -38,7 +39,6 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/utils/diff"
 
-	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 )
@@ -47,7 +47,6 @@ var testscheme = scheme.Scheme
 
 func init() {
 	testscheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
-	testscheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWork{})
 	testscheme.AddKnownTypes(operatorv1.SchemeGroupVersion, &operatorv1.Klusterlet{})
 	testscheme.AddKnownTypes(crdv1beta1.SchemeGroupVersion, &crdv1beta1.CustomResourceDefinition{})
 	testscheme.AddKnownTypes(crdv1.SchemeGroupVersion, &crdv1.CustomResourceDefinition{})
@@ -324,7 +323,7 @@ func TestApplyResources(t *testing.T) {
 		name           string
 		kubeObjs       []runtime.Object
 		klusterletObjs []runtime.Object
-		clientObjs     []client.Object
+		workObjs       []runtime.Object
 		crds           []runtime.Object
 		requiredObjs   []runtime.Object
 		owner          *clusterv1.ManagedCluster
@@ -333,7 +332,7 @@ func TestApplyResources(t *testing.T) {
 			name:           "create resources",
 			kubeObjs:       []runtime.Object{},
 			klusterletObjs: []runtime.Object{},
-			clientObjs:     []client.Object{},
+			workObjs:       []runtime.Object{},
 			crds:           []runtime.Object{},
 			requiredObjs: []runtime.Object{
 				&corev1.ServiceAccount{
@@ -451,7 +450,7 @@ func TestApplyResources(t *testing.T) {
 					},
 				},
 			},
-			clientObjs: []client.Object{
+			workObjs: []runtime.Object{
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test_cluster",
@@ -576,7 +575,8 @@ func TestApplyResources(t *testing.T) {
 				KubeClient:          kubefake.NewSimpleClientset(c.kubeObjs...),
 				APIExtensionsClient: apiextensionsfake.NewSimpleClientset(c.crds...),
 				OperatorClient:      operatorfake.NewSimpleClientset(c.klusterletObjs...),
-				RuntimeClient:       fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.clientObjs...).Build(),
+				RuntimeClient:       fake.NewClientBuilder().WithScheme(testscheme).WithObjects().Build(),
+				WorkClient:          workfake.NewSimpleClientset(c.workObjs...),
 			}
 			err := ApplyResources(clientHolder, eventstesting.NewTestingEventRecorder(t), testscheme, c.owner, c.requiredObjs...)
 			if err != nil {

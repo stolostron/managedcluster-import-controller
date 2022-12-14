@@ -22,15 +22,15 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/selfmanagedcluster"
 	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
-	"k8s.io/client-go/tools/cache"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 var log = logf.Log.WithName("controllers")
 
-type AddToManagerFunc func(manager.Manager, *helpers.ClientHolder, cache.SharedIndexInformer, cache.SharedIndexInformer) (string, error)
+type AddToManagerFunc func(manager.Manager, *helpers.ClientHolder, *source.InformerHolder) (string, error)
 
 // AddToManagerFuncs is a list of functions to add all controllers to the manager
 var AddToManagerFuncs = []AddToManagerFunc{
@@ -45,9 +45,9 @@ var AddToManagerFuncs = []AddToManagerFunc{
 }
 
 // AddToManager adds all controllers to the manager
-func AddToManager(manager manager.Manager, clientHolder *helpers.ClientHolder, importSecretInformer, autoImportSecretInformer cache.SharedIndexInformer) error {
+func AddToManager(manager manager.Manager, clientHolder *helpers.ClientHolder, informerHolder *source.InformerHolder) error {
 	for _, addFunc := range AddToManagerFuncs {
-		name, err := addFunc(manager, clientHolder, importSecretInformer, autoImportSecretInformer)
+		name, err := addFunc(manager, clientHolder, informerHolder)
 		if err != nil {
 			return err
 		}
@@ -56,7 +56,7 @@ func AddToManager(manager manager.Manager, clientHolder *helpers.ClientHolder, i
 	}
 
 	if features.DefaultMutableFeatureGate.Enabled(features.KlusterletHostedMode) {
-		name, err := hosted.Add(manager, clientHolder, importSecretInformer, autoImportSecretInformer)
+		name, err := hosted.Add(manager, clientHolder, informerHolder)
 		if err != nil {
 			return err
 		}
