@@ -8,6 +8,9 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/clientcmd"
+	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 )
 
 var importYaml = `
@@ -146,4 +149,30 @@ func GetImportSecret(managedClusterName string) *corev1.Secret {
 			"import.yaml":      []byte(importYaml),
 		},
 	}
+}
+
+func BuildKubeconfig(restConfig *rest.Config) []byte {
+	kubeConfigData, err := clientcmd.Write(
+		clientcmdapi.Config{
+			Clusters: map[string]*clientcmdapi.Cluster{"test-cluster": {
+				Server:                   restConfig.Host,
+				CertificateAuthorityData: restConfig.CAData,
+				//InsecureSkipTLSVerify: true,
+			}},
+			AuthInfos: map[string]*clientcmdapi.AuthInfo{"test-auth": {
+				//Token: restConfig.BearerToken,
+				ClientCertificateData: restConfig.CertData,
+				ClientKeyData:         restConfig.KeyData,
+			}},
+			Contexts: map[string]*clientcmdapi.Context{"test-context": {
+				Cluster:   "test-cluster",
+				AuthInfo:  "test-auth",
+				Namespace: "configuration",
+			}},
+			CurrentContext: "test-context",
+		})
+	if err != nil {
+		panic(err)
+	}
+	return kubeConfigData
 }

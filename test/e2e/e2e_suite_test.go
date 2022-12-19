@@ -428,7 +428,7 @@ func assertManagedClusterImportSecretApplied(clusterName string, mode ...string)
 		util.Logf("assert managed cluster %s import secret applied spending time: %.2f seconds", clusterName, time.Since(start).Seconds())
 	}()
 	ginkgo.By(fmt.Sprintf("Managed cluster %s should be imported", clusterName), func() {
-		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
+		gomega.Expect(wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
 			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if err != nil {
 				util.Logf("assert managed cluster %s import secret applied get cluster error: %v", clusterName, err)

@@ -7,7 +7,9 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
+	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
@@ -36,6 +38,7 @@ var log = logf.Log.WithName(controllerName)
 type ReconcileAutoImport struct {
 	client         client.Client
 	kubeClient     kubernetes.Interface
+	workClient     workclient.Interface
 	informerHolder *source.InformerHolder
 	recorder       events.Recorder
 }
@@ -98,13 +101,6 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, nil
 	}
 
-	importCondition := metav1.Condition{
-		Type:    "ManagedClusterImportSucceeded",
-		Status:  metav1.ConditionTrue,
-		Message: "Import succeeded",
-		Reason:  "ManagedClusterImported",
-	}
-
 	importClient, restMapper, importErr := helpers.GenerateClientFromSecret(autoImportSecret)
 	switch {
 	case importErr != nil:
@@ -119,11 +115,18 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	if importErr != nil {
-		importCondition.Status = metav1.ConditionFalse
-		importCondition.Message = fmt.Sprintf("Unable to import managed cluster %s with auto-import-secret: %s", managedClusterName, importErr.Error())
-		importCondition.Reason = "ManagedClusterNotImported"
-
-		if err := helpers.UpdateManagedClusterStatus(r.client, r.recorder, managedClusterName, importCondition); err != nil {
+		if err := helpers.UpdateManagedClusterStatus(
+			r.client,
+			r.recorder,
+			managedClusterName,
+			metav1.Condition{
+				Type:   "ManagedClusterImportSucceeded",
+				Status: metav1.ConditionFalse,
+				Message: fmt.Sprintf("Unable to import managed cluster %s with auto-import-secret: %s",
+					managedClusterName, importErr.Error()),
+				Reason: "FailedToDeployKlusterlet",
+			},
+		); err != nil {
 			return reconcile.Result{}, err
 		}
 
@@ -132,9 +135,39 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, utilerrors.NewAggregate([]error{importErr, retryErr})
 	}
 
-	// TODO enhancment: check klusterlet status from managed cluster
+	// TODO get more feedback from klusterlet manifest works
+	// TDOO consider to change ManagedClusterImportSucceeded condition to ManagedClusterImportProcessing
+	available, err := helpers.IsManifestWorksAvailable(ctx, r.workClient, managedClusterName,
+		fmt.Sprintf("%s-%s", managedCluster.Name, constants.KlusterletCRDsSuffix),
+		fmt.Sprintf("%s-%s", managedCluster.Name, constants.KlusterletSuffix))
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	if !available {
+		return reconcile.Result{RequeueAfter: 10 * time.Second}, helpers.UpdateManagedClusterStatus(
+			r.client,
+			r.recorder,
+			managedClusterName,
+			metav1.Condition{
+				Type:    "ManagedClusterImportSucceeded",
+				Status:  metav1.ConditionFalse,
+				Message: "The klusterlet works are not available",
+				Reason:  "KlusterletNotAvailable",
+			},
+		)
+	}
 
-	if err := helpers.UpdateManagedClusterStatus(r.client, r.recorder, managedClusterName, importCondition); err != nil {
+	if err := helpers.UpdateManagedClusterStatus(
+		r.client,
+		r.recorder,
+		managedClusterName,
+		metav1.Condition{
+			Type:    "ManagedClusterImportSucceeded",
+			Status:  metav1.ConditionTrue,
+			Message: "Import succeeded",
+			Reason:  "ManagedClusterImported",
+		},
+	); err != nil {
 		return reconcile.Result{}, err
 	}
 

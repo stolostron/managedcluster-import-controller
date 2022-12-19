@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/informers"
+	"k8s.io/client-go/kubernetes"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 
@@ -46,6 +47,38 @@ func TestReconcile(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer apiServer.Stop()
+
+	spokeKubeClient, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := spokeKubeClient.CoreV1().Namespaces().Create(
+		context.TODO(),
+		&corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "open-cluster-management-agent",
+			},
+		},
+		metav1.CreateOptions{},
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := spokeKubeClient.CoreV1().Secrets("open-cluster-management-agent").Create(
+		context.TODO(),
+		&corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "bootstrap-hub-kubeconfig",
+			},
+			Data: map[string][]byte{
+				"kubeconfig": []byte("dumb"),
+			},
+		},
+		metav1.CreateOptions{},
+	); err != nil {
+		t.Fatal(err)
+	}
 
 	cases := []struct {
 		name        string
@@ -227,6 +260,116 @@ func TestReconcile(t *testing.T) {
 			},
 			expectedErr: true,
 		},
+		{
+			name: "only update the bootstrap secret - works unavailable",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: "test",
+						Labels: map[string]string{
+							restoreLabel: "true",
+						},
+					},
+					Data: map[string][]byte{
+						"autoImportRetry": []byte("0"),
+						"kubeconfig":      testinghelpers.BuildKubeconfig(config),
+					},
+				},
+			},
+			expectedErr: false,
+		},
+		{
+			name: "only update the bootstrap secret - works available",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+					Status: workv1.ManifestWorkStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:   workv1.WorkAvailable,
+								Status: metav1.ConditionTrue,
+							},
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+					Status: workv1.ManifestWorkStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:   workv1.WorkAvailable,
+								Status: metav1.ConditionTrue,
+							},
+						},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: "test",
+						Labels: map[string]string{
+							restoreLabel: "true",
+						},
+					},
+					Data: map[string][]byte{
+						"autoImportRetry": []byte("0"),
+						"kubeconfig":      testinghelpers.BuildKubeconfig(config),
+					},
+				},
+			},
+			expectedErr: false,
+		},
 	}
 
 	for _, c := range cases {
@@ -238,7 +381,7 @@ func TestReconcile(t *testing.T) {
 				secretInformer.GetStore().Add(secret)
 			}
 
-			workClient := workfake.NewSimpleClientset()
+			workClient := workfake.NewSimpleClientset(c.works...)
 			workInformerFactory := workinformers.NewSharedInformerFactory(workClient, 10*time.Minute)
 			workInformer := workInformerFactory.Work().V1().ManifestWorks().Informer()
 			for _, work := range c.works {
@@ -248,6 +391,7 @@ func TestReconcile(t *testing.T) {
 			r := &ReconcileAutoImport{
 				client:     fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).Build(),
 				kubeClient: kubeClient,
+				workClient: workClient,
 				informerHolder: &source.InformerHolder{
 					AutoImportSecretLister: kubeInformerFactory.Core().V1().Secrets().Lister(),
 					ImportSecretLister:     kubeInformerFactory.Core().V1().Secrets().Lister(),
