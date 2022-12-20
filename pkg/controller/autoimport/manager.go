@@ -30,6 +30,7 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder
 		Reconciler: &ReconcileAutoImport{
 			client:         clientHolder.RuntimeClient,
 			kubeClient:     clientHolder.KubeClient,
+			workClient:     clientHolder.WorkClient,
 			informerHolder: informerHolder,
 			recorder:       helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
 		},

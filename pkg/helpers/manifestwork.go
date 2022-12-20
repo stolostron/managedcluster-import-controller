@@ -230,3 +230,21 @@ func IsClusterUnavailable(cluster *clusterv1.ManagedCluster) bool {
 
 	return false
 }
+
+func IsManifestWorksAvailable(ctx context.Context, client workclient.Interface,
+	namespace string, names ...string) (bool, error) {
+	for _, name := range names {
+		work, err := client.WorkV1().ManifestWorks(namespace).Get(ctx, name, metav1.GetOptions{})
+		if errors.IsNotFound(err) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+
+		if !meta.IsStatusConditionTrue(work.Status.Conditions, workv1.WorkAvailable) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
