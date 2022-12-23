@@ -22,7 +22,7 @@ const SelfManagedLabel string = "local-cluster"
 const (
 	ClusterImportSecretLabel = "managedcluster-import-controller.open-cluster-management.io/import-secret"
 	KlusterletWorksLabel     = "import.open-cluster-management.io/klusterlet-works"
-	HostedWorksLabel         = "import.open-cluster-management.io/hosted-works"
+	HostedClusterLabel       = "import.open-cluster-management.io/hosted-cluster"
 )
 
 const (
