@@ -177,7 +177,7 @@ func main() {
 			selector := &metav1.LabelSelector{
 				MatchExpressions: []metav1.LabelSelectorRequirement{
 					{
-						Key:      constants.HostedWorksLabel,
+						Key:      constants.HostedClusterLabel,
 						Operator: metav1.LabelSelectorOpExists,
 					},
 				},

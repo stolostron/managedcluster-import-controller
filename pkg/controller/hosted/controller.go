@@ -87,7 +87,7 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 
 	reqLogger.Info("Reconciling the manifest works of the hosted mode managed cluster")
 
-	hostedWorksSelector := labels.SelectorFromSet(map[string]string{constants.HostedWorksLabel: "true"})
+	hostedWorksSelector := labels.SelectorFromSet(map[string]string{constants.HostedClusterLabel: managedClusterName})
 
 	managementCluster, err := helpers.GetHostingCluster(managedCluster)
 	if err != nil {
@@ -300,7 +300,7 @@ func createHostedManifestWork(managedClusterName string,
 			Name:      hostedKlusterletManifestWorkName(managedClusterName),
 			Namespace: manifestWorkNamespace,
 			Labels: map[string]string{
-				constants.HostedWorksLabel: "true",
+				constants.HostedClusterLabel: managedClusterName,
 			},
 		},
 		Spec: workv1.ManifestWorkSpec{
@@ -351,7 +351,7 @@ func createManagedKubeconfigManifestWork(managedClusterName string, importSecret
 			Name:      hostedManagedKubeconfigManifestWorkName(managedClusterName),
 			Namespace: manifestWorkNamespace,
 			Labels: map[string]string{
-				constants.HostedWorksLabel: "true",
+				constants.HostedClusterLabel: managedClusterName,
 			},
 		},
 		Spec: workv1.ManifestWorkSpec{

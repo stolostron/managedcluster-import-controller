@@ -178,7 +178,7 @@ func TestReconcile(t *testing.T) {
 						Namespace: "cluster1",
 						Name:      "test-hosted-klusterlet",
 						Labels: map[string]string{
-							constants.HostedWorksLabel: "true",
+							constants.HostedClusterLabel: "test",
 						},
 					},
 				},
@@ -187,7 +187,7 @@ func TestReconcile(t *testing.T) {
 						Namespace: "cluster1",
 						Name:      "test-hosted-kubeconfig",
 						Labels: map[string]string{
-							constants.HostedWorksLabel: "true",
+							constants.HostedClusterLabel: "test",
 						},
 					},
 				},
@@ -244,7 +244,7 @@ func TestReconcile(t *testing.T) {
 						Namespace: "cluster1",
 						Name:      "test-hosted-klusterlet",
 						Labels: map[string]string{
-							constants.HostedWorksLabel: "true",
+							constants.HostedClusterLabel: "test",
 						},
 					},
 				},
@@ -253,7 +253,7 @@ func TestReconcile(t *testing.T) {
 						Namespace: "cluster1",
 						Name:      "test-hosted-kubeconfig",
 						Labels: map[string]string{
-							constants.HostedWorksLabel: "true",
+							constants.HostedClusterLabel: "test",
 						},
 					},
 				},
@@ -300,7 +300,7 @@ func TestReconcile(t *testing.T) {
 						Namespace: "cluster1",
 						Name:      "test-hosted-klusterlet",
 						Labels: map[string]string{
-							constants.HostedWorksLabel: "true",
+							constants.HostedClusterLabel: "test",
 						},
 					},
 				},
@@ -309,7 +309,7 @@ func TestReconcile(t *testing.T) {
 						Namespace: "cluster1",
 						Name:      "test-hosted-kubeconfig",
 						Labels: map[string]string{
-							constants.HostedWorksLabel: "true",
+							constants.HostedClusterLabel: "test",
 						},
 					},
 				},
@@ -362,7 +362,7 @@ metadata:
 						Namespace: "cluster1",
 						Name:      "test-hosted-klusterlet",
 						Labels: map[string]string{
-							constants.HostedWorksLabel: "true",
+							constants.HostedClusterLabel: "test",
 						},
 					},
 				},
@@ -371,7 +371,7 @@ metadata:
 						Namespace: "cluster1",
 						Name:      "test-hosted-kubeconfig",
 						Labels: map[string]string{
-							constants.HostedWorksLabel: "true",
+							constants.HostedClusterLabel: "test",
 						},
 					},
 				},

@@ -461,6 +461,26 @@ func assertManagedClusterAvailable(clusterName string) {
 	})
 }
 
+func assertHostedKlusterletManifestWorks(managementClusterName, managedClusterName string) {
+	ginkgo.By(fmt.Sprintf("Hosted cluster %s manifest works should be created", managedClusterName), func() {
+		gomega.Expect(wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
+			klusterletName := fmt.Sprintf("%s-hosted-klusterlet", managedClusterName)
+			manifestWorks := hubWorkClient.WorkV1().ManifestWorks(managementClusterName)
+			work, err := manifestWorks.Get(context.TODO(), klusterletName, metav1.GetOptions{})
+			if err != nil {
+				return false, err
+			}
+
+			clusterLable := work.Labels["import.open-cluster-management.io/hosted-cluster"]
+			if clusterLable != managedClusterName {
+				return false, fmt.Errorf("Expect cluster label on %s/%s but failed", managementClusterName, klusterletName)
+			}
+
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
+	})
+}
+
 func assertManagedClusterManifestWorks(clusterName string) {
 	ginkgo.By(fmt.Sprintf("Managed cluster %s manifest works should be created", clusterName), func() {
 		start := time.Now()
