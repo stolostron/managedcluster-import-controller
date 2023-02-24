@@ -241,7 +241,7 @@ func UpdateManagedClusterStatus(client client.Client, recorder events.Recorder,
 	}
 
 	recorder.Eventf("ManagedClusterStatusUpdated",
-		"Update the ManagedClusterImportSucceeded status of managed cluster %s to %s", managedClusterName, cond.Status)
+		"Update the %s status of managed cluster %s to %s", cond.Type, managedClusterName, cond.Status)
 
 	return nil
 }
