@@ -100,7 +100,8 @@ const (
 const (
 	// ConditionManagedClusterImportSucceeded is the condition type of managed cluster to indicate whether the managed
 	// cluster is imported successfully
-	ConditionManagedClusterImportSucceeded        = "ManagedClusterImportSucceeded"
+	ConditionManagedClusterImportSucceeded = "ManagedClusterImportSucceeded"
+
 	ConditionReasonAutoImportSecretInvalid        = "AutoImportSecretInvalid"
 	ConditionReasonImportSecretNotReady           = "ImportSecretNotFound"
 	ConditionReasonKlusterletManifestWorkNotReady = "KlusterletManifestWorkNotFound"
