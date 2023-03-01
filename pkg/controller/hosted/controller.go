@@ -15,21 +15,17 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
+	"github.com/ghodss/yaml"
 	"github.com/openshift/library-go/pkg/operator/events"
 	operatorhelpers "github.com/openshift/library-go/pkg/operator/v1helpers"
-
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	workv1 "open-cluster-management.io/api/work/v1"
-
-	"github.com/ghodss/yaml"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -96,14 +92,16 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 
 	if !managedCluster.DeletionTimestamp.IsZero() {
 		// use work client to list all works only when a managed cluster is deleting
-		hostedWorks, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(managementCluster).List(ctx, metav1.ListOptions{
-			LabelSelector: hostedWorksSelector.String(),
-		})
+		hostedWorks, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(managementCluster).List(
+			ctx, metav1.ListOptions{
+				LabelSelector: hostedWorksSelector.String(),
+			})
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 
-		manifestWorks, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(managedClusterName).List(ctx, metav1.ListOptions{})
+		manifestWorks, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(managedClusterName).List(
+			ctx, metav1.ListOptions{})
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -135,7 +133,8 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 		return reconcile.Result{}, err
 	}
 
-	// apply klusterlet manifest works klustelet to the management namespace from import secret to trigger the joining process.
+	// apply klusterlet manifest works klustelet to the management namespace from import secret
+	// to trigger the joining process.
 	importSecretName := fmt.Sprintf("%s-%s", managedClusterName, constants.ImportSecretNameSuffix)
 	importSecret, err := r.informerHolder.ImportSecretLister.Secrets(managedClusterName).Get(importSecretName)
 	if errors.IsNotFound(err) {
@@ -156,7 +155,8 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 		return reconcile.Result{}, err
 	}
 
-	autoImportSecret, err := r.informerHolder.AutoImportSecretLister.Secrets(managedClusterName).Get(constants.AutoImportSecretName)
+	autoImportSecret, err := r.informerHolder.AutoImportSecretLister.Secrets(managedClusterName).Get(
+		constants.AutoImportSecretName)
 	if errors.IsNotFound(err) {
 		// the auto import secret has not be created or has been deleted, do nothing
 		return reconcile.Result{}, nil
@@ -169,36 +169,39 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 	if err != nil {
 		return reconcile.Result{}, err
 	}
+
 	err = helpers.ApplyResources(r.clientHolder, r.recorder, r.scheme, managedCluster, manifestWork)
 	if err != nil {
-		errStatus := helpers.UpdateManagedClusterStatus(r.clientHolder.RuntimeClient, r.recorder, managedClusterName, metav1.Condition{
-			Type:    "ExternalManagedKubeconfigCreatedSucceeded",
-			Status:  metav1.ConditionFalse,
-			Message: fmt.Sprintf("Unable to create external managed kubeconfig for %s: %s", managedCluster.Name, err.Error()),
-			Reason:  "ExternalManagedKubeconfigNotCreated",
-		})
-		if errStatus != nil {
+		if errStatus := helpers.UpdateManagedClusterStatus(r.clientHolder.RuntimeClient, r.recorder, managedClusterName,
+			metav1.Condition{
+				Type:   "ExternalManagedKubeconfigCreatedSucceeded",
+				Status: metav1.ConditionFalse,
+				Message: fmt.Sprintf("Unable to create external managed kubeconfig for %s: %s",
+					managedCluster.Name, err.Error()),
+				Reason: "ExternalManagedKubeconfigNotCreated",
+			}); errStatus != nil {
 			return reconcile.Result{}, errStatus
 		}
 
-		errRetry := helpers.UpdateAutoImportRetryTimes(ctx, r.clientHolder.KubeClient, r.recorder, autoImportSecret.DeepCopy())
-		return reconcile.Result{}, utilerrors.NewAggregate([]error{err, errRetry})
+		return reconcile.Result{}, err
 	}
 
 	// TODO: should check the manifest work status to determine this status
-	err = helpers.UpdateManagedClusterStatus(r.clientHolder.RuntimeClient, r.recorder, managedClusterName, metav1.Condition{
-		Type:    "ExternalManagedKubeconfigCreatedSucceeded",
-		Status:  metav1.ConditionTrue,
-		Message: "Created succeeded",
-		Reason:  "ExternalManagedKubeconfigCreated",
-	})
+	err = helpers.UpdateManagedClusterStatus(r.clientHolder.RuntimeClient, r.recorder, managedClusterName,
+		metav1.Condition{
+			Type:    "ExternalManagedKubeconfigCreatedSucceeded",
+			Status:  metav1.ConditionTrue,
+			Message: "Created succeeded",
+			Reason:  "ExternalManagedKubeconfigCreated",
+		})
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
 	reqLogger.Info(fmt.Sprintf("External managed kubeconfig is created, try to delete its auto import secret %s/%s",
 		autoImportSecret.Namespace, autoImportSecret.Name))
-	return reconcile.Result{}, helpers.DeleteAutoImportSecret(ctx, r.clientHolder.KubeClient, autoImportSecret, r.recorder)
+	return reconcile.Result{},
+		helpers.DeleteAutoImportSecret(ctx, r.clientHolder.KubeClient, autoImportSecret, r.recorder)
 }
 
 func klusterletNamespace(managedCluster string) string {
@@ -226,7 +229,8 @@ func (r *ReconcileHosted) deleteManifestWorks(ctx context.Context, cluster *clus
 	works, hostedWorks []workv1.ManifestWork) error {
 	if helpers.IsClusterUnavailable(cluster) {
 		// the managed cluster is offline, force delete all manifest works
-		return helpers.ForceDeleteAllManifestWorks(ctx, r.clientHolder.WorkClient, r.recorder, append(works, hostedWorks...))
+		return helpers.ForceDeleteAllManifestWorks(ctx,
+			r.clientHolder.WorkClient, r.recorder, append(works, hostedWorks...))
 	}
 
 	// delete works that do not include klusterlet works and klusterlet addon works, the addon works were removed
@@ -242,7 +246,8 @@ func (r *ReconcileHosted) deleteManifestWorks(ctx context.Context, cluster *clus
 		}
 		return true
 	}
-	err := helpers.DeleteManifestWorkWithSelector(ctx, r.clientHolder.WorkClient, r.recorder, cluster, works, ignoreAddons)
+	err := helpers.DeleteManifestWorkWithSelector(ctx,
+		r.clientHolder.WorkClient, r.recorder, cluster, works, ignoreAddons)
 	if err != nil {
 		return err
 	}

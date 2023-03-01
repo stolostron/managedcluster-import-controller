@@ -14,9 +14,13 @@ const (
 	// AutoImportRetryName is the secret data key of auto import retry
 	AutoImportRetryName string = "autoImportRetry"
 
-	// AnnotationAutoImportCurrentRetry is the annotation key of auto import secret used for indicate
+	// AnnotationAutoImportCurrentRetry is the annotation key of auto import secret used to indicate
 	// the current retry times of auto importing a managed cluster
-	AnnotationAutoImportCurrentRetry = "import.open-cluster-management.io/current-retry"
+	AnnotationAutoImportCurrentRetry = "managedcluster-import-controller.open-cluster-management.io/current-retry"
+
+	// AnnotationKeepingAutoImportSecret is the annotation key of auto import secret used to indicate
+	// keeping this secret after the cluster is imported successfully
+	AnnotationKeepingAutoImportSecret = "managedcluster-import-controller.open-cluster-management.io/keeping-auto-import-secret"
 )
 
 const PodNamespaceEnvVarName = "POD_NAMESPACE"

@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/apimachinery/pkg/util/wait"
 
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 )
 
@@ -117,7 +118,7 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 			secret, err := util.NewAutoImportSecret(hubKubeClient, managedClusterName)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
-			secret.Annotations = map[string]string{"managedcluster-import-controller.open-cluster-management.io/keeping-auto-import-secret": ""}
+			secret.Annotations = map[string]string{constants.AnnotationKeepingAutoImportSecret: ""}
 
 			_, err = hubKubeClient.CoreV1().Secrets(managedClusterName).Create(context.TODO(), secret, metav1.CreateOptions{})
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
