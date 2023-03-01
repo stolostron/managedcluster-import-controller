@@ -213,16 +213,16 @@ func TestReconcile(t *testing.T) {
 				workInformer.GetStore().Add(work)
 			}
 
-			r := &ReconcileClusterDeployment{
-				client:     fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).Build(),
-				kubeClient: kubeClient,
-				informerHolder: &source.InformerHolder{
+			r := NewReconcileClusterDeployment(
+				fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).Build(),
+				kubeClient,
+				&source.InformerHolder{
 					AutoImportSecretLister: kubeInformerFactory.Core().V1().Secrets().Lister(),
 					ImportSecretLister:     kubeInformerFactory.Core().V1().Secrets().Lister(),
 					KlusterletWorkLister:   workInformerFactory.Work().V1().ManifestWorks().Lister(),
 				},
-				recorder: eventstesting.NewTestingEventRecorder(t),
-			}
+				eventstesting.NewTestingEventRecorder(t),
+			)
 
 			_, err := r.Reconcile(context.TODO(), reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}})
 			if c.expectedErr && err == nil {

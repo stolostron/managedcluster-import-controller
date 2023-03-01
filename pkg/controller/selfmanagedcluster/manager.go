@@ -30,12 +30,12 @@ const controllerName = "selfmanagedcluster-controller"
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder *source.InformerHolder) (string, error) {
 	c, err := controller.New(controllerName, mgr, controller.Options{
-		Reconciler: &ReconcileLocalCluster{
-			clientHolder:   clientHolder,
-			restMapper:     mgr.GetRESTMapper(),
-			informerHolder: informerHolder,
-			recorder:       helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
-		},
+		Reconciler: NewReconcileLocalCluster(
+			clientHolder,
+			informerHolder,
+			mgr.GetRESTMapper(),
+			helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
+		),
 		MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
 	})
 	if err != nil {

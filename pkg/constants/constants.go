@@ -21,6 +21,9 @@ const (
 	// AnnotationKeepingAutoImportSecret is the annotation key of auto import secret used to indicate
 	// keeping this secret after the cluster is imported successfully
 	AnnotationKeepingAutoImportSecret = "managedcluster-import-controller.open-cluster-management.io/keeping-auto-import-secret"
+
+	// LabelAutoImportRestore is the label key of auto import secret used for backup restore case
+	LabelAutoImportRestore = "cluster.open-cluster-management.io/restore-auto-import-secret"
 )
 
 const PodNamespaceEnvVarName = "POD_NAMESPACE"
@@ -109,7 +112,8 @@ const (
 	ConditionReasonAutoImportSecretInvalid        = "AutoImportSecretInvalid"
 	ConditionReasonImportSecretNotReady           = "ImportSecretNotFound"
 	ConditionReasonKlusterletManifestWorkNotReady = "KlusterletManifestWorkNotFound"
-	ConditionReasonImporting                      = "ManagedClusterImporting"
-	ConditionReasonKlusterletNotAvailable         = "KlusterletNotAvailable"
+	ConditionReasonApplyResourcesFailed           = "ApplyResourcesFailed"
+	ConditionReasonManagedClusterImporting        = "ManagedClusterImporting"
+	ConditionReasonManagedClusterImportFailed     = "ManagedClusterNotImported"
 	ConditionReasonManagedClusterImported         = "ManagedClusterImported"
 )

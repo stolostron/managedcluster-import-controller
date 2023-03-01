@@ -5,7 +5,6 @@ package clusterdeployment
 
 import (
 	"context"
-	"fmt"
 
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
@@ -19,9 +18,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/kubernetes"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,6 +35,23 @@ type ReconcileClusterDeployment struct {
 	kubeClient     kubernetes.Interface
 	informerHolder *source.InformerHolder
 	recorder       events.Recorder
+	importHelper   *helpers.ImportHelper
+}
+
+func NewReconcileClusterDeployment(
+	client client.Client,
+	kubeClient kubernetes.Interface,
+	informerHolder *source.InformerHolder,
+	recorder events.Recorder,
+) *ReconcileClusterDeployment {
+
+	return &ReconcileClusterDeployment{
+		client:         client,
+		kubeClient:     kubeClient,
+		informerHolder: informerHolder,
+		recorder:       recorder,
+		importHelper:   helpers.NewImportHelper(informerHolder, recorder, log),
+	}
 }
 
 // blank assignment to verify that ReconcileClusterDeployment implements reconcile.Reconciler
@@ -47,7 +61,9 @@ var _ reconcile.Reconciler = &ReconcileClusterDeployment{}
 //
 // Note: The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
-func (r *ReconcileClusterDeployment) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+func (r *ReconcileClusterDeployment) Reconcile(
+	ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
+
 	reqLogger := log.WithValues("Request.Name", request.Name)
 
 	clusterName := request.Name
@@ -65,8 +81,9 @@ func (r *ReconcileClusterDeployment) Reconcile(ctx context.Context, request reco
 
 	if !clusterDeployment.DeletionTimestamp.IsZero() {
 		// We do not set this finalizer anymore, but we still need to remove it for backward compatible
-		// the clusterdeployment is deleting, its managed cluster may already be detached (the managed cluster has been deleted,
-		// but the namespace is remained), if it has import finalizer, we remove its namespace
+		// the clusterdeployment is deleting, its managed cluster may already be detached (the managed
+		// cluster has been deleted, but the namespace is remained), if it has import finalizer, we
+		// remove its namespace
 		return reconcile.Result{}, r.removeImportFinalizer(ctx, clusterDeployment)
 	}
 
@@ -80,15 +97,25 @@ func (r *ReconcileClusterDeployment) Reconcile(ctx context.Context, request reco
 		return reconcile.Result{}, err
 	}
 
+	if !managedCluster.DeletionTimestamp.IsZero() {
+		return reconcile.Result{}, nil
+	}
+
+	if helpers.ClusterNotNeedToApplyImportResources(managedCluster) {
+		// This check is to prevent the current controller and import status controller from modifying
+		// the ManagedClusterImportSucceeded condition of the managed cluster in a loop
+		return reconcile.Result{}, nil
+	}
+
 	if !clusterDeployment.Spec.Installed {
 		// cluster deployment is not installed yet, do nothing
-		reqLogger.Info(fmt.Sprintf("The hive managed cluster %s is not installed, skipped", clusterName))
+		reqLogger.Info("The hive managed cluster is not installed, skipped", "managedcluster", clusterName)
 		return reconcile.Result{}, nil
 	}
 
 	if clusterDeployment.Spec.ClusterPoolRef != nil && clusterDeployment.Spec.ClusterPoolRef.ClaimedTimestamp.IsZero() {
 		// cluster deployment is not claimed yet, do nothing
-		reqLogger.Info(fmt.Sprintf("The hive managed cluster %s is not claimed, skipped", clusterName))
+		reqLogger.Info("The hive managed cluster is not claimed, skipped", "managedcluster", clusterName)
 		return reconcile.Result{}, nil
 	}
 
@@ -97,10 +124,11 @@ func (r *ReconcileClusterDeployment) Reconcile(ctx context.Context, request reco
 		return reconcile.Result{}, err
 	}
 
-	// if there is an auto import secret in the managed cluster namespce, we will use the auto import secret to import the cluster
+	// if there is an auto import secret in the managed cluster namespace, we will use the auto import secret
+	// to import the cluster
 	_, err = r.informerHolder.AutoImportSecretLister.Secrets(clusterName).Get(constants.AutoImportSecretName)
 	if err == nil {
-		reqLogger.Info(fmt.Sprintf("The hive managed cluster %s has auto import secret, skipped", clusterName))
+		reqLogger.Info("The hive managed cluster has auto import secret, skipped", "managedcluster", clusterName)
 		return reconcile.Result{}, nil
 	}
 	if !errors.IsNotFound(err) {
@@ -112,53 +140,18 @@ func (r *ReconcileClusterDeployment) Reconcile(ctx context.Context, request reco
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	hiveClient, restMapper, err := helpers.GenerateClientFromSecret(hiveSecret)
-	if err != nil {
+
+	result, condition, _, err := r.importHelper.Import(false, clusterName, hiveSecret, 0, 1)
+	if err := helpers.UpdateManagedClusterStatus(
+		r.client,
+		r.recorder,
+		clusterName,
+		condition,
+	); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	importSecretName := fmt.Sprintf("%s-%s", clusterName, constants.ImportSecretNameSuffix)
-	importSecret, err := r.informerHolder.ImportSecretLister.Secrets(clusterName).Get(importSecretName)
-	if errors.IsNotFound(err) {
-		return reconcile.Result{}, nil
-	}
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// ensure the klusterlet manifest works exist
-	workSelector := labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: "true"})
-	manifestWorks, err := r.informerHolder.KlusterletWorkLister.ManifestWorks(clusterName).List(workSelector)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-	if len(manifestWorks) != 2 {
-		reqLogger.Info(fmt.Sprintf("Waiting for klusterlet manifest works for managed cluster %s", clusterName))
-		return reconcile.Result{}, nil
-	}
-
-	importCondition := metav1.Condition{
-		Type:    "ManagedClusterImportSucceeded",
-		Status:  metav1.ConditionTrue,
-		Message: "Import succeeded",
-		Reason:  "ManagedClusterImported",
-	}
-
-	errs := []error{}
-	err = helpers.ImportManagedClusterFromSecret(hiveClient, restMapper, r.recorder, importSecret)
-	if err != nil {
-		errs = append(errs, err)
-
-		importCondition.Status = metav1.ConditionFalse
-		importCondition.Message = fmt.Sprintf("Unable to import %s: %s", clusterName, err.Error())
-		importCondition.Reason = "ManagedClusterNotImported"
-	}
-
-	if err := helpers.UpdateManagedClusterStatus(r.client, r.recorder, clusterName, importCondition); err != nil {
-		errs = append(errs, err)
-	}
-
-	return reconcile.Result{}, utilerrors.NewAggregate(errs)
+	return result, err
 }
 
 func (r *ReconcileClusterDeployment) setCreatedViaAnnotation(
@@ -173,9 +166,11 @@ func (r *ReconcileClusterDeployment) setCreatedViaAnnotation(
 
 	modified := resourcemerge.BoolPtr(false)
 	if clusterDeployment.Spec.Platform.AgentBareMetal != nil {
-		resourcemerge.MergeMap(modified, &cluster.Annotations, map[string]string{constants.CreatedViaAnnotation: constants.CreatedViaAI})
+		resourcemerge.MergeMap(modified,
+			&cluster.Annotations, map[string]string{constants.CreatedViaAnnotation: constants.CreatedViaAI})
 	} else {
-		resourcemerge.MergeMap(modified, &cluster.Annotations, map[string]string{constants.CreatedViaAnnotation: constants.CreatedViaHive})
+		resourcemerge.MergeMap(modified,
+			&cluster.Annotations, map[string]string{constants.CreatedViaAnnotation: constants.CreatedViaHive})
 	}
 
 	if !*modified {
@@ -194,7 +189,9 @@ func (r *ReconcileClusterDeployment) setCreatedViaAnnotation(
 	return nil
 }
 
-func (r *ReconcileClusterDeployment) removeImportFinalizer(ctx context.Context, clusterDeployment *hivev1.ClusterDeployment) error {
+func (r *ReconcileClusterDeployment) removeImportFinalizer(
+	ctx context.Context, clusterDeployment *hivev1.ClusterDeployment) error {
+
 	hasImportFinalizer := false
 
 	for _, finalizer := range clusterDeployment.Finalizers {
@@ -206,13 +203,15 @@ func (r *ReconcileClusterDeployment) removeImportFinalizer(ctx context.Context, 
 
 	if !hasImportFinalizer {
 		// the clusterdeployment does not have import finalizer, ignore it
-		log.Info(fmt.Sprintf("the clusterDeployment %s does not have import finalizer, skip it", clusterDeployment.Name))
+		log.Info("the clusterDeployment does not have import finalizer, skip it",
+			"clusterDeployment", clusterDeployment.Name)
 		return nil
 	}
 
 	if len(clusterDeployment.Finalizers) != 1 {
 		// the clusterdeployment has other finalizers, wait hive to remove them
-		log.Info(fmt.Sprintf("wait hive to remove the finalizers from the clusterdeployment %s", clusterDeployment.Name))
+		log.Info("wait hive to remove the finalizers from the clusterdeployment",
+			"clusterdeployment", clusterDeployment.Name)
 		return nil
 	}
 

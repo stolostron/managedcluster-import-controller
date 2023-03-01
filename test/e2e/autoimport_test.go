@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/rand"
 	"k8s.io/apimachinery/pkg/util/wait"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
@@ -171,8 +172,34 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 			secret, err := util.NewRestoreAutoImportSecret(hubKubeClient, hubDynamicClient, managedClusterName)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
-			_, err = hubKubeClient.CoreV1().Secrets(managedClusterName).Create(context.TODO(), secret, metav1.CreateOptions{})
+			_, err = hubKubeClient.CoreV1().Secrets(managedClusterName).Create(
+				context.TODO(), secret, metav1.CreateOptions{})
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		})
+
+		ginkgo.By(fmt.Sprintf("Set managed cluster %s available condition to false", managedClusterName), func() {
+			gomega.Eventually(func() bool {
+				cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(
+					context.TODO(), managedClusterName, metav1.GetOptions{})
+				if err != nil {
+					util.Logf("failed to get cluster %v", err)
+					return false
+				}
+
+				meta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
+					Type:   clusterv1.ManagedClusterConditionAvailable,
+					Status: metav1.ConditionFalse,
+					Reason: "BackupRestoreTest",
+				})
+
+				_, err = hubClusterClient.ClusterV1().ManagedClusters().UpdateStatus(
+					context.TODO(), cluster, metav1.UpdateOptions{})
+				if err != nil {
+					util.Logf("failed to update available condition of the cluster %v", err)
+					return false
+				}
+				return true
+			}, time.Second*30, time.Second*1).Should(gomega.BeTrue())
 		})
 
 		// make sure no errors happened

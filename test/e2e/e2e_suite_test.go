@@ -439,7 +439,9 @@ func assertManagedClusterImportSecretApplied(clusterName string, mode ...string)
 			if len(mode) != 0 && mode[0] == constants.KlusterletDeployModeHosted {
 				return meta.IsStatusConditionTrue(cluster.Status.Conditions, "ExternalManagedKubeconfigCreatedSucceeded"), nil
 			}
-			return meta.IsStatusConditionTrue(cluster.Status.Conditions, "ManagedClusterImportSucceeded"), nil
+			condition := meta.FindStatusCondition(
+				cluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+			return condition != nil && condition.Reason == constants.ConditionReasonManagedClusterImporting, nil
 		})).ToNot(gomega.HaveOccurred())
 	})
 }
