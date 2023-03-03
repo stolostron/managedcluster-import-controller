@@ -16,18 +16,12 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/kubernetes"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 )
-
-func ClusterNotNeedToApplyImportResources(mc *clusterv1.ManagedCluster) bool {
-	return meta.IsStatusConditionTrue(mc.Status.Conditions, constants.ConditionManagedClusterImportSucceeded) &&
-		meta.IsStatusConditionTrue(mc.Status.Conditions, clusterv1.ManagedClusterConditionAvailable)
-}
 
 // DeleteAutoImportSecret delete the auto-import-secret if the secret does not have the keeping annotation
 func DeleteAutoImportSecret(ctx context.Context, kubeClient kubernetes.Interface,
@@ -73,7 +67,7 @@ func ContainAuthError(err error) bool {
 
 // ApplyResourcesFunc is a function to apply resources to the manged cluster to import it to the hub
 type ApplyResourcesFunc func(backupRestore bool, client *ClientHolder, restMapper meta.RESTMapper,
-	recorder events.Recorder, importSecret *corev1.Secret) error
+	recorder events.Recorder, importSecret *corev1.Secret) (bool, error)
 
 // GenerateClientHolderFunc is a function to generate the managed cluster client holder which is
 // used to import cluster(apply resources to the managed cluster)
@@ -107,12 +101,12 @@ func NewImportHelper(informerHolder *source.InformerHolder,
 		log:            log,
 
 		generateClientHolderFunc: GenerateClientFromSecret,
-		applyResourcesFunc:       defaultapplyResourcesFunc,
+		applyResourcesFunc:       defaultApplyResourcesFunc,
 	}
 }
 
-func defaultapplyResourcesFunc(backupRestore bool,
-	client *ClientHolder, restMapper meta.RESTMapper, recorder events.Recorder, importSecret *corev1.Secret) error {
+func defaultApplyResourcesFunc(backupRestore bool, client *ClientHolder,
+	restMapper meta.RESTMapper, recorder events.Recorder, importSecret *corev1.Secret) (bool, error) {
 	if backupRestore {
 		// only update the bootstrap secret on the managed cluster with the auto-import-secret
 		return UpdateManagedClusterBootstrapSecret(client, importSecret, recorder)
@@ -125,39 +119,10 @@ func defaultapplyResourcesFunc(backupRestore bool,
 // apply
 func (i *ImportHelper) Import(backupRestore bool, clusterName string,
 	managedClusterKubeClientSecret *corev1.Secret, lastRetry, totalRetry int) (
-	reconcile.Result, metav1.Condition, int, error) {
+	reconcile.Result, metav1.Condition, bool, int, error) {
 
 	reqLogger := i.log.WithValues("Request.Name", clusterName)
 	currentRetry := lastRetry
-
-	clientHolder, restMapper, err := i.generateClientHolderFunc(managedClusterKubeClientSecret)
-	if err != nil {
-		return reconcile.Result{},
-			NewManagedClusterImportSucceededCondition(
-				metav1.ConditionFalse,
-				constants.ConditionReasonAutoImportSecretInvalid,
-				fmt.Sprintf("Try to import managed cluster, generate kube client by secret error: %v", err),
-			), currentRetry, err
-	}
-
-	importSecretName := fmt.Sprintf("%s-%s", clusterName, constants.ImportSecretNameSuffix)
-	importSecret, err := i.informerHolder.ImportSecretLister.Secrets(clusterName).Get(importSecretName)
-	if errors.IsNotFound(err) {
-		return reconcile.Result{},
-			NewManagedClusterImportSucceededCondition(
-				metav1.ConditionFalse,
-				constants.ConditionReasonImportSecretNotReady,
-				"Import secret does not exist",
-			), currentRetry, nil
-	}
-	if err != nil {
-		return reconcile.Result{},
-			NewManagedClusterImportSucceededCondition(
-				metav1.ConditionFalse,
-				constants.ConditionReasonImportSecretNotReady,
-				fmt.Sprintf("Get import secret failed: %v", err),
-			), currentRetry, err
-	}
 
 	// ensure the klusterlet manifest works exist
 	workSelector := labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: "true"})
@@ -166,55 +131,97 @@ func (i *ImportHelper) Import(backupRestore bool, clusterName string,
 		return reconcile.Result{},
 			NewManagedClusterImportSucceededCondition(
 				metav1.ConditionFalse,
-				constants.ConditionReasonKlusterletManifestWorkNotReady,
-				fmt.Sprintf("Get klusterlet manifestwork failed: %v", err),
-			), currentRetry, err
+				constants.ConditionReasonManagedClusterImporting,
+				fmt.Sprintf("Get klusterlet manifestwork failed: %v. Will retry", err),
+			), false, currentRetry, err
 	}
 	if len(manifestWorks) != 2 {
 		reqLogger.Info(fmt.Sprintf("Waiting for klusterlet manifest works for managed cluster %s", clusterName))
+		return reconcile.Result{RequeueAfter: 3 * time.Second},
+			NewManagedClusterImportSucceededCondition(
+				metav1.ConditionFalse,
+				constants.ConditionReasonManagedClusterImporting,
+				fmt.Sprintf("Expect 2 manifestworks, but got %v. Will retry", len(manifestWorks)),
+			), false, currentRetry, nil
+	}
+
+	clientHolder, restMapper, err := i.generateClientHolderFunc(managedClusterKubeClientSecret)
+	if err != nil {
 		return reconcile.Result{},
 			NewManagedClusterImportSucceededCondition(
 				metav1.ConditionFalse,
-				constants.ConditionReasonKlusterletManifestWorkNotReady,
-				fmt.Sprintf("Expect 2 manifestwork, but got %v", len(manifestWorks)),
-			), currentRetry, nil
+				constants.ConditionReasonManagedClusterImportFailed,
+				fmt.Sprintf("AutoImportSecretInvalid %s/%s; generate kube client by secret error: %v",
+					managedClusterKubeClientSecret.Namespace, managedClusterKubeClientSecret.Name, err),
+			), false, currentRetry, nil
+	}
+
+	importSecretName := fmt.Sprintf("%s-%s", clusterName, constants.ImportSecretNameSuffix)
+	importSecret, err := i.informerHolder.ImportSecretLister.Secrets(clusterName).Get(importSecretName)
+	if errors.IsNotFound(err) {
+		return reconcile.Result{},
+			NewManagedClusterImportSucceededCondition(
+				metav1.ConditionFalse,
+				constants.ConditionReasonManagedClusterImporting,
+				"Wait for import secret",
+			), false, currentRetry, nil
+	}
+	if err != nil {
+		return reconcile.Result{},
+			NewManagedClusterImportSucceededCondition(
+				metav1.ConditionFalse,
+				constants.ConditionReasonManagedClusterImporting,
+				fmt.Sprintf("Get import secret failed: %v. Will retry", err),
+			), false, currentRetry, err
 	}
 
 	currentRetry++
-	err = i.applyResourcesFunc(backupRestore, clientHolder, restMapper, i.recorder, importSecret)
+	modified, err := i.applyResourcesFunc(backupRestore, clientHolder, restMapper, i.recorder, importSecret)
 	if err != nil {
-		if ContainAuthError(err) {
-			// return an invalid auto import secret reason so that the user knows that
-			// a correct secret needs to be re-provided
-			return reconcile.Result{RequeueAfter: 10 * time.Second},
-				NewManagedClusterImportSucceededCondition(
-					metav1.ConditionFalse,
-					constants.ConditionReasonAutoImportSecretInvalid,
-					fmt.Sprintf("Try to import managed cluster, retry times: %d/%d, error: %v",
-						currentRetry, totalRetry, err),
-				), currentRetry, err
-		}
-
-		// maybe some network issue, retry after 10 second
 		condition := NewManagedClusterImportSucceededCondition(
 			metav1.ConditionFalse,
-			constants.ConditionReasonApplyResourcesFailed,
+			constants.ConditionReasonManagedClusterImportFailed,
 			fmt.Sprintf("Try to import managed cluster, retry times: %d/%d, error: %v",
 				currentRetry, totalRetry, err),
 		)
-		if currentRetry >= totalRetry {
-			// stop retrying
-			condition.Reason = constants.ConditionReasonManagedClusterImportFailed
-			return reconcile.Result{}, condition, currentRetry, nil
+
+		if ContainAuthError(err) {
+			// return message reflects the auto import secret is invalid, so the user knows that
+			// a correct secret needs to be re-provided
+			condition.Message = fmt.Sprintf(
+				"AutoImportSecretInvalid %s/%s; please check its permission, apply resources error: %v",
+				managedClusterKubeClientSecret.Namespace, managedClusterKubeClientSecret.Name, err)
+			return reconcile.Result{}, condition, modified, currentRetry, nil
 		}
-		return reconcile.Result{RequeueAfter: 10 * time.Second},
-			condition, currentRetry, nil
+
+		if currentRetry < totalRetry {
+			// maybe some network issue, retry after 10 second
+			condition.Reason = constants.ConditionReasonManagedClusterImporting
+			return reconcile.Result{RequeueAfter: 10 * time.Second},
+				condition, modified, currentRetry, nil
+		}
+
+		return reconcile.Result{},
+			condition, modified, currentRetry, nil
 	}
 
 	return reconcile.Result{},
 		NewManagedClusterImportSucceededCondition(
 			metav1.ConditionFalse,
 			constants.ConditionReasonManagedClusterImporting,
-			fmt.Sprintf("Try to import managed cluster, retry times: %d/%d", currentRetry, totalRetry),
-		), currentRetry, nil
+			conditionMessageImportingResourcesApplied,
+		), modified, currentRetry, nil
+}
+
+const (
+	conditionMessageImportingResourcesApplied = "Importing resources are applied, wait for resources be available"
+)
+
+func ImportingResourcesApplied(condition *metav1.Condition) bool {
+	if condition != nil && condition.Type == constants.ConditionManagedClusterImportSucceeded &&
+		condition.Reason == constants.ConditionReasonManagedClusterImporting &&
+		condition.Message == conditionMessageImportingResourcesApplied {
+		return true
+	}
+	return false
 }

@@ -150,7 +150,26 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			works:   []runtime.Object{},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "local-cluster-klusterlet-crds",
+						Namespace: "local-cluster",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "local-cluster-klusterlet",
+						Namespace: "local-cluster",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
 			secrets: []runtime.Object{},
 			validateFunc: func(t *testing.T, runtimeClient client.Client) {
 				cluster := &clusterv1.ManagedCluster{}
@@ -161,7 +180,7 @@ func TestReconcile(t *testing.T) {
 				condition := meta.FindStatusCondition(
 					cluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
 				if condition == nil || condition.Status != metav1.ConditionFalse ||
-					condition.Reason != constants.ConditionReasonImportSecretNotReady {
+					condition.Reason != constants.ConditionReasonManagedClusterImporting {
 					t.Errorf("unexpected condition")
 				}
 			},

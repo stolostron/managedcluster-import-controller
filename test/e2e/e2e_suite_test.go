@@ -425,23 +425,28 @@ func assertHostedManagedClusterDeletedFromSpoke(cluster, managementCluster strin
 func assertManagedClusterImportSecretApplied(clusterName string, mode ...string) {
 	start := time.Now()
 	defer func() {
-		util.Logf("assert managed cluster %s import secret applied spending time: %.2f seconds", clusterName, time.Since(start).Seconds())
+		util.Logf("assert managed cluster %s import secret applied spending time: %.2f seconds",
+			clusterName, time.Since(start).Seconds())
 	}()
 	ginkgo.By(fmt.Sprintf("Managed cluster %s should be imported", clusterName), func() {
 		gomega.Expect(wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
-			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
+			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(
+				context.TODO(), clusterName, metav1.GetOptions{})
 			if err != nil {
 				util.Logf("assert managed cluster %s import secret applied get cluster error: %v", clusterName, err)
 				return false, err
 			}
 
-			util.Logf("assert managed cluster %s import secret applied cluster conditions: %v", clusterName, cluster.Status.Conditions)
+			util.Logf("assert managed cluster %s import secret applied cluster conditions: %v",
+				clusterName, cluster.Status.Conditions)
 			if len(mode) != 0 && mode[0] == constants.KlusterletDeployModeHosted {
-				return meta.IsStatusConditionTrue(cluster.Status.Conditions, "ExternalManagedKubeconfigCreatedSucceeded"), nil
+				return meta.IsStatusConditionTrue(
+					cluster.Status.Conditions, "ExternalManagedKubeconfigCreatedSucceeded"), nil
 			}
 			condition := meta.FindStatusCondition(
 				cluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
-			return condition != nil && condition.Reason == constants.ConditionReasonManagedClusterImporting, nil
+			return helpers.ImportingResourcesApplied(condition) ||
+				(condition != nil && condition.Status == metav1.ConditionTrue), nil
 		})).ToNot(gomega.HaveOccurred())
 	})
 }

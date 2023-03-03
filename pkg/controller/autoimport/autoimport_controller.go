@@ -81,12 +81,6 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, nil
 	}
 
-	if helpers.ClusterNotNeedToApplyImportResources(managedCluster) {
-		// This check is to prevent the current controller and import status controller from modifying
-		// the ManagedClusterImportSucceeded condition of the managed cluster in a loop
-		return reconcile.Result{}, nil
-	}
-
 	autoImportSecret, err := r.informerHolder.AutoImportSecretLister.Secrets(managedClusterName).Get(constants.AutoImportSecretName)
 	if errors.IsNotFound(err) {
 		// the auto import secret could have been deleted, do nothing
@@ -118,8 +112,9 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 				managedClusterName,
 				helpers.NewManagedClusterImportSucceededCondition(
 					metav1.ConditionFalse,
-					constants.ConditionReasonAutoImportSecretInvalid,
-					fmt.Sprintf("Invalid value of %s", constants.AutoImportRetryName),
+					constants.ConditionReasonManagedClusterImportFailed,
+					fmt.Sprintf("AutoImportSecretInvalid %s/%s; please check the value %s",
+						autoImportSecret.Namespace, autoImportSecret.Name, constants.AutoImportRetryName),
 				),
 			); err != nil {
 				return reconcile.Result{}, err
@@ -134,22 +129,35 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		backupRestore = true
 	}
 
-	result, condition, currentRetry, iErr := r.importHelper.Import(backupRestore, managedClusterName, autoImportSecret,
-		lastRetry, totalRetry)
-	if err := helpers.UpdateManagedClusterStatus(
-		r.client,
-		r.recorder,
-		managedClusterName,
-		condition,
-	); err != nil {
-		return reconcile.Result{}, err
+	result, condition, modified, currentRetry, iErr := r.importHelper.Import(
+		backupRestore, managedClusterName, autoImportSecret, lastRetry, totalRetry)
+	// if resources are applied but NOT modified, will not update the condition, keep the original condition.
+	// This check is to prevent the current controller and import status controller from modifying the
+	// ManagedClusterImportSucceeded condition of the managed cluster in a loop
+	if !helpers.ImportingResourcesApplied(&condition) || modified {
+		if err := helpers.UpdateManagedClusterStatus(
+			r.client,
+			r.recorder,
+			managedClusterName,
+			condition,
+		); err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 
 	reqLogger.V(5).Info("Import result", "importError", iErr, "condition", condition,
-		"current", currentRetry, "result", result)
+		"current", currentRetry, "result", result, "modified", modified)
 
-	if condition.Reason != constants.ConditionReasonManagedClusterImporting &&
-		lastRetry < currentRetry && currentRetry < totalRetry {
+	if condition.Reason == constants.ConditionReasonManagedClusterImportFailed ||
+		helpers.ImportingResourcesApplied(&condition) {
+		// delete secret
+		if err := helpers.DeleteAutoImportSecret(ctx, r.kubeClient, autoImportSecret, r.recorder); err != nil {
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{}, nil
+	}
+
+	if lastRetry < currentRetry && currentRetry < totalRetry {
 		// update secret
 		if autoImportSecret.Annotations == nil {
 			autoImportSecret.Annotations = make(map[string]string)
@@ -163,27 +171,5 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		}
 	}
 
-	if iErr == nil {
-		if condition.Reason == constants.ConditionReasonManagedClusterImporting {
-			reqLogger.Info("Managed cluster is importing, try to delete its auto import secret",
-				"secretNamespace", autoImportSecret.Namespace, "secretName", autoImportSecret.Name)
-			// delete secret
-			if err := helpers.DeleteAutoImportSecret(ctx, r.kubeClient, autoImportSecret, r.recorder); err != nil {
-				return reconcile.Result{}, err
-			}
-		}
-
-		return result, nil
-	}
-
-	if currentRetry >= totalRetry {
-		r.recorder.Eventf("RetryTimesExceeded",
-			fmt.Sprintf("Exceed the retry times, delete the auto import secret %s/%s",
-				managedClusterName, autoImportSecret.Name))
-		// delete secret
-		if err := helpers.DeleteAutoImportSecret(ctx, r.kubeClient, autoImportSecret, r.recorder); err != nil {
-			return reconcile.Result{}, err
-		}
-	}
 	return result, iErr
 }

@@ -145,7 +145,7 @@ func TestReconcile(t *testing.T) {
 			},
 			expectedErr:             false,
 			expectedConditionStatus: metav1.ConditionFalse,
-			expectedConditionReason: constants.ConditionReasonAutoImportSecretInvalid,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
 		},
 		{
 			name: "auto-import-secret current retry annotation invalid",
@@ -172,33 +172,6 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			expectedErr: true,
-		},
-		{
-			name: "no import-secret",
-			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: managedClusterName,
-					},
-				},
-			},
-			works: []runtime.Object{},
-			secrets: []runtime.Object{
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "auto-import-secret",
-						Namespace: managedClusterName,
-					},
-					Data: map[string][]byte{
-						"autoImportRetry": []byte("2"),
-						"token":           []byte(config.BearerToken),
-						"server":          []byte(config.Host),
-					},
-				},
-			},
-			expectedErr:             false,
-			expectedConditionStatus: metav1.ConditionFalse,
-			expectedConditionReason: constants.ConditionReasonImportSecretNotReady,
 		},
 		{
 			name: "no manifest works",
@@ -229,7 +202,53 @@ func TestReconcile(t *testing.T) {
 			},
 			expectedErr:             false,
 			expectedConditionStatus: metav1.ConditionFalse,
-			expectedConditionReason: constants.ConditionReasonKlusterletManifestWorkNotReady,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
+		},
+		{
+			name: "no import-secret",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: managedClusterName,
+					},
+				},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: managedClusterName,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: managedClusterName,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: managedClusterName,
+					},
+					Data: map[string][]byte{
+						"autoImportRetry": []byte("2"),
+						"token":           []byte(config.BearerToken),
+						"server":          []byte(config.Host),
+					},
+				},
+			},
+			expectedErr:             false,
+			expectedConditionStatus: metav1.ConditionFalse,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
 		},
 		{
 			name: "update auto import secret current retry times",
@@ -269,14 +288,13 @@ func TestReconcile(t *testing.T) {
 					},
 					Data: map[string][]byte{
 						"autoImportRetry": []byte("2"),
-						"token":           []byte(config.BearerToken),
-						"server":          []byte(config.Host),
+						"kubeconfig":      testinghelpers.BuildKubeconfig(config),
 					},
 				},
 			},
-			expectedErr:             true,
+			expectedErr:             false,
 			expectedConditionStatus: metav1.ConditionFalse,
-			expectedConditionReason: constants.ConditionReasonAutoImportSecretInvalid,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
 		},
 		{
 			name: "import cluster with auto-import secret invalid",
@@ -321,9 +339,9 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedErr:             true,
+			expectedErr:             false,
 			expectedConditionStatus: metav1.ConditionFalse,
-			expectedConditionReason: constants.ConditionReasonAutoImportSecretInvalid,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
 		},
 		{
 			name: "only update the bootstrap secret",
@@ -371,9 +389,9 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedErr:             true,
+			expectedErr:             false,
 			expectedConditionStatus: metav1.ConditionFalse,
-			expectedConditionReason: constants.ConditionReasonAutoImportSecretInvalid,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
 		},
 		{
 			name: "only update the bootstrap secret - works unavailable",
@@ -522,10 +540,10 @@ func TestReconcile(t *testing.T) {
 			ctx := context.TODO()
 			_, err := r.Reconcile(ctx, req)
 			if c.expectedErr && err == nil {
-				t.Errorf("expected error, but failed")
+				t.Errorf("name: %v, expected error, but failed", c.name)
 			}
 			if !c.expectedErr && err != nil {
-				t.Errorf("unexpected error: %v", err)
+				t.Errorf("name: %v, unexpected error: %v", c.name, err)
 			}
 
 			if c.expectedConditionReason != "" {
@@ -539,11 +557,11 @@ func TestReconcile(t *testing.T) {
 					managedCluster.Status.Conditions,
 					constants.ConditionManagedClusterImportSucceeded,
 				)
-				if condition.Status != c.expectedConditionStatus {
+				if condition != nil && condition.Status != c.expectedConditionStatus {
 					t.Errorf("name %v : expect condition status %s, got %s",
 						c.name, c.expectedConditionStatus, condition.Status)
 				}
-				if condition.Reason != c.expectedConditionReason {
+				if condition != nil && condition.Reason != c.expectedConditionReason {
 					t.Errorf("name %v : expect condition reason %s, got %s, message: %s",
 						c.name, c.expectedConditionReason, condition.Reason, condition.Message)
 				}

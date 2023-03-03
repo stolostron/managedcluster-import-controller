@@ -59,54 +59,50 @@ func (r *ReconcileImportStatus) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
+	// This controller will only add/update the ImportSucceededCondition condition in following 2 cases:
+	// - Add the condition when it does not exist
+	// - Set the condition status to True when manifestworks are available
+	//
+	// Will NOT change the condition in other situation, otherwise there will be a changing loop on the
+	// condition with other controllers
 	existedCondition := meta.FindStatusCondition(
 		managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
-	if existedCondition == nil || existedCondition.Status != metav1.ConditionFalse ||
-		existedCondition.Reason != constants.ConditionReasonManagedClusterImporting {
-		// Wait for autoimport/clusterdeployment/selfmanaged controller to apply importing resources first
-		return reconcile.Result{}, nil
+	if existedCondition == nil {
+		reqLogger.V(5).Info("Add ImportSucceededCondition with WaitForImporting reason")
+		return reconcile.Result{}, helpers.UpdateManagedClusterStatus(
+			r.client,
+			r.recorder,
+			managedClusterName,
+			helpers.NewManagedClusterImportSucceededCondition(
+				metav1.ConditionFalse,
+				constants.ConditionReasonManagedClusterWaitForImporting,
+				"Wait for importing",
+			),
+		)
 	}
-
-	reqLogger.V(5).Info("Reconciling the klusterlet manifest works to set condition of the managed cluster")
-
-	condition, err := r.checkManifestWorksAvailability(ctx, managedClusterName)
-	reqLogger.V(5).Info("Check manifest works availability", "condition", condition, "error", err)
-	if err := helpers.UpdateManagedClusterStatus(
-		r.client,
-		r.recorder,
-		managedClusterName,
-		condition,
-	); err != nil {
-		return reconcile.Result{}, err
-	}
-
-	return reconcile.Result{}, err
-}
-
-func (r *ReconcileImportStatus) checkManifestWorksAvailability(ctx context.Context, managedClusterName string) (
-	metav1.Condition, error) {
 
 	available, err := helpers.IsManifestWorksAvailable(ctx, r.workClient, managedClusterName,
 		fmt.Sprintf("%s-%s", managedClusterName, constants.KlusterletCRDsSuffix),
 		fmt.Sprintf("%s-%s", managedClusterName, constants.KlusterletSuffix))
 	if err != nil {
-		return helpers.NewManagedClusterImportSucceededCondition(
-			metav1.ConditionFalse,
-			constants.ConditionReasonManagedClusterImporting,
-			fmt.Sprintf("Check klusterlet manifestworks availability failed: %v", err),
-		), err
+		reqLogger.V(5).Info("Check klusterlet manifestworks availability failed", "error", err)
+		return reconcile.Result{}, err
 	}
 	if !available {
-		return helpers.NewManagedClusterImportSucceededCondition(
-			metav1.ConditionFalse,
-			constants.ConditionReasonManagedClusterImporting,
-			"Wait for the klusterlet manifestworks to be available",
-		), nil
+
+		reqLogger.V(5).Info("Klusterlet manifestworks are not available")
+		return reconcile.Result{}, nil
 	}
 
-	return helpers.NewManagedClusterImportSucceededCondition(
-		metav1.ConditionTrue,
-		constants.ConditionReasonManagedClusterImported,
-		"Import succeeded",
-	), nil
+	reqLogger.V(5).Info("Klusterlet manifestworks are available")
+	return reconcile.Result{}, helpers.UpdateManagedClusterStatus(
+		r.client,
+		r.recorder,
+		managedClusterName,
+		helpers.NewManagedClusterImportSucceededCondition(
+			metav1.ConditionTrue,
+			constants.ConditionReasonManagedClusterImported,
+			"Import succeeded",
+		),
+	)
 }

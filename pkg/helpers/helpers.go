@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 	"text/template"
@@ -276,9 +277,9 @@ func ValidateHostedImportSecret(importSecret *corev1.Secret) error {
 
 // ImportManagedClusterFromSecret use managed cluster client to import managed cluster from import-secret
 func ImportManagedClusterFromSecret(client *ClientHolder, restMapper meta.RESTMapper, recorder events.Recorder,
-	importSecret *corev1.Secret) error {
+	importSecret *corev1.Secret) (bool, error) {
 	if err := ValidateImportSecret(importSecret); err != nil {
-		return err
+		return false, err
 	}
 
 	crdsKey := constants.ImportSecretCRDSV1YamlKey
@@ -297,7 +298,9 @@ func ImportManagedClusterFromSecret(client *ClientHolder, restMapper meta.RESTMa
 }
 
 // UpdateManagedClusterBootstrapSecret update the bootstrap secret on the managed cluster
-func UpdateManagedClusterBootstrapSecret(client *ClientHolder, importSecret *corev1.Secret, recorder events.Recorder) error {
+func UpdateManagedClusterBootstrapSecret(client *ClientHolder, importSecret *corev1.Secret,
+	recorder events.Recorder) (bool, error) {
+
 	var obj runtime.Object
 	for _, yaml := range SplitYamls(importSecret.Data[constants.ImportSecretImportYamlKey]) {
 		obj = MustCreateObject(yaml)
@@ -311,7 +314,8 @@ func UpdateManagedClusterBootstrapSecret(client *ClientHolder, importSecret *cor
 		}
 	}
 	if obj == nil {
-		return fmt.Errorf("failed to find bootstrap-hub-kubeconfig in import secret %s/%s", importSecret.Namespace, importSecret.Name)
+		return false, fmt.Errorf("failed to find bootstrap-hub-kubeconfig in import secret %s/%s",
+			importSecret.Namespace, importSecret.Name)
 	}
 	return ApplyResources(client, recorder, nil, nil, obj)
 }
@@ -375,10 +379,11 @@ func ManifestsEqual(newManifests, oldManifests []workv1.Manifest) bool {
 // ApplyResources apply resources, includes: serviceaccount, secret, deployment, clusterrole, clusterrolebinding,
 // crdv1beta1, crdv1, manifestwork and klusterlet
 func ApplyResources(clientHolder *ClientHolder, recorder events.Recorder,
-	scheme *runtime.Scheme, owner metav1.Object, objs ...runtime.Object) error {
+	scheme *runtime.Scheme, owner metav1.Object, objs ...runtime.Object) (bool, error) {
+	changed := false
 	errs := []error{}
 	for _, obj := range objs {
-		if owner != nil {
+		if owner != nil && !reflect.ValueOf(owner).IsNil() {
 			required, ok := obj.(metav1.Object)
 			if !ok {
 				errs = append(errs, fmt.Errorf("%T is not a metav1.Object, cannot call SetControllerReference", obj))
@@ -393,103 +398,130 @@ func ApplyResources(clientHolder *ClientHolder, recorder events.Recorder,
 
 		switch required := obj.(type) {
 		case *corev1.ServiceAccount:
-			_, _, err := resourceapply.ApplyServiceAccount(context.TODO(), clientHolder.KubeClient.CoreV1(), recorder, required)
+			_, modified, err := resourceapply.ApplyServiceAccount(context.TODO(),
+				clientHolder.KubeClient.CoreV1(), recorder, required)
 			errs = append(errs, err)
+			changed = changed || modified
 		case *corev1.Secret:
-			_, _, err := resourceapply.ApplySecret(context.TODO(), clientHolder.KubeClient.CoreV1(), recorder, required)
+			_, modified, err := resourceapply.ApplySecret(context.TODO(),
+				clientHolder.KubeClient.CoreV1(), recorder, required)
 			errs = append(errs, err)
+			changed = changed || modified
 		case *corev1.Namespace:
-			_, _, err := resourceapply.ApplyNamespace(context.TODO(), clientHolder.KubeClient.CoreV1(), recorder, required)
+			_, modified, err := resourceapply.ApplyNamespace(context.TODO(),
+				clientHolder.KubeClient.CoreV1(), recorder, required)
 			errs = append(errs, err)
+			changed = changed || modified
 		case *appsv1.Deployment:
-			errs = append(errs, applyDeployment(clientHolder, recorder, required))
+			modified, err := applyDeployment(clientHolder, recorder, required)
+			errs = append(errs, err)
+			changed = changed || modified
 		case *rbacv1.ClusterRole:
-			_, _, err := resourceapply.ApplyClusterRole(context.TODO(), clientHolder.KubeClient.RbacV1(), recorder, required)
+			_, modified, err := resourceapply.ApplyClusterRole(context.TODO(),
+				clientHolder.KubeClient.RbacV1(), recorder, required)
 			errs = append(errs, err)
+			changed = changed || modified
 		case *rbacv1.ClusterRoleBinding:
-			_, _, err := resourceapply.ApplyClusterRoleBinding(context.TODO(), clientHolder.KubeClient.RbacV1(), recorder, required)
+			_, modified, err := resourceapply.ApplyClusterRoleBinding(context.TODO(),
+				clientHolder.KubeClient.RbacV1(), recorder, required)
 			errs = append(errs, err)
+			changed = changed || modified
 		case *crdv1beta1.CustomResourceDefinition:
-			_, _, err := ApplyCustomResourceDefinitionV1Beta1(
+			_, modified, err := ApplyCustomResourceDefinitionV1Beta1(
 				clientHolder.APIExtensionsClient.ApiextensionsV1beta1(),
 				recorder,
 				required,
 			)
 			errs = append(errs, err)
+			changed = changed || modified
 		case *crdv1.CustomResourceDefinition:
-			_, _, err := resourceapply.ApplyCustomResourceDefinitionV1(
+			_, modified, err := resourceapply.ApplyCustomResourceDefinitionV1(
 				context.TODO(),
 				clientHolder.APIExtensionsClient.ApiextensionsV1(),
 				recorder,
 				required,
 			)
 			errs = append(errs, err)
+			changed = changed || modified
 		case *workv1.ManifestWork:
-			errs = append(errs, applyManifestWork(clientHolder.WorkClient, recorder, required))
+			modified, err := applyManifestWork(clientHolder.WorkClient, recorder, required)
+			errs = append(errs, err)
+			changed = changed || modified
 		case *operatorv1.Klusterlet:
-			errs = append(errs, applyKlusterlet(clientHolder.OperatorClient, recorder, required))
+			modified, err := applyKlusterlet(clientHolder.OperatorClient, recorder, required)
+			errs = append(errs, err)
+			changed = changed || modified
 		}
 	}
 
-	return utilerrors.NewAggregate(errs)
+	return changed, utilerrors.NewAggregate(errs)
 }
 
-func applyDeployment(clientHolder *ClientHolder, recorder events.Recorder, required *appsv1.Deployment) error {
-	key := types.NamespacedName{Namespace: required.Namespace, Name: required.Name}
-	existing := &appsv1.Deployment{}
-	err := clientHolder.RuntimeClient.Get(context.TODO(), key, existing)
+func applyDeployment(clientHolder *ClientHolder, recorder events.Recorder, required *appsv1.Deployment) (bool, error) {
+	existing, err := clientHolder.KubeClient.AppsV1().Deployments(required.Namespace).Get(
+		context.TODO(), required.Name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
-		_, _, err := resourceapply.ApplyDeployment(context.TODO(), clientHolder.KubeClient.AppsV1(), recorder, required, -1)
-		return err
+		_, modified, err := resourceapply.ApplyDeployment(context.TODO(),
+			clientHolder.KubeClient.AppsV1(), recorder, required, -1)
+		return modified, err
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	_, _, err = resourceapply.ApplyDeployment(context.TODO(), clientHolder.KubeClient.AppsV1(), recorder, required, existing.Generation)
-	return err
+	_, modified, err := resourceapply.ApplyDeployment(context.TODO(),
+		clientHolder.KubeClient.AppsV1(), recorder, required, existing.Generation)
+	return modified, err
 }
 
-func applyKlusterlet(client operatorclient.Interface, recorder events.Recorder, required *operatorv1.Klusterlet) error {
+func applyKlusterlet(client operatorclient.Interface, recorder events.Recorder,
+	required *operatorv1.Klusterlet) (bool, error) {
+
 	existing, err := client.OperatorV1().Klusterlets().Get(context.TODO(), required.Name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
-		if _, err := client.OperatorV1().Klusterlets().Create(context.TODO(), required, metav1.CreateOptions{}); err != nil {
-			return err
+		if _, err := client.OperatorV1().Klusterlets().Create(
+			context.TODO(), required, metav1.CreateOptions{}); err != nil {
+			return false, err
 		}
 
 		reportEvent(recorder, required, "Klusterlet", "created")
-		return nil
+		return true, nil
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	if equality.Semantic.DeepEqual(existing.Spec, required.Spec) {
-		return nil
+		return false, nil
 	}
 
 	existing = existing.DeepCopy()
 	existing.Spec = required.Spec
-	if _, err := client.OperatorV1().Klusterlets().Update(context.TODO(), existing, metav1.UpdateOptions{}); err != nil {
-		return err
+	if _, err := client.OperatorV1().Klusterlets().Update(
+		context.TODO(), existing, metav1.UpdateOptions{}); err != nil {
+		return false, err
 	}
 	reportEvent(recorder, required, "Klusterlet", "updated")
-	return nil
+	return true, nil
 }
 
-func applyManifestWork(workClient workclient.Interface, recorder events.Recorder, required *workv1.ManifestWork) error {
-	existing, err := workClient.WorkV1().ManifestWorks(required.Namespace).Get(context.TODO(), required.Name, metav1.GetOptions{})
+func applyManifestWork(workClient workclient.Interface, recorder events.Recorder,
+	required *workv1.ManifestWork) (bool, error) {
+
+	existing, err := workClient.WorkV1().ManifestWorks(required.Namespace).Get(
+		context.TODO(), required.Name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
-		_, err := workClient.WorkV1().ManifestWorks(required.Namespace).Create(context.TODO(), required, metav1.CreateOptions{})
+		_, err := workClient.WorkV1().ManifestWorks(required.Namespace).Create(
+			context.TODO(), required, metav1.CreateOptions{})
 		if err != nil {
-			return err
+			return false, err
 		}
 
 		reportEvent(recorder, required, "ManifestWork", "created")
-		return nil
+		return true, nil
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	modified := resourcemerge.BoolPtr(false)
@@ -499,15 +531,15 @@ func applyManifestWork(workClient workclient.Interface, recorder events.Recorder
 	}
 
 	if !*modified {
-		return nil
+		return false, nil
 	}
 
 	existing.Spec = required.Spec
 	if _, err := workClient.WorkV1().ManifestWorks(required.Namespace).Update(context.TODO(), existing, metav1.UpdateOptions{}); err != nil {
-		return err
+		return false, err
 	}
 	reportEvent(recorder, required, "ManifestWork", "updated")
-	return nil
+	return true, nil
 }
 
 // MustCreateObject translate object from raw bytes to runtime object

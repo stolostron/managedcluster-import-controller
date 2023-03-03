@@ -18,6 +18,7 @@ import (
 	workv1 "open-cluster-management.io/api/work/v1"
 
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
+	"github.com/openshift/library-go/pkg/operator/resource/resourceapply"
 	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -319,6 +320,18 @@ func TestRemoveManagedClusterFinalizer(t *testing.T) {
 func TestApplyResources(t *testing.T) {
 	var replicas int32 = 2
 
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:       "test_cluster",
+			Namespace:  "test_cluster",
+			Generation: 1,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: &replicas,
+		},
+	}
+	resourceapply.SetSpecHashAnnotation(&deployment.ObjectMeta, deployment.Spec)
+
 	cases := []struct {
 		name           string
 		kubeObjs       []runtime.Object
@@ -327,6 +340,7 @@ func TestApplyResources(t *testing.T) {
 		crds           []runtime.Object
 		requiredObjs   []runtime.Object
 		owner          *clusterv1.ManagedCluster
+		modified       bool
 	}{
 		{
 			name:           "create resources",
@@ -390,6 +404,7 @@ func TestApplyResources(t *testing.T) {
 					Name: "test_cluster",
 				},
 			},
+			modified: true,
 		},
 		{
 			name: "update resources",
@@ -566,6 +581,156 @@ func TestApplyResources(t *testing.T) {
 					Name: "test_cluster",
 				},
 			},
+			modified: true,
+		},
+		{
+			name: "not modified resources",
+			kubeObjs: []runtime.Object{
+				&corev1.ServiceAccount{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test_cluster",
+						Namespace: "test_cluster",
+					},
+				},
+				&rbacv1.ClusterRole{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test_cluster",
+					},
+				},
+				&rbacv1.ClusterRoleBinding{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test_cluster",
+					},
+					Subjects: []rbacv1.Subject{
+						{
+							Name: "test1",
+						},
+					},
+					RoleRef: rbacv1.RoleRef{
+						Name: "test1",
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test_cluster",
+						Namespace: "test_cluster",
+					},
+					Data: map[string][]byte{
+						"test": []byte("test"),
+					},
+					Type: corev1.SecretTypeOpaque,
+				},
+				deployment,
+			},
+			crds: []runtime.Object{
+				&crdv1beta1.CustomResourceDefinition{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test_cluster",
+					},
+				},
+				&crdv1.CustomResourceDefinition{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test_cluster",
+					},
+					Spec: crdv1.CustomResourceDefinitionSpec{
+						Conversion: &crdv1.CustomResourceConversion{
+							Strategy: crdv1.NoneConverter,
+						},
+					},
+				},
+			},
+			klusterletObjs: []runtime.Object{
+				&operatorv1.Klusterlet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test_cluster",
+					},
+				},
+			},
+			workObjs: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test_cluster",
+						Namespace: "test_cluster",
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "label_test_cluster",
+						Namespace: "label_test_cluster",
+					},
+				},
+			},
+			requiredObjs: []runtime.Object{
+				&corev1.ServiceAccount{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test_cluster",
+						Namespace: "test_cluster",
+					},
+				},
+				&rbacv1.ClusterRole{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test_cluster",
+					},
+				},
+				&rbacv1.ClusterRoleBinding{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test_cluster",
+					},
+					Subjects: []rbacv1.Subject{
+						{
+							Name: "test1",
+						},
+					},
+					RoleRef: rbacv1.RoleRef{
+						Name: "test1",
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test_cluster",
+						Namespace: "test_cluster",
+					},
+					Data: map[string][]byte{
+						"test": []byte("test"),
+					},
+					Type: corev1.SecretTypeOpaque,
+				},
+				deployment,
+				&operatorv1.Klusterlet{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test_cluster",
+					},
+				},
+				&crdv1beta1.CustomResourceDefinition{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test_cluster",
+					},
+				},
+				&crdv1.CustomResourceDefinition{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test_cluster",
+					},
+					Spec: crdv1.CustomResourceDefinitionSpec{
+						Conversion: &crdv1.CustomResourceConversion{
+							Strategy: crdv1.NoneConverter,
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test_cluster",
+						Namespace: "test_cluster",
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "label_test_cluster",
+						Namespace: "label_test_cluster",
+					},
+				},
+			},
+			owner:    nil,
+			modified: false,
 		},
 	}
 
@@ -578,9 +743,13 @@ func TestApplyResources(t *testing.T) {
 				RuntimeClient:       fake.NewClientBuilder().WithScheme(testscheme).WithObjects().Build(),
 				WorkClient:          workfake.NewSimpleClientset(c.workObjs...),
 			}
-			err := ApplyResources(clientHolder, eventstesting.NewTestingEventRecorder(t), testscheme, c.owner, c.requiredObjs...)
+			modified, err := ApplyResources(clientHolder, eventstesting.NewTestingEventRecorder(t),
+				testscheme, c.owner, c.requiredObjs...)
 			if err != nil {
-				t.Errorf("unexpect err %v", err)
+				t.Errorf("name %s: unexpect err %v", c.name, err)
+			}
+			if modified != c.modified {
+				t.Errorf("name %s: expect modified %v, but got %v", c.name, c.modified, modified)
 			}
 		})
 	}
@@ -715,7 +884,7 @@ func TestImportManagedClusterFromSecret(t *testing.T) {
 				OperatorClient:      operatorfake.NewSimpleClientset(),
 				RuntimeClient:       fake.NewClientBuilder().WithScheme(testscheme).Build(),
 			}
-			err := ImportManagedClusterFromSecret(clientHolder, mapper, fakeRecorder, importSecret)
+			_, err := ImportManagedClusterFromSecret(clientHolder, mapper, fakeRecorder, importSecret)
 			if err != nil {
 				t.Errorf("unexpect err %v", err)
 			}
@@ -775,7 +944,7 @@ func TestUpdateManagedClusterBootstrapSecret(t *testing.T) {
 				KubeClient: kubefake.NewSimpleClientset(),
 			}
 
-			err := UpdateManagedClusterBootstrapSecret(clientHolder, c.importSecret, eventstesting.NewTestingEventRecorder(t))
+			_, err := UpdateManagedClusterBootstrapSecret(clientHolder, c.importSecret, eventstesting.NewTestingEventRecorder(t))
 			if !c.expectedErr && err != nil {
 				t.Errorf("unexpect err %v", err)
 			}

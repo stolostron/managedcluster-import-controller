@@ -150,7 +150,7 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 	}
 
 	manifestWork := createHostedManifestWork(managedCluster.Name, importSecret, managementCluster)
-	err = helpers.ApplyResources(r.clientHolder, r.recorder, r.scheme, managedCluster, manifestWork)
+	_, err = helpers.ApplyResources(r.clientHolder, r.recorder, r.scheme, managedCluster, manifestWork)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -170,7 +170,7 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 		return reconcile.Result{}, err
 	}
 
-	err = helpers.ApplyResources(r.clientHolder, r.recorder, r.scheme, managedCluster, manifestWork)
+	_, err = helpers.ApplyResources(r.clientHolder, r.recorder, r.scheme, managedCluster, manifestWork)
 	if err != nil {
 		if errStatus := helpers.UpdateManagedClusterStatus(r.clientHolder.RuntimeClient, r.recorder, managedClusterName,
 			metav1.Condition{

@@ -98,7 +98,7 @@ func TestReconcile(t *testing.T) {
 					Status: clusterv1.ManagedClusterStatus{
 						Conditions: []metav1.Condition{
 							helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
-								constants.ConditionReasonKlusterletManifestWorkNotReady, "test"),
+								constants.ConditionReasonManagedClusterImporting, "test"),
 						},
 					},
 				},

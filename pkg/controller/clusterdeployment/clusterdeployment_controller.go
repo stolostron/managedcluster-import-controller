@@ -6,21 +6,18 @@ package clusterdeployment
 import (
 	"context"
 
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-
-	hivev1 "github.com/openshift/hive/apis/hive/v1"
-	"github.com/openshift/library-go/pkg/operator/events"
-	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
-
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
+	"github.com/openshift/library-go/pkg/operator/events"
+	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
-
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -101,12 +98,6 @@ func (r *ReconcileClusterDeployment) Reconcile(
 		return reconcile.Result{}, nil
 	}
 
-	if helpers.ClusterNotNeedToApplyImportResources(managedCluster) {
-		// This check is to prevent the current controller and import status controller from modifying
-		// the ManagedClusterImportSucceeded condition of the managed cluster in a loop
-		return reconcile.Result{}, nil
-	}
-
 	if !clusterDeployment.Spec.Installed {
 		// cluster deployment is not installed yet, do nothing
 		reqLogger.Info("The hive managed cluster is not installed, skipped", "managedcluster", clusterName)
@@ -141,14 +132,19 @@ func (r *ReconcileClusterDeployment) Reconcile(
 		return reconcile.Result{}, err
 	}
 
-	result, condition, _, err := r.importHelper.Import(false, clusterName, hiveSecret, 0, 1)
-	if err := helpers.UpdateManagedClusterStatus(
-		r.client,
-		r.recorder,
-		clusterName,
-		condition,
-	); err != nil {
-		return reconcile.Result{}, err
+	result, condition, modified, _, err := r.importHelper.Import(false, clusterName, hiveSecret, 0, 1)
+	// if resources are applied but NOT modified, will not update the condition, keep the original condition.
+	// This check is to prevent the current controller and import status controller from modifying the
+	// ManagedClusterImportSucceeded condition of the managed cluster in a loop
+	if !helpers.ImportingResourcesApplied(&condition) || modified {
+		if err := helpers.UpdateManagedClusterStatus(
+			r.client,
+			r.recorder,
+			clusterName,
+			condition,
+		); err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 
 	return result, err

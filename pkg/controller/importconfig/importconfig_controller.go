@@ -123,7 +123,8 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 		objects = append(objects, helpers.MustCreateObjectFromTemplate(file, template, config))
 	}
 
-	if err := helpers.ApplyResources(r.clientHolder, r.recorder, r.scheme, managedCluster, objects...); err != nil {
+	if _, err := helpers.ApplyResources(
+		r.clientHolder, r.recorder, r.scheme, managedCluster, objects...); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -133,7 +134,8 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	if err := helpers.ApplyResources(r.clientHolder, r.recorder, r.scheme, managedCluster, importSecret); err != nil {
+	if _, err := helpers.ApplyResources(
+		r.clientHolder, r.recorder, r.scheme, managedCluster, importSecret); err != nil {
 		return reconcile.Result{}, err
 	}
 

@@ -109,11 +109,8 @@ const (
 	// cluster is imported successfully
 	ConditionManagedClusterImportSucceeded = "ManagedClusterImportSucceeded"
 
-	ConditionReasonAutoImportSecretInvalid        = "AutoImportSecretInvalid"
-	ConditionReasonImportSecretNotReady           = "ImportSecretNotFound"
-	ConditionReasonKlusterletManifestWorkNotReady = "KlusterletManifestWorkNotFound"
-	ConditionReasonApplyResourcesFailed           = "ApplyResourcesFailed"
+	ConditionReasonManagedClusterWaitForImporting = "ManagedClusterWaitForImporting"
 	ConditionReasonManagedClusterImporting        = "ManagedClusterImporting"
-	ConditionReasonManagedClusterImportFailed     = "ManagedClusterNotImported"
+	ConditionReasonManagedClusterImportFailed     = "ManagedClusterImportFailed"
 	ConditionReasonManagedClusterImported         = "ManagedClusterImported"
 )

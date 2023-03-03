@@ -144,26 +144,6 @@ func TestImportHelper(t *testing.T) {
 		expectedConditionReason string
 	}{
 		{
-			name:       "no import-secret",
-			lastRetry:  0,
-			totalRetry: 1,
-			works:      []runtime.Object{},
-			autoImportSecret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "auto-import-secret",
-					Namespace: managedClusterName,
-				},
-				Data: map[string][]byte{
-					"token":  []byte(config.BearerToken),
-					"server": []byte(config.Host),
-				},
-			},
-			expectedErr:             false,
-			expectedCurrentRetry:    0,
-			expectedConditionStatus: metav1.ConditionFalse,
-			expectedConditionReason: constants.ConditionReasonImportSecretNotReady,
-		},
-		{
 			name:       "no manifest works",
 			lastRetry:  0,
 			totalRetry: 1,
@@ -182,9 +162,48 @@ func TestImportHelper(t *testing.T) {
 			importSecret:            testinghelpers.GetImportSecret(managedClusterName),
 			expectedErr:             false,
 			expectedCurrentRetry:    0,
-			expectedRequeueAfter:    0,
+			expectedRequeueAfter:    3 * time.Second,
 			expectedConditionStatus: metav1.ConditionFalse,
-			expectedConditionReason: constants.ConditionReasonKlusterletManifestWorkNotReady,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
+		},
+		{
+			name:       "no import-secret",
+			lastRetry:  0,
+			totalRetry: 1,
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: managedClusterName,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: managedClusterName,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
+			autoImportSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "auto-import-secret",
+					Namespace: managedClusterName,
+				},
+				Data: map[string][]byte{
+					"token":  []byte(config.BearerToken),
+					"server": []byte(config.Host),
+				},
+			},
+			expectedErr:             false,
+			expectedCurrentRetry:    0,
+			expectedConditionStatus: metav1.ConditionFalse,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
 		},
 		{
 			name:       "update auto import secret current retry times",
@@ -217,15 +236,14 @@ func TestImportHelper(t *testing.T) {
 					Namespace: managedClusterName,
 				},
 				Data: map[string][]byte{
-					"token":  []byte(config.BearerToken),
-					"server": []byte(config.Host),
+					"kubeconfig": testinghelpers.BuildKubeconfig(config),
 				},
 			},
-			expectedErr:             true,
+			expectedErr:             false,
 			expectedCurrentRetry:    2,
 			expectedRequeueAfter:    10 * time.Second,
 			expectedConditionStatus: metav1.ConditionFalse,
-			expectedConditionReason: constants.ConditionReasonAutoImportSecretInvalid,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
 		},
 		{
 			name:       "import cluster with auto-import secret invalid",
@@ -262,11 +280,11 @@ func TestImportHelper(t *testing.T) {
 					"server": []byte(config.Host),
 				},
 			},
-			expectedErr:             true,
+			expectedErr:             false,
 			expectedCurrentRetry:    1,
-			expectedRequeueAfter:    10 * time.Second,
+			expectedRequeueAfter:    0 * time.Second,
 			expectedConditionStatus: metav1.ConditionFalse,
-			expectedConditionReason: constants.ConditionReasonAutoImportSecretInvalid,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
 		},
 		{
 			name:       "only update the bootstrap secret",
@@ -306,11 +324,11 @@ func TestImportHelper(t *testing.T) {
 					"server": []byte(config.Host),
 				},
 			},
-			expectedErr:             true,
+			expectedErr:             false,
 			expectedCurrentRetry:    1,
-			expectedRequeueAfter:    10 * time.Second,
+			expectedRequeueAfter:    0 * time.Second,
 			expectedConditionStatus: metav1.ConditionFalse,
-			expectedConditionReason: constants.ConditionReasonAutoImportSecretInvalid,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
 		},
 		{
 			name:       "import cluster with auto-import secret valid",
@@ -392,7 +410,7 @@ func TestImportHelper(t *testing.T) {
 				}
 			}
 
-			result, condition, currentRetry, err := importHelper.Import(
+			result, condition, _, currentRetry, err := importHelper.Import(
 				backupRestore, managedClusterName, c.autoImportSecret, c.lastRetry, c.totalRetry)
 			if c.expectedErr && err == nil {
 				t.Errorf("name %v : expected error, but failed", c.name)
