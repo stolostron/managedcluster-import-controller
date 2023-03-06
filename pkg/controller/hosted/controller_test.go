@@ -5,31 +5,30 @@ package hosted
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
-
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
+	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/informers"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
-
 	"open-cluster-management.io/api/addon/v1alpha1"
 	workfake "open-cluster-management.io/api/client/work/clientset/versioned/fake"
 	workinformers "open-cluster-management.io/api/client/work/informers/externalversions"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
-
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -46,6 +45,7 @@ func init() {
 }
 
 func TestReconcile(t *testing.T) {
+	trueString := "True"
 	cases := []struct {
 		name         string
 		runtimeObjs  []client.Object  // used by clientHolder.RuntimeClient
@@ -119,8 +119,22 @@ func TestReconcile(t *testing.T) {
 			},
 			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
 			vaildateFunc: func(t *testing.T, reconcileResult reconcile.Result, reconcileErr error, ch *helpers.ClientHolder) {
-				if reconcileErr == nil || !strings.Contains(reconcileErr.Error(), fmt.Sprintf("annotation %s not found", constants.HostingClusterNameAnnotation)) {
-					t.Errorf("expect err annotation %s not found, but get %v", constants.HostingClusterNameAnnotation, reconcileErr)
+				if reconcileErr != nil {
+					t.Errorf("unexpected error: %v", reconcileErr)
+				}
+				managedCluster := &clusterv1.ManagedCluster{}
+				err := ch.RuntimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, managedCluster)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+
+				condition := meta.FindStatusCondition(
+					managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+				if condition.Status != metav1.ConditionFalse {
+					t.Errorf("unexpected condition status: %v", condition.Status)
+				}
+				if condition.Reason != constants.ConditionReasonManagedClusterWaitForImporting {
+					t.Errorf("unexpected condition reason: %v", condition.Reason)
 				}
 			},
 		},
@@ -263,6 +277,24 @@ func TestReconcile(t *testing.T) {
 				if reconcileErr != nil {
 					t.Errorf("unexpected error: %v", reconcileErr)
 				}
+
+				managedCluster := &clusterv1.ManagedCluster{}
+				err := ch.RuntimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, managedCluster)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+
+				condition := meta.FindStatusCondition(
+					managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+				if condition.Status != metav1.ConditionFalse {
+					t.Errorf("unexpected condition status: %v", condition.Status)
+				}
+				if condition.Reason != constants.ConditionReasonManagedClusterImporting {
+					t.Errorf("unexpected condition reason: %v", condition.Reason)
+				}
+				if !strings.Contains(condition.Message, "Wait for import secret to be created") {
+					t.Errorf("unexpected condition message: %v", condition.Message)
+				}
 			},
 		},
 		// managedcluster is Hosted mode, but import secret don't have data
@@ -315,9 +347,27 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
-			vaildateFunc: func(t *testing.T, reconcileResult reconcile.Result, reconcileErr error, ch *helpers.ClientHolder) {
-				if reconcileErr == nil || strings.Contains(reconcileErr.Error(), "is rquired") {
+			vaildateFunc: func(t *testing.T, reconcileResult reconcile.Result,
+				reconcileErr error, ch *helpers.ClientHolder) {
+				if reconcileErr != nil {
 					t.Errorf("unexpected error: %v", reconcileErr)
+				}
+				managedCluster := &clusterv1.ManagedCluster{}
+				err := ch.RuntimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, managedCluster)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+
+				condition := meta.FindStatusCondition(
+					managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+				if condition.Status != metav1.ConditionFalse {
+					t.Errorf("unexpected condition status: %v", condition.Status)
+				}
+				if condition.Reason != constants.ConditionReasonManagedClusterImportFailed {
+					t.Errorf("unexpected condition reason: %v", condition.Reason)
+				}
+				if !strings.Contains(condition.Message, "Import secret is invalid") {
+					t.Errorf("unexpected condition message: %v", condition.Message)
 				}
 			},
 		},
@@ -336,6 +386,7 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			kubeObjs: []runtime.Object{
+
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-import",
@@ -380,6 +431,196 @@ metadata:
 			vaildateFunc: func(t *testing.T, reconcileResult reconcile.Result, reconcileErr error, ch *helpers.ClientHolder) {
 				if reconcileErr != nil {
 					t.Errorf("unexpected error: %v", reconcileErr)
+				}
+				managedCluster := &clusterv1.ManagedCluster{}
+				err := ch.RuntimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, managedCluster)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+
+				condition := meta.FindStatusCondition(
+					managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+				if condition.Status != metav1.ConditionFalse {
+					t.Errorf("unexpected condition status: %v", condition.Status)
+				}
+				if condition.Reason != constants.ConditionReasonManagedClusterImporting {
+					t.Errorf("unexpected condition reason: %v", condition.Reason)
+				}
+				if !strings.Contains(condition.Message,
+					"Wait for importing resources to be available on the hosting cluster") {
+					t.Errorf("unexpected condition message: %v", condition.Message)
+				}
+			},
+		},
+		// managedcluster is Hosted mode, klusterlet available
+		{
+			name: "managedcluster is Hosted mode, and import secret have the data",
+			runtimeObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.HostingClusterNameAnnotation:   "cluster1",
+						},
+					},
+				},
+			},
+			kubeObjs: []runtime.Object{
+				testinghelpers.GetHostedImportSecret("test"),
+			},
+			workObjs: []runtime.Object{
+				// manifestworks
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "manifest1",
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "cluster1",
+						Name:      "test-hosted-klusterlet",
+						Labels: map[string]string{
+							constants.HostedClusterLabel: "test",
+						},
+					},
+					Status: workv1.ManifestWorkStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:   workv1.WorkAvailable,
+								Status: metav1.ConditionTrue,
+							},
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "cluster1",
+						Name:      "test-hosted-kubeconfig",
+						Labels: map[string]string{
+							constants.HostedClusterLabel: "test",
+						},
+					},
+				},
+			},
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
+			vaildateFunc: func(t *testing.T, reconcileResult reconcile.Result, reconcileErr error, ch *helpers.ClientHolder) {
+				if reconcileErr != nil {
+					t.Errorf("unexpected error: %v", reconcileErr)
+				}
+				managedCluster := &clusterv1.ManagedCluster{}
+				err := ch.RuntimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, managedCluster)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+
+				condition := meta.FindStatusCondition(
+					managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+				if condition.Status != metav1.ConditionFalse {
+					t.Errorf("unexpected condition status: %v", condition.Status)
+				}
+				if condition.Reason != constants.ConditionReasonManagedClusterImporting {
+					t.Errorf("unexpected condition reason: %v", condition.Reason)
+				}
+				if !strings.Contains(condition.Message,
+					"Wait for the user to provide the external managed kubeconfig") {
+					t.Errorf("unexpected condition message: %v", condition.Message)
+				}
+			},
+		},
+		// managedcluster is Hosted mode, no auto import secret, but external managed kubeconfig is created
+		{
+			name: "managedcluster is Hosted mode, and import secret have the data",
+			runtimeObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.HostingClusterNameAnnotation:   "cluster1",
+						},
+					},
+				},
+			},
+			kubeObjs: []runtime.Object{
+				testinghelpers.GetHostedImportSecret("test"),
+			},
+			workObjs: []runtime.Object{
+				// manifestworks
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "manifest1",
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "cluster1",
+						Name:      "test-hosted-klusterlet",
+						Labels: map[string]string{
+							constants.HostedClusterLabel: "test",
+						},
+					},
+					Status: workv1.ManifestWorkStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:   workv1.WorkAvailable,
+								Status: metav1.ConditionTrue,
+							},
+						},
+						ResourceStatus: workv1.ManifestResourceStatus{
+							Manifests: []workv1.ManifestCondition{
+								{
+									StatusFeedbacks: workv1.StatusFeedbackResult{
+										Values: []workv1.FeedbackValue{
+											{
+												Name: "ReadyToApply-status",
+												Value: workv1.FieldValue{
+													Type:   workv1.String,
+													String: &trueString,
+												},
+											},
+										},
+									},
+									ResourceMeta: workv1.ManifestResourceMeta{
+										Group: operatorv1.GroupName,
+										Kind:  "Klusterlet",
+										Name:  hostedKlusterletCRName("test"),
+									},
+								},
+							},
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "cluster1",
+						Name:      "test-hosted-kubeconfig",
+						Labels: map[string]string{
+							constants.HostedClusterLabel: "test",
+						},
+					},
+				},
+			},
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
+			vaildateFunc: func(t *testing.T, reconcileResult reconcile.Result, reconcileErr error, ch *helpers.ClientHolder) {
+				if reconcileErr != nil {
+					t.Errorf("unexpected error: %v", reconcileErr)
+				}
+				managedCluster := &clusterv1.ManagedCluster{}
+				err := ch.RuntimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, managedCluster)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+
+				condition := meta.FindStatusCondition(
+					managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+				if condition.Status != metav1.ConditionTrue {
+					t.Errorf("unexpected condition status: %v", condition.Status)
+				}
+				if condition.Reason != constants.ConditionReasonManagedClusterImported {
+					t.Errorf("unexpected condition reason: %v", condition.Reason)
 				}
 			},
 		},

@@ -104,8 +104,6 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	if len(autoImportSecret.Data[constants.AutoImportRetryName]) != 0 {
 		totalRetry, err = strconv.Atoi(string(autoImportSecret.Data[constants.AutoImportRetryName]))
 		if err != nil {
-			r.recorder.Warningf("AutoImportRetryInvalid",
-				"The value of autoImportRetry is invalid in auto-import-secret secret")
 			if err := helpers.UpdateManagedClusterStatus(
 				r.client,
 				r.recorder,

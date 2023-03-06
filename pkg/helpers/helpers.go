@@ -653,8 +653,8 @@ func DetermineKlusterletMode(cluster *clusterv1.ManagedCluster) string {
 
 // GetHostingCluster gets the hosting cluster name from the managed cluster annotation
 func GetHostingCluster(cluster *clusterv1.ManagedCluster) (string, error) {
-	if managementCluster, ok := cluster.Annotations[constants.HostingClusterNameAnnotation]; ok {
-		return managementCluster, nil
+	if hostingCluster, ok := cluster.Annotations[constants.HostingClusterNameAnnotation]; ok {
+		return hostingCluster, nil
 	}
 
 	return "", fmt.Errorf("annotation %s not found", constants.HostingClusterNameAnnotation)

@@ -65,6 +65,24 @@ func ContainAuthError(err error) bool {
 	return false
 }
 
+func ContainInternalServerError(err error) bool {
+	// There should not be a NotFound error, because when applying for a resource,
+	// the existence of the resource has been checked before all create requests
+	if errors.IsAlreadyExists(err) || errors.IsConflict(err) ||
+		errors.IsInternalError(err) || errors.IsTooManyRequests(err) {
+		return true
+	}
+	if errs, ok := err.(utilerrors.Aggregate); ok {
+		for _, e := range errs.Errors() {
+			if errors.IsAlreadyExists(e) || errors.IsConflict(e) ||
+				errors.IsInternalError(e) || errors.IsTooManyRequests(e) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // ApplyResourcesFunc is a function to apply resources to the manged cluster to import it to the hub
 type ApplyResourcesFunc func(backupRestore bool, client *ClientHolder, restMapper meta.RESTMapper,
 	recorder events.Recorder, importSecret *corev1.Secret) (bool, error)
@@ -127,7 +145,7 @@ func (i *ImportHelper) Import(backupRestore bool, clusterName string,
 	// ensure the klusterlet manifest works exist
 	workSelector := labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: "true"})
 	manifestWorks, err := i.informerHolder.KlusterletWorkLister.ManifestWorks(clusterName).List(workSelector)
-	if err != nil {
+	if err != nil && !errors.IsNotFound(err) {
 		return reconcile.Result{},
 			NewManagedClusterImportSucceededCondition(
 				metav1.ConditionFalse,
@@ -135,7 +153,7 @@ func (i *ImportHelper) Import(backupRestore bool, clusterName string,
 				fmt.Sprintf("Get klusterlet manifestwork failed: %v. Will retry", err),
 			), false, currentRetry, err
 	}
-	if len(manifestWorks) != 2 {
+	if errors.IsNotFound(err) || len(manifestWorks) != 2 {
 		reqLogger.Info(fmt.Sprintf("Waiting for klusterlet manifest works for managed cluster %s", clusterName))
 		return reconcile.Result{RequeueAfter: 3 * time.Second},
 			NewManagedClusterImportSucceededCondition(
@@ -192,6 +210,14 @@ func (i *ImportHelper) Import(backupRestore bool, clusterName string,
 				"AutoImportSecretInvalid %s/%s; please check its permission, apply resources error: %v",
 				managedClusterKubeClientSecret.Namespace, managedClusterKubeClientSecret.Name, err)
 			return reconcile.Result{}, condition, modified, currentRetry, nil
+		}
+
+		if ContainInternalServerError(err) {
+			// might be some internal server error, does not take up retry times
+			condition.Reason = constants.ConditionReasonManagedClusterImporting
+			condition.Message = fmt.Sprintf(
+				"Try to import managed cluster, apply resources error: %v. Will Retry", err)
+			return reconcile.Result{}, condition, modified, lastRetry, err
 		}
 
 		if currentRetry < totalRetry {
