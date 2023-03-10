@@ -25,6 +25,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	crdv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -149,7 +150,26 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			works:   []runtime.Object{},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "local-cluster-klusterlet-crds",
+						Namespace: "local-cluster",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "local-cluster-klusterlet",
+						Namespace: "local-cluster",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
 			secrets: []runtime.Object{},
 			validateFunc: func(t *testing.T, runtimeClient client.Client) {
 				cluster := &clusterv1.ManagedCluster{}
@@ -157,8 +177,11 @@ func TestReconcile(t *testing.T) {
 				if err != nil {
 					t.Errorf("unexpected error %v", err)
 				}
-				if len(cluster.Status.Conditions) != 0 {
-					t.Errorf("unexpected condistions")
+				condition := meta.FindStatusCondition(
+					cluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+				if condition == nil || condition.Status != metav1.ConditionFalse ||
+					condition.Reason != constants.ConditionReasonManagedClusterImporting {
+					t.Errorf("unexpected condition")
 				}
 			},
 		},
@@ -226,21 +249,21 @@ func TestReconcile(t *testing.T) {
 				workInformer.GetStore().Add(work)
 			}
 
-			r := &ReconcileLocalCluster{
-				clientHolder: &helpers.ClientHolder{
+			r := NewReconcileLocalCluster(
+				&helpers.ClientHolder{
 					KubeClient:          kubeClient,
 					APIExtensionsClient: apiextensionsfake.NewSimpleClientset(),
 					OperatorClient:      operatorfake.NewSimpleClientset(),
 					RuntimeClient:       fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).Build(),
 				},
-				informerHolder: &source.InformerHolder{
+				&source.InformerHolder{
 					AutoImportSecretLister: kubeInformerFactory.Core().V1().Secrets().Lister(),
 					ImportSecretLister:     kubeInformerFactory.Core().V1().Secrets().Lister(),
 					KlusterletWorkLister:   workInformerFactory.Work().V1().ManifestWorks().Lister(),
 				},
-				recorder:   eventstesting.NewTestingEventRecorder(t),
-				restMapper: restmapper.NewDiscoveryRESTMapper(apiGroupResources),
-			}
+				restmapper.NewDiscoveryRESTMapper(apiGroupResources),
+				eventstesting.NewTestingEventRecorder(t),
+			)
 
 			_, err := r.Reconcile(context.TODO(), reconcile.Request{
 				NamespacedName: types.NamespacedName{

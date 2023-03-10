@@ -36,7 +36,7 @@ var _ = ginkgo.Describe("Importing a managed cluster manually", func() {
 		assertManagedClusterDeleted(managedClusterName)
 	})
 
-	ginkgo.It("Should import the cluster with manually", func() {
+	ginkgo.It("Should import the cluster manually", func() {
 		ginkgo.By(fmt.Sprintf("Create managed cluster %s", managedClusterName))
 		_, err := util.CreateManagedCluster(hubClusterClient, managedClusterName)
 		gomega.Expect(err).ToNot(gomega.HaveOccurred())
@@ -57,7 +57,7 @@ var _ = ginkgo.Describe("Importing a managed cluster manually", func() {
 			OperatorClient:      hubOperatorClient,
 			RuntimeClient:       hubRuntimeClient,
 		}
-		err = helpers.ImportManagedClusterFromSecret(clientHolder, hubMapper, hubRecorder, importSecret)
+		_, err = helpers.ImportManagedClusterFromSecret(clientHolder, hubMapper, hubRecorder, importSecret)
 		gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
 		assertManagedClusterManifestWorks(managedClusterName)

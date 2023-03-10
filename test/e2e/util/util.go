@@ -339,6 +339,25 @@ func NewInvalidAutoImportSecret(kubeClient kubernetes.Interface, dynamicClient d
 	}, nil
 }
 
+func NewExternalManagedKubeconfigSecret(kubeClient kubernetes.Interface, clusterName string) (*corev1.Secret, error) {
+
+	name := "e2e-managed-auto-import-secret"
+	secret, err := kubeClient.CoreV1().Secrets(ocmNamespace).Get(context.TODO(), name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "external-managed-kubeconfig",
+			Namespace: fmt.Sprintf("klusterlet-%s", clusterName),
+		},
+		Data: map[string][]byte{
+			"kubeconfig": secret.Data["kubeconfig"],
+		},
+	}, nil
+}
+
 func NewCSR(labels ...Label) *certificatesv1.CertificateSigningRequest {
 	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {

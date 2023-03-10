@@ -34,12 +34,11 @@ const controllerName = "clusterdeployment-controller"
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder *source.InformerHolder) (string, error) {
 	c, err := controller.New(controllerName, mgr, controller.Options{
-		Reconciler: &ReconcileClusterDeployment{
-			client:         clientHolder.RuntimeClient,
-			kubeClient:     clientHolder.KubeClient,
-			informerHolder: informerHolder,
-			recorder:       helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
-		},
+		Reconciler: NewReconcileClusterDeployment(
+			clientHolder.RuntimeClient,
+			clientHolder.KubeClient,
+			informerHolder,
+			helpers.NewEventRecorder(clientHolder.KubeClient, controllerName)),
 		MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
 	})
 	if err != nil {

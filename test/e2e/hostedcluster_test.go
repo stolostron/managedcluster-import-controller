@@ -29,7 +29,8 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 	ginkgo.BeforeEach(func() {
 		hostingClusterName = fmt.Sprintf("hosting-cluster-%s", rand.String(6))
 		ginkgo.By(fmt.Sprintf("Create hosting cluster %s", hostingClusterName), func() {
-			_, err := util.CreateManagedCluster(hubClusterClient, hostingClusterName, util.NewLable("local-cluster", "true"))
+			_, err := util.CreateManagedCluster(hubClusterClient, hostingClusterName,
+				util.NewLable("local-cluster", "true"))
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 		})
 
@@ -75,6 +76,47 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 			})
 
 			assertManagedClusterImportSecretCreated(managedClusterName, "other", constants.KlusterletDeployModeHosted)
+			assertManagedClusterImportSecretApplied(managedClusterName, constants.KlusterletDeployModeHosted)
+			assertManagedClusterAvailable(managedClusterName)
+		})
+	})
+
+	ginkgo.Context("Import one hosted managed cluster manually", func() {
+		var managedClusterName string
+
+		ginkgo.JustBeforeEach(func() {
+			managedClusterName = fmt.Sprintf("autoimport-test-hosted-%s", rand.String(6))
+			ginkgo.By(fmt.Sprintf("Create managed cluster namespace %s", managedClusterName), func() {
+				ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: managedClusterName}}
+				_, err := hubKubeClient.CoreV1().Namespaces().Create(context.TODO(), ns, metav1.CreateOptions{})
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			})
+		})
+
+		ginkgo.JustAfterEach(func() {
+			assertHostedManagedClusterDeleted(managedClusterName, hostingClusterName)
+		})
+
+		ginkgo.It("Should import the cluster by creating the external managed kubeconfig secret manually", func() {
+			ginkgo.By(fmt.Sprintf("Create hosted mode managed cluster %s", managedClusterName), func() {
+				_, err := util.CreateHostedManagedCluster(hubClusterClient, managedClusterName, hostingClusterName)
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			})
+
+			assertManagedClusterImportSecretCreated(managedClusterName, "other", constants.KlusterletDeployModeHosted)
+			assertHostedManagedClusterManifestWorksAvailable(managedClusterName, hostingClusterName)
+
+			ginkgo.By(fmt.Sprintf("Create external managed kubeconfig %s with kubeconfig", managedClusterName), func() {
+				secret, err := util.NewExternalManagedKubeconfigSecret(hubKubeClient, managedClusterName)
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+				namespace := fmt.Sprintf("klusterlet-%s", managedClusterName)
+				assertNamespaceCreated(hubKubeClient, namespace)
+				_, err = hubKubeClient.CoreV1().Secrets(namespace).Create(
+					context.TODO(), secret, metav1.CreateOptions{})
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			})
+
 			assertManagedClusterImportSecretApplied(managedClusterName, constants.KlusterletDeployModeHosted)
 			assertManagedClusterAvailable(managedClusterName)
 		})

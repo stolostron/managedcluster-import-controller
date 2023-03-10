@@ -136,6 +136,30 @@ metadata:
 spec: {}
 `
 
+var hostedImportYaml = `
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: "bootstrap-hub-kubeconfig"
+  namespace: "klusterlet-test-hosted"
+type: Opaque
+data:
+  kubeconfig: "test"
+---
+apiVersion: operator.open-cluster-management.io/v1
+kind: Klusterlet
+metadata:
+  name: klusterlet
+spec:
+  deployOption:
+    mode: Hosted
+  registrationImagePullSpec: "registration:latest"
+  workImagePullSpec: "work:latest"
+  clusterName: "test"
+  namespace: "open-cluster-management-agent"
+`
+
 func GetImportSecret(managedClusterName string) *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -147,6 +171,18 @@ func GetImportSecret(managedClusterName string) *corev1.Secret {
 			"crdsv1beta1.yaml": []byte(crdsv1beta1Yaml),
 			"crds.yaml":        []byte(crdsv1Yaml),
 			"import.yaml":      []byte(importYaml),
+		},
+	}
+}
+
+func GetHostedImportSecret(managedClusterName string) *corev1.Secret {
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-import", managedClusterName),
+			Namespace: managedClusterName,
+		},
+		Data: map[string][]byte{
+			"import.yaml": []byte(hostedImportYaml),
 		},
 	}
 }

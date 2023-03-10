@@ -12,14 +12,9 @@ import (
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
-	workfake "open-cluster-management.io/api/client/work/clientset/versioned/fake"
-	workinformers "open-cluster-management.io/api/client/work/informers/externalversions"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	workv1 "open-cluster-management.io/api/work/v1"
-
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
-
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -27,7 +22,10 @@ import (
 	"k8s.io/client-go/kubernetes"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
-
+	workfake "open-cluster-management.io/api/client/work/clientset/versioned/fake"
+	workinformers "open-cluster-management.io/api/client/work/informers/externalversions"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -80,12 +78,15 @@ func TestReconcile(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	managedClusterName := "test"
 	cases := []struct {
-		name        string
-		objs        []client.Object
-		works       []runtime.Object
-		secrets     []runtime.Object
-		expectedErr bool
+		name                    string
+		objs                    []client.Object
+		works                   []runtime.Object
+		secrets                 []runtime.Object
+		expectedErr             bool
+		expectedConditionStatus metav1.ConditionStatus
+		expectedConditionReason string
 	}{
 		{
 			name:        "no cluster",
@@ -97,7 +98,7 @@ func TestReconcile(t *testing.T) {
 			objs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
+						Name: managedClusterName,
 						Annotations: map[string]string{
 							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
 						},
@@ -113,7 +114,7 @@ func TestReconcile(t *testing.T) {
 			objs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
+						Name: managedClusterName,
 					},
 				},
 			},
@@ -122,11 +123,11 @@ func TestReconcile(t *testing.T) {
 			expectedErr: false,
 		},
 		{
-			name: "no import-secret",
+			name: "auto-import-secret AutoImportRetry invalid",
 			objs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
+						Name: managedClusterName,
 					},
 				},
 			},
@@ -135,44 +136,80 @@ func TestReconcile(t *testing.T) {
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "auto-import-secret",
-						Namespace: "test",
+						Namespace: managedClusterName,
+					},
+					Data: map[string][]byte{
+						"autoImportRetry": []byte("a"),
 					},
 				},
 			},
-			expectedErr: false,
+			expectedErr:             false,
+			expectedConditionStatus: metav1.ConditionFalse,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
+		},
+		{
+			name: "auto-import-secret current retry annotation invalid",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: managedClusterName,
+					},
+				},
+			},
+			works: []runtime.Object{},
+			secrets: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: managedClusterName,
+						Annotations: map[string]string{
+							constants.AnnotationAutoImportCurrentRetry: "a",
+						},
+					},
+					Data: map[string][]byte{
+						"autoImportRetry": []byte("1"),
+					},
+				},
+			},
+			expectedErr: true,
 		},
 		{
 			name: "no manifest works",
 			objs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
+						Name: managedClusterName,
 					},
 				},
 			},
 			works: []runtime.Object{},
 			secrets: []runtime.Object{
-				testinghelpers.GetImportSecret("test"),
+				testinghelpers.GetImportSecret(managedClusterName),
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "auto-import-secret",
-						Namespace: "test",
+						Namespace: managedClusterName,
+						Annotations: map[string]string{
+							constants.AnnotationAutoImportCurrentRetry: "1",
+						},
 					},
 					Data: map[string][]byte{
-						"autoImportRetry": []byte("0"),
+						"autoImportRetry": []byte("2"),
 						"token":           []byte(config.BearerToken),
 						"server":          []byte(config.Host),
 					},
 				},
 			},
-			expectedErr: false,
+			expectedErr:             false,
+			expectedConditionStatus: metav1.ConditionFalse,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
 		},
 		{
-			name: "import cluster with auto-import secret",
+			name: "no import-secret",
 			objs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
+						Name: managedClusterName,
 					},
 				},
 			},
@@ -180,7 +217,7 @@ func TestReconcile(t *testing.T) {
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-klusterlet-crds",
-						Namespace: "test",
+						Namespace: managedClusterName,
 						Labels: map[string]string{
 							constants.KlusterletWorksLabel: "true",
 						},
@@ -189,7 +226,7 @@ func TestReconcile(t *testing.T) {
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-klusterlet",
-						Namespace: "test",
+						Namespace: managedClusterName,
 						Labels: map[string]string{
 							constants.KlusterletWorksLabel: "true",
 						},
@@ -197,11 +234,103 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			secrets: []runtime.Object{
-				testinghelpers.GetImportSecret("test"),
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "auto-import-secret",
-						Namespace: "test",
+						Namespace: managedClusterName,
+					},
+					Data: map[string][]byte{
+						"autoImportRetry": []byte("2"),
+						"token":           []byte(config.BearerToken),
+						"server":          []byte(config.Host),
+					},
+				},
+			},
+			expectedErr:             false,
+			expectedConditionStatus: metav1.ConditionFalse,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
+		},
+		{
+			name: "update auto import secret current retry times",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: managedClusterName,
+					},
+				},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: managedClusterName,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: managedClusterName,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret(managedClusterName),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: managedClusterName,
+					},
+					Data: map[string][]byte{
+						"autoImportRetry": []byte("2"),
+						"kubeconfig":      testinghelpers.BuildKubeconfig(config),
+					},
+				},
+			},
+			expectedErr:             false,
+			expectedConditionStatus: metav1.ConditionFalse,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
+		},
+		{
+			name: "import cluster with auto-import secret invalid",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: managedClusterName,
+					},
+				},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: managedClusterName,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: managedClusterName,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret(managedClusterName),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: managedClusterName,
 					},
 					Data: map[string][]byte{
 						"autoImportRetry": []byte("0"),
@@ -210,14 +339,16 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: true,
+			expectedErr:             false,
+			expectedConditionStatus: metav1.ConditionFalse,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
 		},
 		{
 			name: "only update the bootstrap secret",
 			objs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
+						Name: managedClusterName,
 					},
 				},
 			},
@@ -225,7 +356,7 @@ func TestReconcile(t *testing.T) {
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-klusterlet-crds",
-						Namespace: "test",
+						Namespace: managedClusterName,
 						Labels: map[string]string{
 							constants.KlusterletWorksLabel: "true",
 						},
@@ -234,7 +365,7 @@ func TestReconcile(t *testing.T) {
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-klusterlet",
-						Namespace: "test",
+						Namespace: managedClusterName,
 						Labels: map[string]string{
 							constants.KlusterletWorksLabel: "true",
 						},
@@ -242,13 +373,13 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			secrets: []runtime.Object{
-				testinghelpers.GetImportSecret("test"),
+				testinghelpers.GetImportSecret(managedClusterName),
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "auto-import-secret",
-						Namespace: "test",
+						Namespace: managedClusterName,
 						Labels: map[string]string{
-							restoreLabel: "true",
+							constants.LabelAutoImportRestore: "true",
 						},
 					},
 					Data: map[string][]byte{
@@ -258,14 +389,16 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: true,
+			expectedErr:             false,
+			expectedConditionStatus: metav1.ConditionFalse,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
 		},
 		{
 			name: "only update the bootstrap secret - works unavailable",
 			objs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
+						Name: managedClusterName,
 					},
 				},
 			},
@@ -273,7 +406,7 @@ func TestReconcile(t *testing.T) {
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-klusterlet-crds",
-						Namespace: "test",
+						Namespace: managedClusterName,
 						Labels: map[string]string{
 							constants.KlusterletWorksLabel: "true",
 						},
@@ -282,7 +415,7 @@ func TestReconcile(t *testing.T) {
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-klusterlet",
-						Namespace: "test",
+						Namespace: managedClusterName,
 						Labels: map[string]string{
 							constants.KlusterletWorksLabel: "true",
 						},
@@ -290,13 +423,13 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			secrets: []runtime.Object{
-				testinghelpers.GetImportSecret("test"),
+				testinghelpers.GetImportSecret(managedClusterName),
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "auto-import-secret",
-						Namespace: "test",
+						Namespace: managedClusterName,
 						Labels: map[string]string{
-							restoreLabel: "true",
+							constants.LabelAutoImportRestore: "true",
 						},
 					},
 					Data: map[string][]byte{
@@ -305,14 +438,16 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: false,
+			expectedErr:             false,
+			expectedConditionStatus: metav1.ConditionFalse,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
 		},
 		{
 			name: "only update the bootstrap secret - works available",
 			objs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
+						Name: managedClusterName,
 					},
 				},
 			},
@@ -320,7 +455,7 @@ func TestReconcile(t *testing.T) {
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-klusterlet-crds",
-						Namespace: "test",
+						Namespace: managedClusterName,
 						Labels: map[string]string{
 							constants.KlusterletWorksLabel: "true",
 						},
@@ -337,7 +472,7 @@ func TestReconcile(t *testing.T) {
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-klusterlet",
-						Namespace: "test",
+						Namespace: managedClusterName,
 						Labels: map[string]string{
 							constants.KlusterletWorksLabel: "true",
 						},
@@ -353,13 +488,13 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			secrets: []runtime.Object{
-				testinghelpers.GetImportSecret("test"),
+				testinghelpers.GetImportSecret(managedClusterName),
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "auto-import-secret",
-						Namespace: "test",
+						Namespace: managedClusterName,
 						Labels: map[string]string{
-							restoreLabel: "true",
+							constants.LabelAutoImportRestore: "true",
 						},
 					},
 					Data: map[string][]byte{
@@ -368,7 +503,9 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: false,
+			expectedErr:             false,
+			expectedConditionStatus: metav1.ConditionFalse,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
 		},
 	}
 
@@ -388,26 +525,48 @@ func TestReconcile(t *testing.T) {
 				workInformer.GetStore().Add(work)
 			}
 
-			r := &ReconcileAutoImport{
-				client:     fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).Build(),
-				kubeClient: kubeClient,
-				workClient: workClient,
-				informerHolder: &source.InformerHolder{
+			r := NewReconcileAutoImport(
+				fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).Build(),
+				kubeClient,
+				&source.InformerHolder{
 					AutoImportSecretLister: kubeInformerFactory.Core().V1().Secrets().Lister(),
 					ImportSecretLister:     kubeInformerFactory.Core().V1().Secrets().Lister(),
 					KlusterletWorkLister:   workInformerFactory.Work().V1().ManifestWorks().Lister(),
 				},
-				recorder: eventstesting.NewTestingEventRecorder(t),
-			}
+				eventstesting.NewTestingEventRecorder(t),
+			)
 
-			req := reconcile.Request{NamespacedName: types.NamespacedName{Namespace: "test"}}
-			_, err := r.Reconcile(context.TODO(), req)
+			req := reconcile.Request{NamespacedName: types.NamespacedName{Namespace: managedClusterName}}
+			ctx := context.TODO()
+			_, err := r.Reconcile(ctx, req)
 			if c.expectedErr && err == nil {
-				t.Errorf("expected error, but failed")
+				t.Errorf("name: %v, expected error, but failed", c.name)
 			}
 			if !c.expectedErr && err != nil {
-				t.Errorf("unexpected error: %v", err)
+				t.Errorf("name: %v, unexpected error: %v", c.name, err)
 			}
+
+			if c.expectedConditionReason != "" {
+
+				managedCluster := &clusterv1.ManagedCluster{}
+				err = r.client.Get(ctx, types.NamespacedName{Name: managedClusterName}, managedCluster)
+				if err != nil {
+					t.Errorf("name %v : get managed cluster error: %v", c.name, err)
+				}
+				condition := meta.FindStatusCondition(
+					managedCluster.Status.Conditions,
+					constants.ConditionManagedClusterImportSucceeded,
+				)
+				if condition != nil && condition.Status != c.expectedConditionStatus {
+					t.Errorf("name %v : expect condition status %s, got %s",
+						c.name, c.expectedConditionStatus, condition.Status)
+				}
+				if condition != nil && condition.Reason != c.expectedConditionReason {
+					t.Errorf("name %v : expect condition reason %s, got %s, message: %s",
+						c.name, c.expectedConditionReason, condition.Reason, condition.Message)
+				}
+			}
+
 		})
 	}
 }

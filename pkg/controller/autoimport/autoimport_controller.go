@@ -6,31 +6,23 @@ package autoimport
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
-	"time"
 
-	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
+	"github.com/openshift/library-go/pkg/operator/events"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/kubernetes"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
-
-	"github.com/openshift/library-go/pkg/operator/events"
-
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
-	"k8s.io/apimachinery/pkg/types"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-	"k8s.io/client-go/kubernetes"
-
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
-
-const restoreLabel = "cluster.open-cluster-management.io/restore-auto-import-secret"
 
 var log = logf.Log.WithName(controllerName)
 
@@ -38,9 +30,25 @@ var log = logf.Log.WithName(controllerName)
 type ReconcileAutoImport struct {
 	client         client.Client
 	kubeClient     kubernetes.Interface
-	workClient     workclient.Interface
 	informerHolder *source.InformerHolder
 	recorder       events.Recorder
+	importHelper   *helpers.ImportHelper
+}
+
+func NewReconcileAutoImport(
+	client client.Client,
+	kubeClient kubernetes.Interface,
+	informerHolder *source.InformerHolder,
+	recorder events.Recorder,
+) *ReconcileAutoImport {
+
+	return &ReconcileAutoImport{
+		client:         client,
+		kubeClient:     kubeClient,
+		informerHolder: informerHolder,
+		recorder:       recorder,
+		importHelper:   helpers.NewImportHelper(informerHolder, recorder, log),
+	}
 }
 
 // blank assignment to verify that ReconcileAutoImport implements reconcile.Reconciler
@@ -69,6 +77,10 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, nil
 	}
 
+	if !managedCluster.DeletionTimestamp.IsZero() {
+		return reconcile.Result{}, nil
+	}
+
 	autoImportSecret, err := r.informerHolder.AutoImportSecretLister.Secrets(managedClusterName).Get(constants.AutoImportSecretName)
 	if errors.IsNotFound(err) {
 		// the auto import secret could have been deleted, do nothing
@@ -78,100 +90,84 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	reqLogger.Info("Reconciling auto import secret")
+	reqLogger.V(5).Info("Reconciling auto import secret")
 
-	importSecretName := fmt.Sprintf("%s-%s", managedClusterName, constants.ImportSecretNameSuffix)
-	importSecret, err := r.informerHolder.ImportSecretLister.Secrets(managedClusterName).Get(importSecretName)
-	if errors.IsNotFound(err) {
-		// there is no import secret, do nothing
-		return reconcile.Result{}, nil
-	}
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// ensure the klusterlet manifest works exist
-	workSelector := labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: "true"})
-	manifestWorks, err := r.informerHolder.KlusterletWorkLister.ManifestWorks(managedClusterName).List(workSelector)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-	if len(manifestWorks) != 2 {
-		reqLogger.Info(fmt.Sprintf("Waiting for klusterlet manifest works for managed cluster %s", managedClusterName))
-		return reconcile.Result{}, nil
-	}
-
-	importClient, restMapper, importErr := helpers.GenerateClientFromSecret(autoImportSecret)
-	switch {
-	case importErr != nil:
-		// failed to generate import client with auto-import sercet, will reduce the auto-import secret retry times and reconcile again
-	case importErr == nil:
-		if val, ok := autoImportSecret.Labels[restoreLabel]; ok && strings.EqualFold(val, "true") {
-			// only update the bootstrap secret on the managed cluster with the auto-import-secret
-			importErr = helpers.UpdateManagedClusterBootstrapSecret(importClient, importSecret, r.recorder)
-		} else {
-			importErr = helpers.ImportManagedClusterFromSecret(importClient, restMapper, r.recorder, importSecret)
+	lastRetry := 0
+	totalRetry := 1
+	if len(autoImportSecret.Annotations[constants.AnnotationAutoImportCurrentRetry]) != 0 {
+		lastRetry, err = strconv.Atoi(autoImportSecret.Annotations[constants.AnnotationAutoImportCurrentRetry])
+		if err != nil {
+			return reconcile.Result{}, err
 		}
 	}
 
-	if importErr != nil {
+	if len(autoImportSecret.Data[constants.AutoImportRetryName]) != 0 {
+		totalRetry, err = strconv.Atoi(string(autoImportSecret.Data[constants.AutoImportRetryName]))
+		if err != nil {
+			if err := helpers.UpdateManagedClusterStatus(
+				r.client,
+				r.recorder,
+				managedClusterName,
+				helpers.NewManagedClusterImportSucceededCondition(
+					metav1.ConditionFalse,
+					constants.ConditionReasonManagedClusterImportFailed,
+					fmt.Sprintf("AutoImportSecretInvalid %s/%s; please check the value %s",
+						autoImportSecret.Namespace, autoImportSecret.Name, constants.AutoImportRetryName),
+				),
+			); err != nil {
+				return reconcile.Result{}, err
+			}
+			// auto import secret invalid, stop retrying
+			return reconcile.Result{}, nil
+		}
+	}
+
+	backupRestore := false
+	if v, ok := autoImportSecret.Labels[constants.LabelAutoImportRestore]; ok && strings.EqualFold(v, "true") {
+		backupRestore = true
+	}
+
+	result, condition, modified, currentRetry, iErr := r.importHelper.Import(
+		backupRestore, managedClusterName, autoImportSecret, lastRetry, totalRetry)
+	// if resources are applied but NOT modified, will not update the condition, keep the original condition.
+	// This check is to prevent the current controller and import status controller from modifying the
+	// ManagedClusterImportSucceeded condition of the managed cluster in a loop
+	if !helpers.ImportingResourcesApplied(&condition) || modified {
 		if err := helpers.UpdateManagedClusterStatus(
 			r.client,
 			r.recorder,
 			managedClusterName,
-			metav1.Condition{
-				Type:   "ManagedClusterImportSucceeded",
-				Status: metav1.ConditionFalse,
-				Message: fmt.Sprintf("Unable to import managed cluster %s with auto-import-secret: %s",
-					managedClusterName, importErr.Error()),
-				Reason: "FailedToDeployKlusterlet",
-			},
+			condition,
 		); err != nil {
 			return reconcile.Result{}, err
 		}
-
-		// failed to apply the import secrect, reduce the retry times and reconcile again
-		retryErr := helpers.UpdateAutoImportRetryTimes(ctx, r.kubeClient, r.recorder, autoImportSecret.DeepCopy())
-		return reconcile.Result{}, utilerrors.NewAggregate([]error{importErr, retryErr})
 	}
 
-	// TODO get more feedback from klusterlet manifest works
-	// TDOO consider to change ManagedClusterImportSucceeded condition to ManagedClusterImportProcessing
-	available, err := helpers.IsManifestWorksAvailable(ctx, r.workClient, managedClusterName,
-		fmt.Sprintf("%s-%s", managedCluster.Name, constants.KlusterletCRDsSuffix),
-		fmt.Sprintf("%s-%s", managedCluster.Name, constants.KlusterletSuffix))
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-	if !available {
-		return reconcile.Result{RequeueAfter: 10 * time.Second}, helpers.UpdateManagedClusterStatus(
-			r.client,
-			r.recorder,
-			managedClusterName,
-			metav1.Condition{
-				Type:    "ManagedClusterImportSucceeded",
-				Status:  metav1.ConditionFalse,
-				Message: "The klusterlet works are not available",
-				Reason:  "KlusterletNotAvailable",
-			},
-		)
+	reqLogger.V(5).Info("Import result", "importError", iErr, "condition", condition,
+		"current", currentRetry, "result", result, "modified", modified)
+
+	if condition.Reason == constants.ConditionReasonManagedClusterImportFailed ||
+		helpers.ImportingResourcesApplied(&condition) {
+		// delete secret
+		if err := helpers.DeleteAutoImportSecret(ctx, r.kubeClient, autoImportSecret, r.recorder); err != nil {
+			return reconcile.Result{}, err
+		}
+		return reconcile.Result{}, nil
 	}
 
-	if err := helpers.UpdateManagedClusterStatus(
-		r.client,
-		r.recorder,
-		managedClusterName,
-		metav1.Condition{
-			Type:    "ManagedClusterImportSucceeded",
-			Status:  metav1.ConditionTrue,
-			Message: "Import succeeded",
-			Reason:  "ManagedClusterImported",
-		},
-	); err != nil {
-		return reconcile.Result{}, err
+	if lastRetry < currentRetry && currentRetry < totalRetry {
+		// update secret
+		if autoImportSecret.Annotations == nil {
+			autoImportSecret.Annotations = make(map[string]string)
+		}
+		autoImportSecret.Annotations[constants.AnnotationAutoImportCurrentRetry] = strconv.Itoa(currentRetry)
+
+		if _, err := r.kubeClient.CoreV1().Secrets(managedClusterName).Update(
+			ctx, autoImportSecret, metav1.UpdateOptions{},
+		); err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 
-	reqLogger.Info(fmt.Sprintf("Managed cluster is imported, try to delete its auto import secret %s/%s",
-		autoImportSecret.Namespace, autoImportSecret.Name))
-	return reconcile.Result{}, helpers.DeleteAutoImportSecret(ctx, r.kubeClient, autoImportSecret, r.recorder)
+	return result, iErr
 }

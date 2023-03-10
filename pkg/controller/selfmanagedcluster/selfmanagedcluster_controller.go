@@ -5,24 +5,18 @@ package selfmanagedcluster
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-
 	"github.com/openshift/library-go/pkg/operator/events"
-
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/types"
-	utilerrors "k8s.io/apimachinery/pkg/util/errors"
-
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -35,6 +29,27 @@ type ReconcileLocalCluster struct {
 	restMapper     meta.RESTMapper
 	informerHolder *source.InformerHolder
 	recorder       events.Recorder
+	importHelper   *helpers.ImportHelper
+}
+
+func NewReconcileLocalCluster(
+	clientHolder *helpers.ClientHolder,
+	informerHolder *source.InformerHolder,
+	restMapper meta.RESTMapper,
+	recorder events.Recorder,
+) *ReconcileLocalCluster {
+
+	return &ReconcileLocalCluster{
+		clientHolder:   clientHolder,
+		restMapper:     restMapper,
+		informerHolder: informerHolder,
+		recorder:       recorder,
+		importHelper: helpers.NewImportHelper(informerHolder, recorder, log).WithGenerateClientHolderFunc(
+			func(secret *v1.Secret) (*helpers.ClientHolder, meta.RESTMapper, error) {
+				return clientHolder, restMapper, nil
+			},
+		),
+	}
 }
 
 // blank assignment to verify that ReconcileLocalCluster implements reconcile.Reconciler
@@ -58,7 +73,12 @@ func (r *ReconcileLocalCluster) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	if selfManaged, ok := managedCluster.Labels[constants.SelfManagedLabel]; !ok || !strings.EqualFold(selfManaged, "true") {
+	if !managedCluster.DeletionTimestamp.IsZero() {
+		return reconcile.Result{}, nil
+	}
+
+	if selfManaged, ok := managedCluster.Labels[constants.SelfManagedLabel]; !ok ||
+		!strings.EqualFold(selfManaged, "true") {
 		return reconcile.Result{}, nil
 	}
 
@@ -74,48 +94,20 @@ func (r *ReconcileLocalCluster) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	importSecretName := fmt.Sprintf("%s-%s", request.Name, constants.ImportSecretNameSuffix)
-	importSecret, err := r.informerHolder.ImportSecretLister.Secrets(request.Name).Get(importSecretName)
-	if errors.IsNotFound(err) {
-		// the import secret could have been deleted, do nothing
-		return reconcile.Result{}, nil
-	}
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-
-	// ensure the klusterlet manifest works exist
-	workSelector := labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: "true"})
-	manifestWorks, err := r.informerHolder.KlusterletWorkLister.ManifestWorks(request.Name).List(workSelector)
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-	if len(manifestWorks) != 2 {
-		reqLogger.Info(fmt.Sprintf("Waiting for klusterlet manifest works for managed cluster %s", request.Name))
-		return reconcile.Result{}, nil
+	result, condition, modified, _, iErr := r.importHelper.Import(false, request.Name, nil, 0, 1)
+	// if resources are applied but NOT modified, will not update the condition, keep the original condition.
+	// This check is to prevent the current controller and import status controller from modifying the
+	// ManagedClusterImportSucceeded condition of the managed cluster in a loop
+	if !helpers.ImportingResourcesApplied(&condition) || modified {
+		if err := helpers.UpdateManagedClusterStatus(
+			r.clientHolder.RuntimeClient,
+			r.recorder,
+			request.Name,
+			condition,
+		); err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 
-	importCondition := metav1.Condition{
-		Type:    "ManagedClusterImportSucceeded",
-		Status:  metav1.ConditionTrue,
-		Message: "Import succeeded",
-		Reason:  "ManagedClusterImported",
-	}
-
-	errs := []error{}
-	err = helpers.ImportManagedClusterFromSecret(r.clientHolder, r.restMapper, r.recorder, importSecret)
-	if err != nil {
-		errs = append(errs, err)
-
-		importCondition.Status = metav1.ConditionFalse
-		importCondition.Message = fmt.Sprintf("Unable to import %s: %s", request.Name, err.Error())
-		importCondition.Reason = "ManagedClusterNotImported"
-	}
-
-	err = helpers.UpdateManagedClusterStatus(r.clientHolder.RuntimeClient, r.recorder, request.Name, importCondition)
-	if err != nil {
-		errs = append(errs, err)
-	}
-
-	return reconcile.Result{}, utilerrors.NewAggregate(errs)
+	return result, iErr
 }

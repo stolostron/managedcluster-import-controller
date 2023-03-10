@@ -121,7 +121,7 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	return reconcile.Result{}, helpers.ApplyResources(
+	_, err = helpers.ApplyResources(
 		r.clientHolder,
 		r.recorder,
 		r.scheme,
@@ -129,6 +129,7 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 		createKlusterletCRDsManifestWork(managedCluster, importSecret),
 		createKlusterletManifestWork(managedCluster, importSecret),
 	)
+	return reconcile.Result{}, err
 }
 
 func (r *ReconcileManifestWork) deleteAddonsAndWorks(ctx context.Context,

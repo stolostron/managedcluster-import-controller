@@ -425,21 +425,29 @@ func assertHostedManagedClusterDeletedFromSpoke(cluster, managementCluster strin
 func assertManagedClusterImportSecretApplied(clusterName string, mode ...string) {
 	start := time.Now()
 	defer func() {
-		util.Logf("assert managed cluster %s import secret applied spending time: %.2f seconds", clusterName, time.Since(start).Seconds())
+		util.Logf("assert managed cluster %s import secret applied spending time: %.2f seconds",
+			clusterName, time.Since(start).Seconds())
 	}()
 	ginkgo.By(fmt.Sprintf("Managed cluster %s should be imported", clusterName), func() {
 		gomega.Expect(wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
-			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
+			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(
+				context.TODO(), clusterName, metav1.GetOptions{})
 			if err != nil {
 				util.Logf("assert managed cluster %s import secret applied get cluster error: %v", clusterName, err)
 				return false, err
 			}
 
-			util.Logf("assert managed cluster %s import secret applied cluster conditions: %v", clusterName, cluster.Status.Conditions)
+			util.Logf("assert managed cluster %s import secret applied cluster conditions: %v",
+				clusterName, cluster.Status.Conditions)
 			if len(mode) != 0 && mode[0] == constants.KlusterletDeployModeHosted {
-				return meta.IsStatusConditionTrue(cluster.Status.Conditions, "ExternalManagedKubeconfigCreatedSucceeded"), nil
+				return meta.IsStatusConditionTrue(
+					cluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded), nil
 			}
-			return meta.IsStatusConditionTrue(cluster.Status.Conditions, "ManagedClusterImportSucceeded"), nil
+
+			return helpers.ImportingResourcesApplied(meta.FindStatusCondition(
+				cluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)) ||
+				meta.IsStatusConditionTrue(cluster.Status.Conditions,
+					constants.ConditionManagedClusterImportSucceeded), nil
 		})).ToNot(gomega.HaveOccurred())
 	})
 }
@@ -540,6 +548,31 @@ func assertManagedClusterManifestWorksAvailable(clusterName string) {
 	time.Sleep(10 * time.Second)
 }
 
+func assertHostedManagedClusterManifestWorksAvailable(clusterName, hostingClusterName string) {
+	assertManagedClusterFinalizer(clusterName,
+		"managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup")
+
+	ginkgo.By(fmt.Sprintf("Hosted managed cluster %s manifest works should be available", clusterName), func() {
+		start := time.Now()
+		gomega.Expect(wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
+			klusterletName := fmt.Sprintf("%s-hosted-klusterlet", clusterName)
+			manifestWorks := hubWorkClient.WorkV1().ManifestWorks(hostingClusterName)
+
+			klusterlet, err := manifestWorks.Get(context.TODO(), klusterletName, metav1.GetOptions{})
+			if err != nil {
+				return false, err
+			}
+			if !meta.IsStatusConditionTrue(klusterlet.Status.Conditions, workv1.WorkAvailable) {
+				return false, nil
+			}
+
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
+		util.Logf("assert hosted managed cluster manifestworks spending time: %.2f seconds",
+			time.Since(start).Seconds())
+	})
+}
+
 func assertAutoImportSecretDeleted(managedClusterName string) {
 	start := time.Now()
 	defer func() {
@@ -611,6 +644,19 @@ func assertKlusterletNodePlacement(nodeSelecor map[string]string, tolerations []
 			if !equality.Semantic.DeepEqual(deploy.Spec.Template.Spec.Tolerations, tolerations) {
 				util.Logf(cmp.Diff(klusterlet.Spec.NodePlacement.Tolerations, tolerations))
 				return false, nil
+			}
+
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
+	})
+}
+
+func assertNamespaceCreated(kubeClient kubernetes.Interface, namespace string) {
+	ginkgo.By(fmt.Sprintf("Namespace %s should be created", namespace), func() {
+		gomega.Expect(wait.Poll(1*time.Second, 60*time.Second, func() (bool, error) {
+			_, err := kubeClient.CoreV1().Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{})
+			if err != nil {
+				return false, err
 			}
 
 			return true, nil

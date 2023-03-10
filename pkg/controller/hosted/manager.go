@@ -71,7 +71,7 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder
 			UpdateFunc: func(e event.UpdateEvent) bool {
 				workName := e.ObjectNew.GetName()
 				// for update event, only watch hosted mode manifest works
-				if !strings.HasSuffix(workName, constants.HostedKlusterletManifestworkSuffix) ||
+				if !strings.HasSuffix(workName, constants.HostedKlusterletManifestworkSuffix) &&
 					!strings.HasSuffix(workName, constants.HostedManagedKubeconfigManifestworkSuffix) {
 					return false
 				}
@@ -79,7 +79,8 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder
 				new, okNew := e.ObjectNew.(*workv1.ManifestWork)
 				old, okOld := e.ObjectOld.(*workv1.ManifestWork)
 				if okNew && okOld {
-					return !helpers.ManifestsEqual(new.Spec.Workload.Manifests, old.Spec.Workload.Manifests)
+					return !helpers.ManifestsEqual(new.Spec.Workload.Manifests, old.Spec.Workload.Manifests) ||
+						!equality.Semantic.DeepEqual(new.Status, old.Status)
 				}
 
 				return false

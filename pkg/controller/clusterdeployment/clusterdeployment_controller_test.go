@@ -21,6 +21,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -50,11 +51,12 @@ func TestReconcile(t *testing.T) {
 	defer apiServer.Stop()
 
 	cases := []struct {
-		name        string
-		objs        []client.Object
-		works       []runtime.Object
-		secrets     []runtime.Object
-		expectedErr bool
+		name                    string
+		objs                    []client.Object
+		works                   []runtime.Object
+		secrets                 []runtime.Object
+		expectedErr             bool
+		expectedConditionReason string
 	}{
 		{
 			name:    "no clusterdeployment",
@@ -193,7 +195,8 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedErr: true,
+			expectedErr:             false,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
 		},
 	}
 
@@ -213,23 +216,40 @@ func TestReconcile(t *testing.T) {
 				workInformer.GetStore().Add(work)
 			}
 
-			r := &ReconcileClusterDeployment{
-				client:     fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).Build(),
-				kubeClient: kubeClient,
-				informerHolder: &source.InformerHolder{
+			r := NewReconcileClusterDeployment(
+				fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).Build(),
+				kubeClient,
+				&source.InformerHolder{
 					AutoImportSecretLister: kubeInformerFactory.Core().V1().Secrets().Lister(),
 					ImportSecretLister:     kubeInformerFactory.Core().V1().Secrets().Lister(),
 					KlusterletWorkLister:   workInformerFactory.Work().V1().ManifestWorks().Lister(),
 				},
-				recorder: eventstesting.NewTestingEventRecorder(t),
-			}
+				eventstesting.NewTestingEventRecorder(t),
+			)
 
 			_, err := r.Reconcile(context.TODO(), reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}})
 			if c.expectedErr && err == nil {
-				t.Errorf("expected error, but failed")
+				t.Errorf("name: %v, expected error, but failed", c.name)
 			}
 			if !c.expectedErr && err != nil {
-				t.Errorf("unexpected error: %v", err)
+				t.Errorf("name: %v, unexpected error: %v", c.name, err)
+			}
+
+			if c.expectedConditionReason != "" {
+				managedCluster := &clusterv1.ManagedCluster{}
+				err = r.client.Get(context.TODO(), types.NamespacedName{Name: "test"}, managedCluster)
+				if err != nil {
+					t.Errorf("name %v : get managed cluster error: %v", c.name, err)
+				}
+				condition := meta.FindStatusCondition(
+					managedCluster.Status.Conditions,
+					constants.ConditionManagedClusterImportSucceeded,
+				)
+
+				if condition != nil && condition.Reason != c.expectedConditionReason {
+					t.Errorf("name %v : expect condition reason %s, got %s, message: %s",
+						c.name, c.expectedConditionReason, condition.Reason, condition.Message)
+				}
 			}
 		})
 	}

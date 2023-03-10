@@ -10,8 +10,21 @@ const YamlSperator = "\n---\n"
 /* #nosec */
 const AutoImportSecretName string = "auto-import-secret"
 
-// AutoImportRetryName is the secret data key of auto import retry
-const AutoImportRetryName string = "autoImportRetry"
+const (
+	// AutoImportRetryName is the secret data key of auto import retry
+	AutoImportRetryName string = "autoImportRetry"
+
+	// AnnotationAutoImportCurrentRetry is the annotation key of auto import secret used to indicate
+	// the current retry times of auto importing a managed cluster
+	AnnotationAutoImportCurrentRetry = "managedcluster-import-controller.open-cluster-management.io/current-retry"
+
+	// AnnotationKeepingAutoImportSecret is the annotation key of auto import secret used to indicate
+	// keeping this secret after the cluster is imported successfully
+	AnnotationKeepingAutoImportSecret = "managedcluster-import-controller.open-cluster-management.io/keeping-auto-import-secret"
+
+	// LabelAutoImportRestore is the label key of auto import secret used for backup restore case
+	LabelAutoImportRestore = "cluster.open-cluster-management.io/restore-auto-import-secret"
+)
 
 const PodNamespaceEnvVarName = "POD_NAMESPACE"
 
@@ -89,4 +102,15 @@ const (
 const (
 	KlusterletSuffix     = "klusterlet"
 	KlusterletCRDsSuffix = "klusterlet-crds"
+)
+
+const (
+	// ConditionManagedClusterImportSucceeded is the condition type of managed cluster to indicate whether the managed
+	// cluster is imported successfully
+	ConditionManagedClusterImportSucceeded = "ManagedClusterImportSucceeded"
+
+	ConditionReasonManagedClusterWaitForImporting = "ManagedClusterWaitForImporting"
+	ConditionReasonManagedClusterImporting        = "ManagedClusterImporting"
+	ConditionReasonManagedClusterImportFailed     = "ManagedClusterImportFailed"
+	ConditionReasonManagedClusterImported         = "ManagedClusterImported"
 )
