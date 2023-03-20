@@ -10,17 +10,9 @@ import (
 	"reflect"
 	"testing"
 
-	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
-	operatorfake "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
-	workfake "open-cluster-management.io/api/client/work/clientset/versioned/fake"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	operatorv1 "open-cluster-management.io/api/operator/v1"
-	workv1 "open-cluster-management.io/api/work/v1"
-
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	"github.com/openshift/library-go/pkg/operator/resource/resourceapply"
 	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
-
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -39,16 +31,25 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/utils/diff"
-
+	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	operatorfake "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
+	workfake "open-cluster-management.io/api/client/work/clientset/versioned/fake"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+
+	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 )
 
 var testscheme = scheme.Scheme
 
 func init() {
-	testscheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
-	testscheme.AddKnownTypes(operatorv1.SchemeGroupVersion, &operatorv1.Klusterlet{})
+	testscheme.AddKnownTypes(clusterv1.GroupVersion, &clusterv1.ManagedCluster{})
+	testscheme.AddKnownTypes(operatorv1.GroupVersion, &operatorv1.Klusterlet{})
+	testscheme.AddKnownTypes(addonv1alpha1.GroupVersion, &addonv1alpha1.ManagedClusterAddOn{})
+	testscheme.AddKnownTypes(addonv1alpha1.GroupVersion, &addonv1alpha1.ManagedClusterAddOnList{})
 	testscheme.AddKnownTypes(crdv1beta1.SchemeGroupVersion, &crdv1beta1.CustomResourceDefinition{})
 	testscheme.AddKnownTypes(crdv1.SchemeGroupVersion, &crdv1.CustomResourceDefinition{})
 }
@@ -1232,5 +1233,159 @@ func createBasic(serverURL, clusterName, userName string, caCert []byte) *client
 		},
 		AuthInfos:      map[string]*clientcmdapi.AuthInfo{},
 		CurrentContext: contextName,
+	}
+}
+
+func TestForceDeleteManagedClusterAddon(t *testing.T) {
+	cases := []struct {
+		name               string
+		existAddon         *addonv1alpha1.ManagedClusterAddOn
+		addon              addonv1alpha1.ManagedClusterAddOn
+		expectAddonDeleted bool
+		expectFinalizers   []string
+	}{
+		{
+			name: "no finalizer",
+			existAddon: &addonv1alpha1.ManagedClusterAddOn{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test",
+				},
+			},
+			addon: addonv1alpha1.ManagedClusterAddOn{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test",
+				},
+			},
+			expectAddonDeleted: true,
+		},
+		{
+			name: "no addon",
+			addon: addonv1alpha1.ManagedClusterAddOn{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test",
+				},
+			},
+			expectAddonDeleted: true,
+		},
+		{
+			name: "no hosting cleanup finalizer",
+			existAddon: &addonv1alpha1.ManagedClusterAddOn{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test",
+					Namespace:  "test",
+					Finalizers: []string{"a", "b"},
+				},
+			},
+			addon: addonv1alpha1.ManagedClusterAddOn{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test",
+				},
+			},
+			expectAddonDeleted: true,
+		},
+		{
+			name: "only hosting cleanup finalizer",
+			existAddon: &addonv1alpha1.ManagedClusterAddOn{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test",
+					Namespace:  "test",
+					Finalizers: []string{addonv1alpha1.AddonHostingManifestFinalizer},
+				},
+			},
+			addon: addonv1alpha1.ManagedClusterAddOn{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test",
+				},
+			},
+			expectAddonDeleted: false,
+			expectFinalizers:   []string{addonv1alpha1.AddonHostingManifestFinalizer},
+		},
+		{
+			name: "only hosting pre delete hook cleanup finalizer",
+			existAddon: &addonv1alpha1.ManagedClusterAddOn{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:       "test",
+					Namespace:  "test",
+					Finalizers: []string{addonv1alpha1.AddonHostingPreDeleteHookFinalizer},
+				},
+			},
+			addon: addonv1alpha1.ManagedClusterAddOn{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test",
+				},
+			},
+			expectAddonDeleted: false,
+			expectFinalizers:   []string{addonv1alpha1.AddonHostingPreDeleteHookFinalizer},
+		},
+		{
+			name: "hosting cleanup and other finalizers",
+			existAddon: &addonv1alpha1.ManagedClusterAddOn{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test",
+					Finalizers: []string{addonv1alpha1.AddonHostingManifestFinalizer,
+						addonv1alpha1.AddonHostingPreDeleteHookFinalizer,
+						addonv1alpha1.AddonDeprecatedHostingManifestFinalizer,
+						addonv1alpha1.AddonDeprecatedHostingPreDeleteHookFinalizer,
+						"a", "b"},
+				},
+			},
+			addon: addonv1alpha1.ManagedClusterAddOn{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test",
+				},
+			},
+			expectAddonDeleted: false,
+			expectFinalizers: []string{addonv1alpha1.AddonHostingManifestFinalizer,
+				addonv1alpha1.AddonHostingPreDeleteHookFinalizer,
+				addonv1alpha1.AddonDeprecatedHostingManifestFinalizer,
+				addonv1alpha1.AddonDeprecatedHostingPreDeleteHookFinalizer},
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ctx := context.TODO()
+			fakeRecorder := eventstesting.NewTestingEventRecorder(t)
+
+			runtimeClientBuilder := fake.NewClientBuilder().WithScheme(testscheme)
+			if c.existAddon != nil {
+				runtimeClientBuilder.WithObjects(c.existAddon)
+			}
+			runtimeClient := runtimeClientBuilder.Build()
+			err := ForceDeleteManagedClusterAddon(ctx, runtimeClient, fakeRecorder, c.addon.Namespace, c.addon.Name)
+			if err != nil {
+				t.Errorf("unexpect err %v", err)
+			}
+
+			addon := addonv1alpha1.ManagedClusterAddOn{}
+			err = runtimeClient.Get(ctx, types.NamespacedName{Namespace: c.addon.Namespace, Name: c.addon.Name}, &addon)
+
+			if err != nil && !errors.IsNotFound(err) {
+				t.Errorf("unexpect err %v", err)
+			}
+			if c.expectAddonDeleted && !errors.IsNotFound(err) {
+				t.Errorf("addon should be deleted, but got err %v", err)
+			}
+			if !c.expectAddonDeleted {
+				if err != nil {
+					t.Errorf("addon should not be deleted, but got err %v", err)
+				}
+
+				if !reflect.DeepEqual(addon.Finalizers, c.expectFinalizers) {
+					t.Errorf("expect finalizer %v but got %v", c.expectFinalizers, addon.Finalizers)
+				}
+
+				if addon.DeletionTimestamp.IsZero() {
+					t.Errorf("addon should be in deleting status")
+				}
+			}
+		})
 	}
 }

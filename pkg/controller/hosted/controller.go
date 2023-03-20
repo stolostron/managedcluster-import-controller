@@ -11,11 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	"github.com/stolostron/managedcluster-import-controller/pkg/source"
-	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
-
 	"github.com/ghodss/yaml"
 	"github.com/openshift/library-go/pkg/operator/events"
 	operatorhelpers "github.com/openshift/library-go/pkg/operator/v1helpers"
@@ -26,11 +21,16 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 )
 
 //go:embed manifests
@@ -119,7 +119,7 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 func (r *ReconcileHosted) cleanup(ctx context.Context,
 	managedCluster *clusterv1.ManagedCluster) (reconcile.Result, error) {
 
-	hostedWorksSelector := labels.SelectorFromSet(map[string]string{constants.HostedClusterLabel: managedCluster.Name})
+	hostingWorksSelector := labels.SelectorFromSet(map[string]string{constants.HostedClusterLabel: managedCluster.Name})
 
 	hostingCluster, err := helpers.GetHostingCluster(managedCluster)
 	if err != nil {
@@ -127,9 +127,9 @@ func (r *ReconcileHosted) cleanup(ctx context.Context,
 	}
 
 	// use work client to list all works only when a managed cluster is deleting
-	hostedWorks, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(hostingCluster).List(
+	hostingKlusterletWorks, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(hostingCluster).List(
 		ctx, metav1.ListOptions{
-			LabelSelector: hostedWorksSelector.String(),
+			LabelSelector: hostingWorksSelector.String(),
 		})
 	if err != nil {
 		return reconcile.Result{}, err
@@ -143,18 +143,18 @@ func (r *ReconcileHosted) cleanup(ctx context.Context,
 
 	// if there no works, remove the manifest work finalizer from the managed cluster
 	if err := helpers.AssertManifestWorkFinalizer(ctx, r.clientHolder.RuntimeClient, r.recorder,
-		managedCluster, len(manifestWorks.Items)+len(hostedWorks.Items)); err != nil {
+		managedCluster, len(manifestWorks.Items)+len(hostingKlusterletWorks.Items)); err != nil {
 		return reconcile.Result{}, err
 	}
 
-	if (len(manifestWorks.Items) + len(hostedWorks.Items)) == 0 {
+	if (len(manifestWorks.Items) + len(hostingKlusterletWorks.Items)) == 0 {
 		return reconcile.Result{}, nil
 	}
 
 	// the managed cluster is deleting, delete its addons and manifestworks
 	// Note: we only informer the hosted works, so we need to requeue here
 	return reconcile.Result{RequeueAfter: 5 * time.Second},
-		r.deleteAddonsAndWorks(ctx, managedCluster, manifestWorks.Items, hostedWorks.Items)
+		r.deleteAddonsAndWorks(ctx, managedCluster, manifestWorks.Items, hostingKlusterletWorks.Items)
 }
 
 func (r *ReconcileHosted) importCluster(ctx context.Context, managedCluster *clusterv1.ManagedCluster,
@@ -344,11 +344,11 @@ func klusterletNamespace(managedCluster string) string {
 }
 
 func (r *ReconcileHosted) deleteAddonsAndWorks(
-	ctx context.Context, cluster *clusterv1.ManagedCluster, works, hostedWorks []workv1.ManifestWork) error {
+	ctx context.Context, cluster *clusterv1.ManagedCluster, works, hostingWorks []workv1.ManifestWork) error {
 	errs := append(
 		[]error{},
 		helpers.DeleteManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster),
-		r.deleteManifestWorks(ctx, cluster, works, hostedWorks),
+		r.deleteManifestWorks(ctx, cluster, works, hostingWorks),
 	)
 	return operatorhelpers.NewMultiLineAggregate(errs)
 }
@@ -361,11 +361,47 @@ func (r *ReconcileHosted) deleteAddonsAndWorks(
 //  2. delete the manifest works that do not include klusterlet addon works
 //  3. delete the klusterlet and managed kubeconfig manifest works
 func (r *ReconcileHosted) deleteManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster,
-	works, hostedWorks []workv1.ManifestWork) error {
+	works, hostingWorks []workv1.ManifestWork) error {
+	err := r.deleteManagedClusterManifestWorks(ctx, cluster, works)
+	if err != nil {
+		return err
+	}
+
+	noAddons, err := helpers.NoManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, cluster.GetName())
+	if err != nil {
+		return err
+	}
+	if !noAddons {
+		// wait for addons deletion
+		return nil
+	}
+
+	ignoreNothing := func(_ string, _ workv1.ManifestWork) bool { return false }
+	noPending, err := helpers.NoPendingManifestWorks(ctx, log, cluster.GetName(), works, ignoreNothing)
+	if err != nil {
+		return err
+	}
+	if !noPending {
+		// still have other works, do nothing
+		return nil
+	}
+
+	// delete hosting manifestWorks from the hosting cluster namespace
+	for _, hostedWork := range hostingWorks {
+		if err := helpers.DeleteManifestWork(ctx, r.clientHolder.WorkClient, r.recorder,
+			hostedWork.Namespace, hostedWork.Name); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *ReconcileHosted) deleteManagedClusterManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster,
+	works []workv1.ManifestWork) error {
 	if helpers.IsClusterUnavailable(cluster) {
-		// the managed cluster is offline, force delete all manifest works
-		return helpers.ForceDeleteAllManifestWorks(ctx,
-			r.clientHolder.WorkClient, r.recorder, append(works, hostedWorks...))
+		// the managed cluster is offline, force delete all managed cluster manifest works
+		return helpers.ForceDeleteAllManifestWorks(ctx, r.clientHolder.WorkClient, r.recorder, works)
 	}
 
 	// delete works that do not include klusterlet works and klusterlet addon works, the addon works were removed
@@ -390,40 +426,9 @@ func (r *ReconcileHosted) deleteManifestWorks(ctx context.Context, cluster *clus
 		}
 		return true
 	}
-	err := helpers.DeleteManifestWorkWithSelector(ctx,
+
+	return helpers.DeleteManifestWorkWithSelector(ctx,
 		r.clientHolder.WorkClient, r.recorder, cluster, works, ignoreAddons)
-	if err != nil {
-		return err
-	}
-
-	noAddons, err := helpers.NoManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, cluster.GetName())
-	if err != nil {
-		return err
-	}
-	if !noAddons {
-		// wait for addons deletion
-		return nil
-	}
-
-	ignoreNothing := func(_ string, _ workv1.ManifestWork) bool { return false }
-	noPending, err := helpers.NoPendingManifestWorks(ctx, log, cluster.GetName(), works, ignoreNothing)
-	if err != nil {
-		return err
-	}
-	if !noPending {
-		// still have other works, do nothing
-		return nil
-	}
-
-	// delete hosted manifestWorks from the hosting cluster namespace
-	for _, hostedWork := range hostedWorks {
-		if err := helpers.DeleteManifestWork(ctx, r.clientHolder.WorkClient, r.recorder,
-			hostedWork.Namespace, hostedWork.Name); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 // createHostingManifestWork creates the manifestwork from import secret for hosted mode cluster
