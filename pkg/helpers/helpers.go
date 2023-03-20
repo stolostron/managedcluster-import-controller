@@ -633,18 +633,19 @@ func ForceDeleteManagedClusterAddon(
 	ctx context.Context,
 	runtimeClient client.Client,
 	recorder events.Recorder,
-	addon addonv1alpha1.ManagedClusterAddOn) error {
-	if err := runtimeClient.Get(ctx, types.NamespacedName{Namespace: addon.Namespace, Name: addon.Name}, &addon); err != nil {
+	addonNamespace, addonName string) error {
+
+	addon := addonv1alpha1.ManagedClusterAddOn{}
+	if err := runtimeClient.Get(ctx,
+		types.NamespacedName{Namespace: addonNamespace, Name: addonName}, &addon); err != nil {
 		if errors.IsNotFound(err) {
 			return nil
 		}
 		return err
 	}
 
-	if len(addon.Finalizers) != 0 {
-		patch := client.MergeFrom(addon.DeepCopy())
-		addon.Finalizers = []string{}
-		if err := runtimeClient.Patch(ctx, &addon, patch); err != nil {
+	if addon.DeletionTimestamp.IsZero() {
+		if err := runtimeClient.Delete(ctx, &addon); err != nil {
 			if errors.IsNotFound(err) {
 				return nil
 			}
@@ -652,8 +653,23 @@ func ForceDeleteManagedClusterAddon(
 		}
 	}
 
-	if addon.DeletionTimestamp.IsZero() {
-		if err := runtimeClient.Delete(ctx, &addon); err != nil {
+	// Remove all finalizers except "cluster.open-cluster-management.io/hosting-manifests-cleanup"
+	// and "cluster.open-cluster-management.io/hosting-addon-pre-delete"
+	// The hosted mode managed cluster addon uses these finalizer to clean up the manifestworks on
+	// the hosting cluster, if we remove it, the manifestworks on the hosting cluster may remain
+	var finalizers []string
+	for _, f := range addon.Finalizers {
+		if f == constants.FinalizerAddonHostingClusterCleanup ||
+			f == constants.FinalizerAddonHostingClusterPreDelete {
+			finalizers = append(finalizers, f)
+		}
+	}
+
+	if len(finalizers) != len(addon.Finalizers) {
+		patch := client.MergeFrom(addon.DeepCopy())
+		addon.Finalizers = finalizers
+
+		if err := runtimeClient.Patch(ctx, &addon, patch); err != nil {
 			if errors.IsNotFound(err) {
 				return nil
 			}
@@ -677,7 +693,7 @@ func ForceDeleteAllManagedClusterAddons(
 		return err
 	}
 	for _, item := range addons.Items {
-		if err := ForceDeleteManagedClusterAddon(ctx, runtimeClient, recorder, item); err != nil {
+		if err := ForceDeleteManagedClusterAddon(ctx, runtimeClient, recorder, item.Namespace, item.Name); err != nil {
 			return err
 		}
 	}

@@ -174,12 +174,14 @@ func (r *ReconcileManagedCluster) deleteManagedClusterAddon(
 		return err
 	}
 	for _, addon := range addons.Items {
-		if err = helpers.ForceDeleteManagedClusterAddon(ctx, r.client, r.recorder, addon); err != nil {
+		if err = helpers.ForceDeleteManagedClusterAddon(ctx, r.client, r.recorder,
+			addon.Namespace, addon.Name); err != nil {
 			return err
 		}
 	}
 
-	r.recorder.Eventf("ManagedClusterNamespaceDeleted", "The managed cluster %s namespace is deleted", managedCluster.Name)
+	r.recorder.Eventf("ManagedClusterNamespaceDeleted",
+		"The managed cluster %s namespace is deleted", managedCluster.Name)
 	return nil
 }
 
