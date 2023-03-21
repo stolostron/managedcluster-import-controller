@@ -12,6 +12,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
+	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 
@@ -169,6 +170,16 @@ func (r *ReconcileManifestWork) deleteManifestWorks(
 	//
 	// if there are any Hosted mode manifestworks we also wait for users to detach the managed cluster first.
 	ignoreKlusterletAndAddons := func(clusterName string, manifestWork workv1.ManifestWork) bool {
+		// if the addon is implemented by addon-framekwork, the format of manifestwork name is
+		// the old format : addon-<addon name>-deploy,
+		// the new format : addon-<addon name>-deploy-<index>
+		// and the manifestwork has the addon label.
+		// so cannot only use the name to filter.
+		workLabels := manifestWork.GetLabels()
+		if _, ok := workLabels[addonapiv1alpha1.AddonLabelKey]; ok {
+			return true
+		}
+
 		manifestWorkName := manifestWork.GetName()
 		switch {
 		case manifestWorkName == fmt.Sprintf("%s-%s", clusterName, constants.KlusterletSuffix):

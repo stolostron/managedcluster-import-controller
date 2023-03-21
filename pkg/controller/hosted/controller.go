@@ -14,6 +14,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
+	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 
 	"github.com/ghodss/yaml"
 	"github.com/openshift/library-go/pkg/operator/events"
@@ -351,6 +352,15 @@ func (r *ReconcileHosted) deleteManifestWorks(ctx context.Context, cluster *clus
 	// delete works that do not include klusterlet works and klusterlet addon works, the addon works were removed
 	// above, we need to wait them to be deleted.
 	ignoreAddons := func(clusterName string, manifestWork workv1.ManifestWork) bool {
+		// if the addon is implemented by addon-framekwork, the format of manifestwork name is
+		// the old format : addon-<addon name>-deploy,
+		// the new format : addon-<addon name>-deploy-<index>
+		// and the manifestwork has the addon label.
+		// so cannot only use the name to filter.
+		workLabels := manifestWork.GetLabels()
+		if _, ok := workLabels[addonapiv1alpha1.AddonLabelKey]; ok {
+			return true
+		}
 		manifestWorkName := manifestWork.GetName()
 		switch {
 		case strings.HasPrefix(manifestWorkName, fmt.Sprintf("%s-klusterlet-addon", manifestWork.GetNamespace())):
