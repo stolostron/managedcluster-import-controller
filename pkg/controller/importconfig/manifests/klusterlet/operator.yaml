@@ -57,3 +57,10 @@ spec:
             scheme: HTTPS
             port: 8443
           initialDelaySeconds: 2
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 2Gi
