@@ -216,6 +216,68 @@ func TestReconcile(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "managedcluster is Hosted mode, and managedCluster is deleting, the non-addon manifestworks are deleted",
+			runtimeObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.HostingClusterNameAnnotation:   "cluster1",
+						},
+						DeletionTimestamp: &metav1.Time{Time: time.Now()}, // managedCluster is deleted
+					},
+				},
+			},
+			kubeObjs: []runtime.Object{},
+			workObjs: []runtime.Object{
+				// manifestworks
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "manifestwork",
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "cluster1",
+						Name:      "test-hosted-klusterlet",
+						Labels: map[string]string{
+							constants.HostedClusterLabel: "test",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "cluster1",
+						Name:      "test-hosted-kubeconfig",
+						Labels: map[string]string{
+							constants.HostedClusterLabel: "test",
+						},
+					},
+				},
+			},
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
+			vaildateFunc: func(t *testing.T, reconcileResult reconcile.Result, reconcileErr error, ch *helpers.ClientHolder) {
+				managedcluster := &clusterv1.ManagedCluster{}
+				err := ch.RuntimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, managedcluster)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+					return
+				}
+
+				// expect hosted manifestworks are deleted
+				manifestworks, err := ch.WorkClient.WorkV1().ManifestWorks("test").List(context.TODO(), metav1.ListOptions{})
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+					return
+				}
+				if len(manifestworks.Items) != 0 {
+					t.Errorf("expect no manifestwork, but get %v", manifestworks.Items)
+				}
+			},
+		},
 		// managedcluster is Hosted mode, but no import secret
 		{
 			name: "managedcluster is Hosted mode, and managedCluster is deleting",
