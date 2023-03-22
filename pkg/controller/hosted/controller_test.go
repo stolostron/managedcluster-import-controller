@@ -138,6 +138,82 @@ func TestReconcile(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "managedcluster is Hosted mode, but hosting cluster is not a managed cluster of the hub",
+			runtimeObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.HostingClusterNameAnnotation:   "cluster1", // hosting cluster name
+						},
+					},
+				},
+			},
+			kubeObjs: []runtime.Object{},
+			workObjs: []runtime.Object{},
+			request:  reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
+			vaildateFunc: func(
+				t *testing.T, reconcileResult reconcile.Result, reconcileErr error, ch *helpers.ClientHolder) {
+				managedcluster := &clusterv1.ManagedCluster{}
+				err := ch.RuntimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, managedcluster)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+					return
+				}
+
+				condition := meta.FindStatusCondition(
+					managedcluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+				if condition.Status != metav1.ConditionFalse {
+					t.Errorf("unexpected condition status: %v", condition.Status)
+				}
+				if condition.Reason != constants.ConditionReasonManagedClusterImporting {
+					t.Errorf("unexpected condition reason: %v", condition.Reason)
+				}
+			},
+		},
+		{
+			name: "managedcluster is Hosted mode, but hosting cluster is being deleted",
+			runtimeObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.HostingClusterNameAnnotation:   "cluster1", // hosting cluster name
+						},
+					},
+				},
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "cluster1",
+						DeletionTimestamp: &metav1.Time{Time: time.Now()},
+					},
+				},
+			},
+			kubeObjs: []runtime.Object{},
+			workObjs: []runtime.Object{},
+			request:  reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
+			vaildateFunc: func(
+				t *testing.T, reconcileResult reconcile.Result, reconcileErr error, ch *helpers.ClientHolder) {
+				managedcluster := &clusterv1.ManagedCluster{}
+				err := ch.RuntimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, managedcluster)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+					return
+				}
+
+				condition := meta.FindStatusCondition(
+					managedcluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+				if condition.Status != metav1.ConditionFalse {
+					t.Errorf("unexpected condition status: %v", condition.Status)
+				}
+				if condition.Reason != constants.ConditionReasonManagedClusterImportFailed {
+					t.Errorf("unexpected condition reason: %v", condition.Reason)
+				}
+			},
+		},
 		// managedcluster is Hosted mode but no manifests found
 		{
 			name: "managedcluster is Hosted mode ",
@@ -150,6 +226,11 @@ func TestReconcile(t *testing.T) {
 							constants.HostingClusterNameAnnotation:   "cluster1", // hosting cluster name
 						},
 						Finalizers: []string{constants.ManifestWorkFinalizer},
+					},
+				},
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "cluster1",
 					},
 				},
 			},
@@ -305,6 +386,11 @@ func TestReconcile(t *testing.T) {
 						},
 					},
 				},
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "cluster1",
+					},
+				},
 			},
 			kubeObjs: []runtime.Object{},
 			workObjs: []runtime.Object{
@@ -370,6 +456,11 @@ func TestReconcile(t *testing.T) {
 							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
 							constants.HostingClusterNameAnnotation:   "cluster1",
 						},
+					},
+				},
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "cluster1",
 					},
 				},
 			},
@@ -446,6 +537,11 @@ func TestReconcile(t *testing.T) {
 						},
 					},
 				},
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "cluster1",
+					},
+				},
 			},
 			kubeObjs: []runtime.Object{
 
@@ -516,7 +612,7 @@ metadata:
 		},
 		// managedcluster is Hosted mode, klusterlet available
 		{
-			name: "managedcluster is Hosted mode, and import secret have the data",
+			name: "managedcluster is Hosted mode, klusterlet available",
 			runtimeObjs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
@@ -525,6 +621,11 @@ metadata:
 							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
 							constants.HostingClusterNameAnnotation:   "cluster1",
 						},
+					},
+				},
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "cluster1",
 					},
 				},
 			},
@@ -591,9 +692,8 @@ metadata:
 				}
 			},
 		},
-		// managedcluster is Hosted mode, no auto import secret, but external managed kubeconfig is created
 		{
-			name: "managedcluster is Hosted mode, and import secret have the data",
+			name: "managedcluster is Hosted mode, no auto import secret, but external managed kubeconfig is created",
 			runtimeObjs: []client.Object{
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
@@ -602,6 +702,11 @@ metadata:
 							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
 							constants.HostingClusterNameAnnotation:   "cluster1",
 						},
+					},
+				},
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "cluster1",
 					},
 				},
 			},

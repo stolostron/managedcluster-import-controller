@@ -81,9 +81,6 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 		return reconcile.Result{}, nil
 	}
 
-	// TODO(zhujian7): check if annotation hosting cluster is provided, check if the hosting cluster
-	// is a managed cluster of hub, and check its status.
-
 	reqLogger.Info("Reconciling the manifest works of the hosted mode managed cluster")
 
 	if !managedCluster.DeletionTimestamp.IsZero() {
@@ -165,7 +162,7 @@ func (r *ReconcileHosted) importCluster(ctx context.Context,
 	managedCluster *clusterv1.ManagedCluster, autoImportSecret *v1.Secret) (reconcile.Result, metav1.Condition, error) {
 	hostedWorksSelector := labels.SelectorFromSet(map[string]string{constants.HostedClusterLabel: managedCluster.Name})
 
-	hostingCluster, err := helpers.GetHostingCluster(managedCluster)
+	hostingClusterName, err := helpers.GetHostingCluster(managedCluster)
 	if err != nil {
 		return reconcile.Result{},
 			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
@@ -174,7 +171,25 @@ func (r *ReconcileHosted) importCluster(ctx context.Context,
 			nil
 	}
 
-	hostedWorks, err := r.informerHolder.HostedWorkLister.ManifestWorks(hostingCluster).List(hostedWorksSelector)
+	hostingCluster := &clusterv1.ManagedCluster{}
+	err = r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: hostingClusterName}, hostingCluster)
+	if err != nil {
+		return reconcile.Result{},
+			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+				constants.ConditionReasonManagedClusterImporting,
+				fmt.Sprintf("Validate if the hosting cluster is a managed cluster of the hub, error: %v", err)),
+			err
+	}
+
+	if !hostingCluster.DeletionTimestamp.IsZero() {
+		return reconcile.Result{},
+			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+				constants.ConditionReasonManagedClusterImportFailed,
+				fmt.Sprintf("The hosting cluster %s is being deleted", hostingClusterName)),
+			nil
+	}
+
+	hostedWorks, err := r.informerHolder.HostedWorkLister.ManifestWorks(hostingClusterName).List(hostedWorksSelector)
 	if err != nil {
 		return reconcile.Result{},
 			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
@@ -221,7 +236,7 @@ func (r *ReconcileHosted) importCluster(ctx context.Context,
 			nil
 	}
 
-	manifestWork := createHostingManifestWork(managedCluster.Name, importSecret, hostingCluster)
+	manifestWork := createHostingManifestWork(managedCluster.Name, importSecret, hostingClusterName)
 	_, err = helpers.ApplyResources(r.clientHolder, r.recorder, r.scheme, managedCluster, manifestWork)
 	if err != nil {
 		return reconcile.Result{},
@@ -250,7 +265,8 @@ func (r *ReconcileHosted) importCluster(ctx context.Context,
 
 	// if the auto import secret exists; create it on the hosting cluster by manifestwork
 	if autoImportSecret != nil {
-		manifestWork, err = createManagedKubeconfigManifestWork(managedCluster.Name, autoImportSecret, hostingCluster)
+		manifestWork, err = createManagedKubeconfigManifestWork(
+			managedCluster.Name, autoImportSecret, hostingClusterName)
 		if err != nil {
 			return reconcile.Result{},
 				helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
@@ -270,7 +286,7 @@ func (r *ReconcileHosted) importCluster(ctx context.Context,
 	}
 
 	// check the klusterlet feedback rule
-	created, err := r.externalManagedKubeconfigCreated(ctx, managedCluster.Name, hostingCluster)
+	created, err := r.externalManagedKubeconfigCreated(ctx, managedCluster.Name, hostingClusterName)
 	if err != nil {
 		return reconcile.Result{},
 			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
