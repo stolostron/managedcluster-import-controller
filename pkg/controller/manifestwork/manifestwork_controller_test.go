@@ -137,6 +137,13 @@ func TestReconcile(t *testing.T) {
 				},
 				&workv1.ManifestWork{
 					ObjectMeta: v1.ObjectMeta{
+						Name:      "test2",
+						Namespace: "test",
+						Labels:    map[string]string{addonv1alpha1.AddonLabelKey: "test2"},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: v1.ObjectMeta{
 						Name:      "test-klusterlet-crds",
 						Namespace: "test",
 						Labels: map[string]string{
@@ -173,7 +180,7 @@ func TestReconcile(t *testing.T) {
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
-				if len(manifestWorks.Items) != 2 {
+				if len(manifestWorks.Items) != 3 {
 					t.Errorf("expected one work, but failed %d", len(manifestWorks.Items))
 				}
 			},

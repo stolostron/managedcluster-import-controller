@@ -85,7 +85,7 @@ var _ source.SyncingSource = &Source{}
 
 func (s *Source) Start(ctx context.Context, handler handler.EventHandler,
 	queue workqueue.RateLimitingInterface, predicates ...predicate.Predicate) error {
-	s.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, err := s.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			newObj, ok := obj.(client.Object)
 			if !ok {
@@ -172,7 +172,7 @@ func (s *Source) Start(ctx context.Context, handler handler.EventHandler,
 		},
 	})
 
-	return nil
+	return err
 }
 
 func (s *Source) WaitForSync(ctx context.Context) error {
