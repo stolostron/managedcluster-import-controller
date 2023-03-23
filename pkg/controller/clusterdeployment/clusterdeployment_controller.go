@@ -139,7 +139,6 @@ func (r *ReconcileClusterDeployment) Reconcile(
 	if !helpers.ImportingResourcesApplied(&condition) || modified {
 		if err := helpers.UpdateManagedClusterStatus(
 			r.client,
-			r.recorder,
 			clusterName,
 			condition,
 		); err != nil {

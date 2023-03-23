@@ -14,27 +14,18 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
-	apiextclientv1beta1 "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1beta1"
-	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
-	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	operatorv1 "open-cluster-management.io/api/operator/v1"
-	workv1 "open-cluster-management.io/api/work/v1"
-
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/resource/resourceapply"
 	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
-
+	"golang.org/x/text/cases"
+	"golang.org/x/text/language"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	crdv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
+	apiextclientv1beta1 "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -52,10 +43,17 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/klog/v2"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
-
+	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
+	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 )
 
 const maxConcurrentReconcilesEnvVarName = "MAX_CONCURRENT_RECONCILES"
@@ -220,8 +218,7 @@ func RemoveManagedClusterFinalizer(ctx context.Context, runtimeClient client.Cli
 }
 
 // UpdateManagedClusterStatus update managed cluster status
-func UpdateManagedClusterStatus(client client.Client, recorder events.Recorder,
-	managedClusterName string, cond metav1.Condition) error {
+func UpdateManagedClusterStatus(client client.Client, managedClusterName string, cond metav1.Condition) error {
 	managedCluster := &clusterv1.ManagedCluster{}
 	err := client.Get(context.TODO(), types.NamespacedName{Name: managedClusterName}, managedCluster)
 	if err != nil {
@@ -238,11 +235,11 @@ func UpdateManagedClusterStatus(client client.Client, recorder events.Recorder,
 
 	managedCluster.Status = *newStatus
 	if err := client.Status().Update(context.TODO(), managedCluster); err != nil {
+		klog.Errorf("Update the managed cluster %s condition %v failed, error: %v", managedClusterName, cond, err)
 		return err
 	}
 
-	recorder.Eventf("ManagedClusterStatusUpdated",
-		"Update the %s status of managed cluster %s to %s", cond.Type, managedClusterName, cond.Status)
+	klog.V(4).Infof("Update the managed cluster %s condition %v succeeded.", managedClusterName, cond)
 
 	return nil
 }

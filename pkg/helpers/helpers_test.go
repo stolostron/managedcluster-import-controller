@@ -203,7 +203,7 @@ func TestUpdateManagedClusterStatus(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			fakeClient := fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.managedCluster).Build()
 
-			err := UpdateManagedClusterStatus(fakeClient, eventstesting.NewTestingEventRecorder(t), c.managedCluster.Name, c.cond)
+			err := UpdateManagedClusterStatus(fakeClient, c.managedCluster.Name, c.cond)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}

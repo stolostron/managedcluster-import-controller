@@ -71,7 +71,6 @@ func (r *ReconcileImportStatus) Reconcile(ctx context.Context, request reconcile
 		reqLogger.V(5).Info("Add ImportSucceededCondition with WaitForImporting reason")
 		return reconcile.Result{}, helpers.UpdateManagedClusterStatus(
 			r.client,
-			r.recorder,
 			managedClusterName,
 			helpers.NewManagedClusterImportSucceededCondition(
 				metav1.ConditionFalse,
@@ -97,7 +96,6 @@ func (r *ReconcileImportStatus) Reconcile(ctx context.Context, request reconcile
 	reqLogger.V(5).Info("Klusterlet manifestworks are available")
 	return reconcile.Result{}, helpers.UpdateManagedClusterStatus(
 		r.client,
-		r.recorder,
 		managedClusterName,
 		helpers.NewManagedClusterImportSucceededCondition(
 			metav1.ConditionTrue,
