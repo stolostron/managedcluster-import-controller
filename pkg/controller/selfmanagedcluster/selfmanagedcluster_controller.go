@@ -101,7 +101,6 @@ func (r *ReconcileLocalCluster) Reconcile(ctx context.Context, request reconcile
 	if !helpers.ImportingResourcesApplied(&condition) || modified {
 		if err := helpers.UpdateManagedClusterStatus(
 			r.clientHolder.RuntimeClient,
-			r.recorder,
 			request.Name,
 			condition,
 		); err != nil {

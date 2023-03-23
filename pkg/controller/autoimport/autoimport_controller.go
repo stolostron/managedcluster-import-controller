@@ -106,7 +106,6 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		if err != nil {
 			if err := helpers.UpdateManagedClusterStatus(
 				r.client,
-				r.recorder,
 				managedClusterName,
 				helpers.NewManagedClusterImportSucceededCondition(
 					metav1.ConditionFalse,
@@ -135,7 +134,6 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	if !helpers.ImportingResourcesApplied(&condition) || modified {
 		if err := helpers.UpdateManagedClusterStatus(
 			r.client,
-			r.recorder,
 			managedClusterName,
 			condition,
 		); err != nil {

@@ -97,7 +97,6 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 	result, condition, iErr := r.importCluster(ctx, managedCluster, autoImportSecret)
 	if err := helpers.UpdateManagedClusterStatus(
 		r.clientHolder.RuntimeClient,
-		r.recorder,
 		request.Name,
 		condition,
 	); err != nil {
@@ -158,8 +157,8 @@ func (r *ReconcileHosted) cleanup(ctx context.Context,
 		r.deleteAddonsAndWorks(ctx, managedCluster, manifestWorks.Items, hostedWorks.Items)
 }
 
-func (r *ReconcileHosted) importCluster(ctx context.Context,
-	managedCluster *clusterv1.ManagedCluster, autoImportSecret *v1.Secret) (reconcile.Result, metav1.Condition, error) {
+func (r *ReconcileHosted) importCluster(ctx context.Context, managedCluster *clusterv1.ManagedCluster,
+	autoImportSecret *v1.Secret) (reconcile.Result, metav1.Condition, error) {
 	hostedWorksSelector := labels.SelectorFromSet(map[string]string{constants.HostedClusterLabel: managedCluster.Name})
 
 	hostingClusterName, err := helpers.GetHostingCluster(managedCluster)
@@ -174,10 +173,14 @@ func (r *ReconcileHosted) importCluster(ctx context.Context,
 	hostingCluster := &clusterv1.ManagedCluster{}
 	err = r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: hostingClusterName}, hostingCluster)
 	if err != nil {
+		message := fmt.Sprintf("Validate the hosting cluster, get managed cluster failed, error: %v", err)
+		if errors.IsNotFound(err) {
+			message = "Hosting cluster is not a managed cluster of the hub"
+		}
 		return reconcile.Result{},
 			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImporting,
-				fmt.Sprintf("Validate if the hosting cluster is a managed cluster of the hub, error: %v", err)),
+				message),
 			err
 	}
 
