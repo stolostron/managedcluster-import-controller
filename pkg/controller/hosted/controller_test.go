@@ -9,11 +9,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
-	"github.com/stolostron/managedcluster-import-controller/pkg/source"
-
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -24,6 +19,8 @@ import (
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 	"open-cluster-management.io/api/addon/v1alpha1"
+	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	workfake "open-cluster-management.io/api/client/work/clientset/versioned/fake"
 	workinformers "open-cluster-management.io/api/client/work/informers/externalversions"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -32,6 +29,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 )
 
 var (
@@ -370,6 +372,80 @@ func TestReconcile(t *testing.T) {
 				}
 				if len(manifestworks.Items) != 0 {
 					t.Errorf("expect no manifestwork, but get %v", manifestworks.Items)
+				}
+			},
+		},
+		{
+			name: "managedcluster is Hosted mode, and is deleting" +
+				"the hosting klusterlet manifestworks are not force deleted",
+			runtimeObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.HostingClusterNameAnnotation:   "cluster1",
+						},
+						DeletionTimestamp: &metav1.Time{Time: time.Now()}, // managedCluster is deleted
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:    clusterv1.ManagedClusterConditionAvailable,
+								Status:  metav1.ConditionFalse,
+								Message: "unavailable",
+								Reason:  "Test",
+							},
+						},
+					},
+				},
+				&addonapiv1alpha1.ManagedClusterAddOn{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       "test",
+						Namespace:  "test",
+						Finalizers: []string{addonv1alpha1.AddonHostingManifestFinalizer},
+					},
+				},
+			},
+			kubeObjs: []runtime.Object{},
+			workObjs: []runtime.Object{
+				// manifestworks
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "cluster1",
+						Name:      "test-hosted-klusterlet",
+						Labels: map[string]string{
+							constants.HostedClusterLabel: "test",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "cluster1",
+						Name:      "test-hosted-kubeconfig",
+						Labels: map[string]string{
+							constants.HostedClusterLabel: "test",
+						},
+					},
+				},
+			},
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
+			vaildateFunc: func(t *testing.T, reconcileResult reconcile.Result, reconcileErr error,
+				ch *helpers.ClientHolder) {
+				managedcluster := &clusterv1.ManagedCluster{}
+				err := ch.RuntimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, managedcluster)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+
+				// expect hosting manifestworks are not deleted
+				hosgintManifestworks, err := ch.WorkClient.WorkV1().ManifestWorks("cluster1").List(
+					context.TODO(), metav1.ListOptions{})
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if len(hosgintManifestworks.Items) != 2 {
+					t.Errorf("expect 2 hosint manifestwork, but get %v", hosgintManifestworks.Items)
 				}
 			},
 		},
