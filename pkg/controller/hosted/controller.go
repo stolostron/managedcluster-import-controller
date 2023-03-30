@@ -97,32 +97,34 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 
 	if !managedCluster.DeletionTimestamp.IsZero() {
 		// use work client to list all works only when a managed cluster is deleting
-		hostedWorks, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(managementCluster).List(ctx, metav1.ListOptions{
-			LabelSelector: hostedWorksSelector.String(),
-		})
+		hostingKlusterletWorks, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(managementCluster).List(
+			ctx, metav1.ListOptions{
+				LabelSelector: hostedWorksSelector.String(),
+			})
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 
-		manifestWorks, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(managedClusterName).List(ctx, metav1.ListOptions{})
+		manifestWorks, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(managedClusterName).List(
+			ctx, metav1.ListOptions{})
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 
 		// if there no works, remove the manifest work finalizer from the managed cluster
 		if err := helpers.AssertManifestWorkFinalizer(ctx, r.clientHolder.RuntimeClient, r.recorder,
-			managedCluster, len(manifestWorks.Items)+len(hostedWorks.Items)); err != nil {
+			managedCluster, len(manifestWorks.Items)+len(hostingKlusterletWorks.Items)); err != nil {
 			return reconcile.Result{}, err
 		}
 
-		if (len(manifestWorks.Items) + len(hostedWorks.Items)) == 0 {
+		if (len(manifestWorks.Items) + len(hostingKlusterletWorks.Items)) == 0 {
 			return reconcile.Result{}, nil
 		}
 
 		// the managed cluster is deleting, delete its addons and manifestworks
 		// Note: we only informer the hosted works, so we need to requeue here
 		return reconcile.Result{RequeueAfter: 5 * time.Second},
-			r.deleteAddonsAndWorks(ctx, managedCluster, manifestWorks.Items, hostedWorks.Items)
+			r.deleteAddonsAndWorks(ctx, managedCluster, manifestWorks.Items, hostingKlusterletWorks.Items)
 	}
 
 	hostedWorks, err := r.informerHolder.HostedWorkLister.ManifestWorks(managementCluster).List(hostedWorksSelector)
@@ -207,11 +209,11 @@ func klusterletNamespace(managedCluster string) string {
 }
 
 func (r *ReconcileHosted) deleteAddonsAndWorks(
-	ctx context.Context, cluster *clusterv1.ManagedCluster, works, hostedWorks []workv1.ManifestWork) error {
+	ctx context.Context, cluster *clusterv1.ManagedCluster, works, hostingWorks []workv1.ManifestWork) error {
 	errs := append(
 		[]error{},
 		helpers.DeleteManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster),
-		r.deleteManifestWorks(ctx, cluster, works, hostedWorks),
+		r.deleteManifestWorks(ctx, cluster, works, hostingWorks),
 	)
 	return operatorhelpers.NewMultiLineAggregate(errs)
 }
@@ -224,10 +226,47 @@ func (r *ReconcileHosted) deleteAddonsAndWorks(
 //  2. delete the manifest works that do not include klusterlet addon works
 //  3. delete the klusterlet and managed kubeconfig manifest works
 func (r *ReconcileHosted) deleteManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster,
-	works, hostedWorks []workv1.ManifestWork) error {
+	works, hostingWorks []workv1.ManifestWork) error {
+	err := r.deleteManagedClusterManifestWorks(ctx, cluster, works)
+	if err != nil {
+		return err
+	}
+
+	noAddons, err := helpers.NoManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, cluster.GetName())
+	if err != nil {
+		return err
+	}
+	if !noAddons {
+		// wait for addons deletion
+		return nil
+	}
+
+	ignoreNothing := func(_ string, _ workv1.ManifestWork) bool { return false }
+	noPending, err := helpers.NoPendingManifestWorks(ctx, log, cluster.GetName(), works, ignoreNothing)
+	if err != nil {
+		return err
+	}
+	if !noPending {
+		// still have other works, do nothing
+		return nil
+	}
+
+	// delete hosting manifestWorks from the hosting cluster namespace
+	for _, hostedWork := range hostingWorks {
+		if err := helpers.DeleteManifestWork(ctx, r.clientHolder.WorkClient, r.recorder,
+			hostedWork.Namespace, hostedWork.Name); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (r *ReconcileHosted) deleteManagedClusterManifestWorks(ctx context.Context, cluster *clusterv1.ManagedCluster,
+	works []workv1.ManifestWork) error {
 	if helpers.IsClusterUnavailable(cluster) {
-		// the managed cluster is offline, force delete all manifest works
-		return helpers.ForceDeleteAllManifestWorks(ctx, r.clientHolder.WorkClient, r.recorder, append(works, hostedWorks...))
+		// the managed cluster is offline, force delete all managed cluster manifest works
+		return helpers.ForceDeleteAllManifestWorks(ctx, r.clientHolder.WorkClient, r.recorder, works)
 	}
 
 	// delete works that do not include klusterlet works and klusterlet addon works, the addon works were removed
@@ -252,39 +291,8 @@ func (r *ReconcileHosted) deleteManifestWorks(ctx context.Context, cluster *clus
 		}
 		return true
 	}
-	err := helpers.DeleteManifestWorkWithSelector(ctx, r.clientHolder.WorkClient, r.recorder, cluster, works, ignoreAddons)
-	if err != nil {
-		return err
-	}
-
-	noAddons, err := helpers.NoManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, cluster.GetName())
-	if err != nil {
-		return err
-	}
-	if !noAddons {
-		// wait for addons deletion
-		return nil
-	}
-
-	ignoreNothing := func(_ string, _ workv1.ManifestWork) bool { return false }
-	noPending, err := helpers.NoPendingManifestWorks(ctx, log, cluster.GetName(), works, ignoreNothing)
-	if err != nil {
-		return err
-	}
-	if !noPending {
-		// still have other works, do nothing
-		return nil
-	}
-
-	// delete hosted manifestWorks from the hosting cluster namespace
-	for _, hostedWork := range hostedWorks {
-		if err := helpers.DeleteManifestWork(ctx, r.clientHolder.WorkClient, r.recorder,
-			hostedWork.Namespace, hostedWork.Name); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return helpers.DeleteManifestWorkWithSelector(ctx,
+		r.clientHolder.WorkClient, r.recorder, cluster, works, ignoreAddons)
 }
 
 // createHostedManifestWork creates a manifestwork from import secret for hosted mode cluster

@@ -59,6 +59,14 @@ const (
 	// In the Hosted mode, this namespace still exists on the managed cluster to contain
 	// necessary resources, like service accounts, roles and rolebindings.
 	KlusterletNamespaceAnnotation string = "import.open-cluster-management.io/klusterlet-namespace"
+
+	// FinalizerAddonHostingClusterCleanup is a finalizer used by the hosted mode managed cluster addon to
+	// clean up the manifestwork on the hosting cluster.
+	FinalizerAddonHostingClusterCleanup = "cluster.open-cluster-management.io/hosting-manifests-cleanup"
+
+	// FinalizerAddonHostingClusterPreDelete is a finalizer used by the hosted mode managed cluster addon to
+	// execute the pre delete hooks.
+	FinalizerAddonHostingClusterPreDelete = "cluster.open-cluster-management.io/hosting-addon-pre-delete"
 )
 
 const (
