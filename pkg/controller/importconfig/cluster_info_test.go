@@ -512,12 +512,12 @@ func TestGetBootstrapKubeConfigData(t *testing.T) {
 		},
 		{
 			name:        "token is valid",
-			clientObjs:  []client.Object{},
-			runtimeObjs: []runtime.Object{mockImportSecret(t, time.Now().Add(8640*time.Hour))},
+			clientObjs:  []client.Object{testInfraConfigDNS, apiserverConfig},
+			runtimeObjs: []runtime.Object{secretCorrect, mockImportSecret(t, time.Now().Add(8640*time.Hour), "https://my-dns-name.com:6443", "custom-cert-data")},
 			want: wantData{
-				serverURL:   "http://fake-server:6443",
+				serverURL:   "https://my-dns-name.com:6443",
 				useInsecure: false,
-				certData:    []byte("fake-ca"),
+				certData:    []byte("custom-cert-data"),
 				token:       "fake-token",
 			},
 			wantErr: false,
@@ -800,15 +800,149 @@ func TestGetBootstrapSAName(t *testing.T) {
 	}
 }
 
-func mockImportSecret(t *testing.T, expirationTime time.Time) *corev1.Secret {
+func TestValidateKubeAPIServerAddress(t *testing.T) {
+	cases := []struct {
+		name               string
+		kubeAPIServer      string
+		infraKubeAPIServer string
+		valid              bool
+	}{
+		{
+			name: "kube apiserver address is empty",
+		},
+		{
+			name:               "address changed",
+			kubeAPIServer:      "https://api.my-cluster.example.com:6443",
+			infraKubeAPIServer: "https://api-int.my-cluster.example.com:6443",
+		},
+		{
+			name:               "no change",
+			kubeAPIServer:      "https://api.my-cluster.example.com:6443",
+			infraKubeAPIServer: "https://api.my-cluster.example.com:6443",
+			valid:              true,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Logf("Test name: %s", c.name)
+
+			clientHolder := &helpers.ClientHolder{
+				RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(&ocinfrav1.Infrastructure{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "cluster",
+					},
+					Spec: ocinfrav1.InfrastructureSpec{},
+					Status: ocinfrav1.InfrastructureStatus{
+						APIServerURL: c.infraKubeAPIServer,
+					},
+				}).Build(),
+			}
+
+			valid, err := validateKubeAPIServerAddress(context.TODO(), c.kubeAPIServer, clientHolder)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if valid != c.valid {
+				t.Errorf("expected %v, but got %v", c.valid, valid)
+			}
+		})
+	}
+}
+
+func TestValidateCAData(t *testing.T) {
+	cases := []struct {
+		name            string
+		clusterName     string
+		bootstrapCAData []byte
+		currentCAData   []byte
+		valid           bool
+	}{
+		{
+			name: "CA data is empty",
+		},
+		{
+			name:            "cert changes",
+			bootstrapCAData: []byte("my-ca-bundle"),
+			currentCAData:   []byte("my-new-ca-bundle"),
+		},
+		{
+			name:            "no cert change",
+			bootstrapCAData: []byte("my-ca-bundle"),
+			currentCAData:   []byte("my-ca-bundle"),
+			valid:           true,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Logf("Test name: %s", c.name)
+
+			fqdn := "api.my-cluster.example.com"
+			kubeAPIServer := fmt.Sprintf("https://%s:6443", fqdn)
+			secretName := "my-secret-name"
+
+			fakeKubeClient := kubefake.NewSimpleClientset(&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: "openshift-config",
+				},
+				Data: map[string][]byte{
+					"tls.crt": c.currentCAData,
+				},
+			})
+
+			clientHolder := &helpers.ClientHolder{
+				RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(&ocinfrav1.APIServer{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "cluster",
+					},
+					Spec: ocinfrav1.APIServerSpec{
+						ServingCerts: ocinfrav1.APIServerServingCerts{
+							NamedCertificates: []ocinfrav1.APIServerNamedServingCert{
+								{
+									Names:              []string{fqdn},
+									ServingCertificate: ocinfrav1.SecretNameReference{Name: secretName},
+								},
+							},
+						},
+					},
+				}).Build(),
+				KubeClient: fakeKubeClient,
+			}
+
+			valid, err := validateCAData(context.TODO(), c.bootstrapCAData, kubeAPIServer, clientHolder, &clusterv1.ManagedCluster{})
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if valid != c.valid {
+				t.Errorf("expected %v, but got %v", c.valid, valid)
+			}
+		})
+	}
+}
+
+func mockImportSecret(t *testing.T, expirationTime time.Time, args ...string) *corev1.Secret {
+	server := "http://fake-server:6443"
+	if len(args) > 0 {
+		server = args[0]
+	}
+	caData := []byte("fake-ca")
+	if len(args) > 1 {
+		caData = []byte(args[1])
+	}
+	token := "fake-token"
+	if len(args) > 2 {
+		token = args[2]
+	}
 	bootstrapConfig := clientcmdapi.Config{
 		Clusters: map[string]*clientcmdapi.Cluster{"default-cluster": {
-			Server:                   "http://fake-server:6443",
+			Server:                   server,
 			InsecureSkipTLSVerify:    false,
-			CertificateAuthorityData: []byte("fake-ca"),
+			CertificateAuthorityData: caData,
 		}},
 		AuthInfos: map[string]*clientcmdapi.AuthInfo{"default-auth": {
-			Token: "fake-token",
+			Token: token,
 		}},
 		Contexts: map[string]*clientcmdapi.Context{"default-context": {
 			Cluster:   "default-cluster",
