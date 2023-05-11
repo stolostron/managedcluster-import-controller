@@ -4,3 +4,5 @@ _generated.go
 pkg/controller/importconfig/manifests/*
 pkg/controller/hosted/manifests/*
 test/e2e/resources/*
+.tekton/*
+
