@@ -251,3 +251,12 @@ func ImportingResourcesApplied(condition *metav1.Condition) bool {
 	}
 	return false
 }
+
+func ImportingSucceeded(conditions []metav1.Condition) bool {
+	for _, condition := range conditions {
+		if condition.Type == constants.ConditionManagedClusterImportSucceeded {
+			return condition.Status == metav1.ConditionTrue
+		}
+	}
+	return false
+}

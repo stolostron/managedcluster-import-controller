@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/openshift/library-go/pkg/operator/events"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -144,11 +145,17 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger.V(5).Info("Import result", "importError", iErr, "condition", condition,
 		"current", currentRetry, "result", result, "modified", modified)
 
-	if condition.Reason == constants.ConditionReasonManagedClusterImportFailed ||
-		helpers.ImportingResourcesApplied(&condition) {
+	if applied := helpers.ImportingResourcesApplied(&condition); applied || condition.Reason == constants.ConditionReasonManagedClusterImportFailed {
 		// delete secret
 		if err := helpers.DeleteAutoImportSecret(ctx, r.kubeClient, autoImportSecret, r.recorder); err != nil {
 			return reconcile.Result{}, err
+		}
+
+		// In backup/restore case, the bootstrap hub kubeconfig secret might be modified after it is
+		// applied by the auto import controller on the managed cluster. So requeue until the auto import
+		// succeeds.
+		if backupRestore && applied && !helpers.ImportingSucceeded(managedCluster.Status.Conditions) {
+			return reconcile.Result{RequeueAfter: 10 * time.Second}, nil
 		}
 		return reconcile.Result{}, nil
 	}
