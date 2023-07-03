@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
@@ -27,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	clientcmdlatest "k8s.io/client-go/tools/clientcmd/api/latest"
 	"k8s.io/utils/pointer"
@@ -259,9 +261,26 @@ func getBootstrapKubeConfigData(ctx context.Context, clientHolder *helpers.Clien
 	}
 
 	kubeConifgData := getBootstrapKubeConfigDataFromImportSecret(importSecret)
+	kubeAPIServer, caData, token, err := parseKubeConfigData(kubeConifgData)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// check if the kube apiserver address is changed
+	validKubeAPIServer, err := validateKubeAPIServerAddress(ctx, kubeAPIServer, clientHolder)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// check if the CA data is changed
+	validCAData, err := validateCAData(ctx, caData, kubeAPIServer, clientHolder, cluster)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	expiration := importSecret.Data[constants.ImportSecretTokenExpiration]
-	if validateToken(kubeConifgData, expiration) {
-		// valid token, return the current kubeconfig
+	if validKubeAPIServer && validCAData && validateToken(token, expiration) {
+		// both the kube apiserver address, CA data and token is valid, return the current kubeconfig
 		return kubeConifgData, expiration, nil
 	}
 
@@ -287,15 +306,66 @@ func getBootstrapKubeConfigDataFromImportSecret(importSecret *corev1.Secret) []b
 
 	return nil
 }
-
-func validateToken(kubeConfigData, expiration []byte) bool {
+func parseKubeConfigData(kubeConfigData []byte) (kubeAPIServer string, caData []byte, token string, err error) {
 	if len(kubeConfigData) == 0 {
-		// no bootstrap kubeconfig in the import secret
+		// kubeconfig data is empty
+		return "", nil, "", nil
+	}
+
+	config, err := clientcmd.Load(kubeConfigData)
+	if err != nil {
+		// kubeconfig data is invalid
+		return "", nil, "", err
+	}
+
+	if cluster, ok := config.Clusters["default-cluster"]; ok {
+		kubeAPIServer = cluster.Server
+		caData = cluster.CertificateAuthorityData
+	}
+
+	if authInfo, ok := config.AuthInfos["default-auth"]; ok {
+		token = authInfo.Token
+	}
+
+	return
+}
+
+func validateKubeAPIServerAddress(ctx context.Context, kubeAPIServer string, clientHolder *helpers.ClientHolder) (bool, error) {
+	if len(kubeAPIServer) == 0 {
+		return false, nil
+	}
+
+	currentKubeAPIServer, err := getKubeAPIServerAddress(ctx, clientHolder.RuntimeClient)
+	if err != nil {
+		return false, err
+	}
+
+	return kubeAPIServer == currentKubeAPIServer, nil
+}
+
+func validateCAData(ctx context.Context, caData []byte, kubeAPIServer string, clientHolder *helpers.ClientHolder,
+	cluster *clusterv1.ManagedCluster) (bool, error) {
+	if len(caData) == 0 {
+		// CA data is empty
+		return false, nil
+	}
+
+	currentCAData, err := getBootstrapCAData(ctx, clientHolder, cluster, kubeAPIServer)
+	if err != nil {
+		return false, err
+	}
+
+	return reflect.DeepEqual(caData, currentCAData), nil
+}
+
+func validateToken(token string, expiration []byte) bool {
+	if len(token) == 0 {
+		// no token in the kubeconfig
 		return false
 	}
 
 	if len(expiration) == 0 {
-		// bootstrap kubeconfig is from the service account token secret
+		// token is from the service account token secret
 		return true
 	}
 
