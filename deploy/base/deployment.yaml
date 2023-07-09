@@ -20,7 +20,7 @@ spec:
       serviceAccountName: managedcluster-import-controller
       containers:
         - name: managedcluster-import-controller
-          image: quay.io/open-cluster-management/managedcluster-import-controller:latest
+          image: managedcluster-import-controller:latest
           imagePullPolicy: IfNotPresent
           env:
             - name: POD_NAME

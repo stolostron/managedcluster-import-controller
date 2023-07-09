@@ -24,7 +24,6 @@ function wait_deployment() {
 BUILD_DIR="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 REPO_DIR="$(dirname "$BUILD_DIR")"
 WORK_DIR="${REPO_DIR}/_output"
-COVERAGE_DIR="${REPO_DIR}/_output/coverage"
 
 KIND_VERSION="v0.14.0"
 KIND="${WORK_DIR}/bin/kind"
@@ -37,7 +36,6 @@ CLUSTER_NAME_MANAGED="e2e-test-cluster-managed"
 
 mkdir -p "${WORK_DIR}/bin"
 mkdir -p "${WORK_DIR}/config"
-mkdir -p "${COVERAGE_DIR}"
 
 echo "###### installing kind"
 curl -s -f -L "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-${GOHOSTOS}-${GOHOSTARCH}" -o "${KIND}"
@@ -57,23 +55,11 @@ chmod +x "${KUBECTL}"
 echo "###### installing e2e test cluster"
 export KUBECONFIG="${WORK_DIR}/kubeconfig"
 ${KIND} delete cluster --name ${CLUSTER_NAME}
-# NOTE: If you are using Docker for Mac or Windows check that the hostPath is included in the Preferences -> Resources -> File Sharing.
-cat << EOF | ${KIND} create cluster --image kindest/node:${KUBE_VERSION} --name ${CLUSTER_NAME} --config=-
-kind: Cluster
-apiVersion: kind.x-k8s.io/v1alpha4
-nodes:
-- role: control-plane
-  extraMounts:
-  - hostPath: "${COVERAGE_DIR}"
-    containerPath: /tmp/coverage
-EOF
+${KIND} create cluster --image kindest/node:${KUBE_VERSION} --name ${CLUSTER_NAME}
 cluster_ip=$(${KUBECTL} get svc kubernetes -n default -o jsonpath="{.spec.clusterIP}")
 cluster_context=$(${KUBECTL} config current-context)
 # scale replicas to 1 to save resources
 ${KUBECTL} --context="${cluster_context}" -n kube-system scale --replicas=1 deployment/coredns
-
-echo "###### loading coverage image"
-${KIND} load docker-image managedcluster-import-controller-coverage --name ${CLUSTER_NAME}
 
 echo "###### deploy ocm"
 rm -rf "$WORK_DIR/_repo_ocm"
@@ -86,6 +72,9 @@ export REGISTRATION_IMAGE=quay.io/stolostron/registration:$OCM_VERSION
 export WORK_IMAGE=quay.io/stolostron/work:$OCM_VERSION
 export PLACEMENT_IMAGE=quay.io/stolostron/placement:$OCM_VERSION
 export ADDON_MANAGER_IMAGE=quay.io/stolostron/addon-manager:$OCM_VERSION
+
+echo "###### loading image"
+${KIND} load docker-image managedcluster-import-controller --name ${CLUSTER_NAME}
 
 git clone --depth 1 --branch $OCM_BRANCH https://github.com/stolostron/ocm.git "$WORK_DIR/_repo_ocm"
 make deploy-hub-operator apply-hub-cr -C "$WORK_DIR/_repo_ocm"
@@ -105,9 +94,9 @@ ${KUBECTL} -n open-cluster-management-hub rollout status deploy cluster-manager-
 ${KUBECTL} -n open-cluster-management scale --replicas=0 deployment/cluster-manager
 ${KUBECTL} -n open-cluster-management-hub scale --replicas=0 deployment/cluster-manager-placement-controller
 
-echo "###### deploy managedcluster-import-controller with image coverage image"
+echo "###### deploy managedcluster-import-controller"
 
-kubectl kustomize "$REPO_DIR/deploy/test" \
+kubectl kustomize "$REPO_DIR/deploy/base" \
   | sed -e "s,quay.io/open-cluster-management/registration:latest,$REGISTRATION_IMAGE," \
   -e "s,quay.io/open-cluster-management/work:latest,$WORK_IMAGE," \
   -e "s,quay.io/open-cluster-management/registration-operator:latest,$REGISTRATION_OPERATOR_IMAGE," \
@@ -232,15 +221,3 @@ ${KUBECTL} create secret generic e2e-managed-auto-import-secret --from-file=kube
 
 # start the e2e test
 ${WORK_DIR}/e2e.test -test.v -ginkgo.v
-
-echo "###### dump the test coverage"
-rm -rf "${COVERAGE_DIR}"/*
-# restart the controller to send the kill signal to get the e2e-test coverage
-kubectl -n open-cluster-management delete pods --wait=true -l name=managedcluster-import-controller
-
-if [ -f "${COVERAGE_DIR}/e2e-test-coverage.out" ]; then
-  COVERAGE=$(go tool cover -func="${COVERAGE_DIR}/e2e-test-coverage.out" | grep "total:" | awk '{print $3}')
-  echo "-------------------------------------------------------------------------"
-  echo "TOTAL COVERAGE IS ${COVERAGE}"
-  echo "-------------------------------------------------------------------------"
-fi
