@@ -77,9 +77,18 @@ ${KIND} load docker-image managedcluster-import-controller-coverage --name ${CLU
 
 echo "###### deploy registration-operator"
 rm -rf "$WORK_DIR/registration-operator"
-git clone https://github.com/stolostron/registration-operator.git "$WORK_DIR/registration-operator"
-${KUBECTL} apply -k "$WORK_DIR/registration-operator/deploy/cluster-manager/config/manifests"
-${KUBECTL} apply -k "$WORK_DIR/registration-operator/deploy/cluster-manager/config/samples"
+
+export OCM_VERSION=backplane-2.1
+export REGISTRATION_OPERATOR_BRANCH=$OCM_VERSION
+export IMAGE_NAME=quay.io/stolostron/registration-operator:$OCM_VERSION
+export REGISTRATION_OPERATOR_IMAGE=quay.io/stolostron/registration-operator:$OCM_VERSION
+export REGISTRATION_IMAGE=quay.io/stolostron/registration:$OCM_VERSION
+export WORK_IMAGE=quay.io/stolostron/work:$OCM_VERSION
+export PLACEMENT_IMAGE=quay.io/stolostron/placement:$OCM_VERSION
+
+git clone --depth 1 --branch $REGISTRATION_OPERATOR_BRANCH https://github.com/stolostron/registration-operator.git "$WORK_DIR/registration-operator"
+make deploy-hub-operator apply-hub-cr -C "$WORK_DIR/registration-operator"
+
 rm -rf "$WORK_DIR/registration-operator"
 
 wait_deployment open-cluster-management cluster-manager
@@ -96,7 +105,12 @@ ${KUBECTL} -n open-cluster-management scale --replicas=0 deployment/cluster-mana
 ${KUBECTL} -n open-cluster-management-hub scale --replicas=0 deployment/cluster-manager-placement-controller
 
 echo "###### deploy managedcluster-import-controller with image coverage image"
-kubectl kustomize "$REPO_DIR/deploy/test" | kubectl apply -f -
+kubectl kustomize "$REPO_DIR/deploy/test" \
+  | sed -e "s,quay.io/open-cluster-management/registration:latest,$REGISTRATION_IMAGE," \
+  -e "s,quay.io/open-cluster-management/work:latest,$WORK_IMAGE," \
+  -e "s,quay.io/open-cluster-management/registration-operator:latest,$REGISTRATION_OPERATOR_IMAGE," \
+  | kubectl apply -f -
+
 sleep 5
 ${KUBECTL} -n open-cluster-management rollout status deploy managedcluster-import-controller --timeout=120s
 

@@ -40,10 +40,10 @@ type ReconcileManifestWork struct {
 var _ reconcile.Reconciler = &ReconcileManifestWork{}
 
 // Reconcile the ManagedClusters of the ManifestWorks.
-// - When the manifester works are created in one managed cluster namespace, we will add a manifest work
-//   finalizer to the managed cluster
-// - When a managed cluster is deleting, we delete the manifest works and remove the manifest work
-//   finalizer from the managed cluster
+//   - When the manifester works are created in one managed cluster namespace, we will add a manifest work
+//     finalizer to the managed cluster
+//   - When a managed cluster is deleting, we delete the manifest works and remove the manifest work
+//     finalizer from the managed cluster
 //
 // Note: The Controller will requeue the Request to be processed again if the returned error is non-nil or
 // Result.Requeue is true, otherwise upon completion it will remove the work from the queue.
@@ -136,15 +136,15 @@ func (r *ReconcileManifestWork) deleteAddonsAndWorks(
 // deleteManifestWorks deletes manifest works when a managed cluster is deleting
 // If the managed cluster is unavailable, we will force delete all manifest works
 // If the managed cluster is available, we will
-//   1. delete the manifest work with the postpone-delete annotation until 10 min after the cluster is deleted.
-//   2. delete the manifest works that do not include klusterlet works and klusterlet addon works
-//   3. delete the klusterlet manifest work, the delete option of the klusterlet manifest work
-//      is orphan, so we can delete it safely
-//   4. after the klusterlet manifest work is deleted, we delete the klusterlet-crds manifest work,
-//      after the klusterlet-crds manifest work is deleted from the hub cluster, its klusterlet
-//      crds will be deleted from the managed cluster, then the kube system will delete the klusterlet
-//      cr from the managed cluster, once the klusterlet cr is deleted, the klusterlet operator will
-//      clean up the klusterlet on the managed cluster
+//  1. delete the manifest work with the postpone-delete annotation until 10 min after the cluster is deleted.
+//  2. delete the manifest works that do not include klusterlet works and klusterlet addon works
+//  3. delete the klusterlet manifest work, the delete option of the klusterlet manifest work
+//     is orphan, so we can delete it safely
+//  4. after the klusterlet manifest work is deleted, we delete the klusterlet-crds manifest work,
+//     after the klusterlet-crds manifest work is deleted from the hub cluster, its klusterlet
+//     crds will be deleted from the managed cluster, then the kube system will delete the klusterlet
+//     cr from the managed cluster, once the klusterlet cr is deleted, the klusterlet operator will
+//     clean up the klusterlet on the managed cluster
 func (r *ReconcileManifestWork) deleteManifestWorks(
 	ctx context.Context,
 	cluster *clusterv1.ManagedCluster,
