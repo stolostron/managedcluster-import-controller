@@ -71,7 +71,7 @@ var _ = ginkgo.Describe("Importing a managed cluster manually", func() {
 			ns, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			copied := ns.DeepCopy()
-			copied.Labels = map[string]string{}
+			delete(copied.Labels, "cluster.open-cluster-management.io/managedCluster")
 			_, err = hubKubeClient.CoreV1().Namespaces().Update(context.TODO(), copied, metav1.UpdateOptions{})
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 		})
