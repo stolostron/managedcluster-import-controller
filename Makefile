@@ -76,12 +76,6 @@ build-coverage:
 build-image:
 	$(DOCKER_BUILDER) build -f $(DOCKER_FILE) . -t $(DOCKER_IMAGE)
 
-## Builds controller image with coverage
-.PHONY: build-image-coverage
-build-image-coverage: build-image
-	$(DOCKER_BUILDER) build -f $(DOCKER_FILE)-coverage . -t managedcluster-import-controller-coverage \
-		--build-arg DOCKER_BASE_IMAGE=$(DOCKER_IMAGE) --build-arg HOST_UID=$(shell id -u)
-
 ## Clean build-harness and remove test files
 .PHONY: clean
 clean: clean-e2e-test
@@ -99,7 +93,7 @@ build-e2e-test:
 
 ## Runs e2e test
 .PHONY: e2e-test
-e2e-test: build-image-coverage build-e2e-test
+e2e-test: build-image build-e2e-test
 	@build/run-e2e-tests.sh
 
 ## Clean e2e test

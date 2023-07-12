@@ -1,9 +1,0 @@
-# Copyright Contributors to the Open Cluster Management project
-
-namespace: open-cluster-management
-
-bases:
-- ../base
-
-patchesStrategicMerge:
-- deploy_patch.yaml

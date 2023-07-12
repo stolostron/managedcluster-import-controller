@@ -1,8 +1,6 @@
 name: DCO
 
 on:
-    push:
-      branches: [ main, release-*, backplane-* ]
     pull_request:
       branches: [ main, release-*, backplane-* ]
 
