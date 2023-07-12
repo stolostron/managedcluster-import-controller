@@ -32,7 +32,6 @@ KUBE_VERSION="v1.24.0"
 KUBECTL="${WORK_DIR}/bin/kubectl"
 
 CLUSTER_NAME="e2e-test-cluster"
-CLUSTER_NAME_MANAGED="e2e-test-cluster-managed"
 
 mkdir -p "${WORK_DIR}/bin"
 mkdir -p "${WORK_DIR}/config"
@@ -44,7 +43,6 @@ chmod +x "${KIND}"
 CLEAN_ARG=${1:-unclean}
 if [ "$CLEAN_ARG"x = "clean"x ]; then
     ${KIND} delete cluster --name ${CLUSTER_NAME}
-    ${KIND} delete cluster --name ${CLUSTER_NAME_MANAGED}
     exit 0
 fi
 
@@ -203,18 +201,8 @@ subjects:
 EOF
 
 
-# prepare another managed cluster for hosted mode testing
-echo "###### installing e2e test managed cluster"
-export KUBECONFIG="${WORK_DIR}/kubeconfig"
-${KIND} delete cluster --name ${CLUSTER_NAME_MANAGED}
-${KIND} create cluster --image kindest/node:${KUBE_VERSION} --name ${CLUSTER_NAME_MANAGED}
-cluster_context_managed=$(${KUBECTL} config current-context)
-echo "managed cluster context is: ${cluster_context_managed}"
-# scale replicas to 1 to save resources
-${KUBECTL} --context="${cluster_context_managed}" -n kube-system scale --replicas=1 deployment/coredns
-
 echo "###### prepare auto-import-secret for hosted cluster"
-${KIND} get kubeconfig --name=${CLUSTER_NAME_MANAGED} --internal > "${WORK_DIR}"/e2e-managed-kubeconfig
+${KIND} get kubeconfig --name=${CLUSTER_NAME} --internal > "${WORK_DIR}"/e2e-managed-kubeconfig
 ${KUBECTL} config use-context "${cluster_context}"
 ${KUBECTL} delete secret e2e-managed-auto-import-secret -n open-cluster-management --ignore-not-found
 ${KUBECTL} create secret generic e2e-managed-auto-import-secret --from-file=kubeconfig="${WORK_DIR}"/e2e-managed-kubeconfig -n open-cluster-management
