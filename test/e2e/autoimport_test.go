@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/rand"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
@@ -99,18 +100,14 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 		})
 
 		ginkgo.By("Managed cluster should not be imported", func() {
-			gomega.Eventually(func() error {
+			gomega.Expect(wait.Poll(1*time.Second, 60*time.Second, func() (bool, error) {
 				cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
 				if err != nil {
-					return err
+					return false, err
 				}
 
-				if meta.IsStatusConditionFalse(cluster.Status.Conditions, "ManagedClusterImportSucceeded") {
-					return nil
-				} else {
-					return fmt.Errorf("Managed cluster %s should not be imported", managedClusterName)
-				}
-			}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
+				return meta.IsStatusConditionFalse(cluster.Status.Conditions, "ManagedClusterImportSucceeded"), nil
+			})).ToNot(gomega.HaveOccurred())
 		})
 
 		assertAutoImportSecretDeleted(managedClusterName)

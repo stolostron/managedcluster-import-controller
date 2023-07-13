@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/rand"
+	"k8s.io/apimachinery/pkg/util/wait"
 
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 )
@@ -91,16 +92,14 @@ var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", fu
 		})
 
 		ginkgo.By("Should delete the managed cluster namespace", func() {
-			gomega.Eventually(func() error {
+			gomega.Expect(wait.Poll(1*time.Second, 10*time.Minute, func() (bool, error) {
 				_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
 				if errors.IsNotFound(err) {
-					return nil
+					return true, nil
 				}
-				if err != nil {
-					return err
-				}
-				return fmt.Errorf("the managed cluster namespace %s should be deleted", managedClusterName)
-			}, 10*time.Minute, 1*time.Second).Should(gomega.Succeed())
+
+				return false, err
+			})).ToNot(gomega.HaveOccurred())
 		})
 	})
 })
@@ -111,16 +110,14 @@ func assertOnlyManagedClusterDeleted(managedClusterName string) {
 		util.Logf("assert delete the managed cluster %s spending time: %.2f seconds", managedClusterName, time.Since(start).Seconds())
 	}()
 	ginkgo.By("Should delete the managed cluster", func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 10*time.Minute, func() (bool, error) {
 			_, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
-				return nil
+				return true, nil
 			}
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("the managed cluster %s should be deleted", managedClusterName)
-		}, 10*time.Minute, 1*time.Second).Should(gomega.Succeed())
+
+			return false, err
+		})).ToNot(gomega.HaveOccurred())
 	})
 }
 
@@ -130,17 +127,14 @@ func assertKlusterletNamespaceDeleted() {
 		util.Logf("assert delete the open-cluster-management-agent namespace spending time: %.2f seconds", time.Since(start).Seconds())
 	}()
 	ginkgo.By("Should delete the open-cluster-management-agent namespace", func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 10*time.Minute, func() (bool, error) {
 			klusterletNamespace := "open-cluster-management-agent"
 			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), klusterletNamespace, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
-				return nil
+				return true, nil
 			}
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("the klusterlet namespace %s should be deleted", klusterletNamespace)
-		}, 10*time.Minute, 1*time.Second).Should(gomega.Succeed())
+			return false, err
+		})).ToNot(gomega.HaveOccurred())
 	})
 
 }
@@ -148,42 +142,39 @@ func assertKlusterletNamespaceDeleted() {
 func assertKlusterletDeleted() {
 	start := time.Now()
 	ginkgo.By("Should delete the klusterlet crd", func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 10*time.Minute, func() (bool, error) {
 			klusterletCRDName := "klusterlets.operator.open-cluster-management.io"
 			crd, err := crdClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), klusterletCRDName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
-				return nil
+				return true, nil
 			}
 			if err != nil {
-				return err
+				return false, err
 			}
 
 			if crd.DeletionTimestamp.IsZero() {
 				// klusterlet crd is not in
-				return fmt.Errorf("the klusterlet crd %s deletionTimestamp should not be zero", klusterletCRDName)
+				return false, nil
 			}
 
 			klusterlet, err := hubOperatorClient.OperatorV1().Klusterlets().Get(context.TODO(), "klusterlet", metav1.GetOptions{})
 			if errors.IsNotFound(err) {
-				return fmt.Errorf("the klusterlet crd %s should be deleted", klusterletCRDName)
+				return false, nil
 			}
 			if err != nil {
-				return err
+				return false, err
 			}
 
 			if klusterlet.DeletionTimestamp.IsZero() {
-				return fmt.Errorf("the klusterlet crd %s deletionTimestamp should not be zero", klusterletCRDName)
+				return false, nil
 			}
 
 			// klusterlet is not deleted yet
 			klusterlet = klusterlet.DeepCopy()
 			klusterlet.Finalizers = []string{}
 			_, err = hubOperatorClient.OperatorV1().Klusterlets().Update(context.TODO(), klusterlet, metav1.UpdateOptions{})
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("the klusterlet crd %s should be deleted, try remove all finalizers again", klusterletCRDName)
-		}, 10*time.Minute, 1*time.Second).Should(gomega.Succeed())
+			return false, err
+		})).ToNot(gomega.HaveOccurred())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
 }

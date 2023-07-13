@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -135,124 +136,124 @@ func assertManagedClusterImportSecretCreated(clusterName, createdVia string, mod
 
 func assertManagedClusterFinalizer(clusterName, expected string) {
 	ginkgo.By(fmt.Sprintf("Managed cluster %s should has expected finalizer: %s", clusterName, expected), func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
 			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if err != nil {
-				return err
+				return false, err
 			}
 
 			for _, finalizer := range cluster.Finalizers {
 				if finalizer == expected {
-					return nil
+					return true, nil
 				}
 			}
 
-			return fmt.Errorf("managed cluster %s does not have expected finalizer %s", clusterName, expected)
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+			return false, nil
+		})).ToNot(gomega.HaveOccurred())
 	})
 }
 
 func assertManagedClusterCreatedViaAnnotation(clusterName, expected string) {
 	ginkgo.By(fmt.Sprintf("Managed cluster %s should has expected annotation: %s", clusterName, expected), func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
 			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if err != nil {
-				return err
+				return false, err
 			}
 
 			annotation, ok := cluster.Annotations["open-cluster-management/created-via"]
 			if !ok {
-				return fmt.Errorf("managed cluster %s does not have expected annotation %s", clusterName, expected)
+				return false, nil
 			}
 
 			if annotation != expected {
-				return fmt.Errorf("managed cluster %s does not have expected annotation %s, get %s", clusterName, expected, annotation)
+				return false, nil
 			}
 
-			return nil
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
 	})
 }
 
 func assertManagedClusterNameLabel(clusterName string) {
 	ginkgo.By(fmt.Sprintf("Managed cluster %s should has cluster name label", clusterName), func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
 			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if err != nil {
-				return err
+				return false, err
 			}
 
 			name, ok := cluster.Labels["name"]
 			if !ok {
-				return fmt.Errorf("managed cluster %s does not have expected label \"name\"", clusterName)
+				return false, nil
 			}
 
 			if name != clusterName {
-				return fmt.Errorf("managed cluster %s does not have expected label \"name\", expect %s, get %s", clusterName, clusterName, name)
+				return false, nil
 			}
 
-			return nil
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
 	})
 }
 
 func assertManagedClusterNamespaceLabel(clusterName string) {
 	ginkgo.By(fmt.Sprintf("Managed cluster namespace %s should has cluster label", clusterName), func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
 			ns, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if err != nil {
-				return err
+				return false, err
 			}
 
 			name, ok := ns.Labels["cluster.open-cluster-management.io/managedCluster"]
 			if !ok {
-				return fmt.Errorf("managed cluster namespace %s does not have expected label \"cluster.open-cluster-management.io/managedCluster\"", clusterName)
+				return false, nil
 			}
 
 			if name != clusterName {
-				return fmt.Errorf("managed cluster namespace %s does not have expected label \"cluster.open-cluster-management.io/managedCluster\", expect %s, get %s", clusterName, clusterName, name)
+				return false, nil
 			}
 
-			return nil
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
 	})
 }
 
 func assertManagedClusterRBAC(managedClusterName string) {
 	ginkgo.By("Should has clusterrole", func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
 			name := fmt.Sprintf("system:open-cluster-management:managedcluster:bootstrap:%s", managedClusterName)
 			_, err := hubKubeClient.RbacV1().ClusterRoles().Get(context.TODO(), name, metav1.GetOptions{})
 			if err != nil {
-				return err
+				return false, err
 			}
 
-			return nil
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
 	})
 
 	ginkgo.By("Should has cluserrolebiding", func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
 			name := fmt.Sprintf("system:open-cluster-management:managedcluster:bootstrap:%s", managedClusterName)
 			_, err := hubKubeClient.RbacV1().ClusterRoleBindings().Get(context.TODO(), name, metav1.GetOptions{})
 			if err != nil {
-				return err
+				return false, err
 			}
 
-			return nil
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
 	})
 
 	ginkgo.By("Should has bootstrap sa", func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
 			name := fmt.Sprintf("%s-bootstrap-sa", managedClusterName)
 			_, err := hubKubeClient.CoreV1().ServiceAccounts(managedClusterName).Get(context.TODO(), name, metav1.GetOptions{})
 			if err != nil {
-				return err
+				return false, err
 			}
 
-			return nil
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
 	})
 }
 
@@ -262,35 +263,43 @@ func assertManagedClusterImportSecret(managedClusterName string) {
 		util.Logf("assert managed cluster import secret spending time: %.2f seconds", time.Since(start).Seconds())
 	}()
 	ginkgo.By("Should create the import secret", func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
 			name := fmt.Sprintf("%s-import", managedClusterName)
 			secret, err := hubKubeClient.CoreV1().Secrets(managedClusterName).Get(context.TODO(), name, metav1.GetOptions{})
+			if errors.IsNotFound(err) {
+				return false, nil
+			}
 			if err != nil {
-				return err
+				return false, err
 			}
 
 			if err := helpers.ValidateImportSecret(secret); err != nil {
-				return fmt.Errorf("invalidated import secret:%v", err)
+				util.Logf("invalidated import secret:%v", err)
+				return false, err
 			}
-			return nil
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
 	})
 }
 
 func assertHostedManagedClusterImportSecret(managedClusterName string) {
 	ginkgo.By("Should create the import secret", func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
 			name := fmt.Sprintf("%s-import", managedClusterName)
 			secret, err := hubKubeClient.CoreV1().Secrets(managedClusterName).Get(context.TODO(), name, metav1.GetOptions{})
+			if errors.IsNotFound(err) {
+				return false, nil
+			}
 			if err != nil {
-				return err
+				return false, err
 			}
 
 			if err := helpers.ValidateHostedImportSecret(secret); err != nil {
-				return fmt.Errorf("invalidated import secret:%v", err)
+				util.Logf("invalid import secret:%v", err)
+				return false, err
 			}
-			return nil
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
 	})
 }
 
@@ -330,32 +339,27 @@ func assertHostedManagedClusterDeleted(clusterName, managementCluster string) {
 func assertManagedClusterDeletedFromHub(clusterName string) {
 	start := time.Now()
 	ginkgo.By(fmt.Sprintf("Should delete the managed cluster %s", clusterName), func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
 			_, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
-				return nil
-			}
-			if err != nil {
-				return err
+				return true, nil
 			}
 
-			return fmt.Errorf("managed cluster %s still exists", clusterName)
-		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
+			return false, err
+		})).ToNot(gomega.HaveOccurred())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
 
 	start = time.Now()
 	ginkgo.By(fmt.Sprintf("Should delete the managed cluster namespace %s", clusterName), func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
 			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
-				return nil
+				return true, nil
 			}
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("managed cluster namespace %s still exists", clusterName)
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+
+			return false, err
+		})).ToNot(gomega.HaveOccurred())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
 }
@@ -363,33 +367,28 @@ func assertManagedClusterDeletedFromHub(clusterName string) {
 func assertManagedClusterDeletedFromSpoke() {
 	start := time.Now()
 	ginkgo.By("Should delete the open-cluster-management-agent namespace", func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
 			klusterletNamespace := "open-cluster-management-agent"
 			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), klusterletNamespace, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
-				return nil
+				return true, nil
 			}
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("namespace %s still exists", klusterletNamespace)
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+			return false, err
+		})).ToNot(gomega.HaveOccurred())
 	})
 	util.Logf("delete the open-cluster-management-agent namespace spending time: %.2f seconds", time.Since(start).Seconds())
 
 	start = time.Now()
 	ginkgo.By("Should delete the klusterlet crd", func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
 			klusterletCRDName := "klusterlets.operator.open-cluster-management.io"
 			_, err := crdClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), klusterletCRDName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
-				return nil
+				return true, nil
 			}
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("crd %s still exists", klusterletCRDName)
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+
+			return false, err
+		})).ToNot(gomega.HaveOccurred())
 	})
 	util.Logf("delete klusterlet crd spending time: %.2f seconds", time.Since(start).Seconds())
 }
@@ -398,33 +397,27 @@ func assertHostedManagedClusterDeletedFromSpoke(cluster, managementCluster strin
 	start := time.Now()
 	namespace := fmt.Sprintf("klusterlet-%s", cluster)
 	ginkgo.By(fmt.Sprintf("Should delete the %s namespace", namespace), func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
 			klusterletNamespace := namespace
 			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), klusterletNamespace, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
-				return nil
+				return true, nil
 			}
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("namespace %s still exists", klusterletNamespace)
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+			return false, err
+		})).ToNot(gomega.HaveOccurred())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
 
 	start = time.Now()
 	klusterletManifestWorkName := fmt.Sprintf("%s-klusterlet", cluster)
 	ginkgo.By(fmt.Sprintf("Should delete the klusterlet manifest work %s", klusterletManifestWorkName), func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 1*time.Minute, func() (bool, error) {
 			_, err := hubWorkClient.WorkV1().ManifestWorks(managementCluster).Get(context.TODO(), klusterletManifestWorkName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
-				return nil
+				return true, nil
 			}
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("klusterlet manifest work %s still exists", klusterletManifestWorkName)
-		}, 1*time.Minute, 1*time.Second).Should(gomega.Succeed())
+			return false, err
+		})).ToNot(gomega.HaveOccurred())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
 }
@@ -436,29 +429,26 @@ func assertManagedClusterImportSecretApplied(clusterName string, mode ...string)
 			clusterName, time.Since(start).Seconds())
 	}()
 	ginkgo.By(fmt.Sprintf("Managed cluster %s should be imported", clusterName), func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
 			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(
 				context.TODO(), clusterName, metav1.GetOptions{})
 			if err != nil {
-				return fmt.Errorf("assert managed cluster %s import secret applied get cluster error: %v", clusterName, err)
+				util.Logf("assert managed cluster %s import secret applied get cluster error: %v", clusterName, err)
+				return false, err
 			}
 
 			util.Logf("assert managed cluster %s import secret applied cluster conditions: %v",
 				clusterName, cluster.Status.Conditions)
-			if len(mode) != 0 && mode[0] == constants.KlusterletDeployModeHosted && meta.IsStatusConditionTrue(
-				cluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded) {
-				return nil
+			if len(mode) != 0 && mode[0] == constants.KlusterletDeployModeHosted {
+				return meta.IsStatusConditionTrue(
+					cluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded), nil
 			}
 
-			if helpers.ImportingResourcesApplied(meta.FindStatusCondition(
+			return helpers.ImportingResourcesApplied(meta.FindStatusCondition(
 				cluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)) ||
 				meta.IsStatusConditionTrue(cluster.Status.Conditions,
-					constants.ConditionManagedClusterImportSucceeded) {
-				return nil
-			}
-
-			return fmt.Errorf("assert managed cluster %s import secret applied failed", clusterName)
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+					constants.ConditionManagedClusterImportSucceeded), nil
+		})).ToNot(gomega.HaveOccurred())
 	})
 }
 
@@ -468,59 +458,55 @@ func assertManagedClusterAvailable(clusterName string) {
 		util.Logf("assert managed cluster %s available spending time: %.2f seconds", clusterName, time.Since(start).Seconds())
 	}()
 	ginkgo.By(fmt.Sprintf("Managed cluster %s should be available", clusterName), func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
 			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if err != nil {
-				return err
+				return false, err
 			}
 
-			if meta.IsStatusConditionTrue(cluster.Status.Conditions, clusterv1.ManagedClusterConditionAvailable) {
-				return nil
-			}
-
-			return fmt.Errorf("assert managed cluster %s available failed", clusterName)
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+			return meta.IsStatusConditionTrue(cluster.Status.Conditions, clusterv1.ManagedClusterConditionAvailable), nil
+		})).ToNot(gomega.HaveOccurred())
 	})
 }
 
 func assertHostedKlusterletManifestWorks(managementClusterName, managedClusterName string) {
 	ginkgo.By(fmt.Sprintf("Hosted cluster %s manifest works should be created", managedClusterName), func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
 			klusterletName := fmt.Sprintf("%s-hosted-klusterlet", managedClusterName)
 			manifestWorks := hubWorkClient.WorkV1().ManifestWorks(managementClusterName)
 			work, err := manifestWorks.Get(context.TODO(), klusterletName, metav1.GetOptions{})
 			if err != nil {
-				return err
+				return false, err
 			}
 
 			clusterLable := work.Labels["import.open-cluster-management.io/hosted-cluster"]
 			if clusterLable != managedClusterName {
-				return fmt.Errorf("Expect cluster label on %s/%s but failed", managementClusterName, klusterletName)
+				return false, fmt.Errorf("Expect cluster label on %s/%s but failed", managementClusterName, klusterletName)
 			}
 
-			return nil
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
 	})
 }
 
 func assertManagedClusterManifestWorks(clusterName string) {
 	ginkgo.By(fmt.Sprintf("Managed cluster %s manifest works should be created", clusterName), func() {
 		start := time.Now()
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
 			klusterletCRDsName := fmt.Sprintf("%s-klusterlet-crds", clusterName)
 			klusterletName := fmt.Sprintf("%s-klusterlet", clusterName)
 			manifestWorks := hubWorkClient.WorkV1().ManifestWorks(clusterName)
 
 			if _, err := manifestWorks.Get(context.TODO(), klusterletCRDsName, metav1.GetOptions{}); err != nil {
-				return err
+				return false, err
 			}
 
 			if _, err := manifestWorks.Get(context.TODO(), klusterletName, metav1.GetOptions{}); err != nil {
-				return err
+				return false, err
 			}
 
-			return nil
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
 		util.Logf("assert managed cluster manifestworks spending time: %.2f seconds", time.Since(start).Seconds())
 	})
 
@@ -532,29 +518,29 @@ func assertManagedClusterManifestWorksAvailable(clusterName string) {
 
 	ginkgo.By(fmt.Sprintf("Managed cluster %s manifest works should be available", clusterName), func() {
 		start := time.Now()
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
 			klusterletCRDsName := fmt.Sprintf("%s-klusterlet-crds", clusterName)
 			klusterletName := fmt.Sprintf("%s-klusterlet", clusterName)
 			manifestWorks := hubWorkClient.WorkV1().ManifestWorks(clusterName)
 
 			klusterletCRDs, err := manifestWorks.Get(context.TODO(), klusterletCRDsName, metav1.GetOptions{})
 			if err != nil {
-				return err
+				return false, err
 			}
 			if !meta.IsStatusConditionTrue(klusterletCRDs.Status.Conditions, workv1.WorkAvailable) {
-				return fmt.Errorf("klusterletCRDs is not available")
+				return false, nil
 			}
 
 			klusterlet, err := manifestWorks.Get(context.TODO(), klusterletName, metav1.GetOptions{})
 			if err != nil {
-				return err
+				return false, err
 			}
 			if !meta.IsStatusConditionTrue(klusterlet.Status.Conditions, workv1.WorkAvailable) {
-				return fmt.Errorf("klusterlet is not available")
+				return false, nil
 			}
 
-			return nil
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
 		util.Logf("assert managed cluster manifestworks spending time: %.2f seconds", time.Since(start).Seconds())
 	})
 
@@ -568,20 +554,20 @@ func assertHostedManagedClusterManifestWorksAvailable(clusterName, hostingCluste
 
 	ginkgo.By(fmt.Sprintf("Hosted managed cluster %s manifest works should be available", clusterName), func() {
 		start := time.Now()
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 5*time.Minute, func() (bool, error) {
 			klusterletName := fmt.Sprintf("%s-hosted-klusterlet", clusterName)
 			manifestWorks := hubWorkClient.WorkV1().ManifestWorks(hostingClusterName)
 
 			klusterlet, err := manifestWorks.Get(context.TODO(), klusterletName, metav1.GetOptions{})
 			if err != nil {
-				return err
+				return false, err
 			}
 			if !meta.IsStatusConditionTrue(klusterlet.Status.Conditions, workv1.WorkAvailable) {
-				return fmt.Errorf("klusterlet is not available")
+				return false, nil
 			}
 
-			return nil
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
 		util.Logf("assert hosted managed cluster manifestworks spending time: %.2f seconds",
 			time.Since(start).Seconds())
 	})
@@ -594,81 +580,86 @@ func assertAutoImportSecretDeleted(managedClusterName string) {
 			managedClusterName, time.Since(start).Seconds())
 	}()
 	ginkgo.By(fmt.Sprintf("Should delete the auto-import-secret from managed cluster namespace %s", managedClusterName), func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 30*time.Second, func() (bool, error) {
 			_, err := hubKubeClient.CoreV1().Secrets(managedClusterName).Get(context.TODO(), "auto-import-secret", metav1.GetOptions{})
 			if errors.IsNotFound(err) {
-				return nil
+				return true, nil
 			}
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("auto-import-secret is not deleted")
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+			return false, err
+		})).ToNot(gomega.HaveOccurred())
 	})
 }
 
 func assertManagedClusterNamespace(managedClusterName string) {
 	ginkgo.By("Should create the managedCluster namespace", func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 60*time.Second, func() (bool, error) {
 			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
-			if err != nil {
-				return err
+			if err != nil && errors.IsNotFound(err) {
+				return true, nil
 			}
-			return nil
-		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
+			if err != nil {
+				return false, err
+			}
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
 	})
 }
 
 func assertKlusterletNodePlacement(nodeSelecor map[string]string, tolerations []corev1.Toleration) {
 	ginkgo.By("Should create the managedCluster namespace", func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 60*time.Second, func() (bool, error) {
 			klusterlet, err := hubOperatorClient.OperatorV1().Klusterlets().Get(context.TODO(), "klusterlet", metav1.GetOptions{})
 			if err != nil && errors.IsNotFound(err) {
-				return nil
+				return true, nil
 			}
 
 			if err != nil {
-				return err
+				return false, err
 			}
 
 			deploy, err := hubKubeClient.AppsV1().Deployments("open-cluster-management-agent").Get(context.TODO(), "klusterlet", metav1.GetOptions{})
 			if err != nil && errors.IsNotFound(err) {
-				return nil
+				return true, nil
 			}
 
 			if err != nil {
-				return err
+				return false, err
 			}
 
 			if !equality.Semantic.DeepEqual(klusterlet.Spec.NodePlacement.NodeSelector, nodeSelecor) {
-				return fmt.Errorf(cmp.Diff(klusterlet.Spec.NodePlacement.NodeSelector, nodeSelecor))
+				util.Logf(cmp.Diff(klusterlet.Spec.NodePlacement.NodeSelector, nodeSelecor))
+				return false, nil
 			}
 
 			if !equality.Semantic.DeepEqual(deploy.Spec.Template.Spec.NodeSelector, nodeSelecor) {
-				return fmt.Errorf(cmp.Diff(deploy.Spec.Template.Spec.NodeSelector, nodeSelecor))
+				util.Logf(cmp.Diff(klusterlet.Spec.NodePlacement.NodeSelector, nodeSelecor))
+				return false, nil
 			}
 
 			if !equality.Semantic.DeepEqual(klusterlet.Spec.NodePlacement.Tolerations, tolerations) {
-				return fmt.Errorf(cmp.Diff(klusterlet.Spec.NodePlacement.Tolerations, tolerations))
+				util.Logf(cmp.Diff(klusterlet.Spec.NodePlacement.Tolerations, tolerations))
+				return false, nil
 			}
 
 			if !equality.Semantic.DeepEqual(deploy.Spec.Template.Spec.Tolerations, tolerations) {
-				return fmt.Errorf(cmp.Diff(deploy.Spec.Template.Spec.Tolerations, tolerations))
+				util.Logf(cmp.Diff(klusterlet.Spec.NodePlacement.Tolerations, tolerations))
+				return false, nil
 			}
 
-			return nil
-		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
 	})
 }
 
 func assertNamespaceCreated(kubeClient kubernetes.Interface, namespace string) {
 	ginkgo.By(fmt.Sprintf("Namespace %s should be created", namespace), func() {
-		gomega.Eventually(func() error {
+		gomega.Expect(wait.Poll(1*time.Second, 60*time.Second, func() (bool, error) {
 			_, err := kubeClient.CoreV1().Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{})
 			if err != nil {
-				return err
+				return false, err
 			}
-			return nil
-		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
+
+			return true, nil
+		})).ToNot(gomega.HaveOccurred())
 	})
 }
