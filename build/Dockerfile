@@ -7,8 +7,8 @@ ENV REMOTE_SOURCE_DIR='/remote-source'
 
 COPY $REMOTE_SOURCE $REMOTE_SOURCE_DIR/app/
 WORKDIR $REMOTE_SOURCE_DIR/app
-RUN BUILD_OUTPUT_DIR=${REMOTE_SOURCE_DIR}/app make build
-RUN BUILD_OUTPUT_DIR=${REMOTE_SOURCE_DIR}/app make build-coverage
+RUN GOFLAGS="" go build ./cmd/manager
+RUN GOFLAGS="" go test -covermode=atomic -coverpkg=github.com/stolostron/managedcluster-import-controller/pkg/... -c -tags testrunmain ./cmd/manager -o manager-coverage
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
 RUN microdnf update

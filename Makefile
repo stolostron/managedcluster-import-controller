@@ -14,7 +14,6 @@ export BUILD_DATE  = $(shell date +%m/%d@%H:%M:%S)
 export VCS_REF     = $(if $(shell git status --porcelain),$(GIT_COMMIT)-$(BUILD_DATE),$(GIT_COMMIT))
 
 export CGO_ENABLED  = 1
-export GOFLAGS ?=
 export GO111MODULE := on
 export GOPATH      ?=$(shell go env GOPATH)
 export GOHOSTOS    ?=$(shell go env GOHOSTOS)
@@ -23,7 +22,6 @@ export GOPACKAGES   = $(shell go list ./... | grep -v /manager | grep -v /bindat
 
 export PROJECT_DIR            = $(shell 'pwd')
 export BUILD_DIR              = $(PROJECT_DIR)/build
-export BUILD_OUTPUT_DIR       ?= _output
 
 export COMPONENT_NAME ?= $(shell cat ./COMPONENT_NAME 2> /dev/null)
 export COMPONENT_VERSION ?= $(shell cat ./COMPONENT_VERSION 2> /dev/null)
@@ -63,13 +61,7 @@ test:
 ## Builds controller binary
 .PHONY: build
 build:
-	go build -o $(BUILD_OUTPUT_DIR)/manager ./cmd/manager
-
-## Builds controller binary with coverage
-.PHONY: build-coverage
-build-coverage:
-	go test -covermode=atomic -coverpkg=github.com/stolostron/managedcluster-import-controller/pkg/... \
-	-c -tags testrunmain ./cmd/manager -o $(BUILD_OUTPUT_DIR)/manager-coverage
+	go build -o build/_output/manager -mod=mod ./cmd/manager
 
 ## Builds controller image
 .PHONY: build-image
