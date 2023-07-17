@@ -448,6 +448,8 @@ func ApplyResources(clientHolder *ClientHolder, recorder events.Recorder,
 			modified, err := applyKlusterlet(clientHolder.OperatorClient, recorder, required)
 			errs = append(errs, err)
 			changed = changed || modified
+		default:
+			errs = append(errs, fmt.Errorf("unknown type %T", required))
 		}
 	}
 
