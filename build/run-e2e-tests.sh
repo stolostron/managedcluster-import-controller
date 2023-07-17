@@ -94,17 +94,6 @@ ${KUBECTL} -n open-cluster-management-hub rollout status deploy cluster-manager-
 ${KUBECTL} -n open-cluster-management scale --replicas=0 deployment/cluster-manager
 ${KUBECTL} -n open-cluster-management-hub scale --replicas=0 deployment/cluster-manager-placement-controller
 
-echo "###### deploy managedcluster-import-controller"
-
-kubectl kustomize "$REPO_DIR/deploy/base" \
-  | sed -e "s,quay.io/open-cluster-management/registration:latest,$REGISTRATION_IMAGE," \
-  -e "s,quay.io/open-cluster-management/work:latest,$WORK_IMAGE," \
-  -e "s,quay.io/open-cluster-management/registration-operator:latest,$REGISTRATION_OPERATOR_IMAGE," \
-  | kubectl apply -f -
-
-sleep 5
-${KUBECTL} -n open-cluster-management rollout status deploy managedcluster-import-controller --timeout=120s
-
 echo "###### prepare required crds"
 ${KUBECTL} apply -f "$REPO_DIR/test/e2e/resources/hive"
 ${KUBECTL} apply -f "$REPO_DIR/test/e2e/resources/ocp"
@@ -121,6 +110,17 @@ status:
   apiServerInternalURI: https://${cluster_ip}
   apiServerURL: https://${cluster_ip}
 EOF
+
+echo "###### deploy managedcluster-import-controller"
+
+kubectl kustomize "$REPO_DIR/deploy/base" \
+  | sed -e "s,quay.io/open-cluster-management/registration:latest,$REGISTRATION_IMAGE," \
+  -e "s,quay.io/open-cluster-management/work:latest,$WORK_IMAGE," \
+  -e "s,quay.io/open-cluster-management/registration-operator:latest,$REGISTRATION_OPERATOR_IMAGE," \
+  | kubectl apply -f -
+
+sleep 5
+${KUBECTL} -n open-cluster-management rollout status deploy managedcluster-import-controller --timeout=120s
 
 echo "###### prepare auto-import-secret"
 cp "${KUBECONFIG}" "${WORK_DIR}"/e2e-kubeconfig
