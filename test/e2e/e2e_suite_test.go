@@ -34,6 +34,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 )
@@ -339,7 +340,7 @@ func assertManagedClusterDeletedFromHub(clusterName string) {
 				return err
 			}
 
-			return fmt.Errorf("managed cluster %s still exists", clusterName)
+			return fmt.Errorf("managed cluster %s still exists, finalizer:%v", clusterName, managedcluster.Finalizer)
 		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
@@ -365,14 +366,14 @@ func assertManagedClusterDeletedFromSpoke() {
 	ginkgo.By("Should delete the open-cluster-management-agent namespace", func() {
 		gomega.Eventually(func() error {
 			klusterletNamespace := "open-cluster-management-agent"
-			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), klusterletNamespace, metav1.GetOptions{})
+			ns, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), klusterletNamespace, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
 				return nil
 			}
 			if err != nil {
 				return err
 			}
-			return fmt.Errorf("namespace %s still exists", klusterletNamespace)
+			return fmt.Errorf("namespace %s still exists, finalizers:%v", klusterletNamespace, ns.Finalizers)
 		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("delete the open-cluster-management-agent namespace spending time: %.2f seconds", time.Since(start).Seconds())
@@ -542,7 +543,7 @@ func assertManagedClusterManifestWorksAvailable(clusterName string) {
 				return err
 			}
 			if !meta.IsStatusConditionTrue(klusterletCRDs.Status.Conditions, workv1.WorkAvailable) {
-				return fmt.Errorf("klusterletCRDs is not available")
+				return fmt.Errorf("klusterletCRDs is not available, %v", klusterletCRDs)
 			}
 
 			klusterlet, err := manifestWorks.Get(context.TODO(), klusterletName, metav1.GetOptions{})
@@ -550,7 +551,7 @@ func assertManagedClusterManifestWorksAvailable(clusterName string) {
 				return err
 			}
 			if !meta.IsStatusConditionTrue(klusterlet.Status.Conditions, workv1.WorkAvailable) {
-				return fmt.Errorf("klusterlet is not available")
+				return fmt.Errorf("klusterlet is not available, %v", klusterlet)
 			}
 
 			return nil
