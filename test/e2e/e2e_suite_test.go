@@ -34,7 +34,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
-	"github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 )
@@ -332,7 +331,7 @@ func assertManagedClusterDeletedFromHub(clusterName string) {
 	start := time.Now()
 	ginkgo.By(fmt.Sprintf("Should delete the managed cluster %s", clusterName), func() {
 		gomega.Eventually(func() error {
-			_, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
+			mc, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
 				return nil
 			}
@@ -340,7 +339,7 @@ func assertManagedClusterDeletedFromHub(clusterName string) {
 				return err
 			}
 
-			return fmt.Errorf("managed cluster %s still exists, finalizer:%v", clusterName, managedcluster.Finalizer)
+			return fmt.Errorf("managed cluster %s still exists, finalizers:%v", clusterName, mc.Finalizers)
 		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
