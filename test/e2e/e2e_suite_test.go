@@ -7,6 +7,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/user"
+	"path"
 	"testing"
 	"time"
 
@@ -58,65 +60,41 @@ func TestE2E(t *testing.T) {
 }
 
 var _ = ginkgo.BeforeSuite(func() {
-	err := func() error {
-		var err error
+	var err error
 
-		kubeconfig := os.Getenv("KUBECONFIG")
+	kubeconfig, err := getKubeConfigFile()
+	gomega.Expect(err).Should(gomega.BeNil())
 
-		clusterCfg, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
-		if err != nil {
-			return err
-		}
+	clusterCfg, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+	gomega.Expect(err).Should(gomega.BeNil())
 
-		hubKubeClient, err = kubernetes.NewForConfig(clusterCfg)
-		if err != nil {
-			return err
-		}
+	hubKubeClient, err = kubernetes.NewForConfig(clusterCfg)
+	gomega.Expect(err).Should(gomega.BeNil())
 
-		hubDynamicClient, err = dynamic.NewForConfig(clusterCfg)
-		if err != nil {
-			return err
-		}
+	hubDynamicClient, err = dynamic.NewForConfig(clusterCfg)
+	gomega.Expect(err).Should(gomega.BeNil())
 
-		crdClient, err = apiextensionsclient.NewForConfig(clusterCfg)
-		if err != nil {
-			return err
-		}
+	crdClient, err = apiextensionsclient.NewForConfig(clusterCfg)
+	gomega.Expect(err).Should(gomega.BeNil())
 
-		hubClusterClient, err = clusterclient.NewForConfig(clusterCfg)
-		if err != nil {
-			return err
-		}
+	hubClusterClient, err = clusterclient.NewForConfig(clusterCfg)
+	gomega.Expect(err).Should(gomega.BeNil())
 
-		hubWorkClient, err = workclient.NewForConfig(clusterCfg)
-		if err != nil {
-			return err
-		}
+	hubWorkClient, err = workclient.NewForConfig(clusterCfg)
+	gomega.Expect(err).Should(gomega.BeNil())
 
-		hubOperatorClient, err = operatorclient.NewForConfig(clusterCfg)
-		if err != nil {
-			return err
-		}
-		addonClient, err = addonclient.NewForConfig(clusterCfg)
-		if err != nil {
-			return err
-		}
+	hubOperatorClient, err = operatorclient.NewForConfig(clusterCfg)
+	gomega.Expect(err).Should(gomega.BeNil())
 
-		hubRuntimeClient, err = crclient.New(clusterCfg, crclient.Options{})
-		if err != nil {
-			return err
-		}
+	addonClient, err = addonclient.NewForConfig(clusterCfg)
+	gomega.Expect(err).Should(gomega.BeNil())
 
-		hubRecorder = helpers.NewEventRecorder(hubKubeClient, "e2e-test")
-		hubMapper, err = apiutil.NewDiscoveryRESTMapper(clusterCfg)
-		if err != nil {
-			return err
-		}
+	hubRuntimeClient, err = crclient.New(clusterCfg, crclient.Options{})
+	gomega.Expect(err).Should(gomega.BeNil())
 
-		return nil
-	}()
-
-	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+	hubRecorder = helpers.NewEventRecorder(hubKubeClient, "e2e-test")
+	hubMapper, err = apiutil.NewDiscoveryRESTMapper(clusterCfg)
+	gomega.Expect(err).Should(gomega.BeNil())
 })
 
 // asserters
@@ -671,4 +649,17 @@ func assertNamespaceCreated(kubeClient kubernetes.Interface, namespace string) {
 			return nil
 		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
+}
+
+func getKubeConfigFile() (string, error) {
+	kubeConfigFile := os.Getenv("KUBECONFIG")
+	if kubeConfigFile == "" {
+		user, err := user.Current()
+		if err != nil {
+			return "", err
+		}
+		kubeConfigFile = path.Join(user.HomeDir, ".kube", "config")
+	}
+
+	return kubeConfigFile, nil
 }

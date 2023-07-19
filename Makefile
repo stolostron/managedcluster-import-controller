@@ -34,8 +34,6 @@ export DOCKER_FILE        = $(BUILD_DIR)/Dockerfile
 export DOCKER_IMAGE      ?= $(COMPONENT_NAME)
 export DOCKER_BUILDER    ?= docker
 
-BEFORE_SCRIPT := $(shell build/before-make.sh)
-
 # Only use git commands if it exists
 ifdef GIT
 GIT_COMMIT      = $(shell git rev-parse --short HEAD)
@@ -86,20 +84,19 @@ clean: clean-e2e-test
 deploy:
 	kubectl apply -k deploy/base
 
-## Build e2e test binary
-.PHONY: build-e2e-test
-build-e2e-test:
-	go test -c ./test/e2e -o _output/e2e.test
-
 ## Runs e2e test
 .PHONY: e2e-test
-e2e-test: build-image build-e2e-test
-	@build/run-e2e-tests.sh
+e2e-test: build-image
+	@build/setup-kind-clusters.sh
+	@build/setup-ocm.sh
+	@build/setup-import-controller.sh
+	go test -c ./test/e2e -o _output/e2e.test
+	_output/e2e.test -test.v -ginkgo.v
 
 ## Clean e2e test
 .PHONY: clean-e2e-test
 clean-e2e-test:
-	@build/run-e2e-tests.sh clean
+	@build/setup-kind-clusters.sh clean
 
 # Update vendor
 .PHONY: vendor
