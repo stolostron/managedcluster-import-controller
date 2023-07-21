@@ -98,6 +98,15 @@ e2e-test: build-image
 clean-e2e-test:
 	@build/setup-kind-clusters.sh clean
 
+## Run e2e test against Prow(an OCP cluster)
+.PHONY: e2e-test-prow
+e2e-test-prow:
+	@build/setup-prow.sh
+	@build/setup-ocm.sh
+	@build/setup-import-controller.sh
+	go test -c ./test/e2e -o _output/e2e.test
+	_output/e2e.test -test.v -ginkgo.v -skip hosted
+
 # Update vendor
 .PHONY: vendor
 vendor:

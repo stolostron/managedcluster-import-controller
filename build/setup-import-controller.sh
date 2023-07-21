@@ -10,6 +10,8 @@ set -o nounset
 # Input: KUBECTL(kubectl or oc), OCM_VERSION, E2E_KUBECONFIG, E2E_MANAGED_KUBECONFIG, cluster_ip, cluster_context
 
 KUBECTL=${KUBECTL:-kubectl}
+OCM_VERSION=${OCM_VERSION:-main}
+IMPORT_CONTROLLER_IMAGE_NAME=${IMPORT_CONTROLLER_IMAGE_NAME:-managedcluster-import-controller:latest}
 
 BUILD_DIR="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 REPO_DIR="$(dirname "$BUILD_DIR")"
@@ -20,18 +22,18 @@ mkdir -p "${WORK_DIR}"
 E2E_KUBECONFIG="${WORK_DIR}/e2e-kubeconfig"
 E2E_MANAGED_KUBECONFIG="${WORK_DIR}/e2e-managed-kubeconfig"
 
-export OCM_VERSION=main
 export OCM_BRANCH=$OCM_VERSION
 export REGISTRATION_OPERATOR_IMAGE=quay.io/stolostron/registration-operator:$OCM_VERSION
 export REGISTRATION_IMAGE=quay.io/stolostron/registration:$OCM_VERSION
 export WORK_IMAGE=quay.io/stolostron/work:$OCM_VERSION
 
-echo "###### deploy managedcluster-import-controller"
+echo "###### deploy managedcluster-import-controller by image $IMPORT_CONTROLLER_IMAGE_NAME"
 
 kubectl kustomize "$REPO_DIR/deploy/base" \
   | sed -e "s,quay.io/open-cluster-management/registration:latest,$REGISTRATION_IMAGE," \
   -e "s,quay.io/open-cluster-management/work:latest,$WORK_IMAGE," \
   -e "s,quay.io/open-cluster-management/registration-operator:latest,$REGISTRATION_OPERATOR_IMAGE," \
+  -e "s,managedcluster-import-controller:latest,$IMPORT_CONTROLLER_IMAGE_NAME," \
   | kubectl apply -f -
 
 sleep 5
