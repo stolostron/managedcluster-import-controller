@@ -24,7 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/rand"
 )
 
-var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted mode", func() {
+var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted mode", ginkgo.Label("hosted"), func() {
 	var hostingClusterName string
 	ginkgo.BeforeEach(func() {
 		hostingClusterName = fmt.Sprintf("hosting-cluster-%s", rand.String(6))
