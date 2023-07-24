@@ -11,6 +11,7 @@ package controller
 import (
 	"fmt"
 
+	agentregistration "github.com/stolostron/managedcluster-import-controller/pkg/controller/agentregistration"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/autoimport"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/clusterdeployment"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/clusternamespacedeletion"
@@ -44,6 +45,7 @@ var AddToManagerFuncs = []AddToManagerFunc{
 	clusterdeployment.Add,
 	clusternamespacedeletion.Add,
 	importstatus.Add,
+	agentregistration.Add,
 }
 
 // AddToManager adds all controllers to the manager

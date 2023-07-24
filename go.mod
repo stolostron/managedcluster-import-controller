@@ -13,6 +13,7 @@ require (
 	github.com/openshift/hive/apis v0.0.0-20230410203125-bb0124b40f86
 	github.com/openshift/library-go v0.0.0-20230308200407-f3277c772011
 	github.com/spf13/pflag v1.0.5
+	github.com/stolostron/klusterlet-addon-controller v0.0.0-20230705135736-ec14c0b2e548
 	go.uber.org/zap v1.24.0
 	golang.org/x/text v0.8.0
 	k8s.io/api v0.26.2
@@ -72,6 +73,7 @@ require (
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/spf13/cobra v1.6.0 // indirect
+	github.com/stolostron/cluster-lifecycle-api v0.0.0-20220621134646-8b67f2e6afed // indirect
 	go.mongodb.org/mongo-driver v1.3.4 // indirect
 	go.uber.org/atomic v1.8.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect

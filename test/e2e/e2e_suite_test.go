@@ -22,6 +22,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -268,6 +269,41 @@ func assertHostedManagedClusterImportSecret(managedClusterName string) {
 				return fmt.Errorf("invalidated import secret:%v", err)
 			}
 			return nil
+		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+	})
+}
+
+func assertKlusterletAddonConfigCreated(clusterName string) {
+	ginkgo.By(fmt.Sprintf("Should create the KlusterletAddonConfig %s", clusterName), func() {
+		gomega.Eventually(func() error {
+			_, err := hubDynamicClient.Resource(schema.GroupVersionResource{
+				Group:    "agent.open-cluster-management.io",
+				Version:  "v1",
+				Resource: "klusterletaddonconfigs",
+			}).Namespace(clusterName).Get(context.TODO(), clusterName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			return nil
+		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+	})
+}
+
+func assertKlusterletAddonConfigNotCreated(clusterName string) {
+	ginkgo.By(fmt.Sprintf("Should not create the KlusterletAddonConfig %s", clusterName), func() {
+		gomega.Eventually(func() error {
+			_, err := hubDynamicClient.Resource(schema.GroupVersionResource{
+				Group:    "agent.open-cluster-management.io",
+				Version:  "v1",
+				Resource: "klusterletaddonconfigs",
+			}).Namespace(clusterName).Get(context.TODO(), clusterName, metav1.GetOptions{})
+			if err != nil && errors.IsNotFound(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("KlusterletAddonConfig %s still exists", clusterName)
 		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 }

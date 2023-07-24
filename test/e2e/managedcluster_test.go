@@ -21,7 +21,7 @@ import (
 )
 
 // ginkgo.Serial promise specs not run in parallel
-var _ = ginkgo.Describe("Importing a managed cluster manually", ginkgo.Serial, func() {
+var _ = ginkgo.Describe("Importing a managed cluster manually", func() {
 	var managedClusterName string
 
 	ginkgo.BeforeEach(func() {
@@ -37,7 +37,7 @@ var _ = ginkgo.Describe("Importing a managed cluster manually", ginkgo.Serial, f
 		assertManagedClusterDeleted(managedClusterName)
 	})
 
-	ginkgo.It("Should create the meta object and the import secret of the managed cluster", func() {
+	ginkgo.It("Should create the meta object and the import secret of the managed cluster", ginkgo.Serial, func() {
 		assertManagedClusterFinalizer(managedClusterName, "managedcluster-import-controller.open-cluster-management.io/cleanup")
 		assertManagedClusterCreatedViaAnnotation(managedClusterName, "other")
 		assertManagedClusterNameLabel(managedClusterName)
@@ -46,7 +46,7 @@ var _ = ginkgo.Describe("Importing a managed cluster manually", ginkgo.Serial, f
 		assertManagedClusterImportSecret(managedClusterName)
 	})
 
-	ginkgo.It("Should recover the meta objet of the managed cluster", func() {
+	ginkgo.It("Should recover the meta objet of the managed cluster", ginkgo.Serial, func() {
 		assertManagedClusterCreatedViaAnnotation(managedClusterName, "other")
 		assertManagedClusterNameLabel(managedClusterName)
 
@@ -65,7 +65,7 @@ var _ = ginkgo.Describe("Importing a managed cluster manually", ginkgo.Serial, f
 		})
 	})
 
-	ginkgo.It("Should recover the label of the managed cluster namespace", func() {
+	ginkgo.It("Should recover the label of the managed cluster namespace", ginkgo.Serial, func() {
 		assertManagedClusterNamespaceLabel(managedClusterName)
 
 		ginkgo.By("Remove the managed cluster namespace label", func() {
@@ -80,7 +80,7 @@ var _ = ginkgo.Describe("Importing a managed cluster manually", ginkgo.Serial, f
 		ginkgo.By("Recover after remove", func() { assertManagedClusterNamespaceLabel(managedClusterName) })
 	})
 
-	ginkgo.It("Should recover the required rbac of the managed cluster", func() {
+	ginkgo.It("Should recover the required rbac of the managed cluster", ginkgo.Serial, func() {
 		assertManagedClusterRBAC(managedClusterName)
 
 		ginkgo.By("Remove the managed cluster rbac", func() {
@@ -97,7 +97,7 @@ var _ = ginkgo.Describe("Importing a managed cluster manually", ginkgo.Serial, f
 		ginkgo.By("Recover after delete", func() { assertManagedClusterRBAC(managedClusterName) })
 	})
 
-	ginkgo.It("Should recover the import secret of the managed cluster", func() {
+	ginkgo.It("Should recover the import secret of the managed cluster", ginkgo.Serial, func() {
 		assertManagedClusterImportSecret(managedClusterName)
 
 		name := fmt.Sprintf("%s-import", managedClusterName)
@@ -108,7 +108,8 @@ var _ = ginkgo.Describe("Importing a managed cluster manually", ginkgo.Serial, f
 
 		ginkgo.By("Recover after delete", func() { assertManagedClusterImportSecret(managedClusterName) })
 	})
-	ginkgo.It("Should postpone delete manifest with postpone-delete annotation", func() {
+
+	ginkgo.It("Should postpone delete manifest with postpone-delete annotation", ginkgo.Serial, func() {
 		assertManagedClusterNamespace(managedClusterName)
 
 		manifestwork := &workv1.ManifestWork{
