@@ -20,7 +20,8 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 )
 
-var _ = ginkgo.Describe("Importing a managed cluster manually", func() {
+// ginkgo.Serial promise specs not run in parallel
+var _ = ginkgo.Describe("Importing a managed cluster manually", ginkgo.Serial, func() {
 	var managedClusterName string
 
 	ginkgo.BeforeEach(func() {
