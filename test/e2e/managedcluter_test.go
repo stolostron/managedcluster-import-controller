@@ -51,12 +51,19 @@ var _ = ginkgo.Describe("Importing a managed cluster manually", func() {
 		assertManagedClusterNameLabel(managedClusterName)
 
 		ginkgo.By("Modify the managed cluster annotation", func() {
-			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			copied := cluster.DeepCopy()
-			copied.Annotations["open-cluster-management/created-via"] = "wrong"
-			_, err = hubClusterClient.ClusterV1().ManagedClusters().Update(context.TODO(), copied, metav1.UpdateOptions{})
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			gomega.Eventually(func() error {
+				cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
+				if err != nil {
+					return err
+				}
+				copied := cluster.DeepCopy()
+				copied.Annotations["open-cluster-management/created-via"] = "wrong"
+				_, err = hubClusterClient.ClusterV1().ManagedClusters().Update(context.TODO(), copied, metav1.UpdateOptions{})
+				if err != nil {
+					return err
+				}
+				return nil
+			}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
 		})
 
 		ginkgo.By("Recover after modify", func() {
@@ -69,12 +76,19 @@ var _ = ginkgo.Describe("Importing a managed cluster manually", func() {
 		assertManagedClusterNamespaceLabel(managedClusterName)
 
 		ginkgo.By("Remove the managed cluster namespace label", func() {
-			ns, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-			copied := ns.DeepCopy()
-			delete(copied.Labels, "cluster.open-cluster-management.io/managedCluster")
-			_, err = hubKubeClient.CoreV1().Namespaces().Update(context.TODO(), copied, metav1.UpdateOptions{})
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			gomega.Eventually(func() error {
+				ns, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
+				if err != nil {
+					return err
+				}
+				copied := ns.DeepCopy()
+				delete(copied.Labels, "cluster.open-cluster-management.io/managedCluster")
+				_, err = hubKubeClient.CoreV1().Namespaces().Update(context.TODO(), copied, metav1.UpdateOptions{})
+				if err != nil {
+					return err
+				}
+				return nil
+			}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
 		})
 
 		ginkgo.By("Recover after remove", func() { assertManagedClusterNamespaceLabel(managedClusterName) })
