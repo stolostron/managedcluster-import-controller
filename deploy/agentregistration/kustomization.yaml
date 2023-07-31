@@ -1,0 +1,18 @@
+# Copyright Contributors to the Open Cluster Management project
+
+namespace: open-cluster-management
+
+
+resources:
+- ./bootstrap_clusterrole.yaml
+- ./bootstrap_clusterrolebinding.yaml
+- ./bootstrap_serviceaccount.yaml
+- ./service.yaml
+- ./route.yaml
+- ./clientclusterrole.yaml
+- ../base
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+patches:
+- path: ./deploy_patch.yaml

@@ -103,7 +103,7 @@ clean-e2e-test:
 e2e-test-prow:
 	@build/setup-prow.sh
 	@build/setup-ocm.sh
-	@build/setup-import-controller.sh
+	@build/setup-import-controller.sh enable-agent-registration
 	go test -c ./test/e2e -o _output/e2e.test
 	_output/e2e.test -test.v -ginkgo.v --ginkgo.skip=hosted
 

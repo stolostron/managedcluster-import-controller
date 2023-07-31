@@ -18,6 +18,9 @@ const (
 	// KlusterletHostedMode will provide a hosted importing worker for import-secret controller,
 	// and will start a new hosted controller to process cluster in hosted mode importing,
 	KlusterletHostedMode featuregate.Feature = "KlusterletHostedMode"
+
+	// AgentRegistration enables a server to provide an endpoint for clients to get manifests
+	AgentRegistration featuregate.Feature = "AgentRegistration"
 )
 
 var (
@@ -36,4 +39,5 @@ func init() {
 // add it here.
 var defaultRegistrationFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
 	KlusterletHostedMode: {Default: true, PreRelease: featuregate.Alpha},
+	AgentRegistration:    {Default: true, PreRelease: featuregate.Alpha},
 }

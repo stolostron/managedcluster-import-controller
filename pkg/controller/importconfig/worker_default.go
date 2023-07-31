@@ -81,15 +81,6 @@ func (w *defaultWorker) generateImportSecret(ctx context.Context, managedCluster
 		return nil, err
 	}
 
-	type DefaultRenderConfig struct {
-		KlusterletRenderConfig
-		UseImagePullSecret        bool
-		ImagePullSecretName       string
-		ImagePullSecretData       string
-		ImagePullSecretConfigKey  string
-		ImagePullSecretType       corev1.SecretType
-		RegistrationOperatorImage string
-	}
 	config := DefaultRenderConfig{
 		KlusterletRenderConfig: KlusterletRenderConfig{
 			ManagedClusterNamespace: managedCluster.Name,
