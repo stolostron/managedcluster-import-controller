@@ -4,9 +4,11 @@
 package importconfig
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"fmt"
 	"net/url"
 	"os"
@@ -21,30 +23,28 @@ import (
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
 
-	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apiserver/pkg/storage/names"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	clientcmdlatest "k8s.io/client-go/tools/clientcmd/api/latest"
 	"k8s.io/utils/pointer"
 
-	"k8s.io/apiserver/pkg/storage/names"
+	authv1 "k8s.io/api/authentication/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-// getBootstrapSecret lists the secrets from the managed cluster namespace to look for the managed cluster
+// getBootstrapToken lists the secrets from the managed cluster namespace to look for the managed cluster
 // bootstrap token firstly (compatibility with the ocp that version is less than 4.11), if there is no
 // token found, uses tokenrequest to request token.
-func getBootstrapToken(ctx context.Context,
-	kubeClient kubernetes.Interface, managedCluster *clusterv1.ManagedCluster) ([]byte, []byte, error) {
-	saName := getBootstrapSAName(managedCluster.Name)
-
-	secrets, err := kubeClient.CoreV1().Secrets(managedCluster.Name).List(ctx, metav1.ListOptions{})
+func getBootstrapToken(ctx context.Context, kubeClient kubernetes.Interface,
+	saName, secretNamespace string, tokenExpirationSeconds int64) ([]byte, []byte, error) {
+	secrets, err := kubeClient.CoreV1().Secrets(secretNamespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -78,18 +78,18 @@ func getBootstrapToken(ctx context.Context,
 		return token, nil, nil
 	}
 
-	tokenRequest, err := kubeClient.CoreV1().ServiceAccounts(managedCluster.Name).CreateToken(
+	tokenRequest, err := kubeClient.CoreV1().ServiceAccounts(secretNamespace).CreateToken(
 		ctx,
 		saName,
 		&authv1.TokenRequest{
 			Spec: authv1.TokenRequestSpec{
-				ExpirationSeconds: pointer.Int64Ptr(8640 * 3600),
+				ExpirationSeconds: pointer.Int64(tokenExpirationSeconds),
 			},
 		},
 		metav1.CreateOptions{},
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("create token request failed: %v", err)
 	}
 
 	expiration, err := tokenRequest.Status.ExpirationTimestamp.MarshalText()
@@ -184,28 +184,33 @@ func getImagePullSecret(ctx context.Context, clientHolder *helpers.ClientHolder,
 		return secret, nil
 	}
 
+	return getDefaultImagePullSecret(ctx, clientHolder)
+}
+
+func getDefaultImagePullSecret(ctx context.Context, clientHolder *helpers.ClientHolder) (*corev1.Secret, error) {
+	var err error
+
 	defaultSecretName := os.Getenv(defaultImagePullSecretEnvVarName)
 	if defaultSecretName == "" {
-		log.Info(fmt.Sprintf("Ignore the image pull secret for %s, it can neither be found from image registry nor from env %s",
-			managedCluster.Name, defaultImagePullSecretEnvVarName))
+		log.Info(fmt.Sprintf("Ignore the image pull secret, it can't be found from from env %s", defaultImagePullSecretEnvVarName))
 		return nil, nil
 	}
 
 	ns := os.Getenv(constants.PodNamespaceEnvVarName)
-	secret, err = clientHolder.KubeClient.CoreV1().Secrets(ns).Get(ctx, defaultSecretName, metav1.GetOptions{})
+	secret, err := clientHolder.KubeClient.CoreV1().Secrets(ns).Get(ctx, defaultSecretName, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
 	return secret, nil
 }
 
-func getImage(managedCluster *clusterv1.ManagedCluster, envName string) (string, error) {
+func getImage(envName string, clusterAnnotations map[string]string) (string, error) {
 	defaultImage := os.Getenv(envName)
 	if defaultImage == "" {
 		return "", fmt.Errorf("environment variable %s not defined", envName)
 	}
 
-	return imageregistry.OverrideImageByAnnotation(managedCluster.GetAnnotations(), defaultImage)
+	return imageregistry.OverrideImageByAnnotation(clusterAnnotations, defaultImage)
 }
 
 // getValidCertificatesFromURL dial to serverURL and get certificates
@@ -254,7 +259,7 @@ func getBootstrapKubeConfigData(ctx context.Context, clientHolder *helpers.Clien
 	importSecret, err := clientHolder.KubeClient.CoreV1().Secrets(cluster.Name).Get(ctx, importSecretName, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		// create bootstrap kubeconfig
-		return createKubeConfig(ctx, clientHolder, cluster)
+		return createKubeConfig(ctx, clientHolder, getBootstrapSAName(cluster.Name), cluster.Name, 8640*3600)
 	}
 	if err != nil {
 		return nil, nil, err
@@ -285,7 +290,7 @@ func getBootstrapKubeConfigData(ctx context.Context, clientHolder *helpers.Clien
 	}
 
 	// recreate bootstrap kubeconfig
-	return createKubeConfig(ctx, clientHolder, cluster)
+	return createKubeConfig(ctx, clientHolder, getBootstrapSAName(cluster.Name), cluster.Name, 8640*3600)
 }
 
 func getBootstrapKubeConfigDataFromImportSecret(importSecret *corev1.Secret) []byte {
@@ -350,7 +355,7 @@ func validateCAData(ctx context.Context, caData []byte, kubeAPIServer string, cl
 		return false, nil
 	}
 
-	currentCAData, err := getBootstrapCAData(ctx, clientHolder, cluster, kubeAPIServer)
+	currentCAData, err := getBootstrapCAData(ctx, clientHolder, kubeAPIServer, cluster.Name)
 	if err != nil {
 		return false, err
 	}
@@ -381,8 +386,8 @@ func validateToken(token string, expiration []byte) bool {
 }
 
 // create kubeconfig from bootstrap secret
-func createKubeConfig(ctx context.Context, clientHolder *helpers.ClientHolder, cluster *clusterv1.ManagedCluster) ([]byte, []byte, error) {
-	token, expiration, err := getBootstrapToken(ctx, clientHolder.KubeClient, cluster)
+func createKubeConfig(ctx context.Context, clientHolder *helpers.ClientHolder, saName string, ns string, tokenExpirationSeconds int64) ([]byte, []byte, error) {
+	token, expiration, err := getBootstrapToken(ctx, clientHolder.KubeClient, saName, ns, tokenExpirationSeconds)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -392,7 +397,7 @@ func createKubeConfig(ctx context.Context, clientHolder *helpers.ClientHolder, c
 		return nil, nil, err
 	}
 
-	certData, err := getBootstrapCAData(ctx, clientHolder, cluster, kubeAPIServer)
+	certData, err := getBootstrapCAData(ctx, clientHolder, kubeAPIServer, ns)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -425,7 +430,7 @@ func createKubeConfig(ctx context.Context, clientHolder *helpers.ClientHolder, c
 	return boostrapConfigData, expiration, err
 }
 
-func getBootstrapCAData(ctx context.Context, clientHolder *helpers.ClientHolder, cluster *clusterv1.ManagedCluster, kubeAPIServer string) ([]byte, error) {
+func getBootstrapCAData(ctx context.Context, clientHolder *helpers.ClientHolder, kubeAPIServer string, caNamespace string) ([]byte, error) {
 	// get the ca cert from ocp apiserver firstly
 	if u, err := url.Parse(kubeAPIServer); err == nil {
 		apiServerCertSecretName, err := getKubeAPIServerSecretName(ctx, clientHolder.RuntimeClient, u.Hostname())
@@ -440,7 +445,7 @@ func getBootstrapCAData(ctx context.Context, clientHolder *helpers.ClientHolder,
 			}
 
 			if len(certData) != 0 {
-				log.Info(fmt.Sprintf("Using openshift-config/%s as the bootstrap ca for cluster %s", apiServerCertSecretName, cluster.Name))
+				log.Info(fmt.Sprintf("Using openshift-config/%s as the bootstrap ca", apiServerCertSecretName))
 				return certData, nil
 			}
 		}
@@ -465,13 +470,12 @@ func getBootstrapCAData(ctx context.Context, clientHolder *helpers.ClientHolder,
 		}
 	}
 
-	// failed to get the ca from ocp, fallback to the kube-root-ca.crt configmap
-	log.Info(fmt.Sprintf("No ca.crt was found, fallback to the %s/kube-root-ca.crt", cluster.Name))
-	rootCA, err := clientHolder.KubeClient.CoreV1().ConfigMaps(cluster.Name).Get(ctx, "kube-root-ca.crt", metav1.GetOptions{})
+	// failed to get the ca from ocp, fallback to the kube-root-ca.crt configmap from the pod namespace.
+	log.Info(fmt.Sprintf("No ca.crt was found, fallback to the %s/kube-root-ca.crt", caNamespace))
+	rootCA, err := clientHolder.KubeClient.CoreV1().ConfigMaps(caNamespace).Get(ctx, "kube-root-ca.crt", metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
-
 	return []byte(rootCA.Data["ca.crt"]), nil
 }
 
@@ -481,4 +485,52 @@ func getBootstrapSAName(clusterName string) string {
 		return fmt.Sprintf("%s-%s", clusterName[:63-len("-"+bootstrapSASuffix)], bootstrapSASuffix)
 	}
 	return bootstrapSAName
+}
+
+func filesToTemplateBytes(files []string, config interface{}) ([]byte, error) {
+	manifests := new(bytes.Buffer)
+	for _, file := range files {
+		b, err := manifestFiles.ReadFile(file)
+		if err != nil {
+			return nil, err
+		}
+
+		if config != nil {
+			b = helpers.MustCreateAssetFromTemplate(file, b, config)
+		}
+		manifests.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, string(b)))
+	}
+	return manifests.Bytes(), nil
+}
+
+func getImagePullSecretConfig(imagePullSecret *corev1.Secret) (ImagePullSecretConfig, error) {
+	useImagePullSecret := false
+	var imagePullSecretType corev1.SecretType
+	var dockerConfigKey string
+	imagePullSecretDataBase64 := ""
+	if imagePullSecret != nil {
+		switch {
+		case len(imagePullSecret.Data[corev1.DockerConfigJsonKey]) != 0:
+			dockerConfigKey = corev1.DockerConfigJsonKey
+			imagePullSecretType = corev1.SecretTypeDockerConfigJson
+			imagePullSecretDataBase64 = base64.StdEncoding.EncodeToString(imagePullSecret.Data[corev1.DockerConfigJsonKey])
+			useImagePullSecret = true
+		case len(imagePullSecret.Data[corev1.DockerConfigKey]) != 0:
+			dockerConfigKey = corev1.DockerConfigKey
+			imagePullSecretType = corev1.SecretTypeDockercfg
+			imagePullSecretDataBase64 = base64.StdEncoding.EncodeToString(imagePullSecret.Data[corev1.DockerConfigKey])
+			useImagePullSecret = true
+		default:
+			return ImagePullSecretConfig{}, fmt.Errorf("there is invalid type of the data of pull secret %v/%v",
+				imagePullSecret.GetNamespace(), imagePullSecret.GetName())
+		}
+	}
+
+	return ImagePullSecretConfig{
+		UseImagePullSecret:       useImagePullSecret,
+		ImagePullSecretName:      managedClusterImagePullSecretName,
+		ImagePullSecretType:      imagePullSecretType,
+		ImagePullSecretData:      imagePullSecretDataBase64,
+		ImagePullSecretConfigKey: dockerConfigKey,
+	}, nil
 }

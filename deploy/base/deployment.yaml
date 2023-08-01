@@ -21,7 +21,7 @@ spec:
       containers:
         - name: managedcluster-import-controller
           image: managedcluster-import-controller:latest
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: IfNotPresent # This is required because in kind-clusters, the image is built locally
           env:
             - name: POD_NAME
               valueFrom:

@@ -456,7 +456,7 @@ func assertManagedClusterAvailable(clusterName string) {
 				return nil
 			}
 
-			return fmt.Errorf("assert managed cluster %s available failed", clusterName)
+			return fmt.Errorf("assert managed cluster %s available failed, cluster conditions: %v", clusterName, cluster.Status.Conditions)
 		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
 	})
 }

@@ -1,0 +1,11 @@
+apiVersion: operator.open-cluster-management.io/v1
+kind: ClusterManager
+metadata:
+  name: cluster-manager
+spec:
+  registrationConfiguration:
+    featureGates:
+      - feature: ManagedClusterAutoApproval
+        mode: Enable
+    autoApproveUsers:
+      - system:serviceaccount:open-cluster-management:agent-registration-bootstrap

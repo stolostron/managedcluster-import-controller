@@ -1,0 +1,24 @@
+# Copyright Contributors to the Open Cluster Management project
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: managedcluster-import-controller
+  namespace: open-cluster-management
+  labels:
+    app: managedcluster-import-controller
+spec:
+  template:
+    spec:
+      volumes:
+        - name: agent-registration-server-tls
+          secret:
+            secretName: managedcluster-import-agent-registration-serving-cert
+      containers:
+      - name: managedcluster-import-controller
+        volumeMounts:
+          - name: agent-registration-server-tls
+            mountPath: /server
+            readOnly: true
+        ports:
+          - containerPort: 9091

@@ -39,15 +39,3 @@ func (f *workerFactory) newWorker(mode string) (importWorker, error) {
 		return nil, fmt.Errorf("klusterlet deploy mode %s not supportted", mode)
 	}
 }
-
-// KlusterletRenderConfig defines variables used in the klusterletFiles.
-type KlusterletRenderConfig struct {
-	KlusterletNamespace     string
-	ManagedClusterNamespace string
-	BootstrapKubeconfig     string
-	RegistrationImageName   string
-	WorkImageName           string
-	NodeSelector            map[string]string
-	Tolerations             []corev1.Toleration
-	InstallMode             string
-}

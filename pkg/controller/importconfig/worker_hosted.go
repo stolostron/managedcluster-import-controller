@@ -4,7 +4,6 @@
 package importconfig
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -29,12 +28,12 @@ func (w *hostedWorker) generateImportSecret(ctx context.Context, managedCluster 
 		return nil, err
 	}
 
-	registrationImageName, err := getImage(managedCluster, registrationImageEnvVarName)
+	registrationImageName, err := getImage(registrationImageEnvVarName, managedCluster.GetAnnotations())
 	if err != nil {
 		return nil, err
 	}
 
-	workImageName, err := getImage(managedCluster, workImageEnvVarName)
+	workImageName, err := getImage(workImageEnvVarName, managedCluster.GetAnnotations())
 	if err != nil {
 		return nil, err
 	}
@@ -61,15 +60,10 @@ func (w *hostedWorker) generateImportSecret(ctx context.Context, managedCluster 
 	}
 
 	files := append([]string{}, klusterletFiles...)
-	importYAML := new(bytes.Buffer)
-	for _, file := range files {
-		template, err := manifestFiles.ReadFile(file)
-		if err != nil {
-			// this should not happen, if happened, panic here
-			panic(err)
-		}
-		raw := helpers.MustCreateAssetFromTemplate(file, template, config)
-		importYAML.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, string(raw)))
+
+	yamlcontent, err := filesToTemplateBytes(files, config)
+	if err != nil {
+		return nil, err
 	}
 
 	secret := &corev1.Secret{
@@ -85,7 +79,7 @@ func (w *hostedWorker) generateImportSecret(ctx context.Context, managedCluster 
 			},
 		},
 		Data: map[string][]byte{
-			constants.ImportSecretImportYamlKey: importYAML.Bytes(),
+			constants.ImportSecretImportYamlKey: yamlcontent,
 		},
 	}
 

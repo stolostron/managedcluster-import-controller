@@ -24,6 +24,7 @@ import (
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller"
+	"github.com/stolostron/managedcluster-import-controller/pkg/controller/agentregistration"
 	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
@@ -205,17 +206,19 @@ func main() {
 		os.Exit(1)
 	}
 
+	clientHolder := &helpers.ClientHolder{
+		KubeClient:          kubeClient,
+		APIExtensionsClient: apiExtensionsClient,
+		OperatorClient:      operatorClient,
+		RuntimeClient:       mgr.GetClient(),
+		ImageRegistryClient: imageregistry.NewClient(kubeClient),
+		WorkClient:          workClient,
+	}
+
 	setupLog.Info("Registering Controllers")
 	if err := controller.AddToManager(
 		mgr,
-		&helpers.ClientHolder{
-			KubeClient:          kubeClient,
-			APIExtensionsClient: apiExtensionsClient,
-			OperatorClient:      operatorClient,
-			RuntimeClient:       mgr.GetClient(),
-			ImageRegistryClient: imageregistry.NewClient(kubeClient),
-			WorkClient:          workClient,
-		},
+		clientHolder,
 		&source.InformerHolder{
 			ImportSecretInformer:     importSecretInformer,
 			ImportSecretLister:       listerscorev1.NewSecretLister(importSecretInformer.GetIndexer()),
@@ -229,6 +232,15 @@ func main() {
 	); err != nil {
 		setupLog.Error(err, "failed to register controller")
 		os.Exit(1)
+	}
+
+	// Start the agent-registratioin server
+	if features.DefaultMutableFeatureGate.Enabled(features.AgentRegistration) {
+		go func() {
+			if err := agentregistration.RunAgentRegistrationServer(ctx, 9091, clientHolder); err != nil {
+				setupLog.Error(err, "failed to start agent registration server")
+			}
+		}()
 	}
 
 	go importSecretInformer.Run(ctx.Done())

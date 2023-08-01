@@ -91,7 +91,7 @@ e2e-test: build-image
 	@build/setup-ocm.sh
 	@build/setup-import-controller.sh
 	go test -c ./test/e2e -o _output/e2e.test
-	_output/e2e.test -test.v -ginkgo.v --ginkgo.skip=agent-registration
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="!agent-registration"
 
 ## Clean e2e test
 .PHONY: clean-e2e-test
@@ -102,10 +102,10 @@ clean-e2e-test:
 .PHONY: e2e-test-prow
 e2e-test-prow:
 	@build/setup-prow.sh
-	@build/setup-ocm.sh
-	@build/setup-import-controller.sh
+	@build/setup-ocm.sh enable-auto-approval
+	@build/setup-import-controller.sh enable-agent-registration
 	go test -c ./test/e2e -o _output/e2e.test
-	_output/e2e.test -test.v -ginkgo.v --ginkgo.skip=hosted
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="!hosted"
 
 # Update vendor
 .PHONY: vendor
