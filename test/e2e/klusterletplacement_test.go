@@ -6,6 +6,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
@@ -84,8 +85,9 @@ var _ = ginkgo.Describe("Adding node placement to the klusterlet", func() {
 		)
 
 		ginkgo.By(fmt.Sprintf("Remove the annotations of managed cluster %s", managedClusterName), func() {
-			err := util.RemoveManagedClusterAnnotations(hubClusterClient, managedClusterName)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			gomega.Eventually(func() error {
+				return util.RemoveManagedClusterAnnotations(hubClusterClient, managedClusterName)
+			}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
 		})
 
 		assertKlusterletNodePlacement(
