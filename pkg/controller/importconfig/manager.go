@@ -27,67 +27,6 @@ const controllerName = "importconfig-controller"
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder *source.InformerHolder) (string, error) {
 
-	// if err := c.Watch(
-	// 	&runtimesource.Kind{Type: &rbacv1.ClusterRole{}},
-	// 	&handler.EnqueueRequestForOwner{
-	// 		IsController: true,
-	// 		OwnerType:    &clusterv1.ManagedCluster{},
-	// 	},
-	// 	predicate.Predicate(predicate.Funcs{
-	// 		GenericFunc: func(e event.GenericEvent) bool { return false },
-	// 		CreateFunc:  func(e event.CreateEvent) bool { return false },
-	// 		DeleteFunc:  func(e event.DeleteEvent) bool { return true },
-	// 		UpdateFunc:  func(e event.UpdateEvent) bool { return true },
-	// 	}),
-	// ); err != nil {
-	// 	return controllerName, err
-	// }
-
-	// if err := c.Watch(
-	// 	&runtimesource.Kind{Type: &rbacv1.ClusterRoleBinding{}},
-	// 	&handler.EnqueueRequestForOwner{
-	// 		IsController: true,
-	// 		OwnerType:    &clusterv1.ManagedCluster{},
-	// 	},
-	// 	predicate.Predicate(predicate.Funcs{
-	// 		GenericFunc: func(e event.GenericEvent) bool { return false },
-	// 		CreateFunc:  func(e event.CreateEvent) bool { return false },
-	// 		DeleteFunc:  func(e event.DeleteEvent) bool { return true },
-	// 		UpdateFunc:  func(e event.UpdateEvent) bool { return true },
-	// 	}),
-	// ); err != nil {
-	// 	return controllerName, err
-	// }
-
-	// if err := c.Watch(
-	// 	&runtimesource.Kind{Type: &corev1.ServiceAccount{}},
-	// 	&handler.EnqueueRequestForOwner{
-	// 		IsController: true,
-	// 		OwnerType:    &clusterv1.ManagedCluster{},
-	// 	},
-	// 	predicate.Predicate(predicate.Funcs{
-	// 		GenericFunc: func(e event.GenericEvent) bool { return false },
-	// 		CreateFunc:  func(e event.CreateEvent) bool { return false },
-	// 		DeleteFunc:  func(e event.DeleteEvent) bool { return true },
-	// 		UpdateFunc:  func(e event.UpdateEvent) bool { return true },
-	// 	}),
-	// ); err != nil {
-	// 	return controllerName, err
-	// }
-
-	// if err := c.Watch(
-	// 	source.NewImportSecretSource(informerHolder.ImportSecretInformer),
-	// 	&source.ManagedClusterResourceEventHandler{},
-	// 	predicate.Predicate(predicate.Funcs{
-	// 		GenericFunc: func(e event.GenericEvent) bool { return false },
-	// 		CreateFunc:  func(e event.CreateEvent) bool { return false },
-	// 		DeleteFunc:  func(e event.DeleteEvent) bool { return true },
-	// 		UpdateFunc:  func(e event.UpdateEvent) bool { return true },
-	// 	}),
-	// ); err != nil {
-	// 	return controllerName, err
-	// }
-
 	err := ctrl.NewControllerManagedBy(mgr).Named(controllerName).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),

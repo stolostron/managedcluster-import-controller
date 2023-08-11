@@ -553,8 +553,11 @@ func TestGetBootstrapKubeConfigData(t *testing.T) {
 			)
 
 			clientHolder := &helpers.ClientHolder{
-				RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(tt.clientObjs...).Build(),
-				KubeClient:    fakeKubeClinet,
+				RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).
+					WithObjects(tt.clientObjs...).
+					WithStatusSubresource(tt.clientObjs...).
+					Build(),
+				KubeClient: fakeKubeClinet,
 			}
 
 			kubeconfigData, _, err := getBootstrapKubeConfigData(context.Background(), clientHolder, cluster)
