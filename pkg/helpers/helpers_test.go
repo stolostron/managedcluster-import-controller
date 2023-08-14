@@ -37,8 +37,10 @@ import (
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 )
@@ -65,6 +67,14 @@ func TestGetMaxConcurrentReconciles(t *testing.T) {
 }
 
 func TestGenerateClientFromSecret(t *testing.T) {
+
+	// if err := os.Setenv("KUBEBUILDER_ASSETS", "./../../_output/kubebuilder/bin"); err != nil { // uncomment these lines to run the test locally
+	// 	t.Fatal(err)
+	// }
+
+	// This line prevents controller-runtime from complaining about log.SetLogger never being called
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+
 	apiServer := &envtest.Environment{}
 	config, err := apiServer.Start()
 	if err != nil {
@@ -91,7 +101,7 @@ func TestGenerateClientFromSecret(t *testing.T) {
 		{
 			name: "using kubeconfig",
 			generateSecret: func(server string, config *rest.Config) *corev1.Secret {
-				apiConfig := createBasic(server, "test", config.Username, config.CAData)
+				apiConfig := createBasic(server, "test", config.CAData, config.KeyData, config.CertData)
 				bconfig, err := clientcmd.Write(*apiConfig)
 				if err != nil {
 					t.Fatal(err)
@@ -108,11 +118,14 @@ func TestGenerateClientFromSecret(t *testing.T) {
 			generateSecret: func(server string, config *rest.Config) *corev1.Secret {
 				return &corev1.Secret{
 					Data: map[string][]byte{
+						// config.BearerToken is empty
+						// TODO: find a way to set config.BearerToken
 						"token":  []byte(config.BearerToken),
 						"server": []byte(server),
 					},
 				}
 			},
+			expectedErr: "unknown",
 		},
 	}
 
@@ -202,7 +215,8 @@ func TestUpdateManagedClusterStatus(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			fakeClient := fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.managedCluster).Build()
+			fakeClient := fake.NewClientBuilder().WithScheme(testscheme).
+				WithObjects(c.managedCluster).WithStatusSubresource(c.managedCluster).Build()
 
 			err := UpdateManagedClusterStatus(fakeClient, c.managedCluster.Name, c.cond)
 			if err != nil {
@@ -296,7 +310,7 @@ func TestRemoveManagedClusterFinalizer(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			fakeClient := fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.managedCluster).Build()
+			fakeClient := fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.managedCluster).WithStatusSubresource(c.managedCluster).Build()
 
 			managedCluster := &clusterv1.ManagedCluster{}
 			if err := fakeClient.Get(context.TODO(), types.NamespacedName{Name: c.managedCluster.Name}, managedCluster); err != nil {
@@ -1216,8 +1230,7 @@ func assertFinalizers(t *testing.T, obj runtime.Object, finalizers []string) {
 	}
 }
 
-func createBasic(serverURL, clusterName, userName string, caCert []byte) *clientcmdapi.Config {
-	contextName := fmt.Sprintf("%s@%s", userName, clusterName)
+func createBasic(serverURL, clusterName string, caCert, clientKey, clientCert []byte) *clientcmdapi.Config {
 	return &clientcmdapi.Config{
 		Clusters: map[string]*clientcmdapi.Cluster{
 			clusterName: {
@@ -1226,13 +1239,18 @@ func createBasic(serverURL, clusterName, userName string, caCert []byte) *client
 			},
 		},
 		Contexts: map[string]*clientcmdapi.Context{
-			contextName: {
+			"default-context": {
 				Cluster:  clusterName,
-				AuthInfo: userName,
+				AuthInfo: "default-auth",
 			},
 		},
-		AuthInfos:      map[string]*clientcmdapi.AuthInfo{},
-		CurrentContext: contextName,
+		AuthInfos: map[string]*clientcmdapi.AuthInfo{
+			"default-auth": &clientcmdapi.AuthInfo{
+				ClientKeyData:         clientKey,
+				ClientCertificateData: clientCert,
+			},
+		},
+		CurrentContext: "default-context",
 	}
 }
 

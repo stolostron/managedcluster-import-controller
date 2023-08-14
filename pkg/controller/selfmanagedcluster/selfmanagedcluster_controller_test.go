@@ -254,7 +254,8 @@ func TestReconcile(t *testing.T) {
 					KubeClient:          kubeClient,
 					APIExtensionsClient: apiextensionsfake.NewSimpleClientset(),
 					OperatorClient:      operatorfake.NewSimpleClientset(),
-					RuntimeClient:       fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).Build(),
+					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).
+						WithObjects(c.objs...).WithStatusSubresource(c.objs...).Build(),
 				},
 				&source.InformerHolder{
 					AutoImportSecretLister: kubeInformerFactory.Core().V1().Secrets().Lister(),

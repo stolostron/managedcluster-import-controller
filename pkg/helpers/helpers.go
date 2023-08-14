@@ -39,6 +39,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/klog/v2"
@@ -166,7 +167,11 @@ func GenerateClientFromSecret(secret *corev1.Secret) (*ClientHolder, meta.RESTMa
 		return nil, nil, err
 	}
 
-	mapper, err := apiutil.NewDiscoveryRESTMapper(clientConfig)
+	httpclient, err := rest.HTTPClientFor(clientConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+	mapper, err := apiutil.NewDiscoveryRESTMapper(clientConfig, httpclient)
 	if err != nil {
 		return nil, nil, err
 	}
