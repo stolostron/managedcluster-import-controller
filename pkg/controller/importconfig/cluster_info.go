@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -24,7 +25,7 @@ import (
 	ocinfrav1 "github.com/openshift/api/config/v1"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -115,7 +116,7 @@ func getKubeAPIServerAddress(ctx context.Context, client client.Client) (string,
 func getKubeAPIServerSecretName(ctx context.Context, client client.Client, dnsName string) (string, error) {
 	apiserver := &ocinfrav1.APIServer{}
 	if err := client.Get(ctx, types.NamespacedName{Name: "cluster"}, apiserver); err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			log.Info("Ignore ocp apiserver, it is not found")
 			return "", nil
 		}
@@ -158,7 +159,7 @@ func checkIsIBMCloud(ctx context.Context, client client.Client) (bool, error) {
 func getKubeAPIServerCertificate(ctx context.Context, kubeClient kubernetes.Interface, secretName string) ([]byte, error) {
 	secret, err := kubeClient.CoreV1().Secrets("openshift-config").Get(ctx, secretName, metav1.GetOptions{})
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			log.Info(fmt.Sprintf("Failed to get secret openshift-config/%s, skipping", secretName))
 			return nil, nil
 		}
@@ -235,7 +236,7 @@ func getValidCertificatesFromURL(serverURL string, rootCAs *x509.CertPool) ([]*x
 	conn, err := tls.Dial("tcp", u.Hostname()+":"+u.Port(), conf)
 	if err != nil {
 		// ignore certificate signed by unknown authority error
-		if _, ok := err.(x509.UnknownAuthorityError); ok {
+		if errors.As(err, &x509.UnknownAuthorityError{}) {
 			return nil, nil
 		}
 		return nil, err
@@ -257,7 +258,7 @@ func getValidCertificatesFromURL(serverURL string, rootCAs *x509.CertPool) ([]*x
 func getBootstrapKubeConfigData(ctx context.Context, clientHolder *helpers.ClientHolder, cluster *clusterv1.ManagedCluster) ([]byte, []byte, error) {
 	importSecretName := fmt.Sprintf("%s-%s", cluster.Name, constants.ImportSecretNameSuffix)
 	importSecret, err := clientHolder.KubeClient.CoreV1().Secrets(cluster.Name).Get(ctx, importSecretName, metav1.GetOptions{})
-	if errors.IsNotFound(err) {
+	if apierrors.IsNotFound(err) {
 		// create bootstrap kubeconfig
 		return createKubeConfig(ctx, clientHolder, getBootstrapSAName(cluster.Name), cluster.Name, 8640*3600)
 	}
