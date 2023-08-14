@@ -17,6 +17,13 @@ spec:
   workImagePullSpec: "{{ .WorkImageName }}"
   clusterName: "{{ .ManagedClusterNamespace }}"
   namespace: "{{ .KlusterletNamespace }}"
+{{- if .ClusterAnnotations}}
+  registrationConfiguration:
+    clusterAnnotations:
+    {{- range $key, $value := .ClusterAnnotations }}
+      "{{ $key }}": "{{ $value }}"
+    {{- end }}
+{{- end }}
 {{- if or .NodeSelector .Tolerations }}
   nodePlacement:
 {{- end }}

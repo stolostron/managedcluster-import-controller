@@ -34,39 +34,22 @@ func (w *defaultWorker) generateImportSecret(ctx context.Context, managedCluster
 		return nil, err
 	}
 
-	useImagePullSecret := false
-	var imagePullSecretType corev1.SecretType
-	var dockerConfigKey string
-	imagePullSecretDataBase64 := ""
-	if imagePullSecret != nil {
-		switch {
-		case len(imagePullSecret.Data[corev1.DockerConfigJsonKey]) != 0:
-			dockerConfigKey = corev1.DockerConfigJsonKey
-			imagePullSecretType = corev1.SecretTypeDockerConfigJson
-			imagePullSecretDataBase64 = base64.StdEncoding.EncodeToString(imagePullSecret.Data[corev1.DockerConfigJsonKey])
-			useImagePullSecret = true
-		case len(imagePullSecret.Data[corev1.DockerConfigKey]) != 0:
-			dockerConfigKey = corev1.DockerConfigKey
-			imagePullSecretType = corev1.SecretTypeDockercfg
-			imagePullSecretDataBase64 = base64.StdEncoding.EncodeToString(imagePullSecret.Data[corev1.DockerConfigKey])
-			useImagePullSecret = true
-		default:
-			return nil, fmt.Errorf("there is invalid type of the data of pull secret %v/%v",
-				imagePullSecret.GetNamespace(), imagePullSecret.GetName())
-		}
-	}
-
-	registrationOperatorImageName, err := getImage(managedCluster, registrationOperatorImageEnvVarName)
+	imagePullSecretConfig, err := getImagePullSecretConfig(imagePullSecret)
 	if err != nil {
 		return nil, err
 	}
 
-	registrationImageName, err := getImage(managedCluster, registrationImageEnvVarName)
+	registrationOperatorImageName, err := getImage(registrationOperatorImageEnvVarName, managedCluster.GetAnnotations())
 	if err != nil {
 		return nil, err
 	}
 
-	workImageName, err := getImage(managedCluster, workImageEnvVarName)
+	registrationImageName, err := getImage(registrationImageEnvVarName, managedCluster.GetAnnotations())
+	if err != nil {
+		return nil, err
+	}
+
+	workImageName, err := getImage(workImageEnvVarName, managedCluster.GetAnnotations())
 	if err != nil {
 		return nil, err
 	}
@@ -81,15 +64,6 @@ func (w *defaultWorker) generateImportSecret(ctx context.Context, managedCluster
 		return nil, err
 	}
 
-	type DefaultRenderConfig struct {
-		KlusterletRenderConfig
-		UseImagePullSecret        bool
-		ImagePullSecretName       string
-		ImagePullSecretData       string
-		ImagePullSecretConfigKey  string
-		ImagePullSecretType       corev1.SecretType
-		RegistrationOperatorImage string
-	}
 	config := DefaultRenderConfig{
 		KlusterletRenderConfig: KlusterletRenderConfig{
 			ManagedClusterNamespace: managedCluster.Name,
@@ -102,11 +76,7 @@ func (w *defaultWorker) generateImportSecret(ctx context.Context, managedCluster
 			InstallMode:             string(operatorv1.InstallModeDefault),
 		},
 
-		UseImagePullSecret:        useImagePullSecret,
-		ImagePullSecretName:       managedClusterImagePullSecretName,
-		ImagePullSecretData:       imagePullSecretDataBase64,
-		ImagePullSecretType:       imagePullSecretType,
-		ImagePullSecretConfigKey:  dockerConfigKey,
+		ImagePullSecretConfig:     imagePullSecretConfig,
 		RegistrationOperatorImage: registrationOperatorImageName,
 	}
 
@@ -114,19 +84,8 @@ func (w *defaultWorker) generateImportSecret(ctx context.Context, managedCluster
 	// deploy the klusterletOperatorFiles first, it contains the agent namespace, if not deploy
 	// the namespace first, other namespace scope resources will fail.
 	deploymentFiles = append(append(deploymentFiles, klusterletOperatorFiles...), klusterletFiles...)
-	if useImagePullSecret {
+	if imagePullSecretConfig.UseImagePullSecret {
 		deploymentFiles = append(deploymentFiles, "manifests/klusterlet/image_pull_secret.yaml")
-	}
-
-	importYAML := new(bytes.Buffer)
-	for _, file := range deploymentFiles {
-		template, err := manifestFiles.ReadFile(file)
-		if err != nil {
-			// this should not happen, if happened, panic here
-			panic(err)
-		}
-		raw := helpers.MustCreateAssetFromTemplate(file, template, config)
-		importYAML.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, string(raw)))
 	}
 
 	crdsV1beta1YAML := new(bytes.Buffer)
@@ -143,6 +102,11 @@ func (w *defaultWorker) generateImportSecret(ctx context.Context, managedCluster
 	}
 	crdsV1YAML.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, string(crdsV1)))
 
+	yamlcontent, err := filesToTemplateBytes(deploymentFiles, config)
+	if err != nil {
+		return nil, err
+	}
+
 	secret := &corev1.Secret{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
@@ -153,7 +117,7 @@ func (w *defaultWorker) generateImportSecret(ctx context.Context, managedCluster
 			},
 		},
 		Data: map[string][]byte{
-			constants.ImportSecretImportYamlKey:      importYAML.Bytes(),
+			constants.ImportSecretImportYamlKey:      yamlcontent,
 			constants.ImportSecretCRDSYamlKey:        crdsV1YAML.Bytes(),
 			constants.ImportSecretCRDSV1YamlKey:      crdsV1YAML.Bytes(),
 			constants.ImportSecretCRDSV1beta1YamlKey: crdsV1beta1YAML.Bytes(),

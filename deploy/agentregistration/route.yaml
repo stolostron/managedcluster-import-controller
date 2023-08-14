@@ -1,0 +1,18 @@
+# Copyright Contributors to the Open Cluster Management project
+
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: agent-registration
+  namespace: open-cluster-management
+  annotations:
+      openshift.io/host.generated: "true"
+spec:
+  port:
+    targetPort: agentregistration
+  tls:
+    termination: reencrypt
+    insecureEdgeTerminationPolicy: Redirect
+  to:
+    kind: Service
+    name: agent-registration
