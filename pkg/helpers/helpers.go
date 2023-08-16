@@ -54,6 +54,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 )
 
@@ -592,29 +593,29 @@ func GetComponentNamespace() (string, error) {
 	return string(nsBytes), nil
 }
 
-func GetNodeSelector(cluster *clusterv1.ManagedCluster) (map[string]string, error) {
+func GetNodeSelector(clusterAnnotations map[string]string) (map[string]string, error) {
 	nodeSelector := map[string]string{}
 
-	nodeSelectorString, ok := cluster.Annotations[nodeSelectorAnnotation]
+	nodeSelectorString, ok := clusterAnnotations[nodeSelectorAnnotation]
 	if !ok {
 		return nodeSelector, nil
 	}
 
 	if err := json.Unmarshal([]byte(nodeSelectorString), &nodeSelector); err != nil {
-		return nil, fmt.Errorf("invalid nodeSelector annotation of cluster %s, %v", cluster.Name, err)
+		return nil, fmt.Errorf("invalid nodeSelector annotation %v", err)
 	}
 
 	if err := validateNodeSelector(nodeSelector); err != nil {
-		return nil, fmt.Errorf("invalid nodeSelector annotation of cluster %s, %v", cluster.Name, err)
+		return nil, fmt.Errorf("invalid nodeSelector annotation %v", err)
 	}
 
 	return nodeSelector, nil
 }
 
-func GetTolerations(cluster *clusterv1.ManagedCluster) ([]corev1.Toleration, error) {
+func GetTolerations(clusterAnnotations map[string]string) ([]corev1.Toleration, error) {
 	tolerations := []corev1.Toleration{}
 
-	tolerationsString, ok := cluster.Annotations[tolerationsAnnotation]
+	tolerationsString, ok := clusterAnnotations[tolerationsAnnotation]
 	if !ok {
 		// return a defautl toleration
 		return []corev1.Toleration{
@@ -627,11 +628,11 @@ func GetTolerations(cluster *clusterv1.ManagedCluster) ([]corev1.Toleration, err
 	}
 
 	if err := json.Unmarshal([]byte(tolerationsString), &tolerations); err != nil {
-		return nil, fmt.Errorf("invalid tolerations annotation of cluster %s, %v", cluster.Name, err)
+		return nil, fmt.Errorf("invalid tolerations annotation %v", err)
 	}
 
 	if err := validateTolerations(tolerations); err != nil {
-		return nil, fmt.Errorf("invalid tolerations annotation of cluster %s, %v", cluster.Name, err)
+		return nil, fmt.Errorf("invalid tolerations annotation %v", err)
 	}
 
 	return tolerations, nil
@@ -653,6 +654,13 @@ func DetermineKlusterletMode(cluster *clusterv1.ManagedCluster) string {
 	}
 
 	return "Unknown"
+}
+
+func ValidateKlusterletMode(mode string) error {
+	if strings.EqualFold(mode, constants.KlusterletDeployModeHosted) && !features.DefaultMutableFeatureGate.Enabled(features.KlusterletHostedMode) {
+		return fmt.Errorf("featurn gate %s is not enabled", features.KlusterletHostedMode)
+	}
+	return nil
 }
 
 // GetHostingCluster gets the hosting cluster name from the managed cluster annotation

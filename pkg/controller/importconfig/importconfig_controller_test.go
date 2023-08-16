@@ -40,10 +40,10 @@ func init() {
 	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &configv1.Infrastructure{})
 	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &configv1.APIServer{})
 
-	os.Setenv(registrationOperatorImageEnvVarName, "quay.io/open-cluster-management/registration-operator:latest")
-	os.Setenv(workImageEnvVarName, "quay.io/open-cluster-management/work:latest")
-	os.Setenv(registrationImageEnvVarName, "quay.io/open-cluster-management/registration:latest")
-	os.Setenv(defaultImagePullSecretEnvVarName, "test-image-pul-secret-secret")
+	os.Setenv(constants.RegistrationOperatorImageEnvVarName, "quay.io/open-cluster-management/registration-operator:latest")
+	os.Setenv(constants.WorkImageEnvVarName, "quay.io/open-cluster-management/work:latest")
+	os.Setenv(constants.RegistrationImageEnvVarName, "quay.io/open-cluster-management/registration:latest")
+	os.Setenv(constants.DefaultImagePullSecretEnvVarName, "test-image-pull-secret-secret")
 	os.Setenv(constants.PodNamespaceEnvVarName, "cluster-secret")
 }
 
@@ -495,10 +495,9 @@ func TestReconcile(t *testing.T) {
 			}
 
 			r := &ReconcileImportConfig{
-				clientHolder:  clientHolder,
-				scheme:        testscheme,
-				recorder:      eventstesting.NewTestingEventRecorder(t),
-				workerFactory: &workerFactory{clientHolder: clientHolder},
+				clientHolder: clientHolder,
+				scheme:       testscheme,
+				recorder:     eventstesting.NewTestingEventRecorder(t),
 			}
 
 			_, err := r.Reconcile(context.TODO(), c.request)

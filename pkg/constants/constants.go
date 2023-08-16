@@ -26,6 +26,14 @@ const (
 	LabelAutoImportRestore = "cluster.open-cluster-management.io/restore-auto-import-secret"
 )
 
+/* #nosec */
+const (
+	RegistrationOperatorImageEnvVarName = "REGISTRATION_OPERATOR_IMAGE"
+	RegistrationImageEnvVarName         = "REGISTRATION_IMAGE"
+	WorkImageEnvVarName                 = "WORK_IMAGE"
+	DefaultImagePullSecretEnvVarName    = "DEFAULT_IMAGE_PULL_SECRET"
+)
+
 const PodNamespaceEnvVarName = "POD_NAMESPACE"
 
 const ImportFinalizer string = "managedcluster-import-controller.open-cluster-management.io/cleanup"
