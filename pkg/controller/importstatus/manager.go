@@ -12,6 +12,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/equality"
 
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -80,5 +81,5 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder
 }
 
 func isDefaultModeObject(object client.Object) bool {
-	return !strings.EqualFold(object.GetAnnotations()[constants.KlusterletDeployModeAnnotation], constants.KlusterletDeployModeHosted)
+	return !strings.EqualFold(object.GetAnnotations()[constants.KlusterletDeployModeAnnotation], string(operatorv1.InstallModeHosted))
 }

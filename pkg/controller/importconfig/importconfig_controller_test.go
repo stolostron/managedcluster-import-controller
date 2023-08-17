@@ -5,6 +5,7 @@ package importconfig
 
 import (
 	"context"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 	"os"
 	"strings"
 	"testing"
@@ -203,7 +204,7 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
 						Annotations: map[string]string{
-							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 						},
 					},
 				},

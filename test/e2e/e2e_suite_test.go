@@ -31,6 +31,7 @@ import (
 	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
 	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
@@ -100,13 +101,13 @@ var _ = ginkgo.BeforeSuite(func() {
 })
 
 // asserters
-func assertManagedClusterImportSecretCreated(clusterName, createdVia string, mode ...string) {
+func assertManagedClusterImportSecretCreated(clusterName, createdVia string, mode ...operatorv1.InstallMode) {
 	assertManagedClusterFinalizer(clusterName, "managedcluster-import-controller.open-cluster-management.io/cleanup")
 	assertManagedClusterCreatedViaAnnotation(clusterName, createdVia)
 	assertManagedClusterNameLabel(clusterName)
 	assertManagedClusterNamespaceLabel(clusterName)
 	assertManagedClusterRBAC(clusterName)
-	if len(mode) != 0 && mode[0] == constants.KlusterletDeployModeHosted {
+	if len(mode) != 0 && mode[0] == operatorv1.InstallModeHosted {
 		assertHostedManagedClusterImportSecret(clusterName)
 	} else {
 		assertManagedClusterImportSecret(clusterName)
@@ -409,7 +410,7 @@ func assertHostedManagedClusterDeletedFromSpoke(cluster, managementCluster strin
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
 }
 
-func assertManagedClusterImportSecretApplied(clusterName string, mode ...string) {
+func assertManagedClusterImportSecretApplied(clusterName string, mode ...operatorv1.InstallMode) {
 	start := time.Now()
 	defer func() {
 		util.Logf("assert managed cluster %s import secret applied spending time: %.2f seconds",
@@ -425,7 +426,7 @@ func assertManagedClusterImportSecretApplied(clusterName string, mode ...string)
 
 			util.Logf("assert managed cluster %s import secret applied cluster conditions: %v",
 				clusterName, cluster.Status.Conditions)
-			if len(mode) != 0 && mode[0] == constants.KlusterletDeployModeHosted && meta.IsStatusConditionTrue(
+			if len(mode) != 0 && mode[0] == operatorv1.InstallModeHosted && meta.IsStatusConditionTrue(
 				cluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded) {
 				return nil
 			}

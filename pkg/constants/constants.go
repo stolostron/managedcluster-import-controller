@@ -84,14 +84,6 @@ const (
 )
 
 const (
-	// KlusterletDeployModeDefault is the default deploy mode. the klusterlet will be deployed in the managed-cluster.
-	KlusterletDeployModeDefault string = "Default"
-
-	// KlusterletDeployModeHosted means deploying klusterlet outside. the klusterlet will be deployed outside of the managed-cluster.
-	KlusterletDeployModeHosted string = "Hosted"
-)
-
-const (
 	// HostedManifestworkSuffix is a suffix of the hosted mode klusterlet manifestwork name.
 	HostedKlusterletManifestworkSuffix = "hosted-klusterlet"
 

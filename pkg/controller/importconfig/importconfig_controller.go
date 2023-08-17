@@ -89,9 +89,9 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 	var yamlcontent, crdsV1YAML, crdsV1beta1YAML []byte
 	var secretAnnotations map[string]string
 	switch mode {
-	case constants.KlusterletDeployModeDefault:
+	case operatorv1.InstallModeDefault, operatorv1.InstallModeSingleton:
 		yamlcontent, err = bootstrap.NewKlusterletManifestsConfig(
-			operatorv1.InstallModeDefault,
+			mode,
 			managedCluster.Name,
 			klusterletNamespace(managedCluster.GetAnnotations()),
 			bootstrapKubeconfigData).
@@ -110,13 +110,12 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 		if err != nil {
 			return reconcile.Result{}, err
 		}
-	case constants.KlusterletDeployModeHosted:
+	case operatorv1.InstallModeHosted:
 		yamlcontent, err = bootstrap.NewKlusterletManifestsConfig(
-			operatorv1.InstallModeHosted,
+			mode,
 			managedCluster.Name,
 			klusterletNamespace(managedCluster.GetAnnotations()),
-			bootstrapKubeconfigData,
-		).
+			bootstrapKubeconfigData).
 			WithManagedClusterAnnotations(managedCluster.GetAnnotations()).
 			WithImagePullSecretGenerate(false).Generate(ctx, r.clientHolder)
 		if err != nil {
@@ -124,7 +123,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 		}
 
 		secretAnnotations = map[string]string{
-			constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+			constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 		}
 	default:
 		return reconcile.Result{}, fmt.Errorf("klusterlet deploy mode %s not supportted", mode)

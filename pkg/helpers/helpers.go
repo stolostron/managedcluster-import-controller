@@ -639,25 +639,29 @@ func GetTolerations(clusterAnnotations map[string]string) ([]corev1.Toleration, 
 }
 
 // DetermineKlusterletMode gets the klusterlet deploy mode for the managed cluster.
-func DetermineKlusterletMode(cluster *clusterv1.ManagedCluster) string {
+func DetermineKlusterletMode(cluster *clusterv1.ManagedCluster) operatorv1.InstallMode {
 	mode, ok := cluster.Annotations[constants.KlusterletDeployModeAnnotation]
 	if !ok {
-		return constants.KlusterletDeployModeDefault
+		return operatorv1.InstallModeSingleton
 	}
 
-	if strings.EqualFold(mode, constants.KlusterletDeployModeDefault) {
-		return constants.KlusterletDeployModeDefault
+	if strings.EqualFold(mode, string(operatorv1.InstallModeDefault)) {
+		return operatorv1.InstallModeDefault
 	}
 
-	if strings.EqualFold(mode, constants.KlusterletDeployModeHosted) {
-		return constants.KlusterletDeployModeHosted
+	if strings.EqualFold(mode, string(operatorv1.InstallModeSingleton)) {
+		return operatorv1.InstallModeSingleton
+	}
+
+	if strings.EqualFold(mode, string(operatorv1.InstallModeHosted)) {
+		return operatorv1.InstallModeHosted
 	}
 
 	return "Unknown"
 }
 
-func ValidateKlusterletMode(mode string) error {
-	if strings.EqualFold(mode, constants.KlusterletDeployModeHosted) && !features.DefaultMutableFeatureGate.Enabled(features.KlusterletHostedMode) {
+func ValidateKlusterletMode(mode operatorv1.InstallMode) error {
+	if mode == operatorv1.InstallModeHosted && !features.DefaultMutableFeatureGate.Enabled(features.KlusterletHostedMode) {
 		return fmt.Errorf("featurn gate %s is not enabled", features.KlusterletHostedMode)
 	}
 	return nil

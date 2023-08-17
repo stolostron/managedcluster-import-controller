@@ -61,7 +61,7 @@ func Logf(format string, args ...interface{}) {
 
 func CreateHostedManagedCluster(clusterClient clusterclient.Interface, name, management string) (*clusterv1.ManagedCluster, error) {
 	clusterAnnotations := map[string]string{}
-	clusterAnnotations[constants.KlusterletDeployModeAnnotation] = constants.KlusterletDeployModeHosted
+	clusterAnnotations[constants.KlusterletDeployModeAnnotation] = string(operatorv1.InstallModeHosted)
 	clusterAnnotations[constants.HostingClusterNameAnnotation] = management
 	cluster, err := clusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
@@ -85,7 +85,7 @@ func CreateHostedManagedCluster(clusterClient clusterclient.Interface, name, man
 
 func CreateHostedManagedClusterWithShortLeaseDuration(clusterClient clusterclient.Interface, name, management string) (*clusterv1.ManagedCluster, error) {
 	clusterAnnotations := map[string]string{}
-	clusterAnnotations[constants.KlusterletDeployModeAnnotation] = constants.KlusterletDeployModeHosted
+	clusterAnnotations[constants.KlusterletDeployModeAnnotation] = string(operatorv1.InstallModeHosted)
 	clusterAnnotations[constants.HostingClusterNameAnnotation] = management
 	cluster, err := clusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), name, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
@@ -257,9 +257,9 @@ func NewLable(key, value string) Label {
 	}
 }
 
-func NewAutoImportSecret(kubeClient kubernetes.Interface, clusterName string, mode ...string) (*corev1.Secret, error) {
+func NewAutoImportSecret(kubeClient kubernetes.Interface, clusterName string, mode ...operatorv1.InstallMode) (*corev1.Secret, error) {
 	name := "e2e-auto-import-secret"
-	if len(mode) != 0 && mode[0] == constants.KlusterletDeployModeHosted {
+	if len(mode) != 0 && mode[0] == operatorv1.InstallModeHosted {
 		name = "e2e-managed-auto-import-secret"
 	}
 	secret, err := kubeClient.CoreV1().Secrets(ocmNamespace).Get(context.TODO(), name, metav1.GetOptions{})

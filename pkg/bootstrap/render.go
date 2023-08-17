@@ -63,6 +63,7 @@ type KlusterletRenderConfig struct {
 	RegistrationOperatorImage string
 	RegistrationImageName     string
 	WorkImageName             string
+	ImageName                 string
 	NodeSelector              map[string]string
 	Tolerations               []corev1.Toleration
 	InstallMode               string
@@ -131,7 +132,7 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 	switch b.InstallMode {
 	case operatorv1.InstallModeHosted:
 		files = append(files, klusterletFiles...)
-	case operatorv1.InstallModeDefault:
+	case operatorv1.InstallModeDefault, operatorv1.InstallModeSingleton:
 		files = append(files, klusterletOperatorFiles...)
 		files = append(files, klusterletFiles...)
 	default:
@@ -178,6 +179,7 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 			RegistrationOperatorImage: registrationOperatorImageName,
 			RegistrationImageName:     registrationImageName,
 			WorkImageName:             workImageName,
+			ImageName:                 registrationOperatorImageName,
 
 			// NodePlacement
 			NodeSelector: nodeSelector,

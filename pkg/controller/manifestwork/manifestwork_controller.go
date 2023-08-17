@@ -14,6 +14,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 
 	"github.com/ghodss/yaml"
@@ -65,7 +66,7 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	if helpers.DetermineKlusterletMode(managedCluster) != constants.KlusterletDeployModeDefault {
+	if helpers.DetermineKlusterletMode(managedCluster) == operatorv1.InstallModeHosted {
 		return reconcile.Result{}, nil
 	}
 
