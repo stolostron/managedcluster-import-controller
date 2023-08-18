@@ -51,6 +51,8 @@ rm -rf "$WORK_DIR/_repo_ocm"
 wait_deployment open-cluster-management cluster-manager
 sleep 120
 ${KUBECTL} -n open-cluster-management describe deployment cluster-manager
+${KUBECTL} -n open-cluster-management get deployments -oyaml
+${KUBECTL} -n open-cluster-management get pods -oyaml
 ${KUBECTL} -n open-cluster-management rollout status deploy cluster-manager --timeout=120s
 
 wait_deployment open-cluster-management-hub cluster-manager-registration-controller
