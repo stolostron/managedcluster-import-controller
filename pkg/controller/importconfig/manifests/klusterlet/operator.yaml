@@ -17,10 +17,6 @@ spec:
       labels:
         app: klusterlet
     spec:
-      securityContext:
-        runAsNonRoot: true
-        seccompProfile:
-          type: RuntimeDefault
       serviceAccountName: klusterlet
 {{- if .NodeSelector }}
       nodeSelector:
@@ -48,12 +44,6 @@ spec:
           - "/registration-operator"
           - "klusterlet"
           - "--disable-leader-election"
-        securityContext:
-          allowPrivilegeEscalation: false
-          capabilities:
-            drop:
-              - ALL
-          privileged: false
         livenessProbe:
           httpGet:
             path: /healthz
