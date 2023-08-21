@@ -19,8 +19,6 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
-        seccompProfile:
-          type: RuntimeDefault
       serviceAccountName: klusterlet
 {{- if .NodeSelector }}
       nodeSelector:
