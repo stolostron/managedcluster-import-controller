@@ -43,6 +43,7 @@ const (
 	CreatedViaAI         = "assisted-installer"
 	CreatedViaHive       = "hive"
 	CreatedViaDiscovery  = "discovery"
+	CreatedViaHypershift = "hypershift"
 )
 
 /* #nosec */
