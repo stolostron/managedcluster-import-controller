@@ -102,10 +102,9 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder
 			}),
 		).
 		Complete(&ReconcileImportConfig{
-			clientHolder:  clientHolder,
-			scheme:        mgr.GetScheme(),
-			recorder:      helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
-			workerFactory: &workerFactory{clientHolder: clientHolder},
+			clientHolder: clientHolder,
+			scheme:       mgr.GetScheme(),
+			recorder:     helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
 		})
 	return controllerName, err
 }

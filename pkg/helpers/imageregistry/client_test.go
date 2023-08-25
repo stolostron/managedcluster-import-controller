@@ -100,7 +100,7 @@ func Test_ClientPullSecret(t *testing.T) {
 
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
-			pullSecret, err := c.client.Cluster(c.cluster).PullSecret()
+			pullSecret, err := c.client.Cluster(c.cluster.Annotations).PullSecret()
 			if (err != nil && c.expectedErr == nil) || (err == nil && c.expectedErr != nil) {
 				t.Errorf("expected error %v, but got %v", c.expectedErr, err)
 			}
@@ -188,7 +188,7 @@ func Test_ClientImageOverride(t *testing.T) {
 	client := fakeClient(newPullSecret("n1", "s1"))
 	for _, c := range testCases {
 		t.Run(c.name, func(t *testing.T) {
-			image, err := client.Cluster(c.cluster).ImageOverride(c.image)
+			image, err := client.Cluster(c.cluster.Annotations).ImageOverride(c.image)
 			if image != c.expectedImage {
 				t.Errorf("expected image %v but got %v", c.expectedImage, image)
 			}

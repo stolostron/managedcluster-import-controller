@@ -1045,7 +1045,7 @@ func TestGetNodeSelector(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := GetNodeSelector(c.managedCluster)
+			_, err := GetNodeSelector(c.managedCluster.Annotations)
 			switch {
 			case len(c.expectedErr) == 0:
 				if err != nil {
@@ -1056,7 +1056,7 @@ func TestGetNodeSelector(t *testing.T) {
 					t.Errorf("expect err %s, but failed", c.expectedErr)
 				}
 
-				if fmt.Sprintf("invalid nodeSelector annotation of cluster test_cluster, %s", c.expectedErr) != err.Error() {
+				if fmt.Sprintf("invalid nodeSelector annotation %s", c.expectedErr) != err.Error() {
 					t.Errorf("expect %v, but %v", c.expectedErr, err.Error())
 				}
 			}
@@ -1200,7 +1200,7 @@ func TestGetTolerations(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := GetTolerations(c.managedCluster)
+			_, err := GetTolerations(c.managedCluster.GetAnnotations())
 			switch {
 			case len(c.expectedErr) == 0:
 				if err != nil {
@@ -1211,7 +1211,7 @@ func TestGetTolerations(t *testing.T) {
 					t.Errorf("expect err %s, but failed", c.expectedErr)
 				}
 
-				if fmt.Sprintf("invalid tolerations annotation of cluster test_cluster, %s", c.expectedErr) != err.Error() {
+				if fmt.Sprintf("invalid tolerations annotation %s", c.expectedErr) != err.Error() {
 					t.Errorf("expect %v, but %v", c.expectedErr, err.Error())
 				}
 			}

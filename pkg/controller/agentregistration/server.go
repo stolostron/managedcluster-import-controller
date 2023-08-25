@@ -5,23 +5,26 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
 	authenticationv1 "k8s.io/api/authentication/v1"
 	authorizationv1 "k8s.io/api/authorization/v1"
 
-	"github.com/stolostron/managedcluster-import-controller/pkg/controller/importconfig"
+	"github.com/stolostron/managedcluster-import-controller/pkg/bootstrap"
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 )
 
 func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *helpers.ClientHolder) error {
 	mux := http.NewServeMux()
 
 	mux.Handle("/agent-registration/crds/v1", authMiddleware(clientHolder, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		content, err := importconfig.GenerateKlusterletCRDsV1()
+		content, err := bootstrap.GenerateKlusterletCRDsV1()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -32,7 +35,7 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 	})))
 
 	mux.Handle("/agent-registration/crds/v1beta1", authMiddleware(clientHolder, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		content, err := importconfig.GenerateKlusterletCRDsV1Beta1()
+		content, err := bootstrap.GenerateKlusterletCRDsV1Beta1()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -50,7 +53,24 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 		}
 
 		clusterID := urlparams[3]
-		content, err := importconfig.GenerateAgentRegistrationManifests(r.Context(), clientHolder, clusterID)
+
+		// In the agent-registration case, the bootstrap sa is not created in the managed cluster namespace, because managed cluster is not created yet.
+		// Instead, it's in the pod namespace with the name "agent-registration-bootstrap".
+		bootstrapkubeconfig, _, err := bootstrap.CreateBootstrapKubeConfig(ctx, clientHolder, AgentRegistrationDefaultBootstrapSAName,
+			os.Getenv(constants.PodNamespaceEnvVarName),
+			7*24*3600)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		content, err := bootstrap.NewKlusterletManifestsConfig(
+			operatorv1.InstallModeDefault,
+			clusterID,
+			DefaultKlusterletNamespace,
+			bootstrapkubeconfig).
+			WithKlusterletClusterAnnotations(map[string]string{"agent.open-cluster-management.io/create-with-default-klusterletaddonconfig": "true"}).
+			Generate(r.Context(), clientHolder)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -132,3 +152,8 @@ func authMiddleware(clientHolder *helpers.ClientHolder, next http.Handler) http.
 		next.ServeHTTP(w, r)
 	})
 }
+
+const (
+	AgentRegistrationDefaultBootstrapSAName = "agent-registration-bootstrap"
+	DefaultKlusterletNamespace              = "open-cluster-management-agent"
+)
