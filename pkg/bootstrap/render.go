@@ -10,7 +10,9 @@ import (
 	"encoding/base64"
 	"fmt"
 	"os"
+	"strings"
 
+	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
@@ -88,6 +90,8 @@ type KlusterletManifestsConfig struct {
 	// In the managed cluster annotations, it contains nodeSelectors and tolerations for the klusterlet deployment.
 	ManagedClusterAnnotations map[string]string
 
+	klusterletconfig *klusterletconfigv1alpha1.KlusterletConfig
+
 	generateImagePullSecret bool // by default is true, in hosted mode, it will be set false
 }
 
@@ -117,6 +121,11 @@ func (c *KlusterletManifestsConfig) WithManagedClusterAnnotations(a map[string]s
 	return c
 }
 
+func (c *KlusterletManifestsConfig) WithKlusterletConfig(klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) *KlusterletManifestsConfig {
+	c.klusterletconfig = klusterletConfig
+	return c
+}
+
 func (c *KlusterletManifestsConfig) WithImagePullSecretGenerate(g bool) *KlusterletManifestsConfig {
 	c.generateImagePullSecret = g
 	return c
@@ -124,8 +133,6 @@ func (c *KlusterletManifestsConfig) WithImagePullSecretGenerate(g bool) *Kluster
 
 // Generate returns the rendered klusterlet manifests in bytes.
 func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *helpers.ClientHolder) ([]byte, error) {
-	// TODO: Get KlusterletConfig, the image pull secret, image override and nodePlacement will use the KlusterletConfig first then the annotations. @xuezhaojun
-
 	// Files depends on the install mode
 	var files []string
 	switch b.InstallMode {
@@ -138,31 +145,61 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 		return nil, fmt.Errorf("invalid install mode: %s", b.InstallMode)
 	}
 
+	// For image, image pull secret, nodeplacement, we use configurations in klusterletconfg over configurations in managed cluster annotations.
+	var kcRegistries []klusterletconfigv1alpha1.Registries
+	var kcNodePlacement *operatorv1.NodePlacement
+	var kcImagePullSecret corev1.ObjectReference
+	if b.klusterletconfig != nil {
+		kcRegistries = b.klusterletconfig.Spec.Registries
+		kcNodePlacement = b.klusterletconfig.Spec.NodePlacement
+		kcImagePullSecret = b.klusterletconfig.Spec.PullSecret
+	}
+
 	// Images override
-	registrationOperatorImageName, err := getImage(constants.RegistrationOperatorImageEnvVarName, b.ManagedClusterAnnotations)
+	registrationOperatorImageName, err := getImage(constants.RegistrationOperatorImageEnvVarName,
+		kcRegistries, b.ManagedClusterAnnotations)
 	if err != nil {
 		return nil, err
 	}
 
-	registrationImageName, err := getImage(constants.RegistrationImageEnvVarName, b.ManagedClusterAnnotations)
+	registrationImageName, err := getImage(constants.RegistrationImageEnvVarName,
+		kcRegistries, b.ManagedClusterAnnotations)
 	if err != nil {
 		return nil, err
 	}
 
-	workImageName, err := getImage(constants.WorkImageEnvVarName, b.ManagedClusterAnnotations)
+	workImageName, err := getImage(constants.WorkImageEnvVarName,
+		kcRegistries, b.ManagedClusterAnnotations)
 	if err != nil {
 		return nil, err
 	}
 
-	// NodeSelector and Tolerations
-	nodeSelector, err := helpers.GetNodeSelector(b.ManagedClusterAnnotations)
-	if err != nil {
-		return nil, fmt.Errorf("Get nodeSelector for cluster %s failed: %v", b.ClusterName, err)
+	// NodeSelector
+	var nodeSelector map[string]string
+	if kcNodePlacement != nil && len(kcNodePlacement.NodeSelector) != 0 {
+		nodeSelector = kcNodePlacement.NodeSelector
+	} else {
+		nodeSelector, err = helpers.GetNodeSelectorFromManagedClusterAnnotations(b.ManagedClusterAnnotations)
+		if err != nil {
+			return nil, fmt.Errorf("Get nodeSelector for cluster %s failed: %v", b.ClusterName, err)
+		}
+	}
+	if err := helpers.ValidateNodeSelector(nodeSelector); err != nil {
+		return nil, fmt.Errorf("invalid nodeSelector annotation %v", err)
 	}
 
-	tolerations, err := helpers.GetTolerations(b.ManagedClusterAnnotations)
-	if err != nil {
-		return nil, fmt.Errorf("Get tolerations for cluster %s failed: %v", b.ClusterName, err)
+	// Tolerations
+	var tolerations []corev1.Toleration
+	if kcNodePlacement != nil && len(kcNodePlacement.Tolerations) != 0 {
+		tolerations = kcNodePlacement.Tolerations
+	} else {
+		tolerations, err = helpers.GetTolerationsFromManagedClusterAnnotations(b.ManagedClusterAnnotations)
+		if err != nil {
+			return nil, fmt.Errorf("Get tolerations for cluster %s failed: %v", b.ClusterName, err)
+		}
+	}
+	if err := helpers.ValidateTolerations(tolerations); err != nil {
+		return nil, fmt.Errorf("invalid tolerations annotation %v", err)
 	}
 
 	renderConfig := RenderConfig{
@@ -192,7 +229,7 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 	if b.generateImagePullSecret {
 		// Image pull secret, need to add `manifests/klusterlet/image_pull_secret.yaml` to files if imagePullSecret is not nil
 
-		imagePullSecret, err := getImagePullSecret(ctx, clientHolder, b.ManagedClusterAnnotations)
+		imagePullSecret, err := getImagePullSecret(ctx, clientHolder, kcImagePullSecret, b.ManagedClusterAnnotations)
 		if err != nil {
 			return nil, err
 		}
@@ -267,11 +304,44 @@ func filesToObjects(files []string, config interface{}) ([]runtime.Object, error
 	return objects, nil
 }
 
-func getImage(envName string, clusterAnnotations map[string]string) (string, error) {
+func getImage(envName string, kcRegistries []klusterletconfigv1alpha1.Registries, clusterAnnotations map[string]string) (string, error) {
 	defaultImage := os.Getenv(envName)
 	if defaultImage == "" {
 		return "", fmt.Errorf("environment variable %s not defined", envName)
 	}
 
+	if len(kcRegistries) != 0 {
+		overrideImageName := defaultImage
+		for i := 0; i < len(kcRegistries); i++ {
+			registry := kcRegistries[i]
+			name := imageOverride(registry.Source, registry.Mirror, defaultImage)
+			if name != defaultImage {
+				overrideImageName = name
+			}
+		}
+		return overrideImageName, nil
+	}
+
 	return imageregistry.OverrideImageByAnnotation(clusterAnnotations, defaultImage)
+}
+
+// imageOverride is a copy from /pkg/helpers/imageregistry/client.go
+func imageOverride(source, mirror, imageName string) string {
+	source = strings.TrimSuffix(source, "/")
+	mirror = strings.TrimSuffix(mirror, "/")
+	imageSegments := strings.Split(imageName, "/")
+	imageNameTag := imageSegments[len(imageSegments)-1]
+	if source == "" {
+		if mirror == "" {
+			return imageNameTag
+		}
+		return fmt.Sprintf("%s/%s", mirror, imageNameTag)
+	}
+
+	if !strings.HasPrefix(imageName, source) {
+		return imageName
+	}
+
+	trimSegment := strings.TrimPrefix(imageName, source)
+	return fmt.Sprintf("%s%s", mirror, trimSegment)
 }

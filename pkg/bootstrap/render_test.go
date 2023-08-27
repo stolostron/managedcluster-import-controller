@@ -5,18 +5,18 @@ import (
 	"os"
 	"testing"
 
+	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
+	appv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-
-	appv1 "k8s.io/api/apps/v1"
-	corev1 "k8s.io/api/core/v1"
 )
 
 func init() {
@@ -26,6 +26,8 @@ func init() {
 }
 
 func TestKlusterletConfigGenerate(t *testing.T) {
+	var tolerationSeconds int64 = 20
+
 	testcases := []struct {
 		name         string
 		clientObjs   []runtimeclient.Object
@@ -116,7 +118,7 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 			},
 		},
 		{
-			name: "default customized",
+			name: "default customized with managed cluster annotations",
 			clientObjs: []runtimeclient.Object{
 				&corev1.Namespace{
 					ObjectMeta: metav1.ObjectMeta{
@@ -159,6 +161,83 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				if klusterlet.Spec.RegistrationConfiguration.ClusterAnnotations["agent.open-cluster-management.io/test"] != "test" {
 					t.Errorf("the klusterlet cluster annotations %s is not %s",
 						klusterlet.Spec.RegistrationConfiguration.ClusterAnnotations["agent.open-cluster-management.io/test"], "test")
+				}
+
+				operater, ok := objects[6].(*appv1.Deployment)
+				if !ok {
+					t.Fatal("the operater is not deployment")
+				}
+
+				if operater.Spec.Template.Spec.NodeSelector["kubernetes.io/os"] != "linux" {
+					t.Errorf("the operater node selector %s is not %s",
+						operater.Spec.Template.Spec.NodeSelector["kubernetes.io/os"], "linux")
+				}
+				if operater.Spec.Template.Spec.Tolerations[0].Key != "foo" {
+					t.Errorf("the operater tolerations %s is not %s",
+						operater.Spec.Template.Spec.Tolerations[0].Key, "foo")
+				}
+			},
+		},
+		{
+			name: "default customized with klusterletconfig",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+			},
+			runtimeObjs: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
+						Namespace: os.Getenv("POD_NAMESPACE"),
+					},
+					Data: map[string][]byte{
+						corev1.DockerConfigKey: []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeDockercfg,
+				},
+			},
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeDefault,
+				"test", // cluster name
+				"test", // klusterlet namespace
+				[]byte("bootstrap kubeconfig"),
+			).WithKlusterletConfig(&klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					Registries: []klusterletconfigv1alpha1.Registries{
+						{
+							Source: "quay.io/open-cluster-management",
+							Mirror: "quay.io/rhacm2",
+						},
+					},
+					NodePlacement: &operatorv1.NodePlacement{
+						NodeSelector: map[string]string{
+							"kubernetes.io/os": "linux",
+						},
+						Tolerations: []corev1.Toleration{
+							{
+								Key:               "foo",
+								Operator:          corev1.TolerationOpExists,
+								Effect:            corev1.TaintEffectNoExecute,
+								TolerationSeconds: &tolerationSeconds,
+							},
+						},
+					},
+				},
+			}),
+			validateFunc: func(t *testing.T, objects []runtime.Object) {
+				if len(objects) != 10 {
+					t.Fatalf("Expected 10 objects, but got %d", len(objects))
+				}
+
+				klusterlet, ok := objects[8].(*operatorv1.Klusterlet)
+				if !ok {
+					t.Fatal("the klusterlet is not klusterlet")
+				}
+				if klusterlet.Spec.RegistrationImagePullSpec != "quay.io/rhacm2/registration:latest" {
+					t.Fatal("the klusterlet registration image pull spec is not replaced")
 				}
 
 				operater, ok := objects[6].(*appv1.Deployment)
