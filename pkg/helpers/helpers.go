@@ -593,7 +593,7 @@ func GetComponentNamespace() (string, error) {
 	return string(nsBytes), nil
 }
 
-func GetNodeSelector(clusterAnnotations map[string]string) (map[string]string, error) {
+func GetNodeSelectorFromManagedClusterAnnotations(clusterAnnotations map[string]string) (map[string]string, error) {
 	nodeSelector := map[string]string{}
 
 	nodeSelectorString, ok := clusterAnnotations[nodeSelectorAnnotation]
@@ -605,14 +605,10 @@ func GetNodeSelector(clusterAnnotations map[string]string) (map[string]string, e
 		return nil, fmt.Errorf("invalid nodeSelector annotation %v", err)
 	}
 
-	if err := validateNodeSelector(nodeSelector); err != nil {
-		return nil, fmt.Errorf("invalid nodeSelector annotation %v", err)
-	}
-
 	return nodeSelector, nil
 }
 
-func GetTolerations(clusterAnnotations map[string]string) ([]corev1.Toleration, error) {
+func GetTolerationsFromManagedClusterAnnotations(clusterAnnotations map[string]string) ([]corev1.Toleration, error) {
 	tolerations := []corev1.Toleration{}
 
 	tolerationsString, ok := clusterAnnotations[tolerationsAnnotation]
@@ -628,10 +624,6 @@ func GetTolerations(clusterAnnotations map[string]string) ([]corev1.Toleration, 
 	}
 
 	if err := json.Unmarshal([]byte(tolerationsString), &tolerations); err != nil {
-		return nil, fmt.Errorf("invalid tolerations annotation %v", err)
-	}
-
-	if err := validateTolerations(tolerations); err != nil {
 		return nil, fmt.Errorf("invalid tolerations annotation %v", err)
 	}
 
@@ -746,7 +738,7 @@ func ForceDeleteAllManagedClusterAddons(
 }
 
 // refer to https://github.com/kubernetes/kubernetes/blob/master/pkg/apis/core/validation/validation.go#L3498
-func validateNodeSelector(nodeSelector map[string]string) error {
+func ValidateNodeSelector(nodeSelector map[string]string) error {
 	errs := []error{}
 	for key, val := range nodeSelector {
 		if errMsgs := validation.IsQualifiedName(key); len(errMsgs) != 0 {
@@ -760,7 +752,7 @@ func validateNodeSelector(nodeSelector map[string]string) error {
 }
 
 // refer to https://github.com/kubernetes/kubernetes/blob/master/pkg/apis/core/validation/validation.go#L3330
-func validateTolerations(tolerations []corev1.Toleration) error {
+func ValidateTolerations(tolerations []corev1.Toleration) error {
 	errs := []error{}
 	for _, toleration := range tolerations {
 		// validate the toleration key

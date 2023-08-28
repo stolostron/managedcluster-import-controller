@@ -25,11 +25,12 @@ func init() {
 
 func TestGetImagePullSecret(t *testing.T) {
 	cases := []struct {
-		name           string
-		clientObjs     []client.Object
-		secret         *corev1.Secret
-		managedCluster *clusterv1.ManagedCluster
-		expectedSecret *corev1.Secret
+		name                            string
+		clientObjs                      []client.Object
+		secret                          *corev1.Secret
+		managedCluster                  *clusterv1.ManagedCluster
+		klusterletconfigImagePullSecret corev1.ObjectReference
+		expectedSecret                  *corev1.Secret
 	}{
 		{
 			name:       "no registry",
@@ -49,6 +50,7 @@ func TestGetImagePullSecret(t *testing.T) {
 					Name: "test",
 				},
 			},
+			klusterletconfigImagePullSecret: corev1.ObjectReference{},
 			expectedSecret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
@@ -80,6 +82,36 @@ func TestGetImagePullSecret(t *testing.T) {
 					},
 				},
 			},
+			klusterletconfigImagePullSecret: corev1.ObjectReference{},
+			expectedSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test1",
+				},
+			},
+		},
+		{
+			name:       "with klusterletconfig image pull secret",
+			clientObjs: []client.Object{},
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test1",
+				},
+				Data: map[string][]byte{
+					".dockerconfigjson": []byte("fake-token"),
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+			},
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test",
+				},
+			},
+			klusterletconfigImagePullSecret: corev1.ObjectReference{
+				Name:      "test",
+				Namespace: "test1",
+			},
 			expectedSecret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test",
@@ -97,7 +129,7 @@ func TestGetImagePullSecret(t *testing.T) {
 				ImageRegistryClient: imageregistry.NewClient(kubeClient),
 			}
 
-			secret, err := getImagePullSecret(context.Background(), clientHolder, c.managedCluster.Annotations)
+			secret, err := getImagePullSecret(context.Background(), clientHolder, c.klusterletconfigImagePullSecret, c.managedCluster.Annotations)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}

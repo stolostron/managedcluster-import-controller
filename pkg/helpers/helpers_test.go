@@ -969,7 +969,7 @@ func TestUpdateManagedClusterBootstrapSecret(t *testing.T) {
 	}
 }
 
-func TestGetNodeSelector(t *testing.T) {
+func TestGetNodeSelectorAndValidate(t *testing.T) {
 	cases := []struct {
 		name           string
 		managedCluster *clusterv1.ManagedCluster
@@ -1045,7 +1045,13 @@ func TestGetNodeSelector(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := GetNodeSelector(c.managedCluster.Annotations)
+			ns, err := GetNodeSelectorFromManagedClusterAnnotations(c.managedCluster.Annotations)
+			if err == nil {
+				err = ValidateNodeSelector(ns)
+				if err != nil {
+					err = fmt.Errorf("invalid nodeSelector annotation %v", err)
+				}
+			}
 			switch {
 			case len(c.expectedErr) == 0:
 				if err != nil {
@@ -1064,7 +1070,7 @@ func TestGetNodeSelector(t *testing.T) {
 	}
 }
 
-func TestGetTolerations(t *testing.T) {
+func TestGetTolerationsAndValidate(t *testing.T) {
 	cases := []struct {
 		name           string
 		managedCluster *clusterv1.ManagedCluster
@@ -1200,7 +1206,13 @@ func TestGetTolerations(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := GetTolerations(c.managedCluster.GetAnnotations())
+			tolerations, err := GetTolerationsFromManagedClusterAnnotations(c.managedCluster.GetAnnotations())
+			if err == nil {
+				err = ValidateTolerations(tolerations)
+				if err != nil {
+					err = fmt.Errorf("invalid tolerations annotation %v", err)
+				}
+			}
 			switch {
 			case len(c.expectedErr) == 0:
 				if err != nil {

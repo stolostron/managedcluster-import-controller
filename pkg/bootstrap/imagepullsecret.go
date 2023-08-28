@@ -49,7 +49,16 @@ func getImagePullSecretConfig(imagePullSecret *corev1.Secret) (ImagePullSecretCo
 }
 
 // getImagePullSecret get image pull secret from env
-func getImagePullSecret(ctx context.Context, clientHolder *helpers.ClientHolder, clusterAnnotations map[string]string) (*corev1.Secret, error) {
+func getImagePullSecret(ctx context.Context, clientHolder *helpers.ClientHolder,
+	kcImagePullSecret corev1.ObjectReference, clusterAnnotations map[string]string) (*corev1.Secret, error) {
+	if kcImagePullSecret.Name != "" {
+		secret, err := clientHolder.KubeClient.CoreV1().Secrets(kcImagePullSecret.Namespace).Get(ctx, kcImagePullSecret.Name, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
+		return secret, nil
+	}
+
 	secret, err := clientHolder.ImageRegistryClient.Cluster(clusterAnnotations).PullSecret()
 	if err != nil {
 		return nil, err
