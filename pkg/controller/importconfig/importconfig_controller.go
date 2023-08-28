@@ -22,16 +22,22 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 
+	listerklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/listers/klusterletconfig/v1alpha1"
+	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
+
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 )
 
 var log = logf.Log.WithName(controllerName)
 
 // ReconcileImportConfig reconciles a managed cluster to prepare its import secret
 type ReconcileImportConfig struct {
-	clientHolder *helpers.ClientHolder
-	scheme       *runtime.Scheme
-	recorder     events.Recorder
+	clientHolder           *helpers.ClientHolder
+	klusterletconfigLister listerklusterletconfigv1alpha1.KlusterletConfigLister
+	scheme                 *runtime.Scheme
+	recorder               events.Recorder
 }
 
 // blank assignment to verify that ReconcileImportConfig implements reconcile.Reconciler
@@ -53,7 +59,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	reqLogger.Info("Reconciling managed cluster import secret")
+	reqLogger.Info("Reconciling managed cluster")
 
 	mode := helpers.DetermineKlusterletMode(managedCluster)
 	if err := helpers.ValidateKlusterletMode(mode); err != nil {
@@ -69,6 +75,16 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 	if _, err := helpers.ApplyResources(
 		r.clientHolder, r.recorder, r.scheme, managedCluster, objects...); err != nil {
 		return reconcile.Result{}, err
+	}
+
+	// Get klusterletconfig
+	var kc *klusterletconfigv1alpha1.KlusterletConfig
+	klusterletconfigName, ok := managedCluster.GetAnnotations()[apiconstants.AnnotationKlusterletConfig]
+	if ok && klusterletconfigName != "" {
+		kc, err = r.klusterletconfigLister.Get(klusterletconfigName)
+		if err != nil && !apierrors.IsNotFound(err) {
+			return reconcile.Result{}, err
+		}
 	}
 
 	// get the previous bootstrap kubeconfig and expiration
@@ -96,6 +112,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 			klusterletNamespace(managedCluster.GetAnnotations()),
 			bootstrapKubeconfigData).
 			WithManagedClusterAnnotations(managedCluster.GetAnnotations()).
+			WithKlusterletConfig(kc).
 			Generate(ctx, r.clientHolder)
 		if err != nil {
 			return reconcile.Result{}, err

@@ -181,6 +181,6 @@ echo "###### apply crds from the endpoint"
 curl --cacert ca.crt -H "Authorization: Bearer $token" https://$agent_registration_host/agent-registration/crds/v1 | kubectl apply -f -
 
 echo "###### apply manifest from the endpoint"
-curl --cacert ca.crt -H "Authorization: Bearer $token" https://$agent_registration_host/agent-registration/manifests/cluster-e2e-test-agent | kubectl apply -f -
+curl --cacert ca.crt -H "Authorization: Bearer $token" https://$agent_registration_host/agent-registration/manifests/cluster-e2e-test-agent?klusterletconfig=default | kubectl apply -f -
 
 fi

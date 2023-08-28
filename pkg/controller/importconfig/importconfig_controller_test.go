@@ -5,20 +5,26 @@ package importconfig
 
 import (
 	"context"
-	operatorv1 "open-cluster-management.io/api/operator/v1"
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
+	fakeklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned/fake"
+	klusterletconfiginformerv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/informers/externalversions/klusterletconfig/v1alpha1"
+	listerklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/listers/klusterletconfig/v1alpha1"
+	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
+
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 
 	configv1 "github.com/openshift/api/config/v1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -27,10 +33,13 @@ import (
 	"k8s.io/client-go/kubernetes"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/tools/cache"
 
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 )
 
 var testscheme = scheme.Scheme
@@ -407,7 +416,7 @@ func TestReconcile(t *testing.T) {
 			},
 		},
 		{
-			name: "nodeSelector and tolerations",
+			name: "nodeSelector and tolerations from managed cluster annotations",
 			clientObjs: []runtimeclient.Object{
 				&corev1.Namespace{
 					ObjectMeta: metav1.ObjectMeta{
@@ -484,7 +493,137 @@ func TestReconcile(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "klusterletconfig",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							apiconstants.AnnotationKlusterletConfig: "test-klusterletconfig",
+						},
+					},
+				},
+				&configv1.Infrastructure{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "cluster",
+					},
+				},
+			},
+			runtimeObjs: []runtime.Object{
+				&corev1.ServiceAccount{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa",
+						Namespace: "test",
+					},
+					Secrets: []corev1.ObjectReference{
+						{
+							Name:      "test-bootstrap-sa-token-5pw5c",
+							Namespace: "test",
+						},
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa-token-5pw5c",
+						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"token": []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeServiceAccountToken,
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
+						Namespace: os.Getenv("POD_NAMESPACE"),
+					},
+					Data: map[string][]byte{
+						corev1.DockerConfigJsonKey: []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeDockerConfigJson,
+				},
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "kube-root-ca.crt",
+						Namespace: "test",
+					},
+					Data: map[string]string{
+						"ca.crt": "fake-root-ca",
+					},
+				},
+			},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, client runtimeclient.Client, kubeClient kubernetes.Interface) {
+				importSecret, err := kubeClient.CoreV1().Secrets("test").Get(context.TODO(), "test-import", metav1.GetOptions{})
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				data, ok := importSecret.Data[constants.ImportSecretImportYamlKey]
+				if !ok {
+					t.Errorf("the %s is required, %s", constants.ImportSecretImportYamlKey, string(data))
+				} else {
+					objs := []runtime.Object{}
+					for _, yaml := range helpers.SplitYamls(importSecret.Data[constants.ImportSecretImportYamlKey]) {
+						objs = append(objs, helpers.MustCreateObject(yaml))
+					}
+					if len(objs) < 1 {
+						t.Errorf("import secret data %s, objs is empty: %v", constants.ImportSecretImportYamlKey, objs)
+					}
+					klusterlet, ok := objs[8].(*operatorv1.Klusterlet)
+					if !ok {
+						t.Errorf("import secret data %s, the objs[8] is not klusterlet", constants.ImportSecretImportYamlKey)
+					}
+					if klusterlet.Spec.NodePlacement.NodeSelector["kubernetes.io/os"] != "linux" {
+						t.Errorf("the klusterlet node selector %s is not %s",
+							klusterlet.Spec.NodePlacement.NodeSelector["kubernetes.io/os"], "linux")
+					}
+					if klusterlet.Spec.NodePlacement.Tolerations[0].Key != "foo" {
+						t.Errorf("the klusterlet tolerations %s is not %s",
+							klusterlet.Spec.NodePlacement.Tolerations[0].Key, "foo")
+					}
+				}
+			},
+		},
 	}
+
+	// setup klusterletconfig informer
+	klusterletconfigs := []runtime.Object{
+		&klusterletconfigv1alpha1.KlusterletConfig{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test-klusterletconfig",
+			},
+			Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+				NodePlacement: &operatorv1.NodePlacement{
+					NodeSelector: map[string]string{
+						"kubernetes.io/os": "linux",
+					},
+					Tolerations: []corev1.Toleration{
+						{
+							Key:      "foo",
+							Operator: corev1.TolerationOpExists,
+							Effect:   corev1.TaintEffectNoExecute,
+						},
+					},
+				},
+			},
+		},
+	}
+	fakeklusterletconfigClient := fakeklusterletconfigv1alpha1.NewSimpleClientset(klusterletconfigs...)
+	klusterletconfigInformer := klusterletconfiginformerv1alpha1.NewKlusterletConfigInformer(fakeklusterletconfigClient, time.Second*30, cache.Indexers{
+		cache.NamespaceIndex: cache.MetaNamespaceIndexFunc,
+	})
+	klusterletconfigLister := listerklusterletconfigv1alpha1.NewKlusterletConfigLister(klusterletconfigInformer.GetIndexer())
+	go klusterletconfigInformer.Run(context.Background().Done())
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -496,9 +635,10 @@ func TestReconcile(t *testing.T) {
 			}
 
 			r := &ReconcileImportConfig{
-				clientHolder: clientHolder,
-				scheme:       testscheme,
-				recorder:     eventstesting.NewTestingEventRecorder(t),
+				clientHolder:           clientHolder,
+				scheme:                 testscheme,
+				klusterletconfigLister: klusterletconfigLister,
+				recorder:               eventstesting.NewTestingEventRecorder(t),
 			}
 
 			_, err := r.Reconcile(context.TODO(), c.request)

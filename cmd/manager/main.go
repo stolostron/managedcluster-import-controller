@@ -25,12 +25,19 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/agentregistration"
+	"github.com/stolostron/managedcluster-import-controller/pkg/controller/importconfig"
 	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
+	klusterletconfigclient "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned"
+	klusterletconfiginformerv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/informers/externalversions/klusterletconfig/v1alpha1"
+	listerklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/listers/klusterletconfig/v1alpha1"
+	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
+	informersclusterv1 "open-cluster-management.io/api/client/cluster/informers/externalversions/cluster/v1"
 	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
 	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
 	informersworkv1 "open-cluster-management.io/api/client/work/informers/externalversions/work/v1"
@@ -74,6 +81,7 @@ func init() {
 	utilruntime.Must(clusterv1.AddToScheme(scheme))
 	utilruntime.Must(asv1beta1.AddToScheme(scheme))
 	utilruntime.Must(addonv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(klusterletconfigv1alpha1.AddToScheme(scheme))
 }
 
 func main() {
@@ -126,6 +134,18 @@ func main() {
 	workClient, err := workclient.NewForConfig(cfg)
 	if err != nil {
 		setupLog.Error(err, "failed to create work client")
+		os.Exit(1)
+	}
+
+	klusterletconfigClient, err := klusterletconfigclient.NewForConfig(cfg)
+	if err != nil {
+		setupLog.Error(err, "failed to create klusterletconfig client")
+		os.Exit(1)
+	}
+
+	managedclusterClient, err := clusterclient.NewForConfig(cfg)
+	if err != nil {
+		setupLog.Error(err, "failed to create managedcluster client")
 		os.Exit(1)
 	}
 
@@ -193,6 +213,18 @@ func main() {
 		},
 	)
 
+	klusterletconfigInformer := klusterletconfiginformerv1alpha1.NewKlusterletConfigInformer(klusterletconfigClient, 10*time.Minute,
+		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
+	klusterletconfigLister := listerklusterletconfigv1alpha1.NewKlusterletConfigLister(klusterletconfigInformer.GetIndexer())
+
+	// managedclusterInformer has an index on the klusterletconfig annotation, so we can get all managed clusters
+	// affected by a klusterletconfig change.
+	managedclusterInformer := informersclusterv1.NewManagedClusterInformer(managedclusterClient, 10*time.Minute,
+		cache.Indexers{
+			cache.NamespaceIndex: cache.MetaNamespaceIndexFunc,
+			importconfig.ManagedClusterKlusterletConfigAnnotationIndexKey: importconfig.IndexManagedClusterByKlusterletconfigAnnotation,
+		})
+
 	// Create controller-runtime manager
 	mgr, err := ctrl.NewManager(cfg, manager.Options{
 		Scheme:                  scheme,
@@ -228,25 +260,37 @@ func main() {
 			KlusterletWorkLister:     listersworkv1.NewManifestWorkLister(klusterletWorksInformer.GetIndexer()),
 			HostedWorkInformer:       hostedWorksInformer,
 			HostedWorkLister:         listersworkv1.NewManifestWorkLister(hostedWorksInformer.GetIndexer()),
+			KlusterletConfigLister:   klusterletconfigLister,
+			ManagedClusterInformer:   managedclusterInformer,
 		},
 	); err != nil {
 		setupLog.Error(err, "failed to register controller")
 		os.Exit(1)
 	}
 
-	// Start the agent-registratioin server
-	if features.DefaultMutableFeatureGate.Enabled(features.AgentRegistration) {
-		go func() {
-			if err := agentregistration.RunAgentRegistrationServer(ctx, 9091, clientHolder); err != nil {
-				setupLog.Error(err, "failed to start agent registration server")
-			}
-		}()
-	}
-
 	go importSecretInformer.Run(ctx.Done())
 	go autoimportSecretInformer.Run(ctx.Done())
 	go klusterletWorksInformer.Run(ctx.Done())
 	go hostedWorksInformer.Run(ctx.Done())
+	go klusterletconfigInformer.Run(ctx.Done())
+	go managedclusterInformer.Run(ctx.Done())
+
+	if !cache.WaitForCacheSync(ctx.Done(),
+		klusterletconfigInformer.HasSynced,
+		managedclusterInformer.HasSynced) {
+		setupLog.Error(err, "failed to wait for caches to sync")
+		os.Exit(1)
+	}
+
+	// Start the agent-registratioin server
+	if features.DefaultMutableFeatureGate.Enabled(features.AgentRegistration) {
+		go func() {
+			if err := agentregistration.RunAgentRegistrationServer(ctx, 9091, clientHolder,
+				klusterletconfigLister); err != nil {
+				setupLog.Error(err, "failed to start agent registration server")
+			}
+		}()
+	}
 
 	setupLog.Info("Starting Controller Manager")
 	if err := mgr.Start(ctx); err != nil {
