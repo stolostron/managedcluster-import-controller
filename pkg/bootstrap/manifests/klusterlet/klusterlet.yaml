@@ -11,11 +11,12 @@ spec:
 {{- if eq .InstallMode "Hosted"}}
     mode: Hosted
 {{- else }}
-    mode: Default
+    mode: Singleton
 {{- end}}
   registrationImagePullSpec: "{{ .RegistrationImageName }}"
   workImagePullSpec: "{{ .WorkImageName }}"
   clusterName: "{{ .ManagedClusterNamespace }}"
+  imagePullSpec: "{{ .ImageName }}"
   namespace: "{{ .KlusterletNamespace }}"
 {{- if .ClusterAnnotations}}
   registrationConfiguration:

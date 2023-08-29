@@ -15,6 +15,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -51,7 +52,7 @@ func (r *ReconcileImportStatus) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	if helpers.DetermineKlusterletMode(managedCluster) != constants.KlusterletDeployModeDefault {
+	if helpers.DetermineKlusterletMode(managedCluster) == operatorv1.InstallModeHosted {
 		return reconcile.Result{}, nil
 	}
 

@@ -13,6 +13,7 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	"github.com/openshift/library-go/pkg/operator/resource/resourceapply"
 	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -225,6 +226,53 @@ func TestUpdateManagedClusterStatus(t *testing.T) {
 		})
 	}
 
+}
+
+func TestDetermineKlusterletMode(t *testing.T) {
+	cases := []struct {
+		name         string
+		annotations  map[string]string
+		expectedMode operatorv1.InstallMode
+	}{
+		{
+			name:         "default",
+			annotations:  map[string]string{},
+			expectedMode: operatorv1.InstallModeSingleton,
+		},
+		{
+			name: "singleton",
+			annotations: map[string]string{
+				constants.KlusterletDeployModeAnnotation: "singleton",
+			},
+			expectedMode: operatorv1.InstallModeSingleton,
+		},
+		{
+			name: "default",
+			annotations: map[string]string{
+				constants.KlusterletDeployModeAnnotation: "default",
+			},
+			expectedMode: operatorv1.InstallModeDefault,
+		},
+		{
+			name: "hosted",
+			annotations: map[string]string{
+				constants.KlusterletDeployModeAnnotation: "hosted",
+			},
+			expectedMode: operatorv1.InstallModeHosted,
+		},
+	}
+
+	for _, c := range cases {
+		cluster := &clusterv1.ManagedCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Annotations: c.annotations,
+			},
+		}
+		mode := DetermineKlusterletMode(cluster)
+		if mode != c.expectedMode {
+			t.Errorf("expected mode not expected")
+		}
+	}
 }
 
 func TestAddManagedClusterFinalizer(t *testing.T) {

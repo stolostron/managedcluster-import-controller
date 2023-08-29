@@ -77,7 +77,7 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
 						Annotations: map[string]string{
-							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeDefault,
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeDefault),
 						},
 					},
 				},
@@ -99,7 +99,7 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
 						Annotations: map[string]string{
-							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 						},
 					},
 				},
@@ -147,7 +147,7 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
 						Annotations: map[string]string{
-							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 							constants.HostingClusterNameAnnotation:   "cluster1", // hosting cluster name
 						},
 					},
@@ -182,7 +182,7 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
 						Annotations: map[string]string{
-							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 							constants.HostingClusterNameAnnotation:   "cluster1", // hosting cluster name
 						},
 					},
@@ -225,7 +225,7 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
 						Annotations: map[string]string{
-							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 							constants.HostingClusterNameAnnotation:   "cluster1", // hosting cluster name
 						},
 						Finalizers: []string{constants.ManifestWorkFinalizer},
@@ -261,7 +261,7 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
 						Annotations: map[string]string{
-							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 							constants.HostingClusterNameAnnotation:   "cluster1",
 						},
 						DeletionTimestamp: &metav1.Time{Time: time.Now()}, // managedCluster is deleted
@@ -323,7 +323,7 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
 						Annotations: map[string]string{
-							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 							constants.HostingClusterNameAnnotation:   "cluster1",
 						},
 						DeletionTimestamp: &metav1.Time{Time: time.Now()}, // managedCluster is deleted
@@ -387,7 +387,7 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
 						Annotations: map[string]string{
-							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 							constants.HostingClusterNameAnnotation:   "cluster1",
 						},
 						DeletionTimestamp: &metav1.Time{Time: time.Now()}, // managedCluster is deleted
@@ -462,7 +462,7 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
 						Annotations: map[string]string{
-							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 							constants.HostingClusterNameAnnotation:   "cluster1",
 						},
 					},
@@ -534,7 +534,7 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
 						Annotations: map[string]string{
-							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 							constants.HostingClusterNameAnnotation:   "cluster1",
 						},
 					},
@@ -613,7 +613,7 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
 						Annotations: map[string]string{
-							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 							constants.HostingClusterNameAnnotation:   "cluster1",
 						},
 					},
@@ -699,7 +699,7 @@ metadata:
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
 						Annotations: map[string]string{
-							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 							constants.HostingClusterNameAnnotation:   "cluster1",
 						},
 					},
@@ -780,7 +780,7 @@ metadata:
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
 						Annotations: map[string]string{
-							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 							constants.HostingClusterNameAnnotation:   "cluster1",
 						},
 					},

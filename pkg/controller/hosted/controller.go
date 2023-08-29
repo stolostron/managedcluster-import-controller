@@ -77,7 +77,7 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 		return reconcile.Result{}, err
 	}
 
-	if helpers.DetermineKlusterletMode(managedCluster) != constants.KlusterletDeployModeHosted {
+	if helpers.DetermineKlusterletMode(managedCluster) != operatorv1.InstallModeHosted {
 		return reconcile.Result{}, nil
 	}
 
