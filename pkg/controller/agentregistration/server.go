@@ -12,15 +12,21 @@ import (
 	authenticationv1 "k8s.io/api/authentication/v1"
 	authorizationv1 "k8s.io/api/authorization/v1"
 
+	listerklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/listers/klusterletconfig/v1alpha1"
+	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/bootstrap"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
+
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
-func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *helpers.ClientHolder) error {
+func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *helpers.ClientHolder,
+	klusterletconfigLister listerklusterletconfigv1alpha1.KlusterletConfigLister) error {
 	mux := http.NewServeMux()
 
 	mux.Handle("/agent-registration/crds/v1", authMiddleware(clientHolder, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -45,14 +51,22 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 		}
 	})))
 
+	// example URl: https://<route address>/agent-registration/manifests/cluster1?klusterletconfig=default
 	mux.Handle("/agent-registration/manifests/", authMiddleware(clientHolder, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		urlparams := strings.Split(r.RequestURI, "/")
-		if len(urlparams) < 4 {
-			http.Error(w, fmt.Sprintf("Invalid request: %s", r.RequestURI), http.StatusBadRequest)
-			return
-		}
+		var err error
+		urlparams := strings.Split(r.URL.Path, "/")
+		clusterID := urlparams[len(urlparams)-1]
 
-		clusterID := urlparams[3]
+		// Get KlusterletConfig
+		var kc *klusterletconfigv1alpha1.KlusterletConfig
+		klusterletconfigName := r.URL.Query().Get("klusterletconfig")
+		if klusterletconfigName != "" {
+			kc, err = klusterletconfigLister.Get(klusterletconfigName)
+			if err != nil && !apierrors.IsNotFound(err) {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
 
 		// In the agent-registration case, the bootstrap sa is not created in the managed cluster namespace, because managed cluster is not created yet.
 		// Instead, it's in the pod namespace with the name "agent-registration-bootstrap".
@@ -64,12 +78,22 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 			return
 		}
 
+		klusterletClusterAnnotations := map[string]string{
+			"agent.open-cluster-management.io/create-with-default-klusterletaddonconfig": "true",
+		}
+		if kc != nil {
+			// This annotation will finanlly be added on the managedcluster which created by the agent side.
+			// Then the reconciliation of importconfig-controller will render manifests with the same KlusterletConfig
+			klusterletClusterAnnotations[apiconstants.AnnotationKlusterletConfig] = klusterletconfigName
+		}
+
 		content, err := bootstrap.NewKlusterletManifestsConfig(
 			operatorv1.InstallModeDefault,
 			clusterID,
 			DefaultKlusterletNamespace,
 			bootstrapkubeconfig).
-			WithKlusterletClusterAnnotations(map[string]string{"agent.open-cluster-management.io/create-with-default-klusterletaddonconfig": "true"}).
+			WithKlusterletClusterAnnotations(klusterletClusterAnnotations).
+			WithKlusterletConfig(kc).
 			Generate(r.Context(), clientHolder)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)

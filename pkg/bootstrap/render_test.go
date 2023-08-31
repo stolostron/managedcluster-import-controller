@@ -239,6 +239,14 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				if klusterlet.Spec.RegistrationImagePullSpec != "quay.io/rhacm2/registration:latest" {
 					t.Fatal("the klusterlet registration image pull spec is not replaced")
 				}
+				if klusterlet.Spec.NodePlacement.NodeSelector["kubernetes.io/os"] != "linux" {
+					t.Errorf("the klusterlet node selector %s is not %s",
+						klusterlet.Spec.NodePlacement.NodeSelector["kubernetes.io/os"], "linux")
+				}
+				if klusterlet.Spec.NodePlacement.Tolerations[0].Key != "foo" {
+					t.Errorf("the klusterlet tolerations %s is not %s",
+						klusterlet.Spec.NodePlacement.Tolerations[0].Key, "foo")
+				}
 
 				operater, ok := objects[6].(*appv1.Deployment)
 				if !ok {

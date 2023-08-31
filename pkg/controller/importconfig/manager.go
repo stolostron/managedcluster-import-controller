@@ -19,6 +19,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 )
 
 const controllerName = "importconfig-controller"
@@ -40,7 +42,7 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder
 				CreateFunc:  func(e event.CreateEvent) bool { return true },
 				UpdateFunc: func(e event.UpdateEvent) bool {
 					// handle the labels changes for image registry
-					// handle the annotations changes for node placement
+					// handle the annotations changes for node placement and klusterletconfig
 					return !equality.Semantic.DeepEqual(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels()) ||
 						!equality.Semantic.DeepEqual(e.ObjectOld.GetAnnotations(), e.ObjectNew.GetAnnotations())
 				},
@@ -91,6 +93,18 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder
 				UpdateFunc:  func(e event.UpdateEvent) bool { return true },
 			}),
 		).
+		Watches(
+			&klusterletconfigv1alpha1.KlusterletConfig{},
+			&enqueueManagedClusterInKlusterletConfigAnnotation{
+				managedclusterIndexer: informerHolder.ManagedClusterInformer.GetIndexer(),
+			},
+			builder.WithPredicates(predicate.Funcs{
+				GenericFunc: func(e event.GenericEvent) bool { return true },
+				CreateFunc:  func(e event.CreateEvent) bool { return true },
+				DeleteFunc:  func(e event.DeleteEvent) bool { return true },
+				UpdateFunc:  func(e event.UpdateEvent) bool { return true },
+			}),
+		).
 		WatchesRawSource(
 			source.NewImportSecretSource(informerHolder.ImportSecretInformer),
 			&source.ManagedClusterResourceEventHandler{},
@@ -102,9 +116,10 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder
 			}),
 		).
 		Complete(&ReconcileImportConfig{
-			clientHolder: clientHolder,
-			scheme:       mgr.GetScheme(),
-			recorder:     helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
+			clientHolder:           clientHolder,
+			klusterletconfigLister: informerHolder.KlusterletConfigLister,
+			scheme:                 mgr.GetScheme(),
+			recorder:               helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
 		})
 	return controllerName, err
 }

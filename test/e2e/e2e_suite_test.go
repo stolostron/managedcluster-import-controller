@@ -36,23 +36,25 @@ import (
 	crclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
+	klusterletconfigclient "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 )
 
 var (
-	clusterCfg        *rest.Config
-	hubKubeClient     kubernetes.Interface
-	hubDynamicClient  dynamic.Interface
-	crdClient         apiextensionsclient.Interface
-	hubClusterClient  clusterclient.Interface
-	hubWorkClient     workclient.Interface
-	hubOperatorClient operatorclient.Interface
-	addonClient       addonclient.Interface
-	hubRuntimeClient  crclient.Client
-	hubRecorder       events.Recorder
-	hubMapper         meta.RESTMapper
+	clusterCfg             *rest.Config
+	hubKubeClient          kubernetes.Interface
+	hubDynamicClient       dynamic.Interface
+	crdClient              apiextensionsclient.Interface
+	hubClusterClient       clusterclient.Interface
+	hubWorkClient          workclient.Interface
+	hubOperatorClient      operatorclient.Interface
+	addonClient            addonclient.Interface
+	klusterletconfigClient klusterletconfigclient.Interface
+	hubRuntimeClient       crclient.Client
+	hubRecorder            events.Recorder
+	hubMapper              meta.RESTMapper
 )
 
 func TestE2E(t *testing.T) {
@@ -88,6 +90,9 @@ var _ = ginkgo.BeforeSuite(func() {
 	gomega.Expect(err).Should(gomega.BeNil())
 
 	addonClient, err = addonclient.NewForConfig(clusterCfg)
+	gomega.Expect(err).Should(gomega.BeNil())
+
+	klusterletconfigClient, err = klusterletconfigclient.NewForConfig(clusterCfg)
 	gomega.Expect(err).Should(gomega.BeNil())
 
 	hubRuntimeClient, err = crclient.New(clusterCfg, crclient.Options{})
@@ -601,7 +606,7 @@ func assertManagedClusterNamespace(managedClusterName string) {
 }
 
 func assertKlusterletNodePlacement(nodeSelecor map[string]string, tolerations []corev1.Toleration) {
-	ginkgo.By("Should create the managedCluster namespace", func() {
+	ginkgo.By("Klusterlet should have expected nodePlacement", func() {
 		gomega.Eventually(func() error {
 			klusterlet, err := hubOperatorClient.OperatorV1().Klusterlets().Get(context.TODO(), "klusterlet", metav1.GetOptions{})
 			if err != nil && errors.IsNotFound(err) {
@@ -622,19 +627,19 @@ func assertKlusterletNodePlacement(nodeSelecor map[string]string, tolerations []
 			}
 
 			if !equality.Semantic.DeepEqual(klusterlet.Spec.NodePlacement.NodeSelector, nodeSelecor) {
-				return fmt.Errorf(cmp.Diff(klusterlet.Spec.NodePlacement.NodeSelector, nodeSelecor))
+				return fmt.Errorf("klusterlet diff: %s", cmp.Diff(klusterlet.Spec.NodePlacement.NodeSelector, nodeSelecor))
 			}
 
 			if !equality.Semantic.DeepEqual(deploy.Spec.Template.Spec.NodeSelector, nodeSelecor) {
-				return fmt.Errorf(cmp.Diff(deploy.Spec.Template.Spec.NodeSelector, nodeSelecor))
+				return fmt.Errorf("deployment diff: %s", cmp.Diff(deploy.Spec.Template.Spec.NodeSelector, nodeSelecor))
 			}
 
 			if !equality.Semantic.DeepEqual(klusterlet.Spec.NodePlacement.Tolerations, tolerations) {
-				return fmt.Errorf(cmp.Diff(klusterlet.Spec.NodePlacement.Tolerations, tolerations))
+				return fmt.Errorf("klusterlet diff: %s", cmp.Diff(klusterlet.Spec.NodePlacement.Tolerations, tolerations))
 			}
 
 			if !equality.Semantic.DeepEqual(deploy.Spec.Template.Spec.Tolerations, tolerations) {
-				return fmt.Errorf(cmp.Diff(deploy.Spec.Template.Spec.Tolerations, tolerations))
+				return fmt.Errorf("deployment diff: %s", cmp.Diff(deploy.Spec.Template.Spec.Tolerations, tolerations))
 			}
 
 			return nil

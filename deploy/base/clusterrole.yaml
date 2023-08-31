@@ -238,3 +238,11 @@ rules:
     - subjectaccessreviews
   verbs:
     - create
+- apiGroups:
+    - config.open-cluster-management.io
+  resources:
+    - klusterletconfigs
+  verbs:
+    - get
+    - list
+    - watch

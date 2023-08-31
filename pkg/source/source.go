@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"reflect"
 
+	klusterletconfigv1alpha1lister "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/listers/klusterletconfig/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	corev1listers "k8s.io/client-go/listers/core/v1"
@@ -36,6 +37,10 @@ type InformerHolder struct {
 
 	HostedWorkInformer cache.SharedIndexInformer
 	HostedWorkLister   workv1lister.ManifestWorkLister
+
+	KlusterletConfigLister klusterletconfigv1alpha1lister.KlusterletConfigLister
+
+	ManagedClusterInformer cache.SharedIndexInformer
 }
 
 // NewImportSecretSource return a source only for import secrets

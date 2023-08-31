@@ -13,7 +13,7 @@ require (
 	github.com/openshift/hive/apis v0.0.0-20230410203125-bb0124b40f86
 	github.com/openshift/library-go v0.0.0-20230809121909-d7e7beca5bae // https://github.com/openshift/library-go/tree/release-4.14
 	github.com/spf13/pflag v1.0.5
-	github.com/stolostron/cluster-lifecycle-api v0.0.0-20230817063627-fae7e784136f
+	github.com/stolostron/cluster-lifecycle-api v0.0.0-20230829070855-cd9b187cca82
 	go.uber.org/zap v1.24.0
 	golang.org/x/text v0.9.0
 	k8s.io/api v0.27.4
