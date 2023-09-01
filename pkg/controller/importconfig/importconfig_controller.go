@@ -88,7 +88,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// get the previous bootstrap kubeconfig and expiration
-	bootstrapKubeconfigData, expiration, err := getBootstrapKubeConfigDataFromImportSecret(ctx, r.clientHolder, managedCluster.Name)
+	bootstrapKubeconfigData, expiration, err := getBootstrapKubeConfigDataFromImportSecret(ctx, r.clientHolder, managedCluster.Name, kc)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -96,7 +96,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 	// if bootstrapKubeconfig not exist or expired, create a new one
 	if bootstrapKubeconfigData == nil {
 		bootstrapKubeconfigData, expiration, err = bootstrap.CreateBootstrapKubeConfig(ctx, r.clientHolder,
-			bootstrap.GetBootstrapSAName(managedCluster.Name), managedCluster.Name, 8640*3600)
+			bootstrap.GetBootstrapSAName(managedCluster.Name), managedCluster.Name, 8640*3600, kc)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
