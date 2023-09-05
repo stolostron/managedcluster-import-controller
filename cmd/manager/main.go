@@ -20,7 +20,9 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+	"k8s.io/client-go/informers"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"k8s.io/client-go/tools/cache"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller"
@@ -32,16 +34,14 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
 	klusterletconfigclient "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned"
-	klusterletconfiginformerv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/informers/externalversions/klusterletconfig/v1alpha1"
-	listerklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/listers/klusterletconfig/v1alpha1"
+	klusterletconfiginformer "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/informers/externalversions"
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
-	informersclusterv1 "open-cluster-management.io/api/client/cluster/informers/externalversions/cluster/v1"
+	informerscluster "open-cluster-management.io/api/client/cluster/informers/externalversions"
 	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
 	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
-	informersworkv1 "open-cluster-management.io/api/client/work/informers/externalversions/work/v1"
-	listersworkv1 "open-cluster-management.io/api/client/work/listers/work/v1"
+	informerswork "open-cluster-management.io/api/client/work/informers/externalversions"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
@@ -53,11 +53,8 @@ import (
 	"k8s.io/apimachinery/pkg/fields"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	informerscorev1 "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
 	k8sscheme "k8s.io/client-go/kubernetes/scheme"
-	listerscorev1 "k8s.io/client-go/listers/core/v1"
-	"k8s.io/client-go/tools/cache"
 	utilflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/logs"
 
@@ -149,12 +146,10 @@ func main() {
 		os.Exit(1)
 	}
 
-	importSecretInformer := informerscorev1.NewFilteredSecretInformer(
+	importSecertInformerF := informers.NewFilteredSharedInformerFactory(
 		kubeClient,
-		metav1.NamespaceAll,
 		10*time.Minute,
-		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
-		func(listOptions *metav1.ListOptions) {
+		metav1.NamespaceAll, func(listOptions *metav1.ListOptions) {
 			selector := &metav1.LabelSelector{
 				MatchExpressions: []metav1.LabelSelectorRequirement{
 					{
@@ -164,25 +159,20 @@ func main() {
 				},
 			}
 			listOptions.LabelSelector = metav1.FormatLabelSelector(selector)
-		},
-	)
+		})
 
-	autoimportSecretInformer := informerscorev1.NewFilteredSecretInformer(
+	autoimportSecretInformerF := informers.NewFilteredSharedInformerFactory(
 		kubeClient,
-		metav1.NamespaceAll,
 		10*time.Minute,
-		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
-		func(listOptions *metav1.ListOptions) {
+		metav1.NamespaceAll, func(listOptions *metav1.ListOptions) {
 			listOptions.FieldSelector = fields.OneTermEqualSelector("metadata.name", constants.AutoImportSecretName).String()
 		},
 	)
 
-	klusterletWorksInformer := informersworkv1.NewFilteredManifestWorkInformer(
+	klusterletWorksInformerF := informerswork.NewFilteredSharedInformerFactory(
 		workClient,
-		metav1.NamespaceAll,
 		10*time.Minute,
-		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
-		func(listOptions *metav1.ListOptions) {
+		metav1.NamespaceAll, func(listOptions *metav1.ListOptions) {
 			selector := &metav1.LabelSelector{
 				MatchExpressions: []metav1.LabelSelectorRequirement{
 					{
@@ -195,12 +185,10 @@ func main() {
 		},
 	)
 
-	hostedWorksInformer := informersworkv1.NewFilteredManifestWorkInformer(
+	hostedWorksInformerF := informerswork.NewFilteredSharedInformerFactory(
 		workClient,
-		metav1.NamespaceAll,
 		10*time.Minute,
-		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
-		func(listOptions *metav1.ListOptions) {
+		metav1.NamespaceAll, func(listOptions *metav1.ListOptions) {
 			selector := &metav1.LabelSelector{
 				MatchExpressions: []metav1.LabelSelectorRequirement{
 					{
@@ -213,17 +201,21 @@ func main() {
 		},
 	)
 
-	klusterletconfigInformer := klusterletconfiginformerv1alpha1.NewKlusterletConfigInformer(klusterletconfigClient, 10*time.Minute,
-		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc})
-	klusterletconfigLister := listerklusterletconfigv1alpha1.NewKlusterletConfigLister(klusterletconfigInformer.GetIndexer())
+	klusterletconfigInformerF := klusterletconfiginformer.NewSharedInformerFactory(klusterletconfigClient, 10*time.Minute)
+	klusterletconfigLister := klusterletconfigInformerF.Config().V1alpha1().KlusterletConfigs().Lister()
 
 	// managedclusterInformer has an index on the klusterletconfig annotation, so we can get all managed clusters
 	// affected by a klusterletconfig change.
-	managedclusterInformer := informersclusterv1.NewManagedClusterInformer(managedclusterClient, 10*time.Minute,
+	managedclusterInformerF := informerscluster.NewSharedInformerFactory(managedclusterClient, 10*time.Minute)
+	managedclusterInformer := managedclusterInformerF.Cluster().V1().ManagedClusters().Informer()
+	if err := managedclusterInformer.AddIndexers(
 		cache.Indexers{
-			cache.NamespaceIndex: cache.MetaNamespaceIndexFunc,
 			importconfig.ManagedClusterKlusterletConfigAnnotationIndexKey: importconfig.IndexManagedClusterByKlusterletconfigAnnotation,
-		})
+		},
+	); err != nil {
+		setupLog.Error(err, "failed to add indexers to managedcluster informer")
+		os.Exit(1)
+	}
 
 	// Create controller-runtime manager
 	mgr, err := ctrl.NewManager(cfg, manager.Options{
@@ -252,14 +244,14 @@ func main() {
 		mgr,
 		clientHolder,
 		&source.InformerHolder{
-			ImportSecretInformer:     importSecretInformer,
-			ImportSecretLister:       listerscorev1.NewSecretLister(importSecretInformer.GetIndexer()),
-			AutoImportSecretInformer: autoimportSecretInformer,
-			AutoImportSecretLister:   listerscorev1.NewSecretLister(autoimportSecretInformer.GetIndexer()),
-			KlusterletWorkInformer:   klusterletWorksInformer,
-			KlusterletWorkLister:     listersworkv1.NewManifestWorkLister(klusterletWorksInformer.GetIndexer()),
-			HostedWorkInformer:       hostedWorksInformer,
-			HostedWorkLister:         listersworkv1.NewManifestWorkLister(hostedWorksInformer.GetIndexer()),
+			ImportSecretInformer:     importSecertInformerF.Core().V1().Secrets().Informer(),
+			ImportSecretLister:       importSecertInformerF.Core().V1().Secrets().Lister(),
+			AutoImportSecretInformer: autoimportSecretInformerF.Core().V1().Secrets().Informer(),
+			AutoImportSecretLister:   autoimportSecretInformerF.Core().V1().Secrets().Lister(),
+			KlusterletWorkInformer:   klusterletWorksInformerF.Work().V1().ManifestWorks().Informer(),
+			KlusterletWorkLister:     klusterletWorksInformerF.Work().V1().ManifestWorks().Lister(),
+			HostedWorkInformer:       hostedWorksInformerF.Work().V1().ManifestWorks().Informer(),
+			HostedWorkLister:         hostedWorksInformerF.Work().V1().ManifestWorks().Lister(),
 			KlusterletConfigLister:   klusterletconfigLister,
 			ManagedClusterInformer:   managedclusterInformer,
 		},
@@ -268,19 +260,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	go importSecretInformer.Run(ctx.Done())
-	go autoimportSecretInformer.Run(ctx.Done())
-	go klusterletWorksInformer.Run(ctx.Done())
-	go hostedWorksInformer.Run(ctx.Done())
-	go klusterletconfigInformer.Run(ctx.Done())
-	go managedclusterInformer.Run(ctx.Done())
+	importSecertInformerF.Start(ctx.Done())
+	autoimportSecretInformerF.Start(ctx.Done())
+	klusterletWorksInformerF.Start(ctx.Done())
+	hostedWorksInformerF.Start(ctx.Done())
+	klusterletconfigInformerF.Start(ctx.Done())
+	managedclusterInformerF.Start(ctx.Done())
 
-	if !cache.WaitForCacheSync(ctx.Done(),
-		klusterletconfigInformer.HasSynced,
-		managedclusterInformer.HasSynced) {
-		setupLog.Error(err, "failed to wait for caches to sync")
-		os.Exit(1)
-	}
+	importSecertInformerF.WaitForCacheSync(ctx.Done())
+	autoimportSecretInformerF.WaitForCacheSync(ctx.Done())
+	klusterletWorksInformerF.WaitForCacheSync(ctx.Done())
+	hostedWorksInformerF.WaitForCacheSync(ctx.Done())
+	klusterletconfigInformerF.WaitForCacheSync(ctx.Done())
+	managedclusterInformerF.WaitForCacheSync(ctx.Done())
 
 	// Start the agent-registratioin server
 	if features.DefaultMutableFeatureGate.Enabled(features.AgentRegistration) {
