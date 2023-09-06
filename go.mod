@@ -15,12 +15,12 @@ require (
 	github.com/spf13/pflag v1.0.5
 	go.uber.org/zap v1.24.0
 	golang.org/x/text v0.8.0
-	k8s.io/api v0.26.2
-	k8s.io/apiextensions-apiserver v0.26.1
-	k8s.io/apimachinery v0.26.2
-	k8s.io/apiserver v0.26.1
+	k8s.io/api v0.26.4
+	k8s.io/apiextensions-apiserver v0.26.4
+	k8s.io/apimachinery v0.26.4
+	k8s.io/apiserver v0.26.4
 	k8s.io/client-go v12.0.0+incompatible
-	k8s.io/component-base v0.26.1
+	k8s.io/component-base v0.26.4
 	k8s.io/klog/v2 v2.90.1
 	k8s.io/utils v0.0.0-20230313181309-38a27ef9d749
 	open-cluster-management.io/api v0.10.1-0.20230321014558-cd918ecf9de3
@@ -86,7 +86,7 @@ require (
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/kube-aggregator v0.26.1 // indirect
+	k8s.io/kube-aggregator v0.26.4 // indirect
 	k8s.io/kube-openapi v0.0.0-20221012153701-172d655c2280 // indirect
 	sigs.k8s.io/json v0.0.0-20221116044647-bc3834ca7abd // indirect
 	sigs.k8s.io/kube-storage-version-migrator v0.0.4 // indirect
@@ -101,9 +101,9 @@ replace (
 	github.com/metal3-io/baremetal-operator/pkg/hardwareutils => github.com/openshift/baremetal-operator/pkg/hardwareutils v0.0.0-20220128094204-28771f489634
 	github.com/openshift/api => github.com/openshift/api v0.0.0-20230228142948-d170fcdc0fa6
 	github.com/terraform-providers/terraform-provider-nutanix => github.com/nutanix/terraform-provider-nutanix v1.5.0
-	k8s.io/client-go => k8s.io/client-go v0.26.1
+	k8s.io/client-go => k8s.io/client-go v0.26.4
 	k8s.io/cloud-provider-vsphere => github.com/openshift/cloud-provider-vsphere v1.19.1-0.20211222185833-7829863d0558
-	k8s.io/kube-aggregator => k8s.io/kube-aggregator v0.26.1
+	k8s.io/kube-aggregator => k8s.io/kube-aggregator v0.26.4
 	sigs.k8s.io/cluster-api => sigs.k8s.io/cluster-api v0.4.5
 	sigs.k8s.io/cluster-api-provider-aws => github.com/openshift/cluster-api-provider-aws v0.2.1-0.20200929152424-eab2e087f366 // Indirect dependency through MAO from cluster API providers
 	sigs.k8s.io/cluster-api-provider-azure => github.com/openshift/cluster-api-provider-azure v0.1.0-alpha.3.0.20210626224711-5d94c794092f // Indirect dependency through MAO from cluster API providers

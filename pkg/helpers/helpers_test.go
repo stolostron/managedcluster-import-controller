@@ -65,6 +65,9 @@ func TestGetMaxConcurrentReconciles(t *testing.T) {
 }
 
 func TestGenerateClientFromSecret(t *testing.T) {
+	// if err := os.Setenv("KUBEBUILDER_ASSETS", "./../../_output/kubebuilder/bin"); err != nil { // uncomment these lines to run the test locally
+	// 	t.Fatal(err)
+	// }
 	apiServer := &envtest.Environment{}
 	config, err := apiServer.Start()
 	if err != nil {
@@ -91,7 +94,7 @@ func TestGenerateClientFromSecret(t *testing.T) {
 		{
 			name: "using kubeconfig",
 			generateSecret: func(server string, config *rest.Config) *corev1.Secret {
-				apiConfig := createBasic(server, "test", config.Username, config.CAData)
+				apiConfig := createBasic(server, "test", config.CAData, config.KeyData, config.CertData)
 				bconfig, err := clientcmd.Write(*apiConfig)
 				if err != nil {
 					t.Fatal(err)
@@ -107,12 +110,15 @@ func TestGenerateClientFromSecret(t *testing.T) {
 			name: "using token",
 			generateSecret: func(server string, config *rest.Config) *corev1.Secret {
 				return &corev1.Secret{
+					// config.BearerToken is empty
+					// TODO: find a way to set config.BearerToken
 					Data: map[string][]byte{
 						"token":  []byte(config.BearerToken),
 						"server": []byte(server),
 					},
 				}
 			},
+			expectedErr: "unknown",
 		},
 	}
 
@@ -1216,8 +1222,7 @@ func assertFinalizers(t *testing.T, obj runtime.Object, finalizers []string) {
 	}
 }
 
-func createBasic(serverURL, clusterName, userName string, caCert []byte) *clientcmdapi.Config {
-	contextName := fmt.Sprintf("%s@%s", userName, clusterName)
+func createBasic(serverURL, clusterName string, caCert, clientKey, clientCert []byte) *clientcmdapi.Config {
 	return &clientcmdapi.Config{
 		Clusters: map[string]*clientcmdapi.Cluster{
 			clusterName: {
@@ -1226,13 +1231,18 @@ func createBasic(serverURL, clusterName, userName string, caCert []byte) *client
 			},
 		},
 		Contexts: map[string]*clientcmdapi.Context{
-			contextName: {
+			"default-context": {
 				Cluster:  clusterName,
-				AuthInfo: userName,
+				AuthInfo: "default-auth",
 			},
 		},
-		AuthInfos:      map[string]*clientcmdapi.AuthInfo{},
-		CurrentContext: contextName,
+		AuthInfos: map[string]*clientcmdapi.AuthInfo{
+			"default-auth": &clientcmdapi.AuthInfo{
+				ClientKeyData:         clientKey,
+				ClientCertificateData: clientCert,
+			},
+		},
+		CurrentContext: "default-context",
 	}
 }
 

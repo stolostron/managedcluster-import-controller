@@ -241,8 +241,7 @@ func TestReconcile(t *testing.T) {
 					},
 					Data: map[string][]byte{
 						"autoImportRetry": []byte("2"),
-						"token":           []byte(config.BearerToken),
-						"server":          []byte(config.Host),
+						"kubeconfig":      testinghelpers.BuildKubeconfig(config),
 					},
 				},
 			},

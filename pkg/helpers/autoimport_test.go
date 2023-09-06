@@ -90,6 +90,9 @@ func TestDeleteAutoImportSecret(t *testing.T) {
 }
 
 func TestImportHelper(t *testing.T) {
+	// if err := os.Setenv("KUBEBUILDER_ASSETS", "./../../_output/kubebuilder/bin"); err != nil { // uncomment these lines to run the test locally
+	// 	t.Fatal(err)
+	// }
 	apiServer := &envtest.Environment{}
 	config, err := apiServer.Start()
 	if err != nil {
@@ -155,8 +158,7 @@ func TestImportHelper(t *testing.T) {
 				},
 				Data: map[string][]byte{
 					"autoImportRetry": []byte("2"),
-					"token":           []byte(config.BearerToken),
-					"server":          []byte(config.Host),
+					"kubeconfig":      testinghelpers.BuildKubeconfig(config),
 				},
 			},
 			importSecret:            testinghelpers.GetImportSecret(managedClusterName),
@@ -196,8 +198,7 @@ func TestImportHelper(t *testing.T) {
 					Namespace: managedClusterName,
 				},
 				Data: map[string][]byte{
-					"token":  []byte(config.BearerToken),
-					"server": []byte(config.Host),
+					"kubeconfig": testinghelpers.BuildKubeconfig(config),
 				},
 			},
 			expectedErr:             false,
@@ -276,8 +277,7 @@ func TestImportHelper(t *testing.T) {
 					Namespace: managedClusterName,
 				},
 				Data: map[string][]byte{
-					"token":  []byte(config.BearerToken),
-					"server": []byte(config.Host),
+					"kubeconfig": testinghelpers.BuildKubeconfig(config),
 				},
 			},
 			expectedErr:             false,
@@ -320,15 +320,14 @@ func TestImportHelper(t *testing.T) {
 					},
 				},
 				Data: map[string][]byte{
-					"token":  []byte(config.BearerToken),
-					"server": []byte(config.Host),
+					"kubeconfig": testinghelpers.BuildKubeconfig(config),
 				},
 			},
 			expectedErr:             false,
 			expectedCurrentRetry:    1,
 			expectedRequeueAfter:    0 * time.Second,
 			expectedConditionStatus: metav1.ConditionFalse,
-			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
 		},
 		{
 			name:       "import cluster with auto-import secret valid",
