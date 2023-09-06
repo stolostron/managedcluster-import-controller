@@ -72,7 +72,7 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 		// Instead, it's in the pod namespace with the name "agent-registration-bootstrap".
 		bootstrapkubeconfig, _, err := bootstrap.CreateBootstrapKubeConfig(ctx, clientHolder, AgentRegistrationDefaultBootstrapSAName,
 			os.Getenv(constants.PodNamespaceEnvVarName),
-			7*24*3600)
+			7*24*3600, kc)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

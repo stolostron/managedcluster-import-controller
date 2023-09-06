@@ -13,6 +13,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
+	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	fakeklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned/fake"
@@ -58,13 +59,24 @@ func init() {
 }
 
 func TestReconcile(t *testing.T) {
+	rootCACertData, rootCAKeyData, err := testinghelpers.NewRootCA("test root ca")
+	if err != nil {
+		t.Errorf("failed to create root ca: %v", err)
+	}
+
+	proxyServerCertData, _, err := testinghelpers.NewServerCertificate("proxy server", rootCACertData, rootCAKeyData)
+	if err != nil {
+		t.Errorf("failed to create default server cert: %v", err)
+	}
+
 	testKlusterletNamespace := "open-cluster-management-agent-test"
 	cases := []struct {
-		name         string
-		clientObjs   []runtimeclient.Object
-		runtimeObjs  []runtime.Object
-		request      reconcile.Request
-		validateFunc func(t *testing.T, client runtimeclient.Client, kubeClient kubernetes.Interface)
+		name             string
+		clientObjs       []runtimeclient.Object
+		runtimeObjs      []runtime.Object
+		klusterletconfig *klusterletconfigv1alpha1.KlusterletConfig
+		request          reconcile.Request
+		validateFunc     func(t *testing.T, client runtimeclient.Client, kubeClient kubernetes.Interface)
 	}{
 		{
 			name:        "no clusters",
@@ -137,7 +149,7 @@ func TestReconcile(t *testing.T) {
 						Namespace: "test",
 					},
 					Data: map[string]string{
-						"ca.crt": "fake-root-ca",
+						"ca.crt": string(rootCACertData),
 					},
 				},
 			},
@@ -262,7 +274,7 @@ func TestReconcile(t *testing.T) {
 						Namespace: "test",
 					},
 					Data: map[string]string{
-						"ca.crt": "fake-root-ca",
+						"ca.crt": string(rootCACertData),
 					},
 				},
 			},
@@ -351,7 +363,7 @@ func TestReconcile(t *testing.T) {
 						Namespace: "test",
 					},
 					Data: map[string]string{
-						"ca.crt": "fake-root-ca",
+						"ca.crt": string(rootCACertData),
 					},
 				},
 			},
@@ -477,7 +489,7 @@ func TestReconcile(t *testing.T) {
 						Namespace: "test",
 					},
 					Data: map[string]string{
-						"ca.crt": "fake-root-ca",
+						"ca.crt": string(rootCACertData),
 					},
 				},
 			},
@@ -554,7 +566,26 @@ func TestReconcile(t *testing.T) {
 						Namespace: "test",
 					},
 					Data: map[string]string{
-						"ca.crt": "fake-root-ca",
+						"ca.crt": string(rootCACertData),
+					},
+				},
+			},
+			klusterletconfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-klusterletconfig",
+				},
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					NodePlacement: &operatorv1.NodePlacement{
+						NodeSelector: map[string]string{
+							"kubernetes.io/os": "linux",
+						},
+						Tolerations: []corev1.Toleration{
+							{
+								Key:      "foo",
+								Operator: corev1.TolerationOpExists,
+								Effect:   corev1.TaintEffectNoExecute,
+							},
+						},
 					},
 				},
 			},
@@ -594,40 +625,136 @@ func TestReconcile(t *testing.T) {
 				}
 			},
 		},
-	}
-
-	// setup klusterletconfig informer
-	klusterletconfigs := []runtime.Object{
-		&klusterletconfigv1alpha1.KlusterletConfig{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "test-klusterletconfig",
-			},
-			Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
-				NodePlacement: &operatorv1.NodePlacement{
-					NodeSelector: map[string]string{
-						"kubernetes.io/os": "linux",
+		{
+			name: "klusterletconfig with proxy config",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
 					},
-					Tolerations: []corev1.Toleration{
-						{
-							Key:      "foo",
-							Operator: corev1.TolerationOpExists,
-							Effect:   corev1.TaintEffectNoExecute,
+				},
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							apiconstants.AnnotationKlusterletConfig: "test-klusterletconfig",
 						},
 					},
 				},
+				&configv1.Infrastructure{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "cluster",
+					},
+				},
+			},
+			runtimeObjs: []runtime.Object{
+				&corev1.ServiceAccount{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa",
+						Namespace: "test",
+					},
+					Secrets: []corev1.ObjectReference{
+						{
+							Name:      "test-bootstrap-sa-token-5pw5c",
+							Namespace: "test",
+						},
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa-token-5pw5c",
+						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"token": []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeServiceAccountToken,
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
+						Namespace: os.Getenv("POD_NAMESPACE"),
+					},
+					Data: map[string][]byte{
+						corev1.DockerConfigJsonKey: []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeDockerConfigJson,
+				},
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "kube-root-ca.crt",
+						Namespace: "test",
+					},
+					Data: map[string]string{
+						"ca.crt": string(rootCACertData),
+					},
+				},
+			},
+			klusterletconfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-klusterletconfig",
+				},
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerProxyConfig: klusterletconfigv1alpha1.KubeAPIServerProxyConfig{
+						HTTPSProxy: "https://127.0.0.1:3129",
+						CABundle:   proxyServerCertData,
+					},
+				},
+			},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, client runtimeclient.Client, kubeClient kubernetes.Interface) {
+				importSecret, err := kubeClient.CoreV1().Secrets("test").Get(context.TODO(), "test-import", metav1.GetOptions{})
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+
+				kubeConfigData := extractBootstrapKubeConfigDataFromImportSecret(importSecret)
+				if len(kubeConfigData) == 0 {
+					t.Errorf("invalid bootstrap hub kubeconfig")
+				}
+
+				_, proxyURL, caData, _, err := parseKubeConfigData(kubeConfigData)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+
+				if proxyURL != "https://127.0.0.1:3129" {
+					t.Errorf("expected proxy url https://127.0.0.1:3129, bug got %s", proxyURL)
+				}
+
+				ok, err := hasCertificates(caData, proxyServerCertData)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if !ok {
+					t.Errorf("the kubeconfig ca data does not include the proxy ca data")
+				}
 			},
 		},
 	}
-	fakeklusterletconfigClient := fakeklusterletconfigv1alpha1.NewSimpleClientset(klusterletconfigs...)
-	klusterletconfigInformer := klusterletconfiginformerv1alpha1.NewKlusterletConfigInformer(fakeklusterletconfigClient, time.Second*30, cache.Indexers{
-		cache.NamespaceIndex: cache.MetaNamespaceIndexFunc,
-	})
-	klusterletconfigLister := listerklusterletconfigv1alpha1.NewKlusterletConfigLister(klusterletconfigInformer.GetIndexer())
-	go klusterletconfigInformer.Run(context.Background().Done())
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			kubeClient := kubefake.NewSimpleClientset(c.runtimeObjs...)
+
+			// setup klusterletconfig informer
+			klusterletconfigs := []runtime.Object{}
+			if c.klusterletconfig != nil {
+				klusterletconfigs = append(klusterletconfigs, c.klusterletconfig)
+			}
+			fakeklusterletconfigClient := fakeklusterletconfigv1alpha1.NewSimpleClientset(klusterletconfigs...)
+			klusterletconfigInformer := klusterletconfiginformerv1alpha1.NewKlusterletConfigInformer(fakeklusterletconfigClient, time.Second*30, cache.Indexers{
+				cache.NamespaceIndex: cache.MetaNamespaceIndexFunc,
+			})
+			if c.klusterletconfig != nil {
+				klusterletconfigInformer.GetStore().Add(c.klusterletconfig)
+			}
+			klusterletconfigLister := listerklusterletconfigv1alpha1.NewKlusterletConfigLister(klusterletconfigInformer.GetIndexer())
+
 			clientHolder := &helpers.ClientHolder{
 				KubeClient:          kubeClient,
 				RuntimeClient:       fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.clientObjs...).Build(),

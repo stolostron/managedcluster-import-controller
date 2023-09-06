@@ -33,7 +33,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", fun
 		ginkgo.BeforeEach(func() {
 			start = time.Now()
 			ginkgo.By(fmt.Sprintf("Create managed cluster %s", localClusterName), func() {
-				_, err := util.CreateManagedClusterWithShortLeaseDuration(hubClusterClient, localClusterName, util.NewLable("local-cluster", "true"))
+				_, err := util.CreateManagedClusterWithShortLeaseDuration(hubClusterClient, localClusterName, nil, util.NewLable("local-cluster", "true"))
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			})
 

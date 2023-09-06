@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"time"
 
+	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/bootstrap"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
@@ -17,6 +18,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/clientcmd"
+	certutil "k8s.io/client-go/util/cert"
 	"k8s.io/klog/v2"
 )
 
@@ -25,7 +27,8 @@ const defaultKlusterletNamespace = "open-cluster-management-agent"
 // getBootstrapKubeConfigDataFromImportSecret aims to reuse the bootstrap kubeconfig data if possible.
 // The return values are: 1. kubeconfig data, 2. token expiration, 3. error
 // Note that the kubeconfig data could be `nil` if the import secret is not found or the kubeconfig data is invalid.
-func getBootstrapKubeConfigDataFromImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, clusterName string) ([]byte, []byte, error) {
+func getBootstrapKubeConfigDataFromImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, clusterName string,
+	klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) ([]byte, []byte, error) {
 	importSecret, err := getImportSecret(ctx, clientHolder, clusterName)
 	if apierrors.IsNotFound(err) {
 		return nil, nil, nil
@@ -39,7 +42,7 @@ func getBootstrapKubeConfigDataFromImportSecret(ctx context.Context, clientHolde
 		return nil, nil, nil
 	}
 
-	kubeAPIServer, caData, token, err := parseKubeConfigData(kubeConfigData)
+	kubeAPIServer, proxyURL, caData, token, err := parseKubeConfigData(kubeConfigData)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse kubeconfig data: %v", err)
 	}
@@ -61,6 +64,16 @@ func getBootstrapKubeConfigDataFromImportSecret(ctx context.Context, clientHolde
 	}
 	if !validCAData {
 		klog.Infof("CAdata is invalid for the managed cluster %s", clusterName)
+		return nil, nil, nil
+	}
+
+	// check if the proxy url changed
+	validProxyConfig, err := validateProxyConfig(proxyURL, caData, klusterletConfig)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to validate proxy config: %v", err)
+	}
+	if !validProxyConfig {
+		klog.Infof("Proxy config is invalid for the managed cluster %s", clusterName)
 		return nil, nil, nil
 	}
 
@@ -97,16 +110,17 @@ func extractBootstrapKubeConfigDataFromImportSecret(importSecret *corev1.Secret)
 	return nil
 }
 
-func parseKubeConfigData(kubeConfigData []byte) (kubeAPIServer string, caData []byte, token string, err error) {
+func parseKubeConfigData(kubeConfigData []byte) (kubeAPIServer, proxyURL string, caData []byte, token string, err error) {
 	config, err := clientcmd.Load(kubeConfigData)
 	if err != nil {
 		// kubeconfig data is invalid
-		return "", nil, "", err
+		return "", "", nil, "", err
 	}
 
 	if cluster, ok := config.Clusters["default-cluster"]; ok {
 		kubeAPIServer = cluster.Server
 		caData = cluster.CertificateAuthorityData
+		proxyURL = cluster.ProxyURL
 	}
 
 	if authInfo, ok := config.AuthInfos["default-auth"]; ok {
@@ -163,6 +177,48 @@ func validateToken(token string, expiration []byte) bool {
 	refreshThreshold := 8640 * time.Hour / 5
 	lifetime := expirationTime.Sub(now.Time)
 	return lifetime > refreshThreshold
+}
+
+func validateProxyConfig(kubeconfigProxyURL string, kubeconfigCAData []byte, klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) (bool, error) {
+	proxyURL, proxyCAData := bootstrap.GetProxySettings(klusterletConfig)
+	if proxyURL != kubeconfigProxyURL {
+		return false, nil
+	}
+
+	return hasCertificates(kubeconfigCAData, proxyCAData)
+}
+
+// hasCertificates returns true if the supersetCertData contains all the certs in subsetCertData
+func hasCertificates(supersetCertData, subsetCertData []byte) (bool, error) {
+	if len(subsetCertData) == 0 {
+		return true, nil
+	}
+
+	if len(supersetCertData) == 0 {
+		return false, nil
+	}
+
+	superset, err := certutil.ParseCertsPEM(supersetCertData)
+	if err != nil {
+		return false, err
+	}
+	subset, err := certutil.ParseCertsPEM(subsetCertData)
+	if err != nil {
+		return false, err
+	}
+	for _, sub := range subset {
+		found := false
+		for _, super := range superset {
+			if reflect.DeepEqual(sub.Raw, super.Raw) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func klusterletNamespace(managedClusterAnnotations map[string]string) string {

@@ -5,10 +5,12 @@ package e2e
 
 import (
 	"context"
+	"crypto/x509"
 	"fmt"
 	"os"
 	"os/user"
 	"path"
+	"reflect"
 	"testing"
 	"time"
 
@@ -26,6 +28,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	certutil "k8s.io/client-go/util/cert"
 	addonclient "open-cluster-management.io/api/client/addon/clientset/versioned"
 	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
@@ -644,6 +647,98 @@ func assertKlusterletNodePlacement(nodeSelecor map[string]string, tolerations []
 
 			return nil
 		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
+	})
+}
+
+func assertBootstrapKubeconfigWithProxyConfig(proxyURL string, caDataIncluded, caDataExcluded []byte) {
+	ginkgo.By("Klusterlet should have bootstrap kubeconfig with expected proxy settings", func() {
+		var bootstrapKubeconfigSecret *corev1.Secret
+		gomega.Eventually(func() error {
+			var err error
+			bootstrapKubeconfigSecret, err = hubKubeClient.CoreV1().Secrets("open-cluster-management-agent").Get(context.TODO(), "bootstrap-hub-kubeconfig", metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+
+			config, err := clientcmd.Load(bootstrapKubeconfigSecret.Data["kubeconfig"])
+			if err != nil {
+				return err
+			}
+
+			// check proxy url
+			cluster, ok := config.Clusters["default-cluster"]
+			if !ok {
+				return fmt.Errorf("default-cluster not found")
+			}
+			if cluster.ProxyURL != proxyURL {
+				return fmt.Errorf("expected proxy url %q but got: %s", proxyURL, cluster.ProxyURL)
+			}
+
+			caCerts, err := certutil.ParseCertsPEM(cluster.CertificateAuthorityData)
+			if err != nil {
+				return err
+			}
+
+			// check included ca data
+			if len(caDataIncluded) > 0 {
+				caCertsIncluded, err := certutil.ParseCertsPEM(caDataIncluded)
+				if err != nil {
+					return err
+				}
+
+				for _, cert := range caCertsIncluded {
+					if !hasCertificate(caCerts, cert) {
+						return fmt.Errorf("kubeconfig ca bundle does not include proxy cert: %s", cert.Subject.CommonName)
+					}
+				}
+			}
+
+			// check excluded ca data
+			if len(caDataExcluded) > 0 {
+				caCertsExcluded, err := certutil.ParseCertsPEM(caDataExcluded)
+				if err != nil {
+					return err
+				}
+
+				for _, cert := range caCertsExcluded {
+					if hasCertificate(caCerts, cert) {
+						return fmt.Errorf("kubeconfig ca bundle should not include proxy cert: %s", cert.Subject.CommonName)
+					}
+				}
+			}
+
+			return nil
+		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
+	})
+}
+
+func hasCertificate(certs []*x509.Certificate, cert *x509.Certificate) bool {
+	if cert == nil {
+		return true
+	}
+	for i := range certs {
+		if reflect.DeepEqual(certs[i].Raw, cert.Raw) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func assertManagedClusterOffline(clusterName string, timeout time.Duration) {
+	ginkgo.By(fmt.Sprintf("Managed cluster %s should be offline", clusterName), func() {
+		gomega.Eventually(func() error {
+			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+
+			if meta.IsStatusConditionPresentAndEqual(cluster.Status.Conditions, clusterv1.ManagedClusterConditionAvailable, metav1.ConditionUnknown) {
+				return nil
+			}
+
+			return fmt.Errorf("assert managed cluster %s offline failed, cluster conditions: %v", clusterName, cluster.Status.Conditions)
+		}, timeout, 1*time.Second).Should(gomega.Succeed())
 	})
 }
 

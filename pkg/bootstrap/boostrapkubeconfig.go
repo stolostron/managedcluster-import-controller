@@ -4,20 +4,25 @@
 package bootstrap
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"fmt"
 	"net/url"
+	"reflect"
 	"strings"
 
+	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apiserver/pkg/storage/names"
 	"k8s.io/client-go/kubernetes"
+	certutil "k8s.io/client-go/util/cert"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -34,8 +39,8 @@ import (
 )
 
 // create kubeconfig for bootstrap
-func CreateBootstrapKubeConfig(ctx context.Context, clientHolder *helpers.ClientHolder,
-	saName string, ns string, tokenExpirationSeconds int64) ([]byte, []byte, error) {
+func CreateBootstrapKubeConfig(ctx context.Context, clientHolder *helpers.ClientHolder, saName string, ns string,
+	tokenExpirationSeconds int64, klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) ([]byte, []byte, error) {
 	token, expiration, err := getBootstrapToken(ctx, clientHolder.KubeClient, saName, ns, tokenExpirationSeconds)
 	if err != nil {
 		return nil, nil, err
@@ -51,12 +56,19 @@ func CreateBootstrapKubeConfig(ctx context.Context, clientHolder *helpers.Client
 		return nil, nil, err
 	}
 
+	proxyURL, proxyCAData := GetProxySettings(klusterletConfig)
+	certData, err = mergeCertificateData(certData, proxyCAData)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	bootstrapConfig := clientcmdapi.Config{
 		// Define a cluster stanza based on the bootstrap kubeconfig.
 		Clusters: map[string]*clientcmdapi.Cluster{"default-cluster": {
 			Server:                   kubeAPIServer,
 			InsecureSkipTLSVerify:    false,
 			CertificateAuthorityData: certData,
+			ProxyURL:                 proxyURL,
 		}},
 		// Define auth based on the obtained client cert.
 		AuthInfos: map[string]*clientcmdapi.AuthInfo{"default-auth": {
@@ -312,4 +324,56 @@ func getValidCertificatesFromURL(serverURL string, rootCAs *x509.CertPool) ([]*x
 		}
 	}
 	return retCerts, nil
+}
+
+func GetProxySettings(klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) (string, []byte) {
+	if klusterletConfig == nil {
+		return "", nil
+	}
+	proxyConfig := klusterletConfig.Spec.HubKubeAPIServerProxyConfig
+
+	// use https proxy if both http and https proxy are specified
+	if len(proxyConfig.HTTPSProxy) > 0 {
+		return proxyConfig.HTTPSProxy, proxyConfig.CABundle
+	}
+
+	return proxyConfig.HTTPProxy, nil
+}
+
+func mergeCertificateData(caBundles ...[]byte) ([]byte, error) {
+	var all []*x509.Certificate
+	for _, caBundle := range caBundles {
+		if len(caBundle) == 0 {
+			continue
+		}
+		certs, err := certutil.ParseCertsPEM(caBundle)
+		if err != nil {
+			return []byte{}, err
+		}
+		all = append(all, certs...)
+	}
+
+	// remove duplicated cert
+	var merged []*x509.Certificate
+	for i := range all {
+		found := false
+		for j := range merged {
+			if reflect.DeepEqual(all[i].Raw, merged[j].Raw) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			merged = append(merged, all[i])
+		}
+	}
+
+	// encode the merged certificates
+	b := bytes.Buffer{}
+	for _, cert := range merged {
+		if err := pem.Encode(&b, &pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}); err != nil {
+			return []byte{}, err
+		}
+	}
+	return b.Bytes(), nil
 }

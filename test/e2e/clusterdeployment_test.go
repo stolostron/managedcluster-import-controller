@@ -31,7 +31,7 @@ var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", fu
 		})
 
 		ginkgo.By(fmt.Sprintf("Create managed cluster %s", managedClusterName), func() {
-			_, err := util.CreateManagedClusterWithShortLeaseDuration(hubClusterClient, managedClusterName)
+			_, err := util.CreateManagedClusterWithShortLeaseDuration(hubClusterClient, managedClusterName, nil)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 		})
 

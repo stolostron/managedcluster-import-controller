@@ -12,9 +12,11 @@ import (
 	"testing"
 	"time"
 
+	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/bootstrap"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
@@ -86,11 +88,12 @@ func TestGetBootstrapKubeConfigDataFromImportSecret(t *testing.T) {
 		token       string
 	}
 	tests := []struct {
-		name        string
-		clientObjs  []client.Object
-		runtimeObjs []runtime.Object
-		want        *wantData
-		wantErr     bool
+		name             string
+		clientObjs       []client.Object
+		runtimeObjs      []runtime.Object
+		klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig
+		want             *wantData
+		wantErr          bool
 	}{
 		{
 			name:    "import secret not exist",
@@ -183,7 +186,7 @@ func TestGetBootstrapKubeConfigDataFromImportSecret(t *testing.T) {
 				KubeClient: fakeKubeClinet,
 			}
 
-			kubeconfigData, _, err := getBootstrapKubeConfigDataFromImportSecret(context.Background(), clientHolder, "testcluster") // cluster.Name = testcluster
+			kubeconfigData, _, err := getBootstrapKubeConfigDataFromImportSecret(context.Background(), clientHolder, "testcluster", tt.klusterletConfig) // cluster.Name = testcluster
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getBootstrapKubeConfigDataFromImportSecret() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -373,6 +376,141 @@ func TestValidateCAData(t *testing.T) {
 			}
 			if valid != c.valid {
 				t.Errorf("expected %v, but got %v", c.valid, valid)
+			}
+		})
+	}
+}
+
+func TestValidateProxyConfig(t *testing.T) {
+	rootCACertData, _, err := testinghelpers.NewRootCA("test root ca")
+	if err != nil {
+		t.Errorf("failed to create root ca: %v", err)
+	}
+
+	cases := []struct {
+		name             string
+		proxyURL         string
+		caData           []byte
+		klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig
+		result           bool
+	}{
+		{
+			name:   "without proxy",
+			result: true,
+		},
+		{
+			name:     "with unexpected proxy",
+			proxyURL: "https://127.0.0.1:3129",
+		},
+		{
+			name:     "with proxy",
+			proxyURL: "https://127.0.0.1:3129",
+			caData:   rootCACertData,
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerProxyConfig: klusterletconfigv1alpha1.KubeAPIServerProxyConfig{
+						HTTPSProxy: "https://127.0.0.1:3129",
+						CABundle:   rootCACertData,
+					},
+				},
+			},
+			result: true,
+		},
+		{
+			name:     "with wrong proxy",
+			proxyURL: "http://127.0.0.1:3128",
+			caData:   rootCACertData,
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerProxyConfig: klusterletconfigv1alpha1.KubeAPIServerProxyConfig{
+						HTTPProxy:  "http://127.0.0.1:3128",
+						HTTPSProxy: "https://127.0.0.1:3129",
+						CABundle:   rootCACertData,
+					},
+				},
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			result, err := validateProxyConfig(c.proxyURL, c.caData, c.klusterletConfig)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if result != c.result {
+				t.Errorf("expected %v, but got %v", c.result, result)
+			}
+		})
+	}
+}
+
+func TestHasCertificates(t *testing.T) {
+	rootCACertData, rootCAKeyData, err := testinghelpers.NewRootCA("test root ca")
+	if err != nil {
+		t.Errorf("failed to create root ca: %v", err)
+	}
+
+	proxyServerCertData, _, err := testinghelpers.NewServerCertificate("proxy server", rootCACertData, rootCAKeyData)
+	if err != nil {
+		t.Errorf("failed to create default server cert: %v", err)
+	}
+
+	cases := []struct {
+		name     string
+		superset []byte
+		subset   []byte
+		wantErr  bool
+		result   bool
+	}{
+		{
+			name:   "both is empty",
+			result: true,
+		},
+		{
+			name:     "subset is empty",
+			superset: rootCACertData,
+			result:   true,
+		},
+		{
+			name:   "superset is empty",
+			subset: rootCACertData,
+		},
+		{
+			name:     "invalid subset",
+			superset: rootCACertData,
+			subset:   []byte("invalid-ca-data"),
+			wantErr:  true,
+		},
+		{
+			name:     "invalid superset",
+			superset: []byte("invalid-ca-data"),
+			subset:   rootCACertData,
+			wantErr:  true,
+		},
+		{
+			name:     "superset include subset",
+			superset: rootCACertData,
+			subset:   rootCACertData,
+			result:   true,
+		},
+		{
+			name:     "superset does not include subset",
+			superset: rootCACertData,
+			subset:   proxyServerCertData,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			result, err := hasCertificates(c.superset, c.subset)
+			if (err != nil) != c.wantErr {
+				t.Errorf("hasCertificates() error = %v, wantErr %v", err, c.wantErr)
+			} else if err == nil {
+
+				if result != c.result {
+					t.Errorf("expected %v, but got %v", c.result, result)
+				}
 			}
 		})
 	}
