@@ -10,7 +10,7 @@ require (
 	github.com/onsi/gomega v1.27.7
 	github.com/openshift/api v0.0.0-20230809230802-fd420c26854b // https://github.com/openshift/api/tree/release-4.14
 	github.com/openshift/assisted-service/api v0.0.0-20230809093954-25856935f237 // https://github.com/openshift/assisted-service/tree/release-ocm-2.9/api
-	github.com/openshift/hive/apis v0.0.0-20230410203125-bb0124b40f86
+	github.com/openshift/hive/apis v0.0.0-20230825202726-4418e43e27a3
 	github.com/openshift/library-go v0.0.0-20230809121909-d7e7beca5bae // https://github.com/openshift/library-go/tree/release-4.14
 	github.com/spf13/pflag v1.0.5
 	github.com/stolostron/cluster-lifecycle-api v0.0.0-20230829070855-cd9b187cca82
@@ -22,8 +22,8 @@ require (
 	k8s.io/apiserver v0.27.4
 	k8s.io/client-go v0.27.4
 	k8s.io/component-base v0.27.4
-	k8s.io/klog/v2 v2.90.1
-	k8s.io/utils v0.0.0-20230406110748-d93618cff8a2
+	k8s.io/klog/v2 v2.100.1
+	k8s.io/utils v0.0.0-20230505201702-9f6742963106
 	open-cluster-management.io/api v0.11.1-0.20230725140722-c0c9fb59d249
 	sigs.k8s.io/controller-runtime v0.15.1
 )
