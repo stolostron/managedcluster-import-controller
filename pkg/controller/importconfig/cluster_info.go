@@ -148,7 +148,7 @@ func checkIsIBMCloud(ctx context.Context, client client.Client) (bool, error) {
 	}
 
 	providerID := nodes.Items[0].Spec.ProviderID
-	if strings.Contains(providerID, "ibm") {
+	if strings.HasPrefix(providerID, "ibm") {
 		return true, nil
 	}
 

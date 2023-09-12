@@ -253,43 +253,44 @@ func TestGetKubeAPIServerCertificate(t *testing.T) {
 func TestCheckIsIBMCloud(t *testing.T) {
 	nodeIBM := &corev1.Node{
 		Spec: corev1.NodeSpec{
-			ProviderID: "ibm",
+			ProviderID: "ibm://123///abc/def",
+		},
+	}
+	nodeOtherWithIBMstring := &corev1.Node{
+		Spec: corev1.NodeSpec{
+			ProviderID: "baremetalhost:///openshift-machine-api/worker.test.ibm.com/123",
 		},
 	}
 	nodeOther := &corev1.Node{}
 
-	type args struct {
-		client client.Client
-		name   string
-	}
 	tests := []struct {
 		name    string
-		args    args
+		client  client.Client
 		want    bool
 		wantErr bool
 	}{
 		{
-			name: "is normal ocp",
-			args: args{
-				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(nodeOther).Build(),
-				name:   "test-secret",
-			},
+			name:    "is normal ocp",
+			client:  fake.NewClientBuilder().WithScheme(testscheme).WithObjects(nodeOther).Build(),
 			want:    false,
 			wantErr: false,
 		},
 		{
-			name: "is ibm",
-			args: args{
-				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(nodeIBM).Build(),
-				name:   "test-secret",
-			},
+			name:    "is ibm",
+			client:  fake.NewClientBuilder().WithScheme(testscheme).WithObjects(nodeIBM).Build(),
 			want:    true,
+			wantErr: false,
+		},
+		{
+			name:    "is other with ibm string",
+			client:  fake.NewClientBuilder().WithScheme(testscheme).WithObjects(nodeOtherWithIBMstring).Build(),
+			want:    false,
 			wantErr: false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := checkIsIBMCloud(context.Background(), tt.args.client)
+			got, err := checkIsIBMCloud(context.Background(), tt.client)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("checkIsROKS() error = %v, wantErr %v", err, tt.wantErr)
 				return
