@@ -46,6 +46,11 @@ spec:
           - "/registration-operator"
           - "klusterlet"
           - "--disable-leader-election"
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
         securityContext:
           allowPrivilegeEscalation: false
           capabilities:
