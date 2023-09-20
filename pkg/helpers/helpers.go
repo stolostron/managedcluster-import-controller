@@ -81,8 +81,8 @@ func init() {
 	utilruntime.Must(rbacv1.AddToScheme(genericScheme))
 	utilruntime.Must(crdv1beta1.AddToScheme(genericScheme))
 	utilruntime.Must(crdv1.AddToScheme(genericScheme))
-	utilruntime.Must(operatorv1.AddToScheme(genericScheme))
-	utilruntime.Must(addonv1alpha1.AddToScheme(genericScheme))
+	utilruntime.Must(operatorv1.Install(genericScheme))
+	utilruntime.Must(addonv1alpha1.Install(genericScheme))
 }
 
 type ClientHolder struct {
@@ -647,6 +647,10 @@ func DetermineKlusterletMode(cluster *clusterv1.ManagedCluster) operatorv1.Insta
 
 	if strings.EqualFold(mode, string(operatorv1.InstallModeHosted)) {
 		return operatorv1.InstallModeHosted
+	}
+
+	if strings.EqualFold(mode, string(operatorv1.InstallModeSingletonHosted)) {
+		return operatorv1.InstallModeSingletonHosted
 	}
 
 	return "Unknown"
