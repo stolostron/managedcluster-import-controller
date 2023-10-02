@@ -39,6 +39,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/klog/v2"
@@ -53,6 +54,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 )
 
@@ -166,7 +168,11 @@ func GenerateClientFromSecret(secret *corev1.Secret) (*ClientHolder, meta.RESTMa
 		return nil, nil, err
 	}
 
-	mapper, err := apiutil.NewDiscoveryRESTMapper(clientConfig)
+	httpclient, err := rest.HTTPClientFor(clientConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+	mapper, err := apiutil.NewDiscoveryRESTMapper(clientConfig, httpclient)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -448,6 +454,8 @@ func ApplyResources(clientHolder *ClientHolder, recorder events.Recorder,
 			modified, err := applyKlusterlet(clientHolder.OperatorClient, recorder, required)
 			errs = append(errs, err)
 			changed = changed || modified
+		default:
+			errs = append(errs, fmt.Errorf("unknown type %T", required))
 		}
 	}
 
@@ -585,29 +593,25 @@ func GetComponentNamespace() (string, error) {
 	return string(nsBytes), nil
 }
 
-func GetNodeSelector(cluster *clusterv1.ManagedCluster) (map[string]string, error) {
+func GetNodeSelectorFromManagedClusterAnnotations(clusterAnnotations map[string]string) (map[string]string, error) {
 	nodeSelector := map[string]string{}
 
-	nodeSelectorString, ok := cluster.Annotations[nodeSelectorAnnotation]
+	nodeSelectorString, ok := clusterAnnotations[nodeSelectorAnnotation]
 	if !ok {
 		return nodeSelector, nil
 	}
 
 	if err := json.Unmarshal([]byte(nodeSelectorString), &nodeSelector); err != nil {
-		return nil, fmt.Errorf("invalid nodeSelector annotation of cluster %s, %v", cluster.Name, err)
-	}
-
-	if err := validateNodeSelector(nodeSelector); err != nil {
-		return nil, fmt.Errorf("invalid nodeSelector annotation of cluster %s, %v", cluster.Name, err)
+		return nil, fmt.Errorf("invalid nodeSelector annotation %v", err)
 	}
 
 	return nodeSelector, nil
 }
 
-func GetTolerations(cluster *clusterv1.ManagedCluster) ([]corev1.Toleration, error) {
+func GetTolerationsFromManagedClusterAnnotations(clusterAnnotations map[string]string) ([]corev1.Toleration, error) {
 	tolerations := []corev1.Toleration{}
 
-	tolerationsString, ok := cluster.Annotations[tolerationsAnnotation]
+	tolerationsString, ok := clusterAnnotations[tolerationsAnnotation]
 	if !ok {
 		// return a defautl toleration
 		return []corev1.Toleration{
@@ -620,32 +624,39 @@ func GetTolerations(cluster *clusterv1.ManagedCluster) ([]corev1.Toleration, err
 	}
 
 	if err := json.Unmarshal([]byte(tolerationsString), &tolerations); err != nil {
-		return nil, fmt.Errorf("invalid tolerations annotation of cluster %s, %v", cluster.Name, err)
-	}
-
-	if err := validateTolerations(tolerations); err != nil {
-		return nil, fmt.Errorf("invalid tolerations annotation of cluster %s, %v", cluster.Name, err)
+		return nil, fmt.Errorf("invalid tolerations annotation %v", err)
 	}
 
 	return tolerations, nil
 }
 
 // DetermineKlusterletMode gets the klusterlet deploy mode for the managed cluster.
-func DetermineKlusterletMode(cluster *clusterv1.ManagedCluster) string {
+func DetermineKlusterletMode(cluster *clusterv1.ManagedCluster) operatorv1.InstallMode {
 	mode, ok := cluster.Annotations[constants.KlusterletDeployModeAnnotation]
 	if !ok {
-		return constants.KlusterletDeployModeDefault
+		return operatorv1.InstallModeSingleton
 	}
 
-	if strings.EqualFold(mode, constants.KlusterletDeployModeDefault) {
-		return constants.KlusterletDeployModeDefault
+	if strings.EqualFold(mode, string(operatorv1.InstallModeDefault)) {
+		return operatorv1.InstallModeDefault
 	}
 
-	if strings.EqualFold(mode, constants.KlusterletDeployModeHosted) {
-		return constants.KlusterletDeployModeHosted
+	if strings.EqualFold(mode, string(operatorv1.InstallModeSingleton)) {
+		return operatorv1.InstallModeSingleton
+	}
+
+	if strings.EqualFold(mode, string(operatorv1.InstallModeHosted)) {
+		return operatorv1.InstallModeHosted
 	}
 
 	return "Unknown"
+}
+
+func ValidateKlusterletMode(mode operatorv1.InstallMode) error {
+	if mode == operatorv1.InstallModeHosted && !features.DefaultMutableFeatureGate.Enabled(features.KlusterletHostedMode) {
+		return fmt.Errorf("featurn gate %s is not enabled", features.KlusterletHostedMode)
+	}
+	return nil
 }
 
 // GetHostingCluster gets the hosting cluster name from the managed cluster annotation
@@ -731,7 +742,7 @@ func ForceDeleteAllManagedClusterAddons(
 }
 
 // refer to https://github.com/kubernetes/kubernetes/blob/master/pkg/apis/core/validation/validation.go#L3498
-func validateNodeSelector(nodeSelector map[string]string) error {
+func ValidateNodeSelector(nodeSelector map[string]string) error {
 	errs := []error{}
 	for key, val := range nodeSelector {
 		if errMsgs := validation.IsQualifiedName(key); len(errMsgs) != 0 {
@@ -745,7 +756,7 @@ func validateNodeSelector(nodeSelector map[string]string) error {
 }
 
 // refer to https://github.com/kubernetes/kubernetes/blob/master/pkg/apis/core/validation/validation.go#L3330
-func validateTolerations(tolerations []corev1.Toleration) error {
+func ValidateTolerations(tolerations []corev1.Toleration) error {
 	errs := []error{}
 	for _, toleration := range tolerations {
 		// validate the toleration key

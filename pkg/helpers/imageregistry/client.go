@@ -13,7 +13,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
 )
 
 const (
@@ -38,14 +37,14 @@ type ImageRegistries struct {
 }
 
 type Interface interface {
-	Cluster(cluster *clusterv1.ManagedCluster) Interface
+	Cluster(clusterAnnotations map[string]string) Interface
 	PullSecret() (*corev1.Secret, error)
 	ImageOverride(imageName string) (string, error)
 }
 
 type Client struct {
-	kubeClient kubernetes.Interface
-	cluster    *clusterv1.ManagedCluster
+	kubeClient         kubernetes.Interface
+	clusterAnnotations map[string]string
 }
 
 func NewClient(kubeClient kubernetes.Interface) Interface {
@@ -54,8 +53,8 @@ func NewClient(kubeClient kubernetes.Interface) Interface {
 	}
 }
 
-func (c *Client) Cluster(cluster *clusterv1.ManagedCluster) Interface {
-	return &Client{kubeClient: c.kubeClient, cluster: cluster}
+func (c *Client) Cluster(clusterAnnotations map[string]string) Interface {
+	return &Client{kubeClient: c.kubeClient, clusterAnnotations: clusterAnnotations}
 }
 
 func (c *Client) PullSecret() (*corev1.Secret, error) {
@@ -123,19 +122,15 @@ func imageOverride(source, mirror, imageName string) string {
 
 func (c *Client) getImageRegistries() (ImageRegistries, error) {
 	imageRegistries := ImageRegistries{}
-	if c.cluster == nil {
-		return imageRegistries, fmt.Errorf("the managedCluster cannot be nil")
-	}
-	annotations := c.cluster.GetAnnotations()
-	if len(annotations) == 0 {
+	if len(c.clusterAnnotations) == 0 {
 		return imageRegistries, nil
 	}
 
-	if _, ok := annotations[ClusterImageRegistriesAnnotation]; !ok {
+	if _, ok := c.clusterAnnotations[ClusterImageRegistriesAnnotation]; !ok {
 		return imageRegistries, nil
 	}
 
-	err := json.Unmarshal([]byte(annotations[ClusterImageRegistriesAnnotation]), &imageRegistries)
+	err := json.Unmarshal([]byte(c.clusterAnnotations[ClusterImageRegistriesAnnotation]), &imageRegistries)
 	return imageRegistries, err
 }
 

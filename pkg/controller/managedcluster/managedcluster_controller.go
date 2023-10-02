@@ -194,11 +194,12 @@ func ensureCreateViaAnnotation(modified *bool, cluster *clusterv1.ManagedCluster
 		return
 	}
 
-	// there is a created-via annotation and the annotation is not created by hive, we ensue that the
+	// there is a created-via annotation and the annotation is not created by hive or hypershift, we ensue that the
 	// created-via annotation is default annotation
 	if viaAnnotation != constants.CreatedViaAI &&
 		viaAnnotation != constants.CreatedViaHive &&
-		viaAnnotation != constants.CreatedViaDiscovery {
+		viaAnnotation != constants.CreatedViaDiscovery &&
+		viaAnnotation != constants.CreatedViaHypershift {
 		resourcemerge.MergeMap(modified, &cluster.Annotations, createViaOtherAnnotation)
 	}
 }

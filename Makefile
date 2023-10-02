@@ -13,7 +13,8 @@ export ARCH_TYPE   = $(if $(patsubst x86_64,,$(ARCH)),$(ARCH),amd64)
 export BUILD_DATE  = $(shell date +%m/%d@%H:%M:%S)
 export VCS_REF     = $(if $(shell git status --porcelain),$(GIT_COMMIT)-$(BUILD_DATE),$(GIT_COMMIT))
 
-export CGO_ENABLED  = 0
+export CGO_ENABLED  = 1
+export GOFLAGS ?=
 export GO111MODULE := on
 export GOPATH      ?=$(shell go env GOPATH)
 export GOHOSTOS    ?=$(shell go env GOHOSTOS)
@@ -22,6 +23,7 @@ export GOPACKAGES   = $(shell go list ./... | grep -v /manager | grep -v /bindat
 
 export PROJECT_DIR            = $(shell 'pwd')
 export BUILD_DIR              = $(PROJECT_DIR)/build
+export BUILD_OUTPUT_DIR       ?= _output
 
 export COMPONENT_NAME ?= $(shell cat ./COMPONENT_NAME 2> /dev/null)
 export COMPONENT_VERSION ?= $(shell cat ./COMPONENT_VERSION 2> /dev/null)
@@ -31,8 +33,6 @@ export SECURITYSCANS_IMAGE_VERSION ?= $(shell cat ./COMPONENT_VERSION 2> /dev/nu
 export DOCKER_FILE        = $(BUILD_DIR)/Dockerfile
 export DOCKER_IMAGE      ?= $(COMPONENT_NAME)
 export DOCKER_BUILDER    ?= docker
-
-BEFORE_SCRIPT := $(shell build/before-make.sh)
 
 # Only use git commands if it exists
 ifdef GIT
@@ -61,18 +61,18 @@ test:
 ## Builds controller binary
 .PHONY: build
 build:
-	go build -o build/_output/manager -mod=mod ./cmd/manager
+	go build -o $(BUILD_OUTPUT_DIR)/manager ./cmd/manager
+
+## Builds controller binary with coverage
+.PHONY: build-coverage
+build-coverage:
+	go test -covermode=atomic -coverpkg=github.com/stolostron/managedcluster-import-controller/pkg/... \
+	-c -tags testrunmain ./cmd/manager -o $(BUILD_OUTPUT_DIR)/manager-coverage
 
 ## Builds controller image
 .PHONY: build-image
 build-image:
 	$(DOCKER_BUILDER) build -f $(DOCKER_FILE) . -t $(DOCKER_IMAGE)
-
-## Builds controller image with coverage
-.PHONY: build-image-coverage
-build-image-coverage: build-image
-	$(DOCKER_BUILDER) build -f $(DOCKER_FILE)-coverage . -t managedcluster-import-controller-coverage \
-		--build-arg DOCKER_BASE_IMAGE=$(DOCKER_IMAGE) --build-arg HOST_UID=$(shell id -u)
 
 ## Clean build-harness and remove test files
 .PHONY: clean
@@ -84,20 +84,28 @@ clean: clean-e2e-test
 deploy:
 	kubectl apply -k deploy/base
 
-## Build e2e test binary
-.PHONY: build-e2e-test
-build-e2e-test:
-	go test -c ./test/e2e -o _output/e2e.test
-
 ## Runs e2e test
 .PHONY: e2e-test
-e2e-test: build-image-coverage build-e2e-test
-	@build/run-e2e-tests.sh
+e2e-test: build-image
+	@build/setup-kind-clusters.sh
+	@build/setup-ocm.sh
+	@build/setup-import-controller.sh
+	go test -c ./test/e2e -o _output/e2e.test
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="!agent-registration"
 
 ## Clean e2e test
 .PHONY: clean-e2e-test
 clean-e2e-test:
-	@build/run-e2e-tests.sh clean
+	@build/setup-kind-clusters.sh clean
+
+## Run e2e test against Prow(an OCP cluster)
+.PHONY: e2e-test-prow
+e2e-test-prow:
+	@build/setup-prow.sh
+	@build/setup-ocm.sh enable-auto-approval
+	@build/setup-import-controller.sh enable-agent-registration
+	go test -c ./test/e2e -o _output/e2e.test
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="agent-registration"
 
 # Update vendor
 .PHONY: vendor

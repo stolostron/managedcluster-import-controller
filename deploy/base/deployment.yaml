@@ -20,8 +20,8 @@ spec:
       serviceAccountName: managedcluster-import-controller
       containers:
         - name: managedcluster-import-controller
-          image: quay.io/open-cluster-management/managedcluster-import-controller:latest
-          imagePullPolicy: IfNotPresent
+          image: managedcluster-import-controller:latest
+          imagePullPolicy: IfNotPresent # This is required because in kind-clusters, the image is built locally
           env:
             - name: POD_NAME
               valueFrom:

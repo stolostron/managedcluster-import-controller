@@ -13,6 +13,7 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	"github.com/openshift/library-go/pkg/operator/resource/resourceapply"
 	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -37,8 +38,10 @@ import (
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 )
@@ -65,6 +68,14 @@ func TestGetMaxConcurrentReconciles(t *testing.T) {
 }
 
 func TestGenerateClientFromSecret(t *testing.T) {
+
+	// if err := os.Setenv("KUBEBUILDER_ASSETS", "./../../_output/kubebuilder/bin"); err != nil { // uncomment these lines to run the test locally
+	// 	t.Fatal(err)
+	// }
+
+	// This line prevents controller-runtime from complaining about log.SetLogger never being called
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
+
 	apiServer := &envtest.Environment{}
 	config, err := apiServer.Start()
 	if err != nil {
@@ -91,7 +102,7 @@ func TestGenerateClientFromSecret(t *testing.T) {
 		{
 			name: "using kubeconfig",
 			generateSecret: func(server string, config *rest.Config) *corev1.Secret {
-				apiConfig := createBasic(server, "test", config.Username, config.CAData)
+				apiConfig := createBasic(server, "test", config.CAData, config.KeyData, config.CertData)
 				bconfig, err := clientcmd.Write(*apiConfig)
 				if err != nil {
 					t.Fatal(err)
@@ -108,11 +119,14 @@ func TestGenerateClientFromSecret(t *testing.T) {
 			generateSecret: func(server string, config *rest.Config) *corev1.Secret {
 				return &corev1.Secret{
 					Data: map[string][]byte{
+						// config.BearerToken is empty
+						// TODO: find a way to set config.BearerToken
 						"token":  []byte(config.BearerToken),
 						"server": []byte(server),
 					},
 				}
 			},
+			expectedErr: "unknown",
 		},
 	}
 
@@ -202,7 +216,8 @@ func TestUpdateManagedClusterStatus(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			fakeClient := fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.managedCluster).Build()
+			fakeClient := fake.NewClientBuilder().WithScheme(testscheme).
+				WithObjects(c.managedCluster).WithStatusSubresource(c.managedCluster).Build()
 
 			err := UpdateManagedClusterStatus(fakeClient, c.managedCluster.Name, c.cond)
 			if err != nil {
@@ -211,6 +226,53 @@ func TestUpdateManagedClusterStatus(t *testing.T) {
 		})
 	}
 
+}
+
+func TestDetermineKlusterletMode(t *testing.T) {
+	cases := []struct {
+		name         string
+		annotations  map[string]string
+		expectedMode operatorv1.InstallMode
+	}{
+		{
+			name:         "default",
+			annotations:  map[string]string{},
+			expectedMode: operatorv1.InstallModeSingleton,
+		},
+		{
+			name: "singleton",
+			annotations: map[string]string{
+				constants.KlusterletDeployModeAnnotation: "singleton",
+			},
+			expectedMode: operatorv1.InstallModeSingleton,
+		},
+		{
+			name: "default",
+			annotations: map[string]string{
+				constants.KlusterletDeployModeAnnotation: "default",
+			},
+			expectedMode: operatorv1.InstallModeDefault,
+		},
+		{
+			name: "hosted",
+			annotations: map[string]string{
+				constants.KlusterletDeployModeAnnotation: "hosted",
+			},
+			expectedMode: operatorv1.InstallModeHosted,
+		},
+	}
+
+	for _, c := range cases {
+		cluster := &clusterv1.ManagedCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Annotations: c.annotations,
+			},
+		}
+		mode := DetermineKlusterletMode(cluster)
+		if mode != c.expectedMode {
+			t.Errorf("expected mode not expected")
+		}
+	}
 }
 
 func TestAddManagedClusterFinalizer(t *testing.T) {
@@ -296,7 +358,7 @@ func TestRemoveManagedClusterFinalizer(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			fakeClient := fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.managedCluster).Build()
+			fakeClient := fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.managedCluster).WithStatusSubresource(c.managedCluster).Build()
 
 			managedCluster := &clusterv1.ManagedCluster{}
 			if err := fakeClient.Get(context.TODO(), types.NamespacedName{Name: c.managedCluster.Name}, managedCluster); err != nil {
@@ -955,7 +1017,7 @@ func TestUpdateManagedClusterBootstrapSecret(t *testing.T) {
 	}
 }
 
-func TestGetNodeSelector(t *testing.T) {
+func TestGetNodeSelectorAndValidate(t *testing.T) {
 	cases := []struct {
 		name           string
 		managedCluster *clusterv1.ManagedCluster
@@ -1031,7 +1093,13 @@ func TestGetNodeSelector(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := GetNodeSelector(c.managedCluster)
+			ns, err := GetNodeSelectorFromManagedClusterAnnotations(c.managedCluster.Annotations)
+			if err == nil {
+				err = ValidateNodeSelector(ns)
+				if err != nil {
+					err = fmt.Errorf("invalid nodeSelector annotation %v", err)
+				}
+			}
 			switch {
 			case len(c.expectedErr) == 0:
 				if err != nil {
@@ -1042,7 +1110,7 @@ func TestGetNodeSelector(t *testing.T) {
 					t.Errorf("expect err %s, but failed", c.expectedErr)
 				}
 
-				if fmt.Sprintf("invalid nodeSelector annotation of cluster test_cluster, %s", c.expectedErr) != err.Error() {
+				if fmt.Sprintf("invalid nodeSelector annotation %s", c.expectedErr) != err.Error() {
 					t.Errorf("expect %v, but %v", c.expectedErr, err.Error())
 				}
 			}
@@ -1050,7 +1118,7 @@ func TestGetNodeSelector(t *testing.T) {
 	}
 }
 
-func TestGetTolerations(t *testing.T) {
+func TestGetTolerationsAndValidate(t *testing.T) {
 	cases := []struct {
 		name           string
 		managedCluster *clusterv1.ManagedCluster
@@ -1186,7 +1254,13 @@ func TestGetTolerations(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, err := GetTolerations(c.managedCluster)
+			tolerations, err := GetTolerationsFromManagedClusterAnnotations(c.managedCluster.GetAnnotations())
+			if err == nil {
+				err = ValidateTolerations(tolerations)
+				if err != nil {
+					err = fmt.Errorf("invalid tolerations annotation %v", err)
+				}
+			}
 			switch {
 			case len(c.expectedErr) == 0:
 				if err != nil {
@@ -1197,7 +1271,7 @@ func TestGetTolerations(t *testing.T) {
 					t.Errorf("expect err %s, but failed", c.expectedErr)
 				}
 
-				if fmt.Sprintf("invalid tolerations annotation of cluster test_cluster, %s", c.expectedErr) != err.Error() {
+				if fmt.Sprintf("invalid tolerations annotation %s", c.expectedErr) != err.Error() {
 					t.Errorf("expect %v, but %v", c.expectedErr, err.Error())
 				}
 			}
@@ -1216,8 +1290,7 @@ func assertFinalizers(t *testing.T, obj runtime.Object, finalizers []string) {
 	}
 }
 
-func createBasic(serverURL, clusterName, userName string, caCert []byte) *clientcmdapi.Config {
-	contextName := fmt.Sprintf("%s@%s", userName, clusterName)
+func createBasic(serverURL, clusterName string, caCert, clientKey, clientCert []byte) *clientcmdapi.Config {
 	return &clientcmdapi.Config{
 		Clusters: map[string]*clientcmdapi.Cluster{
 			clusterName: {
@@ -1226,13 +1299,18 @@ func createBasic(serverURL, clusterName, userName string, caCert []byte) *client
 			},
 		},
 		Contexts: map[string]*clientcmdapi.Context{
-			contextName: {
+			"default-context": {
 				Cluster:  clusterName,
-				AuthInfo: userName,
+				AuthInfo: "default-auth",
 			},
 		},
-		AuthInfos:      map[string]*clientcmdapi.AuthInfo{},
-		CurrentContext: contextName,
+		AuthInfos: map[string]*clientcmdapi.AuthInfo{
+			"default-auth": &clientcmdapi.AuthInfo{
+				ClientKeyData:         clientKey,
+				ClientCertificateData: clientCert,
+			},
+		},
+		CurrentContext: "default-context",
 	}
 }
 

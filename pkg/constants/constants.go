@@ -26,6 +26,14 @@ const (
 	LabelAutoImportRestore = "cluster.open-cluster-management.io/restore-auto-import-secret"
 )
 
+/* #nosec */
+const (
+	RegistrationOperatorImageEnvVarName = "REGISTRATION_OPERATOR_IMAGE"
+	RegistrationImageEnvVarName         = "REGISTRATION_IMAGE"
+	WorkImageEnvVarName                 = "WORK_IMAGE"
+	DefaultImagePullSecretEnvVarName    = "DEFAULT_IMAGE_PULL_SECRET"
+)
+
 const PodNamespaceEnvVarName = "POD_NAMESPACE"
 
 const ImportFinalizer string = "managedcluster-import-controller.open-cluster-management.io/cleanup"
@@ -43,6 +51,7 @@ const (
 	CreatedViaAI         = "assisted-installer"
 	CreatedViaHive       = "hive"
 	CreatedViaDiscovery  = "discovery"
+	CreatedViaHypershift = "hypershift"
 )
 
 /* #nosec */
@@ -72,14 +81,6 @@ const (
 	// In the Hosted mode, this namespace still exists on the managed cluster to contain
 	// necessary resources, like service accounts, roles and rolebindings.
 	KlusterletNamespaceAnnotation string = "import.open-cluster-management.io/klusterlet-namespace"
-)
-
-const (
-	// KlusterletDeployModeDefault is the default deploy mode. the klusterlet will be deployed in the managed-cluster.
-	KlusterletDeployModeDefault string = "Default"
-
-	// KlusterletDeployModeHosted means deploying klusterlet outside. the klusterlet will be deployed outside of the managed-cluster.
-	KlusterletDeployModeHosted string = "Hosted"
 )
 
 const (

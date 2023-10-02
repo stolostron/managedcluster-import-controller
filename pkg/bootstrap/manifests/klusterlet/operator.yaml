@@ -17,6 +17,8 @@ spec:
       labels:
         app: klusterlet
     spec:
+      securityContext:
+        runAsNonRoot: true
       serviceAccountName: klusterlet
 {{- if .NodeSelector }}
       nodeSelector:
@@ -44,6 +46,17 @@ spec:
           - "/registration-operator"
           - "klusterlet"
           - "--disable-leader-election"
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
         livenessProbe:
           httpGet:
             path: /healthz

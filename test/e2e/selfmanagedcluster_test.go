@@ -6,6 +6,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
@@ -59,14 +60,21 @@ var _ = ginkgo.Describe("Importing a self managed cluster", func() {
 			assertManagedClusterImportSecretCreated(managedClusterName, "other")
 
 			ginkgo.By(fmt.Sprintf("Add self managed label to managed cluster %s", managedClusterName), func() {
-				cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
-				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+				gomega.Eventually(func() error {
+					cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
+					if err != nil {
+						return err
+					}
 
-				cluster = cluster.DeepCopy()
-				cluster.Labels["local-cluster"] = "true"
+					cluster = cluster.DeepCopy()
+					cluster.Labels["local-cluster"] = "true"
 
-				_, err = hubClusterClient.ClusterV1().ManagedClusters().Update(context.TODO(), cluster, metav1.UpdateOptions{})
-				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+					_, err = hubClusterClient.ClusterV1().ManagedClusters().Update(context.TODO(), cluster, metav1.UpdateOptions{})
+					if err != nil {
+						return err
+					}
+					return nil
+				}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
 			})
 
 			assertManagedClusterManifestWorks(managedClusterName)

@@ -5,6 +5,7 @@ package autoimport
 
 import (
 	"context"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 	"testing"
 	"time"
 
@@ -39,6 +40,11 @@ func init() {
 }
 
 func TestReconcile(t *testing.T) {
+
+	// if err := os.Setenv("KUBEBUILDER_ASSETS", "./../../../_output/kubebuilder/bin"); err != nil { // uncomment these lines to run the test locally
+	// 	t.Fatal(err)
+	// }
+
 	apiServer := &envtest.Environment{}
 	config, err := apiServer.Start()
 	if err != nil {
@@ -100,7 +106,7 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: managedClusterName,
 						Annotations: map[string]string{
-							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 						},
 					},
 				},
@@ -195,8 +201,7 @@ func TestReconcile(t *testing.T) {
 					},
 					Data: map[string][]byte{
 						"autoImportRetry": []byte("2"),
-						"token":           []byte(config.BearerToken),
-						"server":          []byte(config.Host),
+						"kubeconfig":      testinghelpers.BuildKubeconfig(config),
 					},
 				},
 			},
@@ -241,8 +246,7 @@ func TestReconcile(t *testing.T) {
 					},
 					Data: map[string][]byte{
 						"autoImportRetry": []byte("2"),
-						"token":           []byte(config.BearerToken),
-						"server":          []byte(config.Host),
+						"kubeconfig":      testinghelpers.BuildKubeconfig(config),
 					},
 				},
 			},
@@ -334,8 +338,8 @@ func TestReconcile(t *testing.T) {
 					},
 					Data: map[string][]byte{
 						"autoImportRetry": []byte("0"),
-						"token":           []byte(config.BearerToken),
 						"server":          []byte(config.Host),
+						// no auth info
 					},
 				},
 			},
@@ -384,14 +388,13 @@ func TestReconcile(t *testing.T) {
 					},
 					Data: map[string][]byte{
 						"autoImportRetry": []byte("0"),
-						"token":           []byte(config.BearerToken),
-						"server":          []byte(config.Host),
+						"kubeconfig":      testinghelpers.BuildKubeconfig(config),
 					},
 				},
 			},
 			expectedErr:             false,
 			expectedConditionStatus: metav1.ConditionFalse,
-			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
 		},
 		{
 			name: "only update the bootstrap secret - works unavailable",
@@ -526,7 +529,7 @@ func TestReconcile(t *testing.T) {
 			}
 
 			r := NewReconcileAutoImport(
-				fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).Build(),
+				fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).WithStatusSubresource(c.objs...).Build(),
 				kubeClient,
 				&source.InformerHolder{
 					AutoImportSecretLister: kubeInformerFactory.Core().V1().Secrets().Lister(),

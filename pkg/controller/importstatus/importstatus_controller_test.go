@@ -5,6 +5,7 @@ package importstatus
 
 import (
 	"context"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 	"testing"
 	"time"
 
@@ -55,7 +56,7 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: managedClusterName,
 						Annotations: map[string]string{
-							constants.KlusterletDeployModeAnnotation: constants.KlusterletDeployModeHosted,
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 						},
 					},
 				},
@@ -69,7 +70,8 @@ func TestReconcile(t *testing.T) {
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:              managedClusterName,
-						DeletionTimestamp: &metav1.Time{time.Now()},
+						DeletionTimestamp: &metav1.Time{Time: time.Now()},
+						Finalizers:        []string{"test"},
 					},
 				},
 			},
@@ -214,7 +216,7 @@ func TestReconcile(t *testing.T) {
 			}
 
 			r := ReconcileImportStatus{
-				client:     fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).Build(),
+				client:     fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).WithStatusSubresource(c.objs...).Build(),
 				kubeClient: kubeClient,
 				workClient: workClient,
 				recorder:   eventstesting.NewTestingEventRecorder(t),

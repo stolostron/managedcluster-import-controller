@@ -10,15 +10,15 @@ metadata:
 spec:
   template:
     spec:
+      volumes:
+        - name: agent-registration-server-tls
+          secret:
+            secretName: managedcluster-import-agent-registration-serving-cert
       containers:
       - name: managedcluster-import-controller
-        image: managedcluster-import-controller-coverage:latest
-        imagePullPolicy: IfNotPresent
         volumeMounts:
-          - mountPath: /test-coverage
-            name: coverage-dir
-      volumes:
-        - name: coverage-dir
-          hostPath:
-            path: /tmp/coverage
-            type: Directory
+          - name: agent-registration-server-tls
+            mountPath: /server
+            readOnly: true
+        ports:
+          - containerPort: 9091

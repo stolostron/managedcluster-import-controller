@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"reflect"
 
+	klusterletconfigv1alpha1lister "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/listers/klusterletconfig/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
 	corev1listers "k8s.io/client-go/listers/core/v1"
@@ -36,6 +37,10 @@ type InformerHolder struct {
 
 	HostedWorkInformer cache.SharedIndexInformer
 	HostedWorkLister   workv1lister.ManifestWorkLister
+
+	KlusterletConfigLister klusterletconfigv1alpha1lister.KlusterletConfigLister
+
+	ManagedClusterInformer cache.SharedIndexInformer
 }
 
 // NewImportSecretSource return a source only for import secrets
@@ -74,6 +79,15 @@ func NewHostedWorkSource(workInformer cache.SharedIndexInformer) *Source {
 	}
 }
 
+// NewManagedClusterSource return a source for managed cluster
+func NewManagedClusterSource(mcInformer cache.SharedIndexInformer) *Source {
+	return &Source{
+		informer:     mcInformer,
+		expectedType: reflect.TypeOf(&workv1.ManifestWork{}),
+		name:         "managed-cluster",
+	}
+}
+
 // Source is the event source of specified objects
 type Source struct {
 	informer     cache.SharedIndexInformer
@@ -106,7 +120,7 @@ func (s *Source) Start(ctx context.Context, handler handler.EventHandler,
 				}
 			}
 
-			handler.Create(createEvent, queue)
+			handler.Create(ctx, createEvent, queue)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			oldClientObj, ok := oldObj.(client.Object)
@@ -139,7 +153,7 @@ func (s *Source) Start(ctx context.Context, handler handler.EventHandler,
 				}
 			}
 
-			handler.Update(updateEvent, queue)
+			handler.Update(ctx, updateEvent, queue)
 		},
 		DeleteFunc: func(obj interface{}) {
 			if _, ok := obj.(client.Object); !ok {
@@ -168,7 +182,7 @@ func (s *Source) Start(ctx context.Context, handler handler.EventHandler,
 				}
 			}
 
-			handler.Delete(deleteEvent, queue)
+			handler.Delete(ctx, deleteEvent, queue)
 		},
 	})
 
@@ -196,19 +210,19 @@ type ManagedClusterResourceEventHandler struct {
 
 var _ handler.EventHandler = &ManagedClusterResourceEventHandler{}
 
-func (e *ManagedClusterResourceEventHandler) Create(evt event.CreateEvent, q workqueue.RateLimitingInterface) {
+func (e *ManagedClusterResourceEventHandler) Create(ctx context.Context, evt event.CreateEvent, q workqueue.RateLimitingInterface) {
 	e.add(evt.Object, q)
 }
 
-func (e *ManagedClusterResourceEventHandler) Update(evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
+func (e *ManagedClusterResourceEventHandler) Update(ctx context.Context, evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
 	e.add(evt.ObjectNew, q)
 }
 
-func (e *ManagedClusterResourceEventHandler) Delete(evt event.DeleteEvent, q workqueue.RateLimitingInterface) {
+func (e *ManagedClusterResourceEventHandler) Delete(ctx context.Context, evt event.DeleteEvent, q workqueue.RateLimitingInterface) {
 	e.add(evt.Object, q)
 }
 
-func (e *ManagedClusterResourceEventHandler) Generic(evt event.GenericEvent, q workqueue.RateLimitingInterface) {
+func (e *ManagedClusterResourceEventHandler) Generic(ctx context.Context, evt event.GenericEvent, q workqueue.RateLimitingInterface) {
 	// do nothing
 }
 
