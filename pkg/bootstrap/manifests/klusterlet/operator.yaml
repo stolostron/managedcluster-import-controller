@@ -57,6 +57,8 @@ spec:
             drop:
               - ALL
           privileged: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: true
         livenessProbe:
           httpGet:
             path: /healthz
@@ -76,3 +78,9 @@ spec:
             memory: 64Mi
           limits:
             memory: 2Gi
+        volumeMounts:
+        - name: tmpdir
+          mountPath: /tmp
+      volumes:
+      - name: tmpdir
+        emptyDir: { }
