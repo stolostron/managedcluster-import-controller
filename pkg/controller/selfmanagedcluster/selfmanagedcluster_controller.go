@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
@@ -79,6 +80,11 @@ func (r *ReconcileLocalCluster) Reconcile(ctx context.Context, request reconcile
 
 	if selfManaged, ok := managedCluster.Labels[constants.SelfManagedLabel]; !ok ||
 		!strings.EqualFold(selfManaged, "true") {
+		return reconcile.Result{}, nil
+	}
+
+	if _, autoImportDisabled := managedCluster.Annotations[apiconstants.DisableAutoImportAnnotation]; autoImportDisabled {
+		// skip if auto import is disabled
 		return reconcile.Result{}, nil
 	}
 
