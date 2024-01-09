@@ -451,6 +451,33 @@ func assertManagedClusterImportSecretApplied(clusterName string, mode ...operato
 	})
 }
 
+func assertManagedClusterImportSecretNotApplied(clusterName string) {
+	ginkgo.By(fmt.Sprintf("Managed cluster %s should not be imported", clusterName), func() {
+		gomega.Consistently(func() error {
+			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(
+				context.TODO(), clusterName, metav1.GetOptions{})
+			if err != nil {
+				return fmt.Errorf("assert managed cluster %s import secret not applied get cluster error: %v", clusterName, err)
+			}
+
+			util.Logf("assert managed cluster %s import secret not applied cluster conditions: %v",
+				clusterName, cluster.Status.Conditions)
+
+			condition := meta.FindStatusCondition(
+				cluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+			if condition == nil {
+				return nil
+			}
+
+			if condition.Reason == constants.ConditionReasonManagedClusterWaitForImporting {
+				return nil
+			}
+
+			return fmt.Errorf("assert managed cluster %s import secret not applied failed", clusterName)
+		}, 3*time.Minute, 5*time.Second).Should(gomega.Succeed())
+	})
+}
+
 func assertManagedClusterAvailable(clusterName string) {
 	start := time.Now()
 	defer func() {

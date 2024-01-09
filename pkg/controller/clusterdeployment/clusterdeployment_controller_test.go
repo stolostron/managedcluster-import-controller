@@ -16,6 +16,7 @@ import (
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
@@ -86,8 +87,45 @@ func TestReconcile(t *testing.T) {
 			secrets: []runtime.Object{},
 		},
 		{
+			name: "auto import disabled",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							apiconstants.DisableAutoImportAnnotation: "",
+						},
+					},
+				},
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+					},
+				},
+			},
+			works: []runtime.Object{},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: "test",
+					},
+				},
+			},
+		},
+		{
 			name: "clusterdeployment is not installed",
 			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
 				&hivev1.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
@@ -101,6 +139,11 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "clusterdeployment is not claimed",
 			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
 				&hivev1.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",

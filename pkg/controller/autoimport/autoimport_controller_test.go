@@ -5,10 +5,12 @@ package autoimport
 
 import (
 	"context"
-	operatorv1 "open-cluster-management.io/api/operator/v1"
 	"testing"
 	"time"
 
+	operatorv1 "open-cluster-management.io/api/operator/v1"
+
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
@@ -107,6 +109,22 @@ func TestReconcile(t *testing.T) {
 						Name: managedClusterName,
 						Annotations: map[string]string{
 							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
+						},
+					},
+				},
+			},
+			works:       []runtime.Object{},
+			secrets:     []runtime.Object{},
+			expectedErr: false,
+		},
+		{
+			name: "auto import disabled",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: managedClusterName,
+						Annotations: map[string]string{
+							apiconstants.DisableAutoImportAnnotation: "",
 						},
 					},
 				},

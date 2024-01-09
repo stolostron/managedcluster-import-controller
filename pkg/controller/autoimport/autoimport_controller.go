@@ -20,6 +20,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
@@ -79,6 +80,11 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	if !managedCluster.DeletionTimestamp.IsZero() {
+		return reconcile.Result{}, nil
+	}
+
+	if _, autoImportDisabled := managedCluster.Annotations[apiconstants.DisableAutoImportAnnotation]; autoImportDisabled {
+		// skip if auto import is disabled
 		return reconcile.Result{}, nil
 	}
 

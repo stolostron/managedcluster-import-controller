@@ -44,7 +44,7 @@ kubectl kustomize $DEPLOY_MANIFESTS \
   | kubectl apply -f -
 
 sleep 5
-${KUBECTL} -n open-cluster-management rollout status deploy managedcluster-import-controller --timeout=120s
+${KUBECTL} -n open-cluster-management rollout status deploy managedcluster-import-controller --timeout=300s
 
 echo "###### prepare auto-import-secret"
 cluster_ip=$(${KUBECTL} get svc kubernetes -n default -o jsonpath="{.spec.clusterIP}")

@@ -6,6 +6,7 @@ package clusterdeployment
 import (
 	"context"
 
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
@@ -95,6 +96,11 @@ func (r *ReconcileClusterDeployment) Reconcile(
 	}
 
 	if !managedCluster.DeletionTimestamp.IsZero() {
+		return reconcile.Result{}, nil
+	}
+
+	if _, autoImportDisabled := managedCluster.Annotations[apiconstants.DisableAutoImportAnnotation]; autoImportDisabled {
+		// skip if auto import is disabled
 		return reconcile.Result{}, nil
 	}
 

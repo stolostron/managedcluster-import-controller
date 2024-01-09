@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
@@ -89,6 +90,34 @@ func TestReconcile(t *testing.T) {
 						Name: "local-cluster",
 						Labels: map[string]string{
 							"local-cluster": "false",
+						},
+					},
+				},
+			},
+			works:   []runtime.Object{},
+			secrets: []runtime.Object{},
+			validateFunc: func(t *testing.T, runtimeClient client.Client) {
+				cluster := &clusterv1.ManagedCluster{}
+				err := runtimeClient.Get(context.TODO(), types.NamespacedName{Name: "local-cluster"}, cluster)
+				if err != nil {
+					t.Errorf("unexpected error %v", err)
+				}
+				if len(cluster.Status.Conditions) != 0 {
+					t.Errorf("unexpected condistions")
+				}
+			},
+		},
+		{
+			name: "auto import disabled",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "local-cluster",
+						Labels: map[string]string{
+							"local-cluster": "true",
+						},
+						Annotations: map[string]string{
+							apiconstants.DisableAutoImportAnnotation: "",
 						},
 					},
 				},
