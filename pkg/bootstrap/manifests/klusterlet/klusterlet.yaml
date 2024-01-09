@@ -9,7 +9,7 @@ metadata:
 spec:
   deployOption:
 {{- if eq .InstallMode "Hosted"}}
-    mode: Hosted
+    mode: SingletonHosted
 {{- else }}
     mode: Singleton
 {{- end}}

@@ -137,7 +137,7 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 	// Files depends on the install mode
 	var files []string
 	switch b.InstallMode {
-	case operatorv1.InstallModeHosted:
+	case operatorv1.InstallModeHosted, operatorv1.InstallModeSingletonHosted:
 		files = append(files, klusterletFiles...)
 	case operatorv1.InstallModeDefault, operatorv1.InstallModeSingleton:
 		files = append(files, klusterletOperatorFiles...)
