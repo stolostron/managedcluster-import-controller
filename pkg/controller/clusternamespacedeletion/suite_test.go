@@ -83,6 +83,7 @@ var _ = ginkgo.BeforeSuite(func() {
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 	mgr, err := ctrl.NewManager(cfg, opts)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	runtimeClient = mgr.GetClient()
 
 	clientHolder := &helpers.ClientHolder{
@@ -105,6 +106,7 @@ var _ = ginkgo.BeforeSuite(func() {
 
 var _ = ginkgo.AfterSuite(func() {
 	ginkgo.By("tearing down the test environment")
-	err := testEnv.Stop()
-	gomega.Expect(err).ToNot(gomega.HaveOccurred())
+	if err := testEnv.Stop(); err != nil {
+		setupLog.Error(err, "problem tearing down the test environment")
+	}
 })

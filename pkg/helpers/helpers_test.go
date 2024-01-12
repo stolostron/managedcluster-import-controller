@@ -5,11 +5,18 @@ package helpers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"reflect"
 	"testing"
+	"time"
 
+	"github.com/onsi/gomega"
+	"github.com/onsi/gomega/ghttp"
+	clustersmgmttesting "github.com/openshift-online/ocm-sdk-go/testing"
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	"github.com/openshift/library-go/pkg/operator/resource/resourceapply"
 	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
@@ -133,7 +140,7 @@ func TestGenerateClientFromSecret(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			secret := c.generateSecret(config.Host, config)
-			_, _, err = GenerateClientFromSecret(secret)
+			_, _, _, err = GenerateImportClientFromKubeConfigSecret(secret)
 			if c.expectedErr != "" && err == nil {
 				t.Errorf("expected error, but failed")
 			}
@@ -1305,7 +1312,7 @@ func createBasic(serverURL, clusterName string, caCert, clientKey, clientCert []
 			},
 		},
 		AuthInfos: map[string]*clientcmdapi.AuthInfo{
-			"default-auth": &clientcmdapi.AuthInfo{
+			"default-auth": {
 				ClientKeyData:         clientKey,
 				ClientCertificateData: clientCert,
 			},
@@ -1463,6 +1470,183 @@ func TestForceDeleteManagedClusterAddon(t *testing.T) {
 				if addon.DeletionTimestamp.IsZero() {
 					t.Errorf("addon should be in deleting status")
 				}
+			}
+		})
+	}
+}
+
+func TestGenerateImportClientFromKubeTokenSecret(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		var obj interface{}
+		switch req.URL.Path {
+		case "/api":
+			obj = &metav1.APIVersions{
+				Versions: []string{
+					"v1",
+				},
+			}
+		case "/apis":
+			obj = &metav1.APIGroupList{
+				Groups: []metav1.APIGroup{
+					{
+						Name: "extensions",
+						Versions: []metav1.GroupVersionForDiscovery{
+							{GroupVersion: "extensions/v1beta1"},
+						},
+					},
+				},
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		output, err := json.Marshal(obj)
+		if err != nil {
+			t.Fatalf("unexpected encoding error: %v", err)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(output)
+	}))
+	defer server.Close()
+
+	cases := []struct {
+		name      string
+		secret    *corev1.Secret
+		expectErr bool
+	}{
+		{
+			name: "missing token",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auto-import-secret",
+				},
+				Data: map[string][]byte{
+					"server": []byte(server.URL),
+					// no auth info
+				},
+			},
+			expectErr: true,
+		},
+		{
+			name: "token secret",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auto-import-secret",
+				},
+				Data: map[string][]byte{
+					"server": []byte(server.URL),
+					"token":  []byte("1234"),
+				},
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, _, _, err := GenerateImportClientFromKubeTokenSecret(c.secret)
+			if !c.expectErr && err != nil {
+				t.Errorf("unexpected error %v", err)
+			}
+
+			if c.expectErr && err == nil {
+				t.Errorf("expected error, but failed")
+			}
+		})
+	}
+}
+
+func TestGenerateImportClientFromRosaCluster(t *testing.T) {
+	gomega.RegisterTestingT(t)
+
+	accessToken := clustersmgmttesting.MakeTokenString("Bearer", 5*time.Minute)
+	refreshToken := clustersmgmttesting.MakeTokenString("Refresh", 10*time.Hour)
+
+	oidServer := clustersmgmttesting.MakeTCPServer()
+	oidServer.AppendHandlers(
+		ghttp.CombineHandlers(
+			clustersmgmttesting.RespondWithAccessAndRefreshTokens(accessToken, refreshToken),
+		),
+	)
+	oauthServer := clustersmgmttesting.MakeTCPServer()
+	oauthServer.AppendHandlers(
+		ghttp.CombineHandlers(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// just ensure the token request is received
+				w.WriteHeader(http.StatusNotImplemented)
+			}),
+		),
+	)
+	apiServer := clustersmgmttesting.MakeTCPServer()
+	apiServer.AppendHandlers(
+		ghttp.CombineHandlers(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.Path != "/api/clusters_mgmt/v1/clusters/c0001" {
+					t.Fatalf("unexpected request %s - %s", r.Method, r.URL.Path)
+				}
+			}),
+			clustersmgmttesting.RespondWithJSON(http.StatusOK, newRosaCluster(oauthServer.URL())),
+		),
+		ghttp.CombineHandlers(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.Path != "/api/clusters_mgmt/v1/clusters/c0001/identity_providers" {
+					t.Fatalf("unexpected request %s - %s", r.Method, r.URL.Path)
+				}
+			}),
+			clustersmgmttesting.RespondWithJSON(http.StatusOK, "{}"),
+		),
+		ghttp.CombineHandlers(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodPost || r.URL.Path != "/api/clusters_mgmt/v1/clusters/c0001/identity_providers" {
+					t.Fatalf("unexpected request %s - %s", r.Method, r.URL.Path)
+				}
+			}),
+			clustersmgmttesting.RespondWithJSON(http.StatusCreated, "{}"),
+		),
+		ghttp.CombineHandlers(
+			http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodGet || r.URL.Path != "/api/clusters_mgmt/v1/clusters/c0001/groups/cluster-admins/users/acm-import" {
+					t.Fatalf("unexpected request %s - %s", r.Method, r.URL.Path)
+				}
+			}),
+			clustersmgmttesting.RespondWithJSON(http.StatusOK, "{}"),
+		),
+	)
+	defer func() {
+		oidServer.Close()
+		oauthServer.Close()
+		apiServer.Close()
+	}()
+
+	cases := []struct {
+		name   string
+		getter *RosaKubeConfigGetter
+		secret *corev1.Secret
+	}{
+		{
+			name:   "generate client",
+			getter: NewRosaKubeConfigGetter(),
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "auto-import-secret",
+				},
+				Data: map[string][]byte{
+					"api_token":   []byte(accessToken),
+					"cluster_id":  []byte("c0001"),
+					"api_url":     []byte(apiServer.URL()),
+					"token_url":   []byte(oidServer.URL()),
+					"retry_times": []byte("2"),
+				},
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			result, _, _, _ := GenerateImportClientFromRosaCluster(c.getter, c.secret)
+			if !result.Requeue {
+				t.Errorf("expected requeue result, but failed")
 			}
 		})
 	}

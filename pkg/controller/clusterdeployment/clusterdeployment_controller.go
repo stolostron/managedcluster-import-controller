@@ -48,7 +48,8 @@ func NewReconcileClusterDeployment(
 		kubeClient:     kubeClient,
 		informerHolder: informerHolder,
 		recorder:       recorder,
-		importHelper:   helpers.NewImportHelper(informerHolder, recorder, log),
+		importHelper: helpers.NewImportHelper(informerHolder, recorder, log).
+			WithGenerateClientHolderFunc(helpers.GenerateImportClientFromKubeConfigSecret),
 	}
 }
 

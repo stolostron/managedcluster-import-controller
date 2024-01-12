@@ -52,6 +52,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/features"
@@ -109,80 +110,119 @@ func GetMaxConcurrentReconciles() int {
 	return maxConcurrentReconciles
 }
 
-// GenerateClientFromSecret generate a client from a given secret
-func GenerateClientFromSecret(secret *corev1.Secret) (*ClientHolder, meta.RESTMapper, error) {
-	var err error
-	var config *clientcmdapi.Config
-
+// GenerateImportClientFromKubeConfigSecret generate a client from a given secret that contains a kubeconfig
+func GenerateImportClientFromKubeConfigSecret(secret *corev1.Secret) (reconcile.Result, *ClientHolder, meta.RESTMapper, error) {
 	if kubeconfig, ok := secret.Data["kubeconfig"]; ok {
-		config, err = clientcmd.Load(kubeconfig)
+		config, err := clientcmd.Load(kubeconfig)
 		if err != nil {
-			return nil, nil, err
+			return reconcile.Result{}, nil, nil, err
 		}
+		return buildImportClient(config)
 	}
 
+	return reconcile.Result{}, nil, nil, fmt.Errorf("kubeconfig is missing")
+}
+
+// GenerateImportClientFromKubeTokenSecret generate a client from a given secret that contains kube apiserver and token
+func GenerateImportClientFromKubeTokenSecret(secret *corev1.Secret) (reconcile.Result, *ClientHolder, meta.RESTMapper, error) {
 	token, tok := secret.Data["token"]
 	server, sok := secret.Data["server"]
 	if tok && sok {
-		config = clientcmdapi.NewConfig()
-		config.Clusters["default"] = &clientcmdapi.Cluster{
-			Server:                string(server),
-			InsecureSkipTLSVerify: true,
-		}
-		config.AuthInfos["default"] = &clientcmdapi.AuthInfo{
-			Token: string(token),
-		}
-		config.Contexts["default"] = &clientcmdapi.Context{
-			Cluster:  "default",
-			AuthInfo: "default",
-		}
-		config.CurrentContext = "default"
+		return buildImportClient(buildKubeConfigFileWithToken(string(server), string(token)))
 	}
 
-	if config == nil {
-		return nil, nil, fmt.Errorf("kubeconfig or token and server are missing")
+	return reconcile.Result{}, nil, nil, fmt.Errorf("kube token or server is missing")
+}
+
+// GenerateImportClientFromRosaCluster generate a client from a given secret that contains rosa cluster info
+func GenerateImportClientFromRosaCluster(getter *RosaKubeConfigGetter, secret *corev1.Secret) (reconcile.Result, *ClientHolder, meta.RESTMapper, error) {
+	token, hasOCMAPIToken := secret.Data[constants.AutoImportSecretRosaConfigAPITokenKey]
+	clusterID, hasRosaClusterID := secret.Data[constants.AutoImportSecretRosaConfigClusterIDKey]
+	if !hasOCMAPIToken || !hasRosaClusterID {
+		return reconcile.Result{}, nil, nil, fmt.Errorf("api_token or cluster_id is missing")
 	}
 
+	getter.SetToken(string(token))
+	getter.SetClusterID(string(clusterID))
+
+	if apiServer, ok := secret.Data[constants.AutoImportSecretRosaConfigAPIURLKey]; ok {
+		getter.SetAPIServerURL(string(apiServer))
+	}
+
+	if tokeURL, ok := secret.Data[constants.AutoImportSecretRosaConfigTokenURLKey]; ok {
+		getter.SetTokenURL(string(tokeURL))
+	}
+
+	if retryTimes, ok := secret.Data[constants.AutoImportSecretRosaConfigRetryTimesKey]; ok {
+		getter.SetRetryTimes(string(retryTimes))
+	}
+
+	requeue, config, err := getter.KubeConfig()
+	if err != nil {
+		return reconcile.Result{Requeue: requeue, RequeueAfter: rosaImportRetryPeriod}, nil, nil, err
+	}
+
+	return buildImportClient(config)
+}
+
+func buildImportClient(config *clientcmdapi.Config) (reconcile.Result, *ClientHolder, meta.RESTMapper, error) {
 	clientConfig, err := clientcmd.NewDefaultClientConfig(*config, &clientcmd.ConfigOverrides{}).ClientConfig()
 	if err != nil {
-		return nil, nil, err
+		return reconcile.Result{}, nil, nil, err
 	}
 
 	kubeClient, err := kubernetes.NewForConfig(clientConfig)
 	if err != nil {
-		return nil, nil, err
+		return reconcile.Result{}, nil, nil, err
 	}
 
 	apiExtensionsClient, err := apiextensionsclient.NewForConfig(clientConfig)
 	if err != nil {
-		return nil, nil, err
+		return reconcile.Result{}, nil, nil, err
 	}
 
 	operatorClient, err := operatorclient.NewForConfig(clientConfig)
 	if err != nil {
-		return nil, nil, err
+		return reconcile.Result{}, nil, nil, err
 	}
 
 	runtimeClient, err := client.New(clientConfig, client.Options{})
 	if err != nil {
-		return nil, nil, err
+		return reconcile.Result{}, nil, nil, err
 	}
 
 	httpclient, err := rest.HTTPClientFor(clientConfig)
 	if err != nil {
-		return nil, nil, err
+		return reconcile.Result{}, nil, nil, err
 	}
 	mapper, err := apiutil.NewDiscoveryRESTMapper(clientConfig, httpclient)
 	if err != nil {
-		return nil, nil, err
+		return reconcile.Result{}, nil, nil, err
 	}
 
-	return &ClientHolder{
+	return reconcile.Result{}, &ClientHolder{
 		KubeClient:          kubeClient,
 		APIExtensionsClient: apiExtensionsClient,
 		OperatorClient:      operatorClient,
 		RuntimeClient:       runtimeClient,
 	}, mapper, nil
+}
+
+func buildKubeConfigFileWithToken(apiURL, token string) *clientcmdapi.Config {
+	return &clientcmdapi.Config{
+		Clusters: map[string]*clientcmdapi.Cluster{"default-cluster": {
+			Server:                apiURL,
+			InsecureSkipTLSVerify: true,
+		}},
+		AuthInfos: map[string]*clientcmdapi.AuthInfo{"default-auth": {
+			Token: token,
+		}},
+		Contexts: map[string]*clientcmdapi.Context{"default-context": {
+			Cluster:  "default-cluster",
+			AuthInfo: "default-auth",
+		}},
+		CurrentContext: "default-context",
+	}
 }
 
 // AddManagedClusterFinalizer add a finalizer to a managed cluster
