@@ -264,6 +264,7 @@ func TestValidateKubeAPIServerAddress(t *testing.T) {
 		name               string
 		kubeAPIServer      string
 		infraKubeAPIServer string
+		klusterletConfig   *klusterletconfigv1alpha1.KlusterletConfig
 		valid              bool
 	}{
 		{
@@ -273,6 +274,15 @@ func TestValidateKubeAPIServerAddress(t *testing.T) {
 			name:               "address changed",
 			kubeAPIServer:      "https://api.my-cluster.example.com:6443",
 			infraKubeAPIServer: "https://api-int.my-cluster.example.com:6443",
+		},
+		{
+			name:          "address overridden",
+			kubeAPIServer: "https://api.my-cluster.example.com:6443",
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerURL: "https://api.acm.example.com:6443",
+				},
+			},
 		},
 		{
 			name:               "no change",
@@ -298,7 +308,7 @@ func TestValidateKubeAPIServerAddress(t *testing.T) {
 				}).Build(),
 			}
 
-			valid, err := validateKubeAPIServerAddress(context.TODO(), c.kubeAPIServer, clientHolder)
+			valid, err := validateKubeAPIServerAddress(context.TODO(), c.kubeAPIServer, c.klusterletConfig, clientHolder)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}
@@ -311,11 +321,12 @@ func TestValidateKubeAPIServerAddress(t *testing.T) {
 
 func TestValidateCAData(t *testing.T) {
 	cases := []struct {
-		name            string
-		clusterName     string
-		bootstrapCAData []byte
-		currentCAData   []byte
-		valid           bool
+		name             string
+		clusterName      string
+		bootstrapCAData  []byte
+		currentCAData    []byte
+		klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig
+		valid            bool
 	}{
 		{
 			name: "CA data is empty",
@@ -324,6 +335,15 @@ func TestValidateCAData(t *testing.T) {
 			name:            "cert changes",
 			bootstrapCAData: []byte("my-ca-bundle"),
 			currentCAData:   []byte("my-new-ca-bundle"),
+		},
+		{
+			name:            "cert overridden",
+			bootstrapCAData: []byte("my-ca-bundle"),
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerCABundle: []byte("my-custom-ca-bundle"),
+				},
+			},
 		},
 		{
 			name:            "no cert change",
@@ -370,7 +390,7 @@ func TestValidateCAData(t *testing.T) {
 				KubeClient: fakeKubeClient,
 			}
 
-			valid, err := validateCAData(context.TODO(), c.bootstrapCAData, kubeAPIServer, clientHolder, "cluster")
+			valid, err := validateCAData(context.TODO(), c.bootstrapCAData, kubeAPIServer, c.klusterletConfig, clientHolder, "cluster")
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}

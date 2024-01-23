@@ -48,7 +48,7 @@ func getBootstrapKubeConfigDataFromImportSecret(ctx context.Context, clientHolde
 	}
 
 	// check if the kube apiserver address is changed
-	validKubeAPIServer, err := validateKubeAPIServerAddress(ctx, kubeAPIServer, clientHolder)
+	validKubeAPIServer, err := validateKubeAPIServerAddress(ctx, kubeAPIServer, klusterletConfig, clientHolder)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to validate kube apiserver address: %v", err)
 	}
@@ -58,7 +58,7 @@ func getBootstrapKubeConfigDataFromImportSecret(ctx context.Context, clientHolde
 	}
 
 	// check if the CA data is changed
-	validCAData, err := validateCAData(ctx, caData, kubeAPIServer, clientHolder, clusterName)
+	validCAData, err := validateCAData(ctx, caData, kubeAPIServer, klusterletConfig, clientHolder, clusterName)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to validate CA data: %v", err)
 	}
@@ -130,12 +130,14 @@ func parseKubeConfigData(kubeConfigData []byte) (kubeAPIServer, proxyURL string,
 	return
 }
 
-func validateKubeAPIServerAddress(ctx context.Context, kubeAPIServer string, clientHolder *helpers.ClientHolder) (bool, error) {
+func validateKubeAPIServerAddress(ctx context.Context, kubeAPIServer string,
+	klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig,
+	clientHolder *helpers.ClientHolder) (bool, error) {
 	if len(kubeAPIServer) == 0 {
 		return false, nil
 	}
 
-	currentKubeAPIServer, err := bootstrap.GetKubeAPIServerAddress(ctx, clientHolder.RuntimeClient)
+	currentKubeAPIServer, err := bootstrap.GetKubeAPIServerAddress(ctx, clientHolder.RuntimeClient, klusterletConfig)
 	if err != nil {
 		return false, err
 	}
@@ -143,13 +145,15 @@ func validateKubeAPIServerAddress(ctx context.Context, kubeAPIServer string, cli
 	return kubeAPIServer == currentKubeAPIServer, nil
 }
 
-func validateCAData(ctx context.Context, caData []byte, kubeAPIServer string, clientHolder *helpers.ClientHolder, clusterName string) (bool, error) {
+func validateCAData(ctx context.Context, caData []byte, kubeAPIServer string,
+	klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig,
+	clientHolder *helpers.ClientHolder, clusterName string) (bool, error) {
 	if len(caData) == 0 {
 		// CA data is empty
 		return false, nil
 	}
 
-	currentCAData, err := bootstrap.GetBootstrapCAData(ctx, clientHolder, kubeAPIServer, clusterName)
+	currentCAData, err := bootstrap.GetBootstrapCAData(ctx, clientHolder, kubeAPIServer, clusterName, klusterletConfig)
 	if err != nil {
 		return false, err
 	}

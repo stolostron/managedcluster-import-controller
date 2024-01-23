@@ -407,7 +407,8 @@ func TestGetKubeAPIServerAddress(t *testing.T) {
 	}
 
 	type args struct {
-		client client.Client
+		client           client.Client
+		klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig
 	}
 	tests := []struct {
 		name    string
@@ -431,10 +432,23 @@ func TestGetKubeAPIServerAddress(t *testing.T) {
 			want:    "http://127.0.0.1:6443",
 			wantErr: false,
 		},
+		{
+			name: "use custom address",
+			args: args{
+				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(infraConfig).Build(),
+				klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+					Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+						HubKubeAPIServerURL: "https://api.acm.example.com:6443",
+					},
+				},
+			},
+			want:    "https://api.acm.example.com:6443",
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := GetKubeAPIServerAddress(context.Background(), tt.args.client)
+			got, err := GetKubeAPIServerAddress(context.Background(), tt.args.client, tt.args.klusterletConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getKubeAPIServerAddress() error = %v, wantErr %v", err, tt.wantErr)
 				return
