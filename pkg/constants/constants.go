@@ -3,7 +3,11 @@
 
 package constants
 
-import "time"
+import (
+	"time"
+
+	corev1 "k8s.io/api/core/v1"
+)
 
 const YamlSperator = "\n---\n"
 
@@ -114,4 +118,21 @@ const (
 	ConditionReasonManagedClusterImporting        = "ManagedClusterImporting"
 	ConditionReasonManagedClusterImportFailed     = "ManagedClusterImportFailed"
 	ConditionReasonManagedClusterImported         = "ManagedClusterImported"
+)
+
+/* #nosec */
+const (
+	AutoImportSecretKubeConfig    corev1.SecretType = "auto-import/kubeconfig"
+	AutoImportSecretKubeConfigKey string            = "kubeconfig"
+
+	AutoImportSecretKubeToken     corev1.SecretType = "auto-import/kubetoken"
+	AutoImportSecretKubeServerKey string            = "server"
+	AutoImportSecretKubeTokenKey  string            = "token"
+
+	AutoImportSecretRosaConfig              corev1.SecretType = "auto-import/rosa"
+	AutoImportSecretRosaConfigAPIURLKey     string            = "api_url"
+	AutoImportSecretRosaConfigAPITokenKey   string            = "api_token"
+	AutoImportSecretRosaConfigTokenURLKey   string            = "token_url"
+	AutoImportSecretRosaConfigClusterIDKey  string            = "cluster_id"
+	AutoImportSecretRosaConfigRetryTimesKey string            = "retry_times"
 )

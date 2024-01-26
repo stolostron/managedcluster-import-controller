@@ -198,6 +198,29 @@ func TestReconcile(t *testing.T) {
 			expectedErr: true,
 		},
 		{
+			name: "unsupported auto-import-secret type",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: managedClusterName,
+					},
+				},
+			},
+			works: []runtime.Object{},
+			secrets: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: managedClusterName,
+					},
+					Data: map[string][]byte{},
+				},
+			},
+			expectedErr:             false,
+			expectedConditionStatus: metav1.ConditionFalse,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
+		},
+		{
 			name: "no manifest works",
 			objs: []client.Object{
 				&clusterv1.ManagedCluster{
@@ -221,6 +244,38 @@ func TestReconcile(t *testing.T) {
 						"autoImportRetry": []byte("2"),
 						"kubeconfig":      testinghelpers.BuildKubeconfig(config),
 					},
+					Type: constants.AutoImportSecretKubeConfig,
+				},
+			},
+			expectedErr:             false,
+			expectedConditionStatus: metav1.ConditionFalse,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
+		},
+		{
+			name: "no manifest works (compatibility)",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: managedClusterName,
+					},
+				},
+			},
+			works: []runtime.Object{},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret(managedClusterName),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: managedClusterName,
+						Annotations: map[string]string{
+							constants.AnnotationAutoImportCurrentRetry: "1",
+						},
+					},
+					Data: map[string][]byte{
+						"autoImportRetry": []byte("2"),
+						"kubeconfig":      testinghelpers.BuildKubeconfig(config),
+					},
+					Type: corev1.SecretTypeOpaque,
 				},
 			},
 			expectedErr:             false,
@@ -266,6 +321,7 @@ func TestReconcile(t *testing.T) {
 						"autoImportRetry": []byte("2"),
 						"kubeconfig":      testinghelpers.BuildKubeconfig(config),
 					},
+					Type: constants.AutoImportSecretKubeConfig,
 				},
 			},
 			expectedErr:             false,
@@ -312,6 +368,7 @@ func TestReconcile(t *testing.T) {
 						"autoImportRetry": []byte("2"),
 						"kubeconfig":      testinghelpers.BuildKubeconfig(config),
 					},
+					Type: constants.AutoImportSecretKubeConfig,
 				},
 			},
 			expectedErr:             false,
@@ -359,9 +416,102 @@ func TestReconcile(t *testing.T) {
 						"server":          []byte(config.Host),
 						// no auth info
 					},
+					Type: constants.AutoImportSecretKubeToken,
 				},
 			},
 			expectedErr:             false,
+			expectedConditionStatus: metav1.ConditionFalse,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
+		},
+		{
+			name: "import cluster with auto-import secret invalid (compatibility)",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: managedClusterName,
+					},
+				},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: managedClusterName,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: managedClusterName,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret(managedClusterName),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: managedClusterName,
+					},
+					Data: map[string][]byte{
+						"autoImportRetry": []byte("0"),
+						"server":          []byte(config.Host),
+						// no auth info
+					},
+					Type: corev1.SecretTypeOpaque,
+				},
+			},
+			expectedErr:             false,
+			expectedConditionStatus: metav1.ConditionFalse,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
+		},
+		{
+			name: "import rosa cluster with auto-import secret invalid",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: managedClusterName,
+					},
+				},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: managedClusterName,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: managedClusterName,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret(managedClusterName),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: managedClusterName,
+					},
+					Data: map[string][]byte{},
+					Type: constants.AutoImportSecretRosaConfig,
+				},
+			},
+			expectedErr:             true,
 			expectedConditionStatus: metav1.ConditionFalse,
 			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
 		},
@@ -408,6 +558,7 @@ func TestReconcile(t *testing.T) {
 						"autoImportRetry": []byte("0"),
 						"kubeconfig":      testinghelpers.BuildKubeconfig(config),
 					},
+					Type: constants.AutoImportSecretKubeConfig,
 				},
 			},
 			expectedErr:             false,
@@ -457,6 +608,7 @@ func TestReconcile(t *testing.T) {
 						"autoImportRetry": []byte("0"),
 						"kubeconfig":      testinghelpers.BuildKubeconfig(config),
 					},
+					Type: constants.AutoImportSecretKubeConfig,
 				},
 			},
 			expectedErr:             false,
@@ -522,6 +674,7 @@ func TestReconcile(t *testing.T) {
 						"autoImportRetry": []byte("0"),
 						"kubeconfig":      testinghelpers.BuildKubeconfig(config),
 					},
+					Type: constants.AutoImportSecretKubeConfig,
 				},
 			},
 			expectedErr:             false,

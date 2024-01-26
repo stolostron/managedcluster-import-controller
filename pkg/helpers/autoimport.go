@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
@@ -89,7 +90,7 @@ type ApplyResourcesFunc func(backupRestore bool, client *ClientHolder, restMappe
 
 // GenerateClientHolderFunc is a function to generate the managed cluster client holder which is
 // used to import cluster(apply resources to the managed cluster)
-type GenerateClientHolderFunc func(secret *corev1.Secret) (*ClientHolder, meta.RESTMapper, error)
+type GenerateClientHolderFunc func(secret *corev1.Secret) (reconcile.Result, *ClientHolder, meta.RESTMapper, error)
 
 // ImportHelper is used to helper controller to import managed cluster
 type ImportHelper struct {
@@ -118,8 +119,7 @@ func NewImportHelper(informerHolder *source.InformerHolder,
 		recorder:       recorder,
 		log:            log,
 
-		generateClientHolderFunc: GenerateClientFromSecret,
-		applyResourcesFunc:       defaultApplyResourcesFunc,
+		applyResourcesFunc: defaultApplyResourcesFunc,
 	}
 }
 
@@ -138,6 +138,10 @@ func defaultApplyResourcesFunc(backupRestore bool, client *ClientHolder,
 func (i *ImportHelper) Import(backupRestore bool, clusterName string,
 	managedClusterKubeClientSecret *corev1.Secret, lastRetry, totalRetry int) (
 	reconcile.Result, metav1.Condition, bool, int, error) {
+	if i.generateClientHolderFunc == nil {
+		// if generateClientHolderFunc is nil, panic here
+		utilruntime.Must(fmt.Errorf("the generateClientHolderFunc in the ImportHelper is nil"))
+	}
 
 	reqLogger := i.log.WithValues("Request.Name", clusterName)
 	currentRetry := lastRetry
@@ -163,9 +167,20 @@ func (i *ImportHelper) Import(backupRestore bool, clusterName string,
 			), false, currentRetry, nil
 	}
 
-	clientHolder, restMapper, err := i.generateClientHolderFunc(managedClusterKubeClientSecret)
+	// build import client with managed cluster kube client secret
+	result, clientHolder, restMapper, err := i.generateClientHolderFunc(managedClusterKubeClientSecret)
 	if err != nil {
-		return reconcile.Result{},
+		if result.Requeue {
+			return result,
+				NewManagedClusterImportSucceededCondition(
+					metav1.ConditionFalse,
+					constants.ConditionReasonManagedClusterImporting,
+					fmt.Sprintf("Generate kube client by secret %s/%s, %v",
+						managedClusterKubeClientSecret.Namespace, managedClusterKubeClientSecret.Name, err),
+				), false, currentRetry, nil
+		}
+
+		return result,
 			NewManagedClusterImportSucceededCondition(
 				metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImportFailed,

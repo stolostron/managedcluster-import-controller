@@ -4,6 +4,7 @@ package helpers
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/informers"
@@ -21,6 +23,7 @@ import (
 	workv1 "open-cluster-management.io/api/work/v1"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
@@ -136,17 +139,18 @@ func TestImportHelper(t *testing.T) {
 
 	managedClusterName := "test"
 	cases := []struct {
-		name                    string
-		autoImportSecret        *corev1.Secret
-		importSecret            *corev1.Secret
-		works                   []runtime.Object
-		lastRetry               int
-		totalRetry              int
-		expectedErr             bool
-		expectedCurrentRetry    int
-		expectedRequeueAfter    time.Duration
-		expectedConditionStatus metav1.ConditionStatus
-		expectedConditionReason string
+		name                     string
+		autoImportSecret         *corev1.Secret
+		importSecret             *corev1.Secret
+		works                    []runtime.Object
+		lastRetry                int
+		totalRetry               int
+		generateClientHolderFunc GenerateClientHolderFunc
+		expectedErr              bool
+		expectedCurrentRetry     int
+		expectedRequeueAfter     time.Duration
+		expectedConditionStatus  metav1.ConditionStatus
+		expectedConditionReason  string
 	}{
 		{
 			name:       "no manifest works",
@@ -163,7 +167,10 @@ func TestImportHelper(t *testing.T) {
 					"kubeconfig":      testinghelpers.BuildKubeconfig(config),
 				},
 			},
-			importSecret:            testinghelpers.GetImportSecret(managedClusterName),
+			importSecret: testinghelpers.GetImportSecret(managedClusterName),
+			generateClientHolderFunc: func(secret *corev1.Secret) (reconcile.Result, *ClientHolder, meta.RESTMapper, error) {
+				return reconcile.Result{}, nil, nil, fmt.Errorf("Not Implemented")
+			},
 			expectedErr:             false,
 			expectedCurrentRetry:    0,
 			expectedRequeueAfter:    3 * time.Second,
@@ -203,10 +210,11 @@ func TestImportHelper(t *testing.T) {
 					"kubeconfig": testinghelpers.BuildKubeconfig(config),
 				},
 			},
-			expectedErr:             false,
-			expectedCurrentRetry:    0,
-			expectedConditionStatus: metav1.ConditionFalse,
-			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
+			generateClientHolderFunc: GenerateImportClientFromKubeConfigSecret,
+			expectedErr:              false,
+			expectedCurrentRetry:     0,
+			expectedConditionStatus:  metav1.ConditionFalse,
+			expectedConditionReason:  constants.ConditionReasonManagedClusterImporting,
 		},
 		{
 			name:       "update auto import secret current retry times",
@@ -242,11 +250,12 @@ func TestImportHelper(t *testing.T) {
 					"kubeconfig": testinghelpers.BuildKubeconfig(config),
 				},
 			},
-			expectedErr:             false,
-			expectedCurrentRetry:    2,
-			expectedRequeueAfter:    10 * time.Second,
-			expectedConditionStatus: metav1.ConditionFalse,
-			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
+			generateClientHolderFunc: GenerateImportClientFromKubeConfigSecret,
+			expectedErr:              false,
+			expectedCurrentRetry:     2,
+			expectedRequeueAfter:     10 * time.Second,
+			expectedConditionStatus:  metav1.ConditionFalse,
+			expectedConditionReason:  constants.ConditionReasonManagedClusterImporting,
 		},
 		{
 			name:       "import cluster with auto-import secret invalid",
@@ -283,11 +292,12 @@ func TestImportHelper(t *testing.T) {
 					// no auth info
 				},
 			},
-			expectedErr:             false,
-			expectedCurrentRetry:    0,
-			expectedRequeueAfter:    0 * time.Second,
-			expectedConditionStatus: metav1.ConditionFalse,
-			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
+			generateClientHolderFunc: GenerateImportClientFromKubeTokenSecret,
+			expectedErr:              false,
+			expectedCurrentRetry:     0,
+			expectedRequeueAfter:     0 * time.Second,
+			expectedConditionStatus:  metav1.ConditionFalse,
+			expectedConditionReason:  constants.ConditionReasonManagedClusterImportFailed,
 		},
 		{
 			name:       "only update the bootstrap secret",
@@ -326,11 +336,12 @@ func TestImportHelper(t *testing.T) {
 					"kubeconfig": testinghelpers.BuildKubeconfig(config),
 				},
 			},
-			expectedErr:             false,
-			expectedCurrentRetry:    1,
-			expectedRequeueAfter:    0 * time.Second,
-			expectedConditionStatus: metav1.ConditionFalse,
-			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
+			generateClientHolderFunc: GenerateImportClientFromKubeConfigSecret,
+			expectedErr:              false,
+			expectedCurrentRetry:     1,
+			expectedRequeueAfter:     0 * time.Second,
+			expectedConditionStatus:  metav1.ConditionFalse,
+			expectedConditionReason:  constants.ConditionReasonManagedClusterImporting,
 		},
 		{
 			name:       "import cluster with auto-import secret valid",
@@ -369,11 +380,12 @@ func TestImportHelper(t *testing.T) {
 					"kubeconfig": testinghelpers.BuildKubeconfig(config),
 				},
 			},
-			expectedErr:             false,
-			expectedCurrentRetry:    1,
-			expectedRequeueAfter:    0,
-			expectedConditionStatus: metav1.ConditionFalse,
-			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
+			generateClientHolderFunc: GenerateImportClientFromKubeConfigSecret,
+			expectedErr:              false,
+			expectedCurrentRetry:     1,
+			expectedRequeueAfter:     0,
+			expectedConditionStatus:  metav1.ConditionFalse,
+			expectedConditionReason:  constants.ConditionReasonManagedClusterImporting,
 		},
 	}
 
@@ -403,6 +415,8 @@ func TestImportHelper(t *testing.T) {
 				ImportSecretLister:   kubeInformerFactory.Core().V1().Secrets().Lister(),
 				KlusterletWorkLister: workInformerFactory.Work().V1().ManifestWorks().Lister(),
 			}, eventstesting.NewTestingEventRecorder(t), logf.Log.WithName("import-helper-tester"))
+
+			importHelper = importHelper.WithGenerateClientHolderFunc(c.generateClientHolderFunc)
 
 			backupRestore := false
 			if c.autoImportSecret != nil {

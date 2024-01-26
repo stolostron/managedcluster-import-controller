@@ -46,8 +46,8 @@ func NewReconcileLocalCluster(
 		informerHolder: informerHolder,
 		recorder:       recorder,
 		importHelper: helpers.NewImportHelper(informerHolder, recorder, log).WithGenerateClientHolderFunc(
-			func(secret *v1.Secret) (*helpers.ClientHolder, meta.RESTMapper, error) {
-				return clientHolder, restMapper, nil
+			func(secret *v1.Secret) (reconcile.Result, *helpers.ClientHolder, meta.RESTMapper, error) {
+				return reconcile.Result{}, clientHolder, restMapper, nil
 			},
 		),
 	}
