@@ -46,12 +46,12 @@ func CreateBootstrapKubeConfig(ctx context.Context, clientHolder *helpers.Client
 		return nil, nil, err
 	}
 
-	kubeAPIServer, err := GetKubeAPIServerAddress(ctx, clientHolder.RuntimeClient)
+	kubeAPIServer, err := GetKubeAPIServerAddress(ctx, clientHolder.RuntimeClient, klusterletConfig)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	certData, err := GetBootstrapCAData(ctx, clientHolder, kubeAPIServer, ns)
+	certData, err := GetBootstrapCAData(ctx, clientHolder, kubeAPIServer, ns, klusterletConfig)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -162,8 +162,13 @@ func getBootstrapToken(ctx context.Context, kubeClient kubernetes.Interface,
 	return []byte(tokenRequest.Status.Token), expiration, nil
 }
 
-// GetKubeAPIServerAddress get the kube-apiserver URL from ocp infrastructure
-func GetKubeAPIServerAddress(ctx context.Context, client client.Client) (string, error) {
+func GetKubeAPIServerAddress(ctx context.Context, client client.Client,
+	klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) (string, error) {
+	// use the custom hub Kube APIServer URL if specified
+	if klusterletConfig != nil && len(klusterletConfig.Spec.HubKubeAPIServerURL) > 0 {
+		return klusterletConfig.Spec.HubKubeAPIServerURL, nil
+	}
+
 	infraConfig := &ocinfrav1.Infrastructure{}
 	if err := client.Get(ctx, types.NamespacedName{Name: "cluster"}, infraConfig); err != nil {
 		return "", err
@@ -172,8 +177,14 @@ func GetKubeAPIServerAddress(ctx context.Context, client client.Client) (string,
 	return infraConfig.Status.APIServerURL, nil
 }
 
-func GetBootstrapCAData(ctx context.Context, clientHolder *helpers.ClientHolder, kubeAPIServer string, caNamespace string) ([]byte, error) {
-	// get the ca cert from ocp apiserver firstly
+func GetBootstrapCAData(ctx context.Context, clientHolder *helpers.ClientHolder, kubeAPIServer string,
+	caNamespace string, klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) ([]byte, error) {
+	// use the custom hub Kube APIServer CA bundle if specified
+	if klusterletConfig != nil && len(klusterletConfig.Spec.HubKubeAPIServerCABundle) > 0 {
+		return klusterletConfig.Spec.HubKubeAPIServerCABundle, nil
+	}
+
+	// and then get the ca cert from ocp apiserver firstly
 	if u, err := url.Parse(kubeAPIServer); err == nil {
 		apiServerCertSecretName, err := getKubeAPIServerSecretName(ctx, clientHolder.RuntimeClient, u.Hostname())
 		if err != nil {

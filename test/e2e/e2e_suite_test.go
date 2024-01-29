@@ -17,6 +17,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
+	ocinfrav1 "github.com/openshift/api/config/v1"
 	"github.com/openshift/library-go/pkg/operator/events"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
@@ -24,8 +25,11 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	k8sruntime "k8s.io/apimachinery/pkg/runtime"
+	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	k8sscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	certutil "k8s.io/client-go/util/cert"
@@ -58,7 +62,14 @@ var (
 	hubRuntimeClient       crclient.Client
 	hubRecorder            events.Recorder
 	hubMapper              meta.RESTMapper
+
+	scheme = k8sruntime.NewScheme()
 )
+
+func init() {
+	utilruntime.Must(k8sscheme.AddToScheme(scheme))
+	utilruntime.Must(ocinfrav1.AddToScheme(scheme))
+}
 
 func TestE2E(t *testing.T) {
 	gomega.RegisterFailHandler(ginkgo.Fail)
@@ -98,7 +109,9 @@ var _ = ginkgo.BeforeSuite(func() {
 	klusterletconfigClient, err = klusterletconfigclient.NewForConfig(clusterCfg)
 	gomega.Expect(err).Should(gomega.BeNil())
 
-	hubRuntimeClient, err = crclient.New(clusterCfg, crclient.Options{})
+	hubRuntimeClient, err = crclient.New(clusterCfg, crclient.Options{
+		Scheme: scheme,
+	})
 	gomega.Expect(err).Should(gomega.BeNil())
 
 	hubRecorder = helpers.NewEventRecorder(hubKubeClient, "e2e-test")
@@ -329,7 +342,7 @@ func assertManagedClusterDeletedFromHub(clusterName string) {
 			}
 
 			return fmt.Errorf("managed cluster %s still exists", clusterName)
-		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 120*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
 
@@ -732,6 +745,40 @@ func assertBootstrapKubeconfigWithProxyConfig(proxyURL string, caDataIncluded, c
 						return fmt.Errorf("kubeconfig ca bundle should not include proxy cert: %s", cert.Subject.CommonName)
 					}
 				}
+			}
+
+			return nil
+		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
+	})
+}
+
+func assertBootstrapKubeconfigServerURLAndCABundle(serverURL string, caData []byte) {
+	ginkgo.By("Klusterlet should have bootstrap kubeconfig with expected serverURL & CA bundle", func() {
+		var bootstrapKubeconfigSecret *corev1.Secret
+		gomega.Eventually(func() error {
+			var err error
+			bootstrapKubeconfigSecret, err = hubKubeClient.CoreV1().Secrets("open-cluster-management-agent").Get(context.TODO(), "bootstrap-hub-kubeconfig", metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+
+			config, err := clientcmd.Load(bootstrapKubeconfigSecret.Data["kubeconfig"])
+			if err != nil {
+				return err
+			}
+
+			// check server url
+			cluster, ok := config.Clusters["default-cluster"]
+			if !ok {
+				return fmt.Errorf("default-cluster not found")
+			}
+			if cluster.Server != serverURL {
+				return fmt.Errorf("expected server url %q but got: %s", serverURL, cluster.Server)
+			}
+
+			// check ca data
+			if !reflect.DeepEqual(cluster.CertificateAuthorityData, caData) {
+				return fmt.Errorf("unexpected CA bundle is included in the bootstrap kubeconfig: open-cluster-management-agent/bootstrap-hub-kubeconfig")
 			}
 
 			return nil

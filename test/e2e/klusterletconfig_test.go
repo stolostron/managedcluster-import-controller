@@ -15,6 +15,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
+	"github.com/stolostron/managedcluster-import-controller/pkg/bootstrap"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -204,6 +206,73 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 		}
 
 		// cluster should become available because no proxy is used
+		assertManagedClusterAvailable(managedClusterName)
+	})
+
+	It("Should deploy the klusterlet with custom server URL and CA bundle", func() {
+		By("Create managed cluster", func() {
+			_, err := util.CreateManagedClusterWithShortLeaseDuration(
+				hubClusterClient,
+				managedClusterName,
+				map[string]string{
+					"agent.open-cluster-management.io/klusterlet-config": klusterletConfigName,
+				},
+				util.NewLable("local-cluster", "true"))
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		// klusterletconfig is missing and it will be ignored
+		defaultServerUrl, err := bootstrap.GetKubeAPIServerAddress(context.TODO(), hubRuntimeClient, nil)
+		Expect(err).ToNot(HaveOccurred())
+		defaultCABundle, err := bootstrap.GetBootstrapCAData(context.TODO(), &helpers.ClientHolder{
+			KubeClient:    hubKubeClient,
+			RuntimeClient: hubRuntimeClient,
+		}, defaultServerUrl, managedClusterName, nil)
+		Expect(err).ToNot(HaveOccurred())
+		assertBootstrapKubeconfigServerURLAndCABundle(defaultServerUrl, defaultCABundle)
+		assertManagedClusterAvailable(managedClusterName)
+
+		customServerURL := "https://invalid.server.url:6443"
+		customCAData, _, err := newCert("custom CA for hub Kube API server")
+		Expect(err).ToNot(HaveOccurred())
+
+		By("Create KlusterletConfig with custom server URL & CA bundle", func() {
+			_, err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Create(context.TODO(), &klusterletconfigv1alpha1.KlusterletConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: klusterletConfigName,
+				},
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerURL:      customServerURL,
+					HubKubeAPIServerCABundle: customCAData,
+				},
+			}, metav1.CreateOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		assertBootstrapKubeconfigServerURLAndCABundle(customServerURL, customCAData)
+
+		// cluster should become offline because the custom server URL and CA bundle is invalid
+		assertManagedClusterOffline(managedClusterName, 120*time.Second)
+
+		By("Delete Klusterletconfig", func() {
+			err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Delete(context.TODO(), klusterletConfigName, metav1.DeleteOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		assertBootstrapKubeconfigServerURLAndCABundle(defaultServerUrl, defaultCABundle)
+
+		// delete agent deployment to rebootstrap
+		deploys, err := hubKubeClient.AppsV1().Deployments("open-cluster-management-agent").List(context.TODO(), metav1.ListOptions{})
+		Expect(err).ToNot(HaveOccurred())
+		for _, deploy := range deploys.Items {
+			if deploy.Name == "klusterlet" {
+				continue
+			}
+			err = hubKubeClient.AppsV1().Deployments(deploy.Namespace).Delete(context.TODO(), deploy.Name, metav1.DeleteOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		}
+
+		// cluster should become available because custom server URL and CA bundle is removed
 		assertManagedClusterAvailable(managedClusterName)
 	})
 })
