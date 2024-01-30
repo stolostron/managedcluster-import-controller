@@ -33,15 +33,17 @@ spec:
             clusterName:
               description: ClusterName is the name of the managed cluster to be created on hub. The Klusterlet agent generates a random name if it is not set, or discovers the appropriate cluster name on OpenShift.
               type: string
+              maxLength: 63
+              pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
             deployOption:
               description: DeployOption contains the options of deploying a klusterlet
               type: object
               properties:
                 mode:
-                  description: 'Mode can be Default or Hosted. It is Default mode if not specified In Default mode, all klusterlet related resources are deployed on the managed cluster. In Hosted mode, only crd and configurations are installed on the spoke/managed cluster. Controllers run in another cluster (defined as management-cluster) and connect to the mangaged cluster with the kubeconfig in secret of "external-managed-kubeconfig"(a kubeconfig of managed-cluster with cluster-admin permission). Note: Do not modify the Mode field once it''s applied.'
+                  description: 'Mode can be Default, Hosted, Singleton or SingletonHosted. It is Default mode if not specified In Default mode, all klusterlet related resources are deployed on the managed cluster. In Hosted mode, only crd and configurations are installed on the spoke/managed cluster. Controllers run in another cluster (defined as management-cluster) and connect to the mangaged cluster with the kubeconfig in secret of "external-managed-kubeconfig"(a kubeconfig of managed-cluster with cluster-admin permission). In Singleton mode, registration/work agent is started as a single deployment. In SingletonHosted mode, agent is started as a single deployment in hosted mode. Note: Do not modify the Mode field once it''s applied.'
                   type: string
             externalServerURLs:
-              description: ExternalServerURLs represents the a list of apiserver urls and ca bundles that is accessible externally If it is set empty, managed cluster has no externally accessible url that hub cluster can visit.
+              description: ExternalServerURLs represents a list of apiserver urls and ca bundles that is accessible externally If it is set empty, managed cluster has no externally accessible url that hub cluster can visit.
               type: array
               items:
                 description: ServerURL represents the apiserver url and ca bundle that is accessible externally
@@ -54,9 +56,29 @@ spec:
                   url:
                     description: URL is the url of apiserver endpoint of the managed cluster.
                     type: string
-            namespace:
-              description: 'Namespace is the namespace to deploy the agent. The namespace must have a prefix of "open-cluster-management-", and if it is not set, the namespace of "open-cluster-management-agent" is used to deploy agent. Note: in Detach mode, this field will be **ignored**, the agent will be deployed to the namespace with the same name as klusterlet.'
+            hubApiServerHostAlias:
+              description: HubApiServerHostAlias contains the host alias for hub api server. registration-agent and work-agent will use it to communicate with hub api server.
+              type: object
+              required:
+                - hostname
+                - ip
+              properties:
+                hostname:
+                  description: Hostname for the above IP address.
+                  type: string
+                  pattern: ^(([a-zA-Z0-9]|[a-zA-Z0-9][a-zA-Z0-9\-]*[a-zA-Z0-9])\.)*([A-Za-z0-9]|[A-Za-z0-9][A-Za-z0-9\-]*[A-Za-z0-9])$
+                ip:
+                  description: IP address of the host file entry.
+                  type: string
+                  pattern: ^(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$
+            imagePullSpec:
+              description: ImagePullSpec represents the desired image configuration of agent, it takes effect only when singleton mode is set. quay.io/open-cluster-management.io/registration-operator:latest will be used if unspecified
               type: string
+            namespace:
+              description: Namespace is the namespace to deploy the agent on the managed cluster. The namespace must have a prefix of "open-cluster-management-", and if it is not set, the namespace of "open-cluster-management-agent" is used to deploy agent. In addition, the add-ons are deployed to the namespace of "{Namespace}-addon". In the Hosted mode, this namespace still exists on the managed cluster to contain necessary resources, like service accounts, roles and rolebindings, while the agent is deployed to the namespace with the same name as klusterlet on the management cluster.
+              type: string
+              maxLength: 63
+              pattern: ^open-cluster-management-[-a-z0-9]*[a-z0-9]$
             nodePlacement:
               description: NodePlacement enables explicit control over the scheduling of the deployed pods.
               type: object
@@ -67,7 +89,7 @@ spec:
                   additionalProperties:
                     type: string
                 tolerations:
-                  description: Tolerations is attached by pods to tolerate any taint that matches the triple <key,value,effect> using the matching operator <operator>. The default is an empty list.
+                  description: Tolerations are attached by pods to tolerate any taint that matches the triple <key,value,effect> using the matching operator <operator>. The default is an empty list.
                   type: array
                   items:
                     description: The pod this Toleration is attached to tolerates any taint that matches the triple <key,value,effect> using the matching operator <operator>.
@@ -89,9 +111,123 @@ spec:
                       value:
                         description: Value is the taint value the toleration matches to. If the operator is Exists, the value should be empty, otherwise just a regular string.
                         type: string
+            registrationConfiguration:
+              description: RegistrationConfiguration contains the configuration of registration
+              type: object
+              properties:
+                clientCertExpirationSeconds:
+                  description: clientCertExpirationSeconds represents the seconds of a client certificate to expire. If it is not set or 0, the default duration seconds will be set by the hub cluster. If the value is larger than the max signing duration seconds set on the hub cluster, the max signing duration seconds will be set.
+                  type: integer
+                  format: int32
+                clusterAnnotations:
+                  description: ClusterAnnotations is annotations with the reserve prefix "agent.open-cluster-management.io" set on ManagedCluster when creating only, other actors can update it afterwards.
+                  type: object
+                  additionalProperties:
+                    type: string
+                featureGates:
+                  description: "FeatureGates represents the list of feature gates for registration If it is set empty, default feature gates will be used. If it is set, featuregate/Foo is an example of one item in FeatureGates:   1. If featuregate/Foo does not exist, registration-operator will discard it   2. If featuregate/Foo exists and is false by default. It is now possible to set featuregate/Foo=[false|true]   3. If featuregate/Foo exists and is true by default. If a cluster-admin upgrading from 1 to 2 wants to continue having featuregate/Foo=false,  \the can set featuregate/Foo=false before upgrading. Let's say the cluster-admin wants featuregate/Foo=false."
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - feature
+                    properties:
+                      feature:
+                        description: Feature is the key of feature gate. e.g. featuregate/Foo.
+                        type: string
+                      mode:
+                        description: Mode is either Enable, Disable, "" where "" is Disable by default. In Enable mode, a valid feature gate `featuregate/Foo` will be set to "--featuregate/Foo=true". In Disable mode, a valid feature gate `featuregate/Foo` will be set to "--featuregate/Foo=false".
+                        type: string
+                        enum:
+                          - Enable
+                          - Disable
+                kubeAPIBurst:
+                  description: 'KubeAPIBurst indicates the maximum burst of the throttle while talking with apiserver of hub cluster from the spoke cluster. If it is set empty, use the default value: 100'
+                  type: integer
+                  format: int32
+                kubeAPIQPS:
+                  description: 'KubeAPIQPS indicates the maximum QPS while talking with apiserver of hub cluster from the spoke cluster. If it is set empty, use the default value: 50'
+                  type: integer
+                  format: int32
             registrationImagePullSpec:
               description: RegistrationImagePullSpec represents the desired image configuration of registration agent. quay.io/open-cluster-management.io/registration:latest will be used if unspecified.
               type: string
+            resourceRequirement:
+              description: ResourceRequirement specify QoS classes of deployments managed by klusterlet. It applies to all the containers in the deployments.
+              type: object
+              properties:
+                resourceRequirements:
+                  description: ResourceRequirements defines resource requests and limits when Type is ResourceQosClassResourceRequirement
+                  type: object
+                  properties:
+                    claims:
+                      description: "Claims lists the names of resources, defined in spec.resourceClaims, that are used by this container. \n This is an alpha field and requires enabling the DynamicResourceAllocation feature gate. \n This field is immutable. It can only be set for containers."
+                      type: array
+                      items:
+                        description: ResourceClaim references one entry in PodSpec.ResourceClaims.
+                        type: object
+                        required:
+                          - name
+                        properties:
+                          name:
+                            description: Name must match the name of one entry in pod.spec.resourceClaims of the Pod where this field is used. It makes that resource available inside a container.
+                            type: string
+                      x-kubernetes-list-map-keys:
+                        - name
+                      x-kubernetes-list-type: map
+                    limits:
+                      description: 'Limits describes the maximum amount of compute resources allowed. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                      type: object
+                      additionalProperties:
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        anyOf:
+                          - type: integer
+                          - type: string
+                        x-kubernetes-int-or-string: true
+                    requests:
+                      description: 'Requests describes the minimum amount of compute resources required. If Requests is omitted for a container, it defaults to Limits if that is explicitly specified, otherwise to an implementation-defined value. Requests cannot exceed Limits. More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/'
+                      type: object
+                      additionalProperties:
+                        pattern: ^(\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))(([KMGTPE]i)|[numkMGTPE]|([eE](\+|-)?(([0-9]+(\.[0-9]*)?)|(\.[0-9]+))))?$
+                        anyOf:
+                          - type: integer
+                          - type: string
+                        x-kubernetes-int-or-string: true
+                type:
+                  type: string
+                  enum:
+                    - Default
+                    - BestEffort
+                    - ResourceRequirement
+            workConfiguration:
+              description: WorkConfiguration contains the configuration of work
+              type: object
+              properties:
+                featureGates:
+                  description: "FeatureGates represents the list of feature gates for work If it is set empty, default feature gates will be used. If it is set, featuregate/Foo is an example of one item in FeatureGates:   1. If featuregate/Foo does not exist, registration-operator will discard it   2. If featuregate/Foo exists and is false by default. It is now possible to set featuregate/Foo=[false|true]   3. If featuregate/Foo exists and is true by default. If a cluster-admin upgrading from 1 to 2 wants to continue having featuregate/Foo=false,  \the can set featuregate/Foo=false before upgrading. Let's say the cluster-admin wants featuregate/Foo=false."
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - feature
+                    properties:
+                      feature:
+                        description: Feature is the key of feature gate. e.g. featuregate/Foo.
+                        type: string
+                      mode:
+                        description: Mode is either Enable, Disable, "" where "" is Disable by default. In Enable mode, a valid feature gate `featuregate/Foo` will be set to "--featuregate/Foo=true". In Disable mode, a valid feature gate `featuregate/Foo` will be set to "--featuregate/Foo=false".
+                        type: string
+                        enum:
+                          - Enable
+                          - Disable
+                kubeAPIBurst:
+                  description: 'KubeAPIBurst indicates the maximum burst of the throttle while talking with apiserver of hub cluster from the spoke cluster. If it is set empty, use the default value: 100'
+                  type: integer
+                  format: int32
+                kubeAPIQPS:
+                  description: 'KubeAPIQPS indicates the maximum QPS while talking with apiserver of hub cluster from the spoke cluster. If it is set empty, use the default value: 50'
+                  type: integer
+                  format: int32
             workImagePullSpec:
               description: WorkImagePullSpec represents the desired image configuration of work agent. quay.io/open-cluster-management.io/work:latest will be used if unspecified.
               type: string
@@ -103,7 +239,7 @@ spec:
               description: 'Conditions contain the different condition statuses for this Klusterlet. Valid condition types are: Applied: Components have been applied in the managed cluster. Available: Components in the managed cluster are available and ready to serve. Progressing: Components in the managed cluster are in a transitioning state. Degraded: Components in the managed cluster do not match the desired configuration and only provide degraded service.'
               type: array
               items:
-                description: "Condition contains details for one aspect of the current state of this API Resource. --- This struct is intended for direct use as an array at the field path .status.conditions.  For example, type FooStatus struct{     // Represents the observations of a foo's current state.     // Known .status.conditions.type are: \"Available\", \"Progressing\", and \"Degraded\"     // +patchMergeKey=type     // +patchStrategy=merge     // +listType=map     // +listMapKey=type     Conditions []metav1.Condition `json:\"conditions,omitempty\" patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"` \n     // other fields }"
+                description: "Condition contains details for one aspect of the current state of this API Resource. --- This struct is intended for direct use as an array at the field path .status.conditions.  For example, \n \ttype FooStatus struct{ \t    // Represents the observations of a foo's current state. \t    // Known .status.conditions.type are: \"Available\", \"Progressing\", and \"Degraded\" \t    // +patchMergeKey=type \t    // +patchStrategy=merge \t    // +listType=map \t    // +listMapKey=type \t    Conditions []metav1.Condition `json:\"conditions,omitempty\" patchStrategy:\"merge\" patchMergeKey:\"type\" protobuf:\"bytes,1,rep,name=conditions\"` \n \t    // other fields \t}"
                 type: object
                 required:
                   - lastTransitionTime
