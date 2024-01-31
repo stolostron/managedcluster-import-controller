@@ -61,6 +61,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
 // Change below variables to serve metrics on different host or port.
@@ -219,8 +220,10 @@ func main() {
 
 	// Create controller-runtime manager
 	mgr, err := ctrl.NewManager(cfg, manager.Options{
-		Scheme:                  scheme,
-		MetricsBindAddress:      fmt.Sprintf(":%d", metricsPort),
+		Scheme: scheme,
+		Metrics: metricsserver.Options{
+			BindAddress: fmt.Sprintf(":%d", metricsPort),
+		},
 		LeaderElection:          true,
 		LeaderElectionID:        "managedcluster-import-controller.open-cluster-management.io",
 		LeaderElectionNamespace: leaderElectionNamespace,
