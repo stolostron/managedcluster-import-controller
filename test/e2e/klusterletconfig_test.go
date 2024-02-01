@@ -125,6 +125,8 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 				},
 			},
 		)
+
+		assertManagedClusterAvailable(managedClusterName)
 	})
 
 	It("Should deploy the klusterlet with proxy config", func() {
