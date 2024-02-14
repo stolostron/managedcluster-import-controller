@@ -29,12 +29,59 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 	var tolerationSeconds int64 = 20
 
 	testcases := []struct {
-		name         string
-		clientObjs   []runtimeclient.Object
-		runtimeObjs  []runtime.Object
-		config       *KlusterletManifestsConfig
-		validateFunc func(t *testing.T, objects []runtime.Object)
+		name                   string
+		defaultImagePullSecret string
+		clientObjs             []runtimeclient.Object
+		runtimeObjs            []runtime.Object
+		config                 *KlusterletManifestsConfig
+		validateFunc           func(t *testing.T, objects []runtime.Object)
 	}{
+		{
+			name: "default without DEFAULT_IMAGE_PULL_SECRET set",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+			},
+			defaultImagePullSecret: "",
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeDefault,
+				"test", // cluster name
+				"test", // klusterlet namespace
+				[]byte("bootstrap kubeconfig"),
+			),
+			validateFunc: func(t *testing.T, objs []runtime.Object) {
+				if len(objs) != 10 {
+					t.Fatalf("Expected 10 objects, but got %d", len(objs))
+				}
+				if len(objs) != 10 {
+					t.Fatalf("Expected 10 objects, but got %d", len(objs))
+				}
+				_, ok := objs[0].(*corev1.Namespace)
+				if !ok {
+					t.Errorf("import secret data %s, the first element is not namespace", constants.ImportSecretImportYamlKey)
+				}
+				pullSecret, ok := objs[9].(*corev1.Secret)
+				if !ok {
+					t.Errorf("import secret data %s, the last element is not secret", constants.ImportSecretImportYamlKey)
+				}
+				if pullSecret.Type != corev1.SecretTypeDockerConfigJson {
+					t.Errorf("the pull secret type %s is not %s",
+						pullSecret.Type, corev1.SecretTypeDockerConfigJson)
+				}
+				if _, ok := pullSecret.Data[corev1.DockerConfigJsonKey]; !ok {
+					t.Errorf("the pull secret data %s is not %s",
+						pullSecret.Data, corev1.DockerConfigJsonKey)
+				}
+				// the content of the pull secret is "{}"
+				if string(pullSecret.Data[corev1.DockerConfigJsonKey]) != "{}" {
+					t.Errorf("the pull secret data %s is not %s",
+						pullSecret.Data[corev1.DockerConfigJsonKey], "{}")
+				}
+			},
+		},
 		{
 			name: "default",
 			clientObjs: []runtimeclient.Object{
@@ -44,11 +91,11 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 					},
 				},
 			},
+			defaultImagePullSecret: "test-image-pull-secret",
 			runtimeObjs: []runtime.Object{
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
-						Namespace: os.Getenv("POD_NAMESPACE"),
+						Name: "test-image-pull-secret",
 					},
 					Data: map[string][]byte{
 						corev1.DockerConfigJsonKey: []byte("fake-token"),
@@ -93,11 +140,11 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 					},
 				},
 			},
+			defaultImagePullSecret: "test-image-pull-secret",
 			runtimeObjs: []runtime.Object{
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
-						Namespace: os.Getenv("POD_NAMESPACE"),
+						Name: "test-image-pull-secret",
 					},
 					Data: map[string][]byte{
 						corev1.DockerConfigKey: []byte("fake-token"),
@@ -118,7 +165,8 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 			},
 		},
 		{
-			name: "default customized with managed cluster annotations",
+			name:                   "default customized with managed cluster annotations",
+			defaultImagePullSecret: "test-image-pull-secret",
 			clientObjs: []runtimeclient.Object{
 				&corev1.Namespace{
 					ObjectMeta: metav1.ObjectMeta{
@@ -129,8 +177,7 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 			runtimeObjs: []runtime.Object{
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
-						Namespace: os.Getenv("POD_NAMESPACE"),
+						Name: "test-image-pull-secret",
 					},
 					Data: map[string][]byte{
 						corev1.DockerConfigKey: []byte("fake-token"),
@@ -187,11 +234,11 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 					},
 				},
 			},
+			defaultImagePullSecret: "test-image-pull-secret",
 			runtimeObjs: []runtime.Object{
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
-						Namespace: os.Getenv("POD_NAMESPACE"),
+						Name: "test-image-pull-secret",
 					},
 					Data: map[string][]byte{
 						corev1.DockerConfigKey: []byte("fake-token"),
@@ -267,6 +314,8 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
+			os.Setenv(constants.DefaultImagePullSecretEnvVarName, testcase.defaultImagePullSecret)
+
 			kubeClient := kubefake.NewSimpleClientset(testcase.runtimeObjs...)
 			clientHolder := &helpers.ClientHolder{
 				KubeClient:          kubeClient,

@@ -236,9 +236,10 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 			return nil, err
 		}
 
-		if imagePullSecret != nil {
-			files = append(files, "manifests/klusterlet/image_pull_secret.yaml")
+		if imagePullSecret == nil {
+			return nil, fmt.Errorf("imagePullSecret is nil")
 		}
+		files = append(files, "manifests/klusterlet/image_pull_secret.yaml")
 
 		imagePullSecretConfig, err := getImagePullSecretConfig(imagePullSecret)
 		if err != nil {
