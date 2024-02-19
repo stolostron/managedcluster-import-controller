@@ -16,6 +16,8 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+const EmptyImagePullSecret = "empty-image-pull-secret"
+
 func getImagePullSecretConfig(imagePullSecret *corev1.Secret) (ImagePullSecretConfig, error) {
 	useImagePullSecret := false
 	var imagePullSecretType corev1.SecretType
@@ -72,17 +74,27 @@ func getImagePullSecret(ctx context.Context, clientHolder *helpers.ClientHolder,
 
 func getDefaultImagePullSecret(ctx context.Context, clientHolder *helpers.ClientHolder) (*corev1.Secret, error) {
 	var err error
+	var secret *corev1.Secret
 
 	defaultSecretName := os.Getenv(constants.DefaultImagePullSecretEnvVarName)
 	if defaultSecretName == "" {
-		// Ignore the image pull secret, it can't be found from env DEFAULT_IMAGE_PULL_SECRET
-		return nil, nil
+		// If default secret can't be found from env DEFAULT_IMAGE_PULL_SECRET, create an empty image pull secret
+		secret = &corev1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: EmptyImagePullSecret,
+			},
+			Data: map[string][]byte{
+				corev1.DockerConfigJsonKey: []byte("{}"),
+			},
+			Type: corev1.SecretTypeDockerConfigJson,
+		}
+	} else {
+		ns := os.Getenv(constants.PodNamespaceEnvVarName)
+		secret, err = clientHolder.KubeClient.CoreV1().Secrets(ns).Get(ctx, defaultSecretName, metav1.GetOptions{})
+		if err != nil {
+			return nil, err
+		}
 	}
 
-	ns := os.Getenv(constants.PodNamespaceEnvVarName)
-	secret, err := clientHolder.KubeClient.CoreV1().Secrets(ns).Get(ctx, defaultSecretName, metav1.GetOptions{})
-	if err != nil {
-		return nil, err
-	}
 	return secret, nil
 }
