@@ -22,6 +22,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
+	schedulingv1 "k8s.io/api/scheduling/v1"
 	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	crdv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
@@ -38,6 +39,7 @@ import (
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/apimachinery/pkg/util/version"
+	versionutil "k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -84,6 +86,7 @@ func init() {
 	utilruntime.Must(crdv1.AddToScheme(genericScheme))
 	utilruntime.Must(operatorv1.Install(genericScheme))
 	utilruntime.Must(addonv1alpha1.Install(genericScheme))
+	utilruntime.Must(schedulingv1.AddToScheme(genericScheme))
 }
 
 type ClientHolder struct {
@@ -494,6 +497,10 @@ func ApplyResources(clientHolder *ClientHolder, recorder events.Recorder,
 			modified, err := applyKlusterlet(clientHolder.OperatorClient, recorder, required)
 			errs = append(errs, err)
 			changed = changed || modified
+		case *schedulingv1.PriorityClass:
+			modified, err := applyPriorityClass(clientHolder.KubeClient, recorder, required)
+			errs = append(errs, err)
+			changed = changed || modified
 		default:
 			errs = append(errs, fmt.Errorf("unknown type %T", required))
 		}
@@ -584,6 +591,43 @@ func applyManifestWork(workClient workclient.Interface, recorder events.Recorder
 		return false, err
 	}
 	reportEvent(recorder, required, "ManifestWork", "updated")
+	return true, nil
+}
+
+func applyPriorityClass(client kubernetes.Interface, recorder events.Recorder,
+	required *schedulingv1.PriorityClass) (bool, error) {
+	existing, err := client.SchedulingV1().PriorityClasses().Get(context.TODO(), required.Name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		if _, err := client.SchedulingV1().PriorityClasses().Create(
+			context.TODO(), required, metav1.CreateOptions{}); err != nil {
+			return false, err
+		}
+
+		reportEvent(recorder, required, "PriorityClass", "created")
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+
+	if existing.Value == required.Value &&
+		existing.GlobalDefault == required.GlobalDefault &&
+		existing.Description == required.Description &&
+		equality.Semantic.DeepEqual(existing.PreemptionPolicy, required.PreemptionPolicy) {
+		return false, nil
+	}
+
+	existing = existing.DeepCopy()
+	existing.Value = required.Value
+	existing.GlobalDefault = required.GlobalDefault
+	existing.Description = required.Description
+	existing.PreemptionPolicy = required.PreemptionPolicy
+
+	if _, err := client.SchedulingV1().PriorityClasses().Update(
+		context.TODO(), existing, metav1.UpdateOptions{}); err != nil {
+		return false, err
+	}
+	reportEvent(recorder, required, "PriorityClass", "updated")
 	return true, nil
 }
 
@@ -880,4 +924,37 @@ func ApplyCustomResourceDefinitionV1Beta1(client apiextclientv1beta1.CustomResou
 	reportEvent(recorder, required, "CustomResourceDefinition", "updated")
 
 	return actual, true, err
+}
+
+func IsKubeVersionChanged(objectOld, objectNew runtime.Object) bool {
+	clusterOld, ok := objectOld.(*clusterv1.ManagedCluster)
+	if !ok {
+		return false
+	}
+	clusterNew, ok := objectNew.(*clusterv1.ManagedCluster)
+	if !ok {
+		return false
+	}
+	return clusterOld.Status.Version.Kubernetes != clusterNew.Status.Version.Kubernetes
+}
+
+func SupportPriorityClass(cluster *clusterv1.ManagedCluster) (bool, error) {
+	if cluster == nil || len(cluster.Status.Version.Kubernetes) == 0 {
+		return false, nil
+	}
+
+	kubeVersion, err := versionutil.ParseGeneric(cluster.Status.Version.Kubernetes)
+	if err != nil {
+		return false, err
+	}
+
+	// priorityclass.scheduling.k8s.io/v1 is supported since v1.14.
+	if cnt, err := kubeVersion.Compare("v1.14.0"); err != nil {
+		klog.Warningf("Do not support priorityclass because %s: %v",
+			"it's failed to check whether the cluster supports priorityclass/v1 or not", err)
+		return false, nil
+	} else if cnt == -1 {
+		return false, nil
+	}
+	return true, nil
 }
