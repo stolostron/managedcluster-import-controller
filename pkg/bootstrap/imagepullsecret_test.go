@@ -19,10 +19,6 @@ import (
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 )
 
-func init() {
-	os.Setenv(constants.DefaultImagePullSecretEnvVarName, "test-image-pull-secret-secret") // this is also depend by render_test.go
-}
-
 func TestGetImagePullSecret(t *testing.T) {
 	cases := []struct {
 		name                            string
@@ -31,20 +27,21 @@ func TestGetImagePullSecret(t *testing.T) {
 		managedCluster                  *clusterv1.ManagedCluster
 		klusterletconfigImagePullSecret corev1.ObjectReference
 		expectedSecret                  *corev1.Secret
+		defaultImagePullSecret          string
 	}{
 		{
 			name:       "no registry",
 			clientObjs: []client.Object{},
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
-					Namespace: os.Getenv("POD_NAMESPACE"),
+					Name: "test-image-pull-secret",
 				},
 				Data: map[string][]byte{
 					".dockerconfigjson": []byte("fake-token"),
 				},
 				Type: corev1.SecretTypeDockerConfigJson,
 			},
+			defaultImagePullSecret: "test-image-pull-secret",
 			managedCluster: &clusterv1.ManagedCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test",
@@ -53,8 +50,23 @@ func TestGetImagePullSecret(t *testing.T) {
 			klusterletconfigImagePullSecret: corev1.ObjectReference{},
 			expectedSecret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
-					Namespace: os.Getenv("POD_NAMESPACE"),
+					Name: "test-image-pull-secret",
+				},
+			},
+		},
+		{
+			name:       "no registry, no default secret found in env var",
+			clientObjs: []client.Object{},
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test",
+				},
+			},
+			defaultImagePullSecret:          "",
+			klusterletconfigImagePullSecret: corev1.ObjectReference{},
+			expectedSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: EmptyImagePullSecret,
 				},
 			},
 		},
@@ -71,6 +83,7 @@ func TestGetImagePullSecret(t *testing.T) {
 				},
 				Type: corev1.SecretTypeDockerConfigJson,
 			},
+			defaultImagePullSecret: "test-image-pull-secret",
 			managedCluster: &clusterv1.ManagedCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test",
@@ -103,6 +116,7 @@ func TestGetImagePullSecret(t *testing.T) {
 				},
 				Type: corev1.SecretTypeDockerConfigJson,
 			},
+			defaultImagePullSecret: "test-image-pull-secret",
 			managedCluster: &clusterv1.ManagedCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "test",
@@ -123,7 +137,14 @@ func TestGetImagePullSecret(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			kubeClient := kubefake.NewSimpleClientset(c.secret)
+			os.Setenv(constants.DefaultImagePullSecretEnvVarName, c.defaultImagePullSecret)
+
+			var kubeClient *kubefake.Clientset
+			if c.secret != nil {
+				kubeClient = kubefake.NewSimpleClientset(c.secret)
+			} else {
+				kubeClient = kubefake.NewSimpleClientset()
+			}
 			clientHolder := &helpers.ClientHolder{
 				KubeClient:          kubeClient,
 				ImageRegistryClient: imageregistry.NewClient(kubeClient),
