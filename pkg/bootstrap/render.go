@@ -52,7 +52,10 @@ var klusterletFiles = []string{
 	"manifests/klusterlet/klusterlet.yaml",
 }
 
+// TODO: The clusterrole_priority_class.yaml is only for upgrade case and should be removed
+// after two or three releases.
 var priorityClassFiles = []string{
+	"manifests/klusterlet/clusterrole_priority_class.yaml",
 	"manifests/klusterlet/priority_class.yaml",
 }
 
