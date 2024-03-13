@@ -24,7 +24,6 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	schedulingv1 "k8s.io/api/scheduling/v1"
 	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	crdv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
@@ -469,11 +468,6 @@ func TestApplyResources(t *testing.T) {
 						Namespace: "test_cluster",
 					},
 				},
-				&schedulingv1.PriorityClass{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test_priority_class",
-					},
-				},
 			},
 			owner: &clusterv1.ManagedCluster{
 				ObjectMeta: metav1.ObjectMeta{
@@ -519,11 +513,6 @@ func TestApplyResources(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test_cluster",
 						Namespace: "test_cluster",
-					},
-				},
-				&schedulingv1.PriorityClass{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test_priority_class",
 					},
 				},
 			},
@@ -656,12 +645,6 @@ func TestApplyResources(t *testing.T) {
 						},
 					},
 				},
-				&schedulingv1.PriorityClass{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test_priority_class",
-					},
-					GlobalDefault: true,
-				},
 			},
 			owner: &clusterv1.ManagedCluster{
 				ObjectMeta: metav1.ObjectMeta{
@@ -708,11 +691,6 @@ func TestApplyResources(t *testing.T) {
 					Type: corev1.SecretTypeOpaque,
 				},
 				deployment,
-				&schedulingv1.PriorityClass{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test_priority_class",
-					},
-				},
 			},
 			crds: []runtime.Object{
 				&crdv1beta1.CustomResourceDefinition{
@@ -818,11 +796,6 @@ func TestApplyResources(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "label_test_cluster",
 						Namespace: "label_test_cluster",
-					},
-				},
-				&schedulingv1.PriorityClass{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test_priority_class",
 					},
 				},
 			},
@@ -1674,158 +1647,6 @@ func TestGenerateImportClientFromRosaCluster(t *testing.T) {
 			result, _, _, _ := GenerateImportClientFromRosaCluster(c.getter, c.secret)
 			if !result.Requeue {
 				t.Errorf("expected requeue result, but failed")
-			}
-		})
-	}
-}
-
-func TestIsKubeVersionChanged(t *testing.T) {
-	cases := []struct {
-		name       string
-		oldCluster runtime.Object
-		newCluster runtime.Object
-		changed    bool
-	}{
-		{
-			name:       "invalid old cluster",
-			oldCluster: &corev1.Secret{},
-			newCluster: &clusterv1.ManagedCluster{},
-		},
-		{
-			name:       "invalid new cluster",
-			oldCluster: &clusterv1.ManagedCluster{},
-			newCluster: &corev1.Secret{},
-		},
-		{
-			name:       "kube version is set",
-			oldCluster: &clusterv1.ManagedCluster{},
-			newCluster: &clusterv1.ManagedCluster{
-				Status: clusterv1.ManagedClusterStatus{
-					Version: clusterv1.ManagedClusterVersion{
-						Kubernetes: "v1.14.12",
-					},
-				},
-			},
-			changed: true,
-		},
-		{
-			name: "kube version is unset",
-			oldCluster: &clusterv1.ManagedCluster{
-				Status: clusterv1.ManagedClusterStatus{
-					Version: clusterv1.ManagedClusterVersion{
-						Kubernetes: "v1.14.12",
-					},
-				},
-			},
-			newCluster: &clusterv1.ManagedCluster{},
-			changed:    true,
-		},
-		{
-			name: "cluster upgraded",
-			oldCluster: &clusterv1.ManagedCluster{
-				Status: clusterv1.ManagedClusterStatus{
-					Version: clusterv1.ManagedClusterVersion{
-						Kubernetes: "v1.14.12",
-					},
-				},
-			},
-			newCluster: &clusterv1.ManagedCluster{
-				Status: clusterv1.ManagedClusterStatus{
-					Version: clusterv1.ManagedClusterVersion{
-						Kubernetes: "v1.15.03",
-					},
-				},
-			},
-			changed: true,
-		},
-		{
-			name: "no change",
-			oldCluster: &clusterv1.ManagedCluster{
-				Status: clusterv1.ManagedClusterStatus{
-					Version: clusterv1.ManagedClusterVersion{
-						Kubernetes: "v1.14.12",
-					},
-				},
-			},
-			newCluster: &clusterv1.ManagedCluster{
-				Status: clusterv1.ManagedClusterStatus{
-					Version: clusterv1.ManagedClusterVersion{
-						Kubernetes: "v1.14.12",
-					},
-				},
-			},
-		},
-	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			changed := IsKubeVersionChanged(c.oldCluster, c.newCluster)
-			if changed != c.changed {
-				t.Errorf("expect changed %v but got %v", c.changed, changed)
-			}
-		})
-	}
-}
-
-func TestSupportPriorityClass(t *testing.T) {
-	cases := []struct {
-		name              string
-		kubeVersionString string
-		supported         bool
-		expectedErr       string
-	}{
-		{
-			name: "nil cluster",
-		},
-		{
-			name: "without kubeVersion",
-		},
-		{
-			name:              "kube v1.13",
-			kubeVersionString: "v1.13.0",
-		},
-		{
-			name:              "kube v1.14",
-			kubeVersionString: "v1.14.0",
-			supported:         true,
-		},
-		{
-			name:              "kube v1.22",
-			kubeVersionString: "v1.22.5+5c84e52",
-			supported:         true,
-		},
-		{
-			name:              "invalid kubeVersion",
-			kubeVersionString: "invalid-version",
-			expectedErr:       "could not parse \"invalid-version\" as version",
-		},
-	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			cluster := &clusterv1.ManagedCluster{
-				Status: clusterv1.ManagedClusterStatus{
-					Version: clusterv1.ManagedClusterVersion{
-						Kubernetes: c.kubeVersionString,
-					},
-				},
-			}
-			supported, err := SupportPriorityClass(cluster)
-			if c.expectedErr != "" && err == nil {
-				t.Errorf("expected error, but failed")
-			}
-			if err != nil && c.expectedErr != err.Error() {
-				t.Errorf("unexpected error: %v", err)
-			}
-			if err != nil {
-				if c.expectedErr == "" {
-					t.Errorf("unexpected error: %v", err)
-				} else if err.Error() != c.expectedErr {
-					t.Errorf("expected error %q, but got %q", c.expectedErr, err.Error())
-				}
-			}
-			if supported != c.supported {
-				t.Errorf("expect supported %v but got %v", c.supported, supported)
 			}
 		})
 	}

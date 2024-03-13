@@ -175,7 +175,8 @@ func (i *ImportHelper) Import(backupRestore bool, clusterName string,
 				NewManagedClusterImportSucceededCondition(
 					metav1.ConditionFalse,
 					constants.ConditionReasonManagedClusterImporting,
-					failureMessageOfKubeClientGerneration(managedClusterKubeClientSecret, err),
+					fmt.Sprintf("Generate kube client by secret %s/%s, %v",
+						managedClusterKubeClientSecret.Namespace, managedClusterKubeClientSecret.Name, err),
 				), false, currentRetry, nil
 		}
 
@@ -183,7 +184,8 @@ func (i *ImportHelper) Import(backupRestore bool, clusterName string,
 			NewManagedClusterImportSucceededCondition(
 				metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImportFailed,
-				failureMessageOfInvalidAutoImportSecret(managedClusterKubeClientSecret, err),
+				fmt.Sprintf("AutoImportSecretInvalid %s/%s; generate kube client by secret error: %v",
+					managedClusterKubeClientSecret.Namespace, managedClusterKubeClientSecret.Name, err),
 			), false, currentRetry, nil
 	}
 
@@ -219,8 +221,9 @@ func (i *ImportHelper) Import(backupRestore bool, clusterName string,
 		if ContainAuthError(err) {
 			// return message reflects the auto import secret is invalid, so the user knows that
 			// a correct secret needs to be re-provided
-			condition.Message = failureMessageOfInvalidAutoImportSecretPrivileges(
-				managedClusterKubeClientSecret, err)
+			condition.Message = fmt.Sprintf(
+				"AutoImportSecretInvalid %s/%s; please check its permission, apply resources error: %v",
+				managedClusterKubeClientSecret.Namespace, managedClusterKubeClientSecret.Name, err)
 			return reconcile.Result{}, condition, modified, currentRetry, nil
 		}
 
@@ -249,35 +252,6 @@ func (i *ImportHelper) Import(backupRestore bool, clusterName string,
 			constants.ConditionReasonManagedClusterImporting,
 			conditionMessageImportingResourcesApplied,
 		), modified, currentRetry, nil
-}
-
-func failureMessageOfKubeClientGerneration(managedClusterKubeClientSecret *corev1.Secret,
-	err error) string {
-	if managedClusterKubeClientSecret != nil {
-		return fmt.Sprintf("Generate kube client by secret %s/%s, %v",
-			managedClusterKubeClientSecret.Namespace, managedClusterKubeClientSecret.Name, err)
-	}
-	return fmt.Sprintf("Generate kube client error: %v", err)
-}
-
-func failureMessageOfInvalidAutoImportSecret(managedClusterKubeClientSecret *corev1.Secret,
-	err error) string {
-	if managedClusterKubeClientSecret != nil {
-		return fmt.Sprintf("AutoImportSecretInvalid %s/%s; generate kube client by secret error: %v",
-			managedClusterKubeClientSecret.Namespace, managedClusterKubeClientSecret.Name, err)
-	}
-	return fmt.Sprintf("Generate kube client error: %v", err)
-}
-
-func failureMessageOfInvalidAutoImportSecretPrivileges(managedClusterKubeClientSecret *corev1.Secret,
-	err error) string {
-	if managedClusterKubeClientSecret != nil {
-		return fmt.Sprintf(
-			"AutoImportSecretInvalid %s/%s; please check its permission, apply resources error: %v",
-			managedClusterKubeClientSecret.Namespace, managedClusterKubeClientSecret.Name, err)
-	}
-	return fmt.Sprintf(
-		"Apply resources error, please check kube client permission: %v", err)
 }
 
 const (

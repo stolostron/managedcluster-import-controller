@@ -136,7 +136,3 @@ const (
 	AutoImportSecretRosaConfigClusterIDKey  string            = "cluster_id"
 	AutoImportSecretRosaConfigRetryTimesKey string            = "retry_times"
 )
-
-const (
-	DefaultKlusterletPriorityClassName = "klusterlet-critical"
-)

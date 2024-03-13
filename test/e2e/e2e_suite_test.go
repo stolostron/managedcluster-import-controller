@@ -19,7 +19,6 @@ import (
 	"github.com/onsi/gomega"
 	ocinfrav1 "github.com/openshift/api/config/v1"
 	"github.com/openshift/library-go/pkg/operator/events"
-	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -277,98 +276,6 @@ func assertManagedClusterImportSecret(managedClusterName string) {
 			}
 			return nil
 		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
-	})
-}
-
-func assertManagedClusterPriorityClass(managedClusterName string) {
-	start := time.Now()
-	defer func() {
-		util.Logf("assert managed cluster priority class spending time: %.2f seconds", time.Since(start).Seconds())
-	}()
-	ginkgo.By("Should set the priorityclass", func() {
-		gomega.Eventually(func() error {
-			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
-			if err != nil {
-				return err
-			}
-			// wait for kube version is available in the status of the managed cluster
-			if len(cluster.Status.Version.Kubernetes) == 0 {
-				return fmt.Errorf("kube version is unknown")
-			}
-			// check the priority class name of klusterlet & operator
-			supported, err := helpers.SupportPriorityClass(cluster)
-			if err != nil {
-				return err
-			}
-			var priorityClassName string
-			if supported {
-				priorityClassName = constants.DefaultKlusterletPriorityClassName
-			}
-
-			name := fmt.Sprintf("%s-import", managedClusterName)
-			secret, err := hubKubeClient.CoreV1().Secrets(managedClusterName).Get(context.TODO(), name, metav1.GetOptions{})
-			if err != nil {
-				return err
-			}
-			var klusterlet *operatorv1.Klusterlet
-			var operator *appsv1.Deployment
-			for _, yaml := range helpers.SplitYamls(secret.Data[constants.ImportSecretImportYamlKey]) {
-				obj := helpers.MustCreateObject(yaml)
-				switch required := obj.(type) {
-				case *operatorv1.Klusterlet:
-					klusterlet = required
-				case *appsv1.Deployment:
-					operator = required
-				}
-			}
-			if klusterlet == nil {
-				return fmt.Errorf("Klusterlet is not found in import.yaml")
-			}
-			if klusterlet.Spec.PriorityClassName != priorityClassName {
-				return fmt.Errorf("expect PriorityClassName of Klusterlet in import.yaml is %q, but got %q", priorityClassName,
-					klusterlet.Spec.PriorityClassName)
-			}
-			if operator == nil {
-				return fmt.Errorf("operator is not found in import.yaml")
-			}
-			if operator.Spec.Template.Spec.PriorityClassName != priorityClassName {
-				return fmt.Errorf("expect PriorityClassName of Klusterlet operator in import.yaml is %q, but got %q", priorityClassName,
-					operator.Spec.Template.Spec.PriorityClassName)
-			}
-			return nil
-		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
-	})
-}
-
-func assertManagedClusterPriorityClassHosted(managedClusterName string) {
-	start := time.Now()
-	defer func() {
-		util.Logf("assert managed cluster priority class hosted spending time: %.2f seconds", time.Since(start).Seconds())
-	}()
-	ginkgo.By("Should set the priorityclass", func() {
-		gomega.Eventually(func() error {
-			name := fmt.Sprintf("%s-import", managedClusterName)
-			secret, err := hubKubeClient.CoreV1().Secrets(managedClusterName).Get(context.TODO(), name, metav1.GetOptions{})
-			if err != nil {
-				return err
-			}
-			var klusterlet *operatorv1.Klusterlet
-			for _, yaml := range helpers.SplitYamls(secret.Data[constants.ImportSecretImportYamlKey]) {
-				obj := helpers.MustCreateObject(yaml)
-				switch required := obj.(type) {
-				case *operatorv1.Klusterlet:
-					klusterlet = required
-				}
-			}
-			if klusterlet == nil {
-				return fmt.Errorf("Klusterlet is not found in import.yaml")
-			}
-			if klusterlet.Spec.PriorityClassName != constants.DefaultKlusterletPriorityClassName {
-				return fmt.Errorf("expect PriorityClassName of Klusterlet in import.yaml is %q, but got %q", constants.DefaultKlusterletPriorityClassName,
-					klusterlet.Spec.PriorityClassName)
-			}
-			return nil
-		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 }
 

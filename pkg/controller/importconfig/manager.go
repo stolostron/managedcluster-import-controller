@@ -43,10 +43,8 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder
 				UpdateFunc: func(e event.UpdateEvent) bool {
 					// handle the labels changes for image registry
 					// handle the annotations changes for node placement and klusterletconfig
-					// handle the claim changes for priority class
 					return !equality.Semantic.DeepEqual(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels()) ||
-						!equality.Semantic.DeepEqual(e.ObjectOld.GetAnnotations(), e.ObjectNew.GetAnnotations()) ||
-						helpers.IsKubeVersionChanged(e.ObjectOld, e.ObjectNew)
+						!equality.Semantic.DeepEqual(e.ObjectOld.GetAnnotations(), e.ObjectNew.GetAnnotations())
 				},
 			}),
 		).

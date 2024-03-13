@@ -46,6 +46,3 @@ spec:
       {{- end }}
     {{- end }}
 {{- end }}
-{{- if .PriorityClassName }}
-  priorityClassName: "{{ .PriorityClassName }}"
-{{- end }}

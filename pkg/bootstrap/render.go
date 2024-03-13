@@ -52,10 +52,6 @@ var klusterletFiles = []string{
 	"manifests/klusterlet/klusterlet.yaml",
 }
 
-var priorityClassFiles = []string{
-	"manifests/klusterlet/priority_class.yaml",
-}
-
 type RenderConfig struct {
 	KlusterletRenderConfig
 	ImagePullSecretConfig
@@ -70,7 +66,6 @@ type KlusterletRenderConfig struct {
 	RegistrationImageName     string
 	WorkImageName             string
 	ImageName                 string
-	PriorityClassName         string
 	NodeSelector              map[string]string
 	Tolerations               []corev1.Toleration
 	InstallMode               string
@@ -92,9 +87,6 @@ type KlusterletManifestsConfig struct {
 	KlusterletNamespace          string
 	KlusterletClusterAnnotations map[string]string
 	BootstrapKubeconfig          []byte
-
-	// PriorityClassName is the name of the PriorityClass used by the klusterlet and operator
-	PriorityClassName string
 
 	// In the managed cluster annotations, it contains nodeSelectors and tolerations for the klusterlet deployment.
 	ManagedClusterAnnotations map[string]string
@@ -140,11 +132,6 @@ func (c *KlusterletManifestsConfig) WithImagePullSecretGenerate(g bool) *Kluster
 	return c
 }
 
-func (c *KlusterletManifestsConfig) WithPriorityClassName(priorityClassName string) *KlusterletManifestsConfig {
-	c.PriorityClassName = priorityClassName
-	return c
-}
-
 // Generate returns the rendered klusterlet manifests in bytes.
 func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *helpers.ClientHolder) ([]byte, error) {
 	// Files depends on the install mode
@@ -153,9 +140,6 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 	case operatorv1.InstallModeHosted, operatorv1.InstallModeSingletonHosted:
 		files = append(files, klusterletFiles...)
 	case operatorv1.InstallModeDefault, operatorv1.InstallModeSingleton:
-		if b.PriorityClassName == constants.DefaultKlusterletPriorityClassName {
-			files = append(files, priorityClassFiles...)
-		}
 		files = append(files, klusterletOperatorFiles...)
 		files = append(files, klusterletFiles...)
 	default:
@@ -233,9 +217,6 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 			RegistrationImageName:     registrationImageName,
 			WorkImageName:             workImageName,
 			ImageName:                 registrationOperatorImageName,
-
-			// PriorityClassName
-			PriorityClassName: b.PriorityClassName,
 
 			// NodePlacement
 			NodeSelector: nodeSelector,

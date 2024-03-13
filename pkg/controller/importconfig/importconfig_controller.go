@@ -106,14 +106,6 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 	var secretAnnotations map[string]string
 	switch mode {
 	case operatorv1.InstallModeDefault, operatorv1.InstallModeSingleton:
-		supportPriorityClass, err := helpers.SupportPriorityClass(managedCluster)
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-		var priorityClassName string
-		if supportPriorityClass {
-			priorityClassName = constants.DefaultKlusterletPriorityClassName
-		}
 		yamlcontent, err = bootstrap.NewKlusterletManifestsConfig(
 			mode,
 			managedCluster.Name,
@@ -121,7 +113,6 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 			bootstrapKubeconfigData).
 			WithManagedClusterAnnotations(managedCluster.GetAnnotations()).
 			WithKlusterletConfig(kc).
-			WithPriorityClassName(priorityClassName).
 			Generate(ctx, r.clientHolder)
 		if err != nil {
 			return reconcile.Result{}, err
@@ -143,11 +134,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 			klusterletNamespace(managedCluster.GetAnnotations()),
 			bootstrapKubeconfigData).
 			WithManagedClusterAnnotations(managedCluster.GetAnnotations()).
-			WithImagePullSecretGenerate(false).
-			// the hosting cluster should support PriorityClass API and have
-			// already had the default PriorityClass
-			WithPriorityClassName(constants.DefaultKlusterletPriorityClassName).
-			Generate(ctx, r.clientHolder)
+			WithImagePullSecretGenerate(false).Generate(ctx, r.clientHolder)
 		if err != nil {
 			return reconcile.Result{}, err
 		}

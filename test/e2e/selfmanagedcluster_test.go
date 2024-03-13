@@ -37,7 +37,6 @@ var _ = ginkgo.Describe("Importing a self managed cluster", func() {
 			assertManagedClusterImportSecretApplied(localClusterName)
 			assertManagedClusterAvailable(localClusterName)
 			assertManagedClusterManifestWorksAvailable(localClusterName)
-			assertManagedClusterPriorityClass(localClusterName)
 		})
 	})
 
@@ -82,7 +81,6 @@ var _ = ginkgo.Describe("Importing a self managed cluster", func() {
 			assertManagedClusterImportSecretApplied(managedClusterName)
 			assertManagedClusterAvailable(managedClusterName)
 			assertManagedClusterManifestWorksAvailable(managedClusterName)
-			assertManagedClusterPriorityClass(managedClusterName)
 		})
 	})
 })

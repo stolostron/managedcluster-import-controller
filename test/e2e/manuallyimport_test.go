@@ -63,6 +63,5 @@ var _ = ginkgo.Describe("Importing a managed cluster manually", func() {
 		assertManagedClusterManifestWorks(managedClusterName)
 		assertManagedClusterAvailable(managedClusterName)
 		assertManagedClusterManifestWorksAvailable(managedClusterName)
-		assertManagedClusterPriorityClass(managedClusterName)
 	})
 })

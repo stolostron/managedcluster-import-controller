@@ -81,9 +81,6 @@ spec:
         volumeMounts:
         - name: tmpdir
           mountPath: /tmp
-{{- if .PriorityClassName }}
-      priorityClassName: "{{ .PriorityClassName }}"
-{{- end }}
       volumes:
       - name: tmpdir
         emptyDir: { }

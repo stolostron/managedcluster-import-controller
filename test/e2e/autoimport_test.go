@@ -57,7 +57,6 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 		assertManagedClusterImportSecretApplied(managedClusterName)
 		assertManagedClusterAvailable(managedClusterName)
 		assertManagedClusterManifestWorksAvailable(managedClusterName)
-		assertManagedClusterPriorityClass(managedClusterName)
 
 		assertAutoImportSecretDeleted(managedClusterName)
 	})
@@ -103,7 +102,6 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 		assertManagedClusterImportSecretApplied(managedClusterName)
 		assertManagedClusterAvailable(managedClusterName)
 		assertManagedClusterManifestWorksAvailable(managedClusterName)
-		assertManagedClusterPriorityClass(managedClusterName)
 
 		assertAutoImportSecretDeleted(managedClusterName)
 	})
@@ -128,7 +126,6 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 		assertManagedClusterImportSecretApplied(managedClusterName)
 		assertManagedClusterAvailable(managedClusterName)
 		assertManagedClusterManifestWorksAvailable(managedClusterName)
-		assertManagedClusterPriorityClass(managedClusterName)
 
 		assertAutoImportSecretDeleted(managedClusterName)
 	})
@@ -187,7 +184,6 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 		assertManagedClusterImportSecretApplied(managedClusterName)
 		assertManagedClusterAvailable(managedClusterName)
 		assertManagedClusterManifestWorksAvailable(managedClusterName)
-		assertManagedClusterPriorityClass(managedClusterName)
 
 		ginkgo.By(fmt.Sprintf("Should keep the auto-import-secret in managed cluster namespace %s", managedClusterName), func() {
 			gomega.Consistently(func() error {
@@ -217,7 +213,6 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 		assertManagedClusterImportSecretApplied(managedClusterName)
 		assertManagedClusterAvailable(managedClusterName)
 		assertManagedClusterManifestWorksAvailable(managedClusterName)
-		assertManagedClusterPriorityClass(managedClusterName)
 
 		assertAutoImportSecretDeleted(managedClusterName)
 
