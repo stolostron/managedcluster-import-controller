@@ -7,6 +7,8 @@ ENV REMOTE_SOURCE_DIR='/remote-source'
 
 COPY $REMOTE_SOURCE $REMOTE_SOURCE_DIR/app/
 WORKDIR $REMOTE_SOURCE_DIR/app
+# This is used to fix "Error: building at STEP "RUN BUILD_OUTPUT_DIR=${REMOTE_SOURCE_DIR}/app make build": exit status 2" in konflux build
+RUN go mod vendor
 RUN BUILD_OUTPUT_DIR=${REMOTE_SOURCE_DIR}/app make build
 
 FROM registry.access.redhat.com/ubi8/ubi-minimal:latest
