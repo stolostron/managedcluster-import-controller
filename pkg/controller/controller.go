@@ -41,7 +41,6 @@ var AddToManagerFuncs = []AddToManagerFunc{
 	manifestwork.Add,
 	selfmanagedcluster.Add,
 	autoimport.Add,
-	clusterdeployment.Add,
 	clusternamespacedeletion.Add,
 	importstatus.Add,
 }
@@ -50,6 +49,15 @@ var AddToManagerFuncs = []AddToManagerFunc{
 func AddToManager(manager manager.Manager, clientHolder *helpers.ClientHolder, informerHolder *source.InformerHolder) error {
 	for _, addFunc := range AddToManagerFuncs {
 		name, err := addFunc(manager, clientHolder, informerHolder)
+		if err != nil {
+			return err
+		}
+
+		log.Info(fmt.Sprintf("Add controller %s to manager", name))
+	}
+
+	if helpers.DeployOnOCP() {
+		name, err := clusterdeployment.Add(manager, clientHolder, informerHolder)
 		if err != nil {
 			return err
 		}

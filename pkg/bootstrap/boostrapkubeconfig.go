@@ -169,6 +169,10 @@ func GetKubeAPIServerAddress(ctx context.Context, client client.Client,
 		return klusterletConfig.Spec.HubKubeAPIServerURL, nil
 	}
 
+	if !helpers.DeployOnOCP() {
+		return "", fmt.Errorf("failed get Hub kube apiserver on non-OCP cluster")
+	}
+
 	infraConfig := &ocinfrav1.Infrastructure{}
 	if err := client.Get(ctx, types.NamespacedName{Name: "cluster"}, infraConfig); err != nil {
 		return "", err
@@ -182,6 +186,11 @@ func GetBootstrapCAData(ctx context.Context, clientHolder *helpers.ClientHolder,
 	// use the custom hub Kube APIServer CA bundle if specified
 	if klusterletConfig != nil && len(klusterletConfig.Spec.HubKubeAPIServerCABundle) > 0 {
 		return klusterletConfig.Spec.HubKubeAPIServerCABundle, nil
+	}
+
+	// get caBundle from the kube-root-ca.crt configmap in the pod namespace for non-ocp case.
+	if !helpers.DeployOnOCP() {
+		return getCABundleFromConfigmap(ctx, clientHolder, caNamespace)
 	}
 
 	// and then get the ca cert from ocp apiserver firstly
@@ -225,6 +234,10 @@ func GetBootstrapCAData(ctx context.Context, clientHolder *helpers.ClientHolder,
 
 	// failed to get the ca from ocp, fallback to the kube-root-ca.crt configmap from the pod namespace.
 	klog.Info(fmt.Sprintf("No ca.crt was found, fallback to the %s/kube-root-ca.crt", caNamespace))
+	return getCABundleFromConfigmap(ctx, clientHolder, caNamespace)
+}
+
+func getCABundleFromConfigmap(ctx context.Context, clientHolder *helpers.ClientHolder, caNamespace string) ([]byte, error) {
 	rootCA, err := clientHolder.KubeClient.CoreV1().ConfigMaps(caNamespace).Get(ctx, "kube-root-ca.crt", metav1.GetOptions{})
 	if err != nil {
 		return nil, err
