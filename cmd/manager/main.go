@@ -20,10 +20,6 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
-	"k8s.io/client-go/informers"
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
-	"k8s.io/client-go/tools/cache"
-
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/agentregistration"
@@ -32,6 +28,10 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
+	"k8s.io/client-go/discovery"
+	"k8s.io/client-go/informers"
+	_ "k8s.io/client-go/plugin/pkg/client/auth"
+	"k8s.io/client-go/tools/cache"
 
 	klusterletconfigclient "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned"
 	klusterletconfiginformer "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/informers/externalversions"
@@ -147,6 +147,12 @@ func main() {
 		os.Exit(1)
 	}
 
+	discoveryClient, err := discovery.NewDiscoveryClientForConfig(cfg)
+	if err != nil {
+		setupLog.Error(err, "failed to create discovery client")
+		os.Exit(1)
+	}
+
 	importSecertInformerF := informers.NewFilteredSharedInformerFactory(
 		kubeClient,
 		10*time.Minute,
@@ -218,6 +224,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	if err = helpers.CheckDeployOnOCP(discoveryClient); err != nil {
+		setupLog.Error(err, "failed to check if the controller is deployed on OCP cluster")
+		os.Exit(1)
+	}
+
 	// Create controller-runtime manager
 	mgr, err := ctrl.NewManager(cfg, manager.Options{
 		Scheme: scheme,
@@ -278,7 +289,7 @@ func main() {
 	managedclusterInformerF.WaitForCacheSync(ctx.Done())
 
 	// Start the agent-registratioin server
-	if features.DefaultMutableFeatureGate.Enabled(features.AgentRegistration) {
+	if features.DefaultMutableFeatureGate.Enabled(features.AgentRegistration) && helpers.DeployOnOCP() {
 		go func() {
 			if err := agentregistration.RunAgentRegistrationServer(ctx, 9091, clientHolder,
 				klusterletconfigLister); err != nil {

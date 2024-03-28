@@ -33,8 +33,7 @@ const controllerName = "clusternamespacedeletion-controller"
 // Add creates a new managedcluster controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, _ *source.InformerHolder) (string, error) {
-
-	err := ctrl.NewControllerManagedBy(mgr).Named(controllerName).
+	mgrBuilder := ctrl.NewControllerManagedBy(mgr).Named(controllerName).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
 		}).
@@ -101,29 +100,6 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, _ *source.Info
 			}),
 		).
 		Watches(
-			&hivev1.ClusterDeployment{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
-				return []reconcile.Request{
-					{
-						NamespacedName: types.NamespacedName{
-							Name: o.GetNamespace(),
-						},
-					},
-				}
-			}),
-			// only cares deletion
-			builder.WithPredicates(predicate.Funcs{
-				GenericFunc: func(e event.GenericEvent) bool { return false },
-				DeleteFunc:  func(e event.DeleteEvent) bool { return true },
-				CreateFunc: func(e event.CreateEvent) bool {
-					return false
-				},
-				UpdateFunc: func(e event.UpdateEvent) bool {
-					return false
-				},
-			}),
-		).
-		Watches(
 			&addonv1alpha1.ManagedClusterAddOn{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
 				return []reconcile.Request{
@@ -145,34 +121,62 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, _ *source.Info
 					return false
 				},
 			}),
-		).
-		Watches(
-			&asv1beta1.InfraEnv{},
-			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
-				return []reconcile.Request{
-					{
-						NamespacedName: types.NamespacedName{
-							Name: o.GetNamespace(),
+		)
+
+	if helpers.DeployOnOCP() {
+		mgrBuilder.
+			Watches(
+				&hivev1.ClusterDeployment{},
+				handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
+					return []reconcile.Request{
+						{
+							NamespacedName: types.NamespacedName{
+								Name: o.GetNamespace(),
+							},
 						},
+					}
+				}),
+				// only cares deletion
+				builder.WithPredicates(predicate.Funcs{
+					GenericFunc: func(e event.GenericEvent) bool { return false },
+					DeleteFunc:  func(e event.DeleteEvent) bool { return true },
+					CreateFunc: func(e event.CreateEvent) bool {
+						return false
 					},
-				}
-			}),
-			// only cares deletion
-			builder.WithPredicates(predicate.Funcs{
-				GenericFunc: func(e event.GenericEvent) bool { return false },
-				DeleteFunc:  func(e event.DeleteEvent) bool { return true },
-				CreateFunc: func(e event.CreateEvent) bool {
-					return false
-				},
-				UpdateFunc: func(e event.UpdateEvent) bool {
-					return false
-				},
-			}),
-		).
-		Complete(&ReconcileClusterNamespaceDeletion{
-			client:   clientHolder.RuntimeClient,
-			recorder: helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
-		})
+					UpdateFunc: func(e event.UpdateEvent) bool {
+						return false
+					},
+				}),
+			).
+			Watches(
+				&asv1beta1.InfraEnv{},
+				handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
+					return []reconcile.Request{
+						{
+							NamespacedName: types.NamespacedName{
+								Name: o.GetNamespace(),
+							},
+						},
+					}
+				}),
+				// only cares deletion
+				builder.WithPredicates(predicate.Funcs{
+					GenericFunc: func(e event.GenericEvent) bool { return false },
+					DeleteFunc:  func(e event.DeleteEvent) bool { return true },
+					CreateFunc: func(e event.CreateEvent) bool {
+						return false
+					},
+					UpdateFunc: func(e event.UpdateEvent) bool {
+						return false
+					},
+				}),
+			)
+	}
+
+	err := mgrBuilder.Complete(&ReconcileClusterNamespaceDeletion{
+		client:   clientHolder.RuntimeClient,
+		recorder: helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
+	})
 
 	return controllerName, err
 }

@@ -9,17 +9,17 @@ import (
 	"strings"
 	"time"
 
-	"github.com/openshift/library-go/pkg/operator/events"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-
 	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
+	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	clustercontroller "github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -102,28 +102,30 @@ func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, reque
 		return reconcile.Result{}, nil
 	}
 
-	clusterDeploymentList := &hivev1.ClusterDeploymentList{}
-	if err := r.client.List(ctx, clusterDeploymentList, client.InNamespace(ns.Name)); err != nil {
-		return reconcile.Result{}, client.IgnoreNotFound(err)
-	}
-	if len(clusterDeploymentList.Items) != 0 {
-		// there are clusterDeployments in the managed cluster namespace.
-		// the managed cluster is deleted, we need to keep the managed cluster namespace.
-		reqLogger.Info(fmt.Sprintf("Waiting for cluster deployments, there are %d clusterDeployement in namespace %s",
-			len(clusterDeploymentList.Items), ns.Name))
-		return reconcile.Result{}, nil
-	}
+	if helpers.DeployOnOCP() {
+		clusterDeploymentList := &hivev1.ClusterDeploymentList{}
+		if err := r.client.List(ctx, clusterDeploymentList, client.InNamespace(ns.Name)); err != nil {
+			return reconcile.Result{}, client.IgnoreNotFound(err)
+		}
+		if len(clusterDeploymentList.Items) != 0 {
+			// there are clusterDeployments in the managed cluster namespace.
+			// the managed cluster is deleted, we need to keep the managed cluster namespace.
+			reqLogger.Info(fmt.Sprintf("Waiting for cluster deployments, there are %d clusterDeployement in namespace %s",
+				len(clusterDeploymentList.Items), ns.Name))
+			return reconcile.Result{}, nil
+		}
 
-	infraEnvList := &asv1beta1.InfraEnvList{}
-	if err := r.client.List(ctx, infraEnvList, client.InNamespace(ns.Name)); err != nil {
-		return reconcile.Result{}, client.IgnoreNotFound(err)
-	}
-	if len(infraEnvList.Items) != 0 {
-		// there are infraEnvs in the managed cluster namespace.
-		// the managed cluster is deleted, we need to keep the managed cluster namespace.
-		reqLogger.Info(fmt.Sprintf("Waiting for infra envs, there are %d infraEnvs in namespace %s",
-			len(infraEnvList.Items), ns.Name))
-		return reconcile.Result{}, nil
+		infraEnvList := &asv1beta1.InfraEnvList{}
+		if err := r.client.List(ctx, infraEnvList, client.InNamespace(ns.Name)); err != nil {
+			return reconcile.Result{}, client.IgnoreNotFound(err)
+		}
+		if len(infraEnvList.Items) != 0 {
+			// there are infraEnvs in the managed cluster namespace.
+			// the managed cluster is deleted, we need to keep the managed cluster namespace.
+			reqLogger.Info(fmt.Sprintf("Waiting for infra envs, there are %d infraEnvs in namespace %s",
+				len(infraEnvList.Items), ns.Name))
+			return reconcile.Result{}, nil
+		}
 	}
 
 	pods := &corev1.PodList{}
