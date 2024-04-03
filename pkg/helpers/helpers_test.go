@@ -1830,3 +1830,36 @@ func TestSupportPriorityClass(t *testing.T) {
 		})
 	}
 }
+
+func TestResourceIsNotFound(t *testing.T) {
+	cases := []struct {
+		name        string
+		err         error
+		expectedRst bool
+	}{
+		{
+			name:        "nil error",
+			err:         nil,
+			expectedRst: false,
+		},
+		{
+			name:        "other err",
+			err:         fmt.Errorf("cluster abc is not found"),
+			expectedRst: false,
+		},
+		{
+			name: "resource not found err",
+			err: fmt.Errorf("failed to get API group resources: unable to retrieve the complete " +
+				"list of server APIs: config.openshift.io/v1: the server could not find the requested resource"),
+			expectedRst: true,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if c.expectedRst != ResourceIsNotFound(c.err) {
+				t.Errorf("expected %v, but got %v", c.expectedRst, ResourceIsNotFound(c.err))
+			}
+		})
+	}
+}

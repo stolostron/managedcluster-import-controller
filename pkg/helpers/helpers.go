@@ -68,6 +68,9 @@ const (
 	tolerationsAnnotation  = "open-cluster-management/tolerations"
 )
 
+// DeployOnOCP is set once at the beginning
+var DeployOnOCP bool = true
+
 var v1APIExtensionMinVersion = version.MustParseGeneric("v1.16.0")
 
 var crdGroupKind = schema.GroupKind{Group: "apiextensions.k8s.io", Kind: "CustomResourceDefinition"}
@@ -957,4 +960,12 @@ func SupportPriorityClass(cluster *clusterv1.ManagedCluster) (bool, error) {
 		return false, nil
 	}
 	return true, nil
+}
+
+func ResourceIsNotFound(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	return strings.Contains(err.Error(), "the server could not find the requested resource")
 }

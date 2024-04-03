@@ -161,6 +161,8 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 
 		assertBootstrapKubeconfigWithProxyConfig("http://127.0.0.1:3128", nil, nil)
 
+		// here to restart agent pods to trigger bootstrap secret update to save time.
+		restartAgentPods()
 		// cluster should become offline because there is no proxy server listening on the specified endpoint
 		assertManagedClusterOffline(managedClusterName, 120*time.Second)
 
@@ -186,6 +188,8 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 
 		assertBootstrapKubeconfigWithProxyConfig("https://127.0.0.1:3129", proxyCAData, nil)
 
+		// here to restart agent pods to trigger bootstrap secret update to save time.
+		restartAgentPods()
 		// cluster should be offline because there is no proxy server listening on the specified endpoint
 		assertManagedClusterOffline(managedClusterName, 120*time.Second)
 
@@ -196,16 +200,8 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 
 		assertBootstrapKubeconfigWithProxyConfig("", nil, proxyCAData)
 
-		// delete agent deployment to rebootstrap
-		deploys, err := hubKubeClient.AppsV1().Deployments("open-cluster-management-agent").List(context.TODO(), metav1.ListOptions{})
-		Expect(err).ToNot(HaveOccurred())
-		for _, deploy := range deploys.Items {
-			if deploy.Name == "klusterlet" {
-				continue
-			}
-			err = hubKubeClient.AppsV1().Deployments(deploy.Namespace).Delete(context.TODO(), deploy.Name, metav1.DeleteOptions{})
-			Expect(err).ToNot(HaveOccurred())
-		}
+		// here to restart agent pods to trigger bootstrap secret update to save time.
+		restartAgentPods()
 
 		// cluster should become available because no proxy is used
 		assertManagedClusterAvailable(managedClusterName)
@@ -253,6 +249,8 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 
 		assertBootstrapKubeconfigServerURLAndCABundle(customServerURL, customCAData)
 
+		// here to restart agent pods to trigger bootstrap secret update to save time.
+		restartAgentPods()
 		// cluster should become offline because the custom server URL and CA bundle is invalid
 		assertManagedClusterOffline(managedClusterName, 120*time.Second)
 
@@ -263,17 +261,8 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 
 		assertBootstrapKubeconfigServerURLAndCABundle(defaultServerUrl, defaultCABundle)
 
-		// delete agent deployment to rebootstrap
-		deploys, err := hubKubeClient.AppsV1().Deployments("open-cluster-management-agent").List(context.TODO(), metav1.ListOptions{})
-		Expect(err).ToNot(HaveOccurred())
-		for _, deploy := range deploys.Items {
-			if deploy.Name == "klusterlet" {
-				continue
-			}
-			err = hubKubeClient.AppsV1().Deployments(deploy.Namespace).Delete(context.TODO(), deploy.Name, metav1.DeleteOptions{})
-			Expect(err).ToNot(HaveOccurred())
-		}
-
+		// here to restart agent pods to trigger bootstrap secret update to save time.
+		restartAgentPods()
 		// cluster should become available because custom server URL and CA bundle is removed
 		assertManagedClusterAvailable(managedClusterName)
 	})
@@ -324,4 +313,14 @@ func newCert(commoneName string) ([]byte, []byte, error) {
 	}
 
 	return caPEM.Bytes(), caPrivKeyPEM.Bytes(), nil
+}
+
+func restartAgentPods() {
+	pods, err := hubKubeClient.CoreV1().Pods("open-cluster-management-agent").List(context.TODO(), metav1.ListOptions{LabelSelector: "app=klusterlet-agent"})
+	Expect(err).ToNot(HaveOccurred())
+
+	for _, pod := range pods.Items {
+		err = hubKubeClient.CoreV1().Pods("open-cluster-management-agent").Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
+		Expect(err).ToNot(HaveOccurred())
+	}
 }
