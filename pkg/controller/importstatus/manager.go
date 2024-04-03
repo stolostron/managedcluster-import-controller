@@ -74,7 +74,6 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder
 			client:     clientHolder.RuntimeClient,
 			kubeClient: clientHolder.KubeClient,
 			workClient: clientHolder.WorkClient,
-			recorder:   helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
 		})
 
 	return controllerName, err

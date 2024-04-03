@@ -32,7 +32,7 @@ type ReconcileClusterDeployment struct {
 	client         client.Client
 	kubeClient     kubernetes.Interface
 	informerHolder *source.InformerHolder
-	recorder       events.Recorder
+	globalRecorder events.Recorder
 	importHelper   *helpers.ImportHelper
 }
 
@@ -40,15 +40,15 @@ func NewReconcileClusterDeployment(
 	client client.Client,
 	kubeClient kubernetes.Interface,
 	informerHolder *source.InformerHolder,
-	recorder events.Recorder,
+	globalRecorder events.Recorder,
 ) *ReconcileClusterDeployment {
 
 	return &ReconcileClusterDeployment{
 		client:         client,
 		kubeClient:     kubeClient,
 		informerHolder: informerHolder,
-		recorder:       recorder,
-		importHelper: helpers.NewImportHelper(informerHolder, recorder, log).
+		globalRecorder: globalRecorder,
+		importHelper: helpers.NewImportHelper(informerHolder, globalRecorder, log).
 			WithGenerateClientHolderFunc(helpers.GenerateImportClientFromKubeConfigSecret),
 	}
 }
@@ -139,15 +139,17 @@ func (r *ReconcileClusterDeployment) Reconcile(
 		return reconcile.Result{}, err
 	}
 
+	mcEventRecorder := helpers.NewManagedClusterEventRecorder(r.kubeClient, controllerName, managedCluster)
 	result, condition, modified, _, iErr := r.importHelper.Import(false, clusterName, hiveSecret, 0, 1)
 	// if resources are applied but NOT modified, will not update the condition, keep the original condition.
 	// This check is to prevent the current controller and import status controller from modifying the
 	// ManagedClusterImportSucceeded condition of the managed cluster in a loop
 	if !helpers.ImportingResourcesApplied(&condition) || modified {
-		if err := helpers.UpdateManagedClusterStatus(
+		if err := helpers.UpdateManagedClusterImportCondition(
 			r.client,
 			clusterName,
 			condition,
+			mcEventRecorder,
 		); err != nil {
 			return reconcile.Result{}, err
 		}
@@ -187,7 +189,7 @@ func (r *ReconcileClusterDeployment) setCreatedViaAnnotation(
 		return err
 	}
 
-	r.recorder.Eventf("ManagedClusterLabelsUpdated", "The managed cluster %s labels is added", cluster.Name)
+	r.globalRecorder.Eventf("ManagedClusterLabelsUpdated", "The managed cluster %s labels is added", cluster.Name)
 	return nil
 }
 
@@ -223,7 +225,7 @@ func (r *ReconcileClusterDeployment) removeImportFinalizer(
 		return err
 	}
 
-	r.recorder.Eventf("ClusterDeploymentFinalizerRemoved",
+	r.globalRecorder.Eventf("ClusterDeploymentFinalizerRemoved",
 		"The clusterdeployment %s finalizer %s is removed", clusterDeployment.Name, constants.ImportFinalizer)
 	return nil
 }

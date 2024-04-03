@@ -95,7 +95,7 @@ type GenerateClientHolderFunc func(secret *corev1.Secret) (reconcile.Result, *Cl
 // ImportHelper is used to helper controller to import managed cluster
 type ImportHelper struct {
 	informerHolder *source.InformerHolder
-	recorder       events.Recorder
+	globalRecorder events.Recorder
 	log            logr.Logger
 
 	generateClientHolderFunc GenerateClientHolderFunc
@@ -113,12 +113,12 @@ func (i *ImportHelper) WithGenerateClientHolderFunc(f GenerateClientHolderFunc) 
 }
 
 func NewImportHelper(informerHolder *source.InformerHolder,
-	recorder events.Recorder, log logr.Logger) *ImportHelper {
+	recorder events.Recorder,
+	log logr.Logger) *ImportHelper {
 	return &ImportHelper{
-		informerHolder: informerHolder,
-		recorder:       recorder,
-		log:            log,
-
+		informerHolder:     informerHolder,
+		log:                log,
+		globalRecorder:     recorder,
 		applyResourcesFunc: defaultApplyResourcesFunc,
 	}
 }
@@ -133,8 +133,8 @@ func defaultApplyResourcesFunc(backupRestore bool, client *ClientHolder,
 }
 
 // Import uses the managedClusterKubeClientSecret to generate a managed cluster client,
-// then use this client to import the managed cluster, return condition when finished
-// apply
+// then use this client to import the managed cluster, return managed cluster import condition
+// when finished apply
 func (i *ImportHelper) Import(backupRestore bool, clusterName string,
 	managedClusterKubeClientSecret *corev1.Secret, lastRetry, totalRetry int) (
 	reconcile.Result, metav1.Condition, bool, int, error) {
@@ -207,7 +207,7 @@ func (i *ImportHelper) Import(backupRestore bool, clusterName string,
 	}
 
 	currentRetry++
-	modified, err := i.applyResourcesFunc(backupRestore, clientHolder, restMapper, i.recorder, importSecret)
+	modified, err := i.applyResourcesFunc(backupRestore, clientHolder, restMapper, i.globalRecorder, importSecret)
 	if err != nil {
 		condition := NewManagedClusterImportSucceededCondition(
 			metav1.ConditionFalse,

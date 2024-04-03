@@ -94,11 +94,13 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 		return reconcile.Result{}, err
 	}
 
+	mcEventRecorder := helpers.NewManagedClusterEventRecorder(r.clientHolder.KubeClient, controllerName, managedCluster)
 	result, condition, iErr := r.importCluster(ctx, managedCluster, autoImportSecret)
-	if err := helpers.UpdateManagedClusterStatus(
+	if err := helpers.UpdateManagedClusterImportCondition(
 		r.clientHolder.RuntimeClient,
 		request.Name,
 		condition,
+		mcEventRecorder,
 	); err != nil {
 		return reconcile.Result{}, err
 	}

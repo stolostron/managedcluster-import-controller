@@ -35,7 +35,7 @@ type ReconcileAutoImport struct {
 	client                client.Client
 	kubeClient            kubernetes.Interface
 	informerHolder        *source.InformerHolder
-	recorder              events.Recorder
+	globalRecorder        events.Recorder
 	importHelper          *helpers.ImportHelper
 	rosaKubeConfigGetters map[string]*helpers.RosaKubeConfigGetter
 }
@@ -44,15 +44,14 @@ func NewReconcileAutoImport(
 	client client.Client,
 	kubeClient kubernetes.Interface,
 	informerHolder *source.InformerHolder,
-	recorder events.Recorder,
+	globalRecorder events.Recorder,
 ) *ReconcileAutoImport {
-
 	return &ReconcileAutoImport{
 		client:                client,
 		kubeClient:            kubeClient,
 		informerHolder:        informerHolder,
-		recorder:              recorder,
-		importHelper:          helpers.NewImportHelper(informerHolder, recorder, log),
+		globalRecorder:        globalRecorder,
+		importHelper:          helpers.NewImportHelper(informerHolder, globalRecorder, log),
 		rosaKubeConfigGetters: make(map[string]*helpers.RosaKubeConfigGetter),
 	}
 }
@@ -102,7 +101,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	reqLogger.V(5).Info("Reconciling auto import secret")
-
+	mcEventRecorder := helpers.NewManagedClusterEventRecorder(r.kubeClient, controllerName, managedCluster)
 	lastRetry := 0
 	totalRetry := 1
 	if len(autoImportSecret.Annotations[constants.AnnotationAutoImportCurrentRetry]) != 0 {
@@ -115,7 +114,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	if len(autoImportSecret.Data[constants.AutoImportRetryName]) != 0 {
 		totalRetry, err = strconv.Atoi(string(autoImportSecret.Data[constants.AutoImportRetryName]))
 		if err != nil {
-			if err := helpers.UpdateManagedClusterStatus(
+			if err := helpers.UpdateManagedClusterImportCondition(
 				r.client,
 				managedClusterName,
 				helpers.NewManagedClusterImportSucceededCondition(
@@ -124,6 +123,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 					fmt.Sprintf("AutoImportSecretInvalid %s/%s; please check the value %s",
 						autoImportSecret.Namespace, autoImportSecret.Name, constants.AutoImportRetryName),
 				),
+				mcEventRecorder,
 			); err != nil {
 				return reconcile.Result{}, err
 			}
@@ -139,7 +139,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 
 	generateClientHolderFunc, err := r.getGenerateClientHolderFuncFromAutoImportSecret(managedClusterName, autoImportSecret)
 	if err != nil {
-		if err := helpers.UpdateManagedClusterStatus(
+		if err := helpers.UpdateManagedClusterImportCondition(
 			r.client,
 			managedClusterName,
 			helpers.NewManagedClusterImportSucceededCondition(
@@ -148,6 +148,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 				fmt.Sprintf("AutoImportSecretInvalid %s/%s; %s",
 					autoImportSecret.Namespace, autoImportSecret.Name, err),
 			),
+			mcEventRecorder,
 		); err != nil {
 			return reconcile.Result{}, err
 		}
@@ -162,10 +163,11 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	// This check is to prevent the current controller and import status controller from modifying the
 	// ManagedClusterImportSucceeded condition of the managed cluster in a loop
 	if !helpers.ImportingResourcesApplied(&condition) || modified {
-		if err := helpers.UpdateManagedClusterStatus(
+		if err := helpers.UpdateManagedClusterImportCondition(
 			r.client,
 			managedClusterName,
 			condition,
+			mcEventRecorder,
 		); err != nil {
 			return reconcile.Result{}, err
 		}
@@ -186,7 +188,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		}
 
 		// delete secret
-		if err := helpers.DeleteAutoImportSecret(ctx, r.kubeClient, autoImportSecret, r.recorder); err != nil {
+		if err := helpers.DeleteAutoImportSecret(ctx, r.kubeClient, autoImportSecret, r.globalRecorder); err != nil {
 			return reconcile.Result{}, err
 		}
 		return reconcile.Result{}, nil

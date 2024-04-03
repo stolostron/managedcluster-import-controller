@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/openshift/library-go/pkg/operator/events"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,7 +30,6 @@ type ReconcileImportStatus struct {
 	client     client.Client
 	kubeClient kubernetes.Interface
 	workClient workclient.Interface
-	recorder   events.Recorder
 }
 
 // blank assignment to verify that ReconcileImportStatus implements reconcile.Reconciler
@@ -60,6 +58,7 @@ func (r *ReconcileImportStatus) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
+	mcEventRecorder := helpers.NewManagedClusterEventRecorder(r.kubeClient, controllerName, managedCluster)
 	// This controller will only add/update the ImportSucceededCondition condition in following 2 cases:
 	// - Add the condition when it does not exist
 	// - Set the condition status to True when manifestworks are available
@@ -70,7 +69,7 @@ func (r *ReconcileImportStatus) Reconcile(ctx context.Context, request reconcile
 		managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
 	if existedCondition == nil {
 		reqLogger.V(5).Info("Add ImportSucceededCondition with WaitForImporting reason")
-		return reconcile.Result{}, helpers.UpdateManagedClusterStatus(
+		return reconcile.Result{}, helpers.UpdateManagedClusterImportCondition(
 			r.client,
 			managedClusterName,
 			helpers.NewManagedClusterImportSucceededCondition(
@@ -78,6 +77,7 @@ func (r *ReconcileImportStatus) Reconcile(ctx context.Context, request reconcile
 				constants.ConditionReasonManagedClusterWaitForImporting,
 				"Wait for importing",
 			),
+			mcEventRecorder,
 		)
 	}
 
@@ -95,7 +95,7 @@ func (r *ReconcileImportStatus) Reconcile(ctx context.Context, request reconcile
 	}
 
 	reqLogger.V(5).Info("Klusterlet manifestworks are available")
-	return reconcile.Result{}, helpers.UpdateManagedClusterStatus(
+	return reconcile.Result{}, helpers.UpdateManagedClusterImportCondition(
 		r.client,
 		managedClusterName,
 		helpers.NewManagedClusterImportSucceededCondition(
@@ -103,5 +103,6 @@ func (r *ReconcileImportStatus) Reconcile(ctx context.Context, request reconcile
 			constants.ConditionReasonManagedClusterImported,
 			"Import succeeded",
 		),
+		mcEventRecorder,
 	)
 }

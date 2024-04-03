@@ -120,6 +120,13 @@ const (
 	ConditionReasonManagedClusterImported         = "ManagedClusterImported"
 )
 
+const (
+	EventReasonManagedClusterImportFailed = "Failed"
+	EventReasonManagedClusterImported     = "Imported"
+	EventReasonManagedClusterImporting    = "Importing"
+	EventReasonManagedClusterWait         = "WaitForImporting"
+)
+
 /* #nosec */
 const (
 	AutoImportSecretKubeConfig    corev1.SecretType = "auto-import/kubeconfig"

@@ -269,12 +269,13 @@ func RemoveManagedClusterFinalizer(ctx context.Context, runtimeClient client.Cli
 	return nil
 }
 
-// UpdateManagedClusterStatus update managed cluster status
-func UpdateManagedClusterStatus(client client.Client, managedClusterName string, cond metav1.Condition) error {
+// updateManagedClusterStatus update managed cluster status
+// return true if the status is updated
+func updateManagedClusterStatus(client client.Client, managedClusterName string, cond metav1.Condition) (bool, error) {
 	managedCluster := &clusterv1.ManagedCluster{}
 	err := client.Get(context.TODO(), types.NamespacedName{Name: managedClusterName}, managedCluster)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	oldStatus := &managedCluster.Status
@@ -282,16 +283,51 @@ func UpdateManagedClusterStatus(client client.Client, managedClusterName string,
 
 	meta.SetStatusCondition(&newStatus.Conditions, cond)
 	if equality.Semantic.DeepEqual(managedCluster.Status.Conditions, newStatus.Conditions) {
-		return nil
+		return false, nil
 	}
 
 	managedCluster.Status = *newStatus
 	if err := client.Status().Update(context.TODO(), managedCluster); err != nil {
 		klog.Errorf("Update the managed cluster %s condition %v failed, error: %v", managedClusterName, cond, err)
-		return err
+		return true, err
 	}
 
-	klog.V(4).Infof("Update the managed cluster %s condition %v succeeded.", managedClusterName, cond)
+	klog.Infof("Update the managed cluster %s condition %v succeeded.", managedClusterName, cond)
+
+	return true, nil
+}
+
+// UpdateManagedClusterImportCondition update managed cluster status and record the event
+func UpdateManagedClusterImportCondition(client client.Client, managedClusterName string, cond metav1.Condition,
+	recorder events.Recorder) error {
+	if cond.Type != constants.ConditionManagedClusterImportSucceeded {
+		return fmt.Errorf("the condition type %s is not supported", cond.Type)
+	}
+
+	changed, err := updateManagedClusterStatus(client, managedClusterName, cond)
+	if err != nil {
+		return err
+	}
+	if !changed {
+		return nil
+	}
+
+	switch cond.Reason {
+	case constants.ConditionReasonManagedClusterWaitForImporting:
+		recorder.Eventf(constants.EventReasonManagedClusterWait,
+			"The %s is waiting for importing", managedClusterName)
+	case constants.ConditionReasonManagedClusterImporting:
+		recorder.Eventf(constants.EventReasonManagedClusterImporting,
+			"The %s is being imported now: %s", managedClusterName, cond.Message)
+	case constants.ConditionReasonManagedClusterImported:
+		recorder.Eventf(constants.EventReasonManagedClusterImported,
+			"The %s is imported successfully", managedClusterName)
+	case constants.ConditionReasonManagedClusterImportFailed:
+		recorder.Warningf(constants.EventReasonManagedClusterImportFailed,
+			"Fail to import the %s as a managed cluster due to: %s", managedClusterName, cond.Message)
+	default:
+		return fmt.Errorf("the condition reason %s is not supported", cond.Reason)
+	}
 
 	return nil
 }
@@ -666,6 +702,20 @@ func NewEventRecorder(kubeClient kubernetes.Interface, controllerName string) ev
 
 	options := events.RecommendedClusterSingletonCorrelatorOptions()
 	return events.NewKubeRecorderWithOptions(kubeClient.CoreV1().Events(namespace), options, controllerName, controllerRef)
+}
+
+func NewManagedClusterEventRecorder(kubeClient kubernetes.Interface, controllerName string,
+	cluster *clusterv1.ManagedCluster) events.Recorder {
+
+	involvedObjectRef := &corev1.ObjectReference{
+		APIVersion: cluster.APIVersion,
+		Kind:       cluster.Kind,
+		Name:       cluster.Name,
+		Namespace:  cluster.Name,
+	}
+	options := events.RecommendedClusterSingletonCorrelatorOptions()
+	return events.NewKubeRecorderWithOptions(kubeClient.CoreV1().Events(cluster.Name),
+		options, controllerName, involvedObjectRef)
 }
 
 func GetComponentNamespace() (string, error) {

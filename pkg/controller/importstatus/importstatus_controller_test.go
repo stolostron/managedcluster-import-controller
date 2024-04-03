@@ -5,14 +5,14 @@ package importstatus
 
 import (
 	"context"
-	operatorv1 "open-cluster-management.io/api/operator/v1"
 	"testing"
 	"time"
+
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 
-	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -219,7 +219,7 @@ func TestReconcile(t *testing.T) {
 				client:     fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).WithStatusSubresource(c.objs...).Build(),
 				kubeClient: kubeClient,
 				workClient: workClient,
-				recorder:   eventstesting.NewTestingEventRecorder(t),
+				// recorder:   eventstesting.NewTestingEventRecorder(t),
 			}
 
 			req := reconcile.Request{

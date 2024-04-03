@@ -100,15 +100,17 @@ func (r *ReconcileLocalCluster) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	mcEventRecorder := helpers.NewManagedClusterEventRecorder(r.clientHolder.KubeClient, controllerName, managedCluster)
 	result, condition, modified, _, iErr := r.importHelper.Import(false, request.Name, nil, 0, 1)
 	// if resources are applied but NOT modified, will not update the condition, keep the original condition.
 	// This check is to prevent the current controller and import status controller from modifying the
 	// ManagedClusterImportSucceeded condition of the managed cluster in a loop
 	if !helpers.ImportingResourcesApplied(&condition) || modified {
-		if err := helpers.UpdateManagedClusterStatus(
+		if err := helpers.UpdateManagedClusterImportCondition(
 			r.clientHolder.RuntimeClient,
 			request.Name,
 			condition,
+			mcEventRecorder,
 		); err != nil {
 			return reconcile.Result{}, err
 		}
