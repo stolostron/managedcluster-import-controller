@@ -33,6 +33,9 @@ import (
 )
 
 func TestGetBootstrapKubeConfigDataFromImportSecret(t *testing.T) {
+	certData1, _, _ := testinghelpers.NewRootCA("test ca1")
+	certData2, keyData2, _ := testinghelpers.NewRootCA("test ca2")
+
 	testInfraConfigDNS := &ocinfrav1.Infrastructure{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "cluster",
@@ -65,7 +68,7 @@ func TestGetBootstrapKubeConfigDataFromImportSecret(t *testing.T) {
 			Namespace: "testcluster",
 		},
 		Data: map[string]string{
-			"ca.crt": "fake-root-ca",
+			"ca.crt": string(certData1),
 		},
 	}
 
@@ -75,8 +78,8 @@ func TestGetBootstrapKubeConfigDataFromImportSecret(t *testing.T) {
 			Namespace: "openshift-config",
 		},
 		Data: map[string][]byte{
-			"tls.crt": []byte("custom-cert-data"),
-			"tls.key": []byte("custom-key-data"),
+			"tls.crt": certData2,
+			"tls.key": keyData2,
 		},
 		Type: corev1.SecretTypeTLS,
 	}
@@ -110,7 +113,7 @@ func TestGetBootstrapKubeConfigDataFromImportSecret(t *testing.T) {
 			runtimeObjs: []runtime.Object{secretCorrect,
 				mockImportSecret(t, time.Now().Add(-1*time.Hour),
 					"https://my-dns-name.com:6443",
-					[]byte("custom-cert-data"),
+					certData2,
 					"mock-token"),
 			},
 			wantErr: false,
@@ -132,7 +135,7 @@ func TestGetBootstrapKubeConfigDataFromImportSecret(t *testing.T) {
 			runtimeObjs: []runtime.Object{secretCorrect,
 				mockImportSecret(t, time.Now().Add(8640*time.Hour),
 					"https://wrong.com:6443",
-					[]byte("custom-cert-data"),
+					certData2,
 					"mock-token"),
 			},
 			wantErr: false,
@@ -143,14 +146,14 @@ func TestGetBootstrapKubeConfigDataFromImportSecret(t *testing.T) {
 			runtimeObjs: []runtime.Object{secretCorrect,
 				mockImportSecret(t, time.Now().Add(8640*time.Hour),
 					"https://my-dns-name.com:6443",
-					[]byte("custom-cert-data"),
+					certData2,
 					"mock-token"),
 			},
 			wantErr: false,
 			want: &wantData{
 				serverURL:   "https://my-dns-name.com:6443",
 				useInsecure: false,
-				certData:    []byte("custom-cert-data"),
+				certData:    certData2,
 				token:       "mock-token",
 			},
 		},
@@ -160,14 +163,14 @@ func TestGetBootstrapKubeConfigDataFromImportSecret(t *testing.T) {
 			runtimeObjs: []runtime.Object{cm,
 				mockImportSecret(t, time.Now().Add(8640*time.Hour),
 					"https://my-dns-name.com:6443",
-					[]byte("fake-root-ca"),
+					certData1,
 					"mock-token"),
 			},
 			wantErr: false,
 			want: &wantData{
 				serverURL:   "https://my-dns-name.com:6443",
 				useInsecure: false,
-				certData:    []byte("fake-root-ca"),
+				certData:    certData1,
 				token:       "mock-token",
 			},
 		},
@@ -320,6 +323,9 @@ func TestValidateKubeAPIServerAddress(t *testing.T) {
 }
 
 func TestValidateCAData(t *testing.T) {
+	certData1, _, _ := testinghelpers.NewRootCA("test ca1")
+	certData2, _, _ := testinghelpers.NewRootCA("test ca2")
+
 	cases := []struct {
 		name             string
 		clusterName      string
@@ -333,22 +339,22 @@ func TestValidateCAData(t *testing.T) {
 		},
 		{
 			name:            "cert changes",
-			bootstrapCAData: []byte("my-ca-bundle"),
-			currentCAData:   []byte("my-new-ca-bundle"),
+			bootstrapCAData: certData1,
+			currentCAData:   certData2,
 		},
 		{
 			name:            "cert overridden",
-			bootstrapCAData: []byte("my-ca-bundle"),
+			bootstrapCAData: certData1,
 			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
 				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
-					HubKubeAPIServerCABundle: []byte("my-custom-ca-bundle"),
+					HubKubeAPIServerCABundle: certData2,
 				},
 			},
 		},
 		{
 			name:            "no cert change",
-			bootstrapCAData: []byte("my-ca-bundle"),
-			currentCAData:   []byte("my-ca-bundle"),
+			bootstrapCAData: certData1,
+			currentCAData:   certData1,
 			valid:           true,
 		},
 	}
