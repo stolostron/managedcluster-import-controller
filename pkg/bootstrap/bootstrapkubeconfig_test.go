@@ -529,7 +529,7 @@ func TestGetKubeAPIServerSecretName(t *testing.T) {
 	}
 }
 
-func TestGetKubeAPIServerCertificate(t *testing.T) {
+func TestGetCustomKubeAPIServerCertificate(t *testing.T) {
 	secretCorrect := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "test-secret",
@@ -609,13 +609,13 @@ func TestGetKubeAPIServerCertificate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := getKubeAPIServerCertificate(context.Background(), tt.args.client, tt.args.name)
+			got, err := getCustomKubeAPIServerCertificate(context.Background(), tt.args.client, tt.args.name)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("getKubeAPIServerCertificate() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("getCustomKubeAPIServerCertificate() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("getKubeAPIServerCertificate() = %v, want %v", got, tt.want)
+				t.Errorf("getCustomKubeAPIServerCertificate() = %v, want %v", got, tt.want)
 			}
 		})
 	}
@@ -824,6 +824,90 @@ func TestGetProxySettings(t *testing.T) {
 	}
 }
 
+func TestGetBootstrapCAData(t *testing.T) {
+	certData1, _, _ := testinghelpers.NewRootCA("test ca1")
+	certData2, _, _ := testinghelpers.NewRootCA("test ca2")
+	mergedCAData, _ := mergeCertificateData(certData1, certData2)
+
+	cases := []struct {
+		name             string
+		apiServerCAData  []byte
+		klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig
+		expectedCAData   []byte
+	}{
+		{
+			name:            "witout proxy ca",
+			apiServerCAData: certData1,
+			expectedCAData:  certData1,
+		},
+		{
+			name:            "with blank line in api server certs",
+			apiServerCAData: []byte(fmt.Sprintf("%s\n\n%s", string(certData1), string(certData2))),
+			expectedCAData:  mergedCAData,
+		},
+		{
+			name:            "with proxy ca",
+			apiServerCAData: certData1,
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerProxyConfig: klusterletconfigv1alpha1.KubeAPIServerProxyConfig{
+						HTTPSProxy: "https://127.0.0.1:3128",
+						CABundle:   certData2,
+					},
+				},
+			},
+			expectedCAData: mergedCAData,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Logf("Test name: %s", c.name)
+
+			fqdn := "api.my-cluster.example.com"
+			kubeAPIServer := fmt.Sprintf("https://%s:6443", fqdn)
+			secretName := "my-secret-name"
+
+			fakeKubeClient := kubefake.NewSimpleClientset(&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      secretName,
+					Namespace: "openshift-config",
+				},
+				Data: map[string][]byte{
+					"tls.crt": c.apiServerCAData,
+				},
+			})
+
+			clientHolder := &helpers.ClientHolder{
+				RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(&ocinfrav1.APIServer{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "cluster",
+					},
+					Spec: ocinfrav1.APIServerSpec{
+						ServingCerts: ocinfrav1.APIServerServingCerts{
+							NamedCertificates: []ocinfrav1.APIServerNamedServingCert{
+								{
+									Names:              []string{fqdn},
+									ServingCertificate: ocinfrav1.SecretNameReference{Name: secretName},
+								},
+							},
+						},
+					},
+				}).Build(),
+				KubeClient: fakeKubeClient,
+			}
+
+			caData, err := GetBootstrapCAData(context.TODO(), clientHolder, kubeAPIServer, "cluster", c.klusterletConfig)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+			if !reflect.DeepEqual(caData, c.expectedCAData) {
+				t.Errorf("expected %v, but got %v", c.expectedCAData, caData)
+			}
+		})
+	}
+}
+
 func TestMergeCertificateData(t *testing.T) {
 	certData, _, err := testinghelpers.NewRootCA("test ca")
 	if err != nil {
@@ -868,7 +952,7 @@ func TestMergeCertificateData(t *testing.T) {
 				)
 			} else if err == nil {
 				if !reflect.DeepEqual(merged, tt.merged) {
-					t.Errorf("GetProxySettings() = %v, want %v", merged, tt.merged)
+					t.Errorf("mergeCertificateData() = %v, want %v", merged, tt.merged)
 				}
 			}
 		})

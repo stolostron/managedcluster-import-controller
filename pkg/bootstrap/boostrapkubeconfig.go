@@ -56,12 +56,7 @@ func CreateBootstrapKubeConfig(ctx context.Context, clientHolder *helpers.Client
 		return nil, nil, err
 	}
 
-	proxyURL, proxyCAData := GetProxySettings(klusterletConfig)
-	certData, err = mergeCertificateData(certData, proxyCAData)
-	if err != nil {
-		return nil, nil, err
-	}
-
+	proxyURL, _ := GetProxySettings(klusterletConfig)
 	bootstrapConfig := clientcmdapi.Config{
 		// Define a cluster stanza based on the bootstrap kubeconfig.
 		Clusters: map[string]*clientcmdapi.Cluster{"default-cluster": {
@@ -179,6 +174,17 @@ func GetKubeAPIServerAddress(ctx context.Context, client client.Client,
 
 func GetBootstrapCAData(ctx context.Context, clientHolder *helpers.ClientHolder, kubeAPIServer string,
 	caNamespace string, klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) ([]byte, error) {
+	apiServerCAData, err := getKubeAPIServerCAData(ctx, clientHolder, kubeAPIServer, caNamespace, klusterletConfig)
+	if err != nil {
+		return nil, err
+	}
+
+	_, proxyCAData := GetProxySettings(klusterletConfig)
+	return mergeCertificateData(apiServerCAData, proxyCAData)
+}
+
+func getKubeAPIServerCAData(ctx context.Context, clientHolder *helpers.ClientHolder, kubeAPIServer string,
+	caNamespace string, klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) ([]byte, error) {
 	// use the custom hub Kube APIServer CA bundle if specified
 	if klusterletConfig != nil && len(klusterletConfig.Spec.HubKubeAPIServerCABundle) > 0 {
 		return klusterletConfig.Spec.HubKubeAPIServerCABundle, nil
@@ -192,7 +198,7 @@ func GetBootstrapCAData(ctx context.Context, clientHolder *helpers.ClientHolder,
 		}
 
 		if len(apiServerCertSecretName) > 0 {
-			certData, err := getKubeAPIServerCertificate(ctx, clientHolder.KubeClient, apiServerCertSecretName)
+			certData, err := getCustomKubeAPIServerCertificate(ctx, clientHolder.KubeClient, apiServerCertSecretName)
 			if err != nil {
 				return nil, err
 			}
@@ -276,8 +282,9 @@ func checkIsIBMCloud(ctx context.Context, client client.Client) (bool, error) {
 	return false, nil
 }
 
-// getKubeAPIServerCertificate looks for secret in openshift-config namespace, and returns tls.crt
-func getKubeAPIServerCertificate(ctx context.Context, kubeClient kubernetes.Interface, secretName string) ([]byte, error) {
+// getCustomKubeAPIServerCertificate looks for secret in openshift-config namespace, and returns tls.crt
+func getCustomKubeAPIServerCertificate(ctx context.Context, kubeClient kubernetes.Interface,
+	secretName string) ([]byte, error) {
 	secret, err := kubeClient.CoreV1().Secrets("openshift-config").Get(ctx, secretName, metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
