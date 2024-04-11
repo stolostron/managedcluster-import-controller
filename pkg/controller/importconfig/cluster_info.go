@@ -58,7 +58,7 @@ func getBootstrapKubeConfigDataFromImportSecret(ctx context.Context, clientHolde
 	}
 
 	// check if the CA data is changed
-	validCAData, err := validateCAData(ctx, caData, kubeAPIServer, clientHolder, clusterName)
+	validCAData, err := validateCAData(ctx, caData, kubeAPIServer, clientHolder, clusterName, klusterletConfig)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to validate CA data: %v", err)
 	}
@@ -143,13 +143,14 @@ func validateKubeAPIServerAddress(ctx context.Context, kubeAPIServer string, cli
 	return kubeAPIServer == currentKubeAPIServer, nil
 }
 
-func validateCAData(ctx context.Context, caData []byte, kubeAPIServer string, clientHolder *helpers.ClientHolder, clusterName string) (bool, error) {
+func validateCAData(ctx context.Context, caData []byte, kubeAPIServer string, clientHolder *helpers.ClientHolder,
+	clusterName string, klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) (bool, error) {
 	if len(caData) == 0 {
 		// CA data is empty
 		return false, nil
 	}
 
-	currentCAData, err := bootstrap.GetBootstrapCAData(ctx, clientHolder, kubeAPIServer, clusterName)
+	currentCAData, err := bootstrap.GetBootstrapCAData(ctx, clientHolder, kubeAPIServer, clusterName, klusterletConfig)
 	if err != nil {
 		return false, err
 	}
