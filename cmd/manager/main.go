@@ -245,6 +245,7 @@ func main() {
 
 	setupLog.Info("Registering Controllers")
 	if err := controller.AddToManager(
+		ctx,
 		mgr,
 		clientHolder,
 		&source.InformerHolder{

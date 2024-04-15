@@ -215,19 +215,20 @@ func TestReconcile(t *testing.T) {
 				workInformer.GetStore().Add(work)
 			}
 
-			r := ReconcileImportStatus{
-				client:     fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).WithStatusSubresource(c.objs...).Build(),
-				kubeClient: kubeClient,
-				workClient: workClient,
-				// recorder:   eventstesting.NewTestingEventRecorder(t),
-			}
+			ctx := context.TODO()
+			r := NewReconcileImportStatus(
+				fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).WithStatusSubresource(c.objs...).Build(),
+				kubeClient,
+				workClient,
+				helpers.NewManagedClusterEventRecorder(ctx, kubeClient, controllerName),
+			)
 
 			req := reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: managedClusterName,
 				},
 			}
-			ctx := context.TODO()
+
 			_, err := r.Reconcile(ctx, req)
 			if c.expectedErr && err == nil {
 				t.Errorf("expected error, but failed")

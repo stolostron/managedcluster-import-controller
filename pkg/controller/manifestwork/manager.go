@@ -4,6 +4,7 @@
 package manifestwork
 
 import (
+	"context"
 	"strings"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
@@ -30,7 +31,8 @@ const controllerName = "manifestwork-controller"
 
 // Add creates a new manifestwork controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
-func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder *source.InformerHolder) (string, error) {
+func Add(ctx context.Context,
+	mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder *source.InformerHolder) (string, error) {
 
 	err := ctrl.NewControllerManagedBy(mgr).Named(controllerName).
 		WithOptions(controller.Options{

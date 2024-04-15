@@ -4,6 +4,7 @@
 package clusternamespacedeletion
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -91,7 +92,7 @@ var _ = ginkgo.BeforeSuite(func() {
 		KubeClient:    k8sClient,
 	}
 
-	_, err = Add(mgr, clientHolder, nil)
+	_, err = Add(context.TODO(), mgr, clientHolder, nil)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 	go func() {

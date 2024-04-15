@@ -891,21 +891,23 @@ metadata:
 				workInformer.GetStore().Add(work)
 			}
 
-			r := &ReconcileHosted{
-				clientHolder: &helpers.ClientHolder{
+			ctx := context.TODO()
+			r := NewReconcileHosted(
+				&helpers.ClientHolder{
 					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).
 						WithObjects(c.runtimeObjs...).WithStatusSubresource(c.runtimeObjs...).Build(),
 					KubeClient: kubeClient,
 					WorkClient: workClient,
 				},
-				informerHolder: &source.InformerHolder{
+				&source.InformerHolder{
 					ImportSecretLister:     kubeInformerFactory.Core().V1().Secrets().Lister(),
 					AutoImportSecretLister: kubeInformerFactory.Core().V1().Secrets().Lister(),
 					HostedWorkLister:       workInformerFactory.Work().V1().ManifestWorks().Lister(),
 				},
-				recorder: eventstesting.NewTestingEventRecorder(t),
-				scheme:   testscheme,
-			}
+				testscheme,
+				eventstesting.NewTestingEventRecorder(t),
+				helpers.NewManagedClusterEventRecorder(ctx, kubeClient, controllerName),
+			)
 			response, err := r.Reconcile(context.Background(), c.request)
 			c.vaildateFunc(t, response, err, r.clientHolder)
 		})

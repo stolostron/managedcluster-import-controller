@@ -276,10 +276,11 @@ func TestUpdateManagedClusterImportCondition(t *testing.T) {
 			fakeClient := fake.NewClientBuilder().WithScheme(testscheme).
 				WithObjects(c.managedCluster).WithStatusSubresource(c.managedCluster).Build()
 			kubeClient := kubefake.NewSimpleClientset()
-			recorder := NewManagedClusterEventRecorder(kubeClient, "test", c.managedCluster)
-			defer recorder.Shutdown()
 
-			err := UpdateManagedClusterImportCondition(fakeClient, c.managedCluster.Name, c.cond, recorder)
+			ctx := context.TODO()
+			recorder := NewManagedClusterEventRecorder(ctx, kubeClient, "test")
+
+			err := UpdateManagedClusterImportCondition(fakeClient, c.managedCluster, c.cond, recorder)
 			if len(c.expectedErr) > 0 {
 				if err == nil {
 					t.Errorf("expected error %s, but got nil", c.expectedErr)

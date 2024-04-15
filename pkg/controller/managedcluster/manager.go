@@ -4,6 +4,8 @@
 package managedcluster
 
 import (
+	"context"
+
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -24,7 +26,8 @@ const controllerName = "managedcluster-controller"
 
 // Add creates a new managedcluster controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
-func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, _ *source.InformerHolder) (string, error) {
+func Add(ctx context.Context,
+	mgr manager.Manager, clientHolder *helpers.ClientHolder, _ *source.InformerHolder) (string, error) {
 
 	err := ctrl.NewControllerManagedBy(mgr).Named(controllerName).
 		WithOptions(controller.Options{

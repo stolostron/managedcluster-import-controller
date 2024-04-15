@@ -44,8 +44,10 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+	kevents "k8s.io/client-go/tools/events"
 	"k8s.io/klog/v2"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	clusterscheme "open-cluster-management.io/api/client/cluster/clientset/versioned/scheme"
 	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
 	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -298,13 +300,13 @@ func updateManagedClusterStatus(client client.Client, managedClusterName string,
 }
 
 // UpdateManagedClusterImportCondition update managed cluster status and record the event
-func UpdateManagedClusterImportCondition(client client.Client, managedClusterName string, cond metav1.Condition,
-	recorder events.Recorder) error {
+func UpdateManagedClusterImportCondition(client client.Client, managedCluster *clusterv1.ManagedCluster,
+	cond metav1.Condition, recorder kevents.EventRecorder) error {
 	if cond.Type != constants.ConditionManagedClusterImportSucceeded {
 		return fmt.Errorf("the condition type %s is not supported", cond.Type)
 	}
 
-	changed, err := updateManagedClusterStatus(client, managedClusterName, cond)
+	changed, err := updateManagedClusterStatus(client, managedCluster.Name, cond)
 	if err != nil {
 		return err
 	}
@@ -312,19 +314,25 @@ func UpdateManagedClusterImportCondition(client client.Client, managedClusterNam
 		return nil
 	}
 
+	mc := managedCluster.DeepCopy()
+	mc.SetNamespace(mc.Name)
 	switch cond.Reason {
 	case constants.ConditionReasonManagedClusterWaitForImporting:
-		recorder.Eventf(constants.EventReasonManagedClusterWait,
-			"The %s is waiting for importing", managedClusterName)
+		recorder.Eventf(mc, nil, corev1.EventTypeNormal,
+			constants.EventReasonManagedClusterWait, constants.EventReasonManagedClusterWait,
+			"The %s is waiting for importing", mc.Name)
 	case constants.ConditionReasonManagedClusterImporting:
-		recorder.Eventf(constants.EventReasonManagedClusterImporting,
-			"The %s is being imported now: %s", managedClusterName, cond.Message)
+		recorder.Eventf(mc, nil, corev1.EventTypeNormal,
+			constants.EventReasonManagedClusterImporting, constants.EventReasonManagedClusterImporting,
+			"The %s is being imported now: %s", mc.Name, cond.Message)
 	case constants.ConditionReasonManagedClusterImported:
-		recorder.Eventf(constants.EventReasonManagedClusterImported,
-			"The %s is imported successfully", managedClusterName)
+		recorder.Eventf(mc, nil, corev1.EventTypeNormal,
+			constants.EventReasonManagedClusterImported, constants.EventReasonManagedClusterImported,
+			"The %s is imported successfully", mc.Name)
 	case constants.ConditionReasonManagedClusterImportFailed:
-		recorder.Warningf(constants.EventReasonManagedClusterImportFailed,
-			"Fail to import the %s as a managed cluster due to: %s", managedClusterName, cond.Message)
+		recorder.Eventf(mc, nil, corev1.EventTypeWarning,
+			constants.EventReasonManagedClusterImportFailed, constants.EventReasonManagedClusterImportFailed,
+			"Fail to import the %s as a managed cluster due to: %s", mc.Name, cond.Message)
 	default:
 		return fmt.Errorf("the condition reason %s is not supported", cond.Reason)
 	}
@@ -704,18 +712,13 @@ func NewEventRecorder(kubeClient kubernetes.Interface, controllerName string) ev
 	return events.NewKubeRecorderWithOptions(kubeClient.CoreV1().Events(namespace), options, controllerName, controllerRef)
 }
 
-func NewManagedClusterEventRecorder(kubeClient kubernetes.Interface, controllerName string,
-	cluster *clusterv1.ManagedCluster) events.Recorder {
-
-	involvedObjectRef := &corev1.ObjectReference{
-		APIVersion: cluster.APIVersion,
-		Kind:       cluster.Kind,
-		Name:       cluster.Name,
-		Namespace:  cluster.Name,
-	}
-	options := events.RecommendedClusterSingletonCorrelatorOptions()
-	return events.NewKubeRecorderWithOptions(kubeClient.CoreV1().Events(cluster.Name),
-		options, controllerName, involvedObjectRef)
+func NewManagedClusterEventRecorder(ctx context.Context,
+	kubeClient kubernetes.Interface, controllerName string) kevents.EventRecorder {
+	broadcaster := kevents.NewBroadcaster(&kevents.EventSinkImpl{Interface: kubeClient.EventsV1()})
+	broadcaster.StartRecordingToSink(ctx.Done())
+	broadcaster.StartStructuredLogging(0)
+	recorder := broadcaster.NewRecorder(clusterscheme.Scheme, controllerName)
+	return recorder
 }
 
 func GetComponentNamespace() (string, error) {

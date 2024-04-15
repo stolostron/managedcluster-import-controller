@@ -4,6 +4,7 @@
 package selfmanagedcluster
 
 import (
+	"context"
 	"strings"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
@@ -29,7 +30,9 @@ const controllerName = "selfmanagedcluster-controller"
 
 // Add creates a new self managed cluster controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
-func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder *source.InformerHolder) (string, error) {
+func Add(ctx context.Context,
+	mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder *source.InformerHolder) (string, error) {
+
 	err := ctrl.NewControllerManagedBy(mgr).Named(controllerName).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
@@ -112,6 +115,7 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder
 			informerHolder,
 			mgr.GetRESTMapper(),
 			helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
+			helpers.NewManagedClusterEventRecorder(ctx, clientHolder.KubeClient, controllerName),
 		))
 	return controllerName, err
 }
