@@ -15,11 +15,13 @@ import (
 	"net"
 	"time"
 
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 )
 
 var importYaml = `
@@ -323,4 +325,47 @@ func NewServerCertificate(commonName string, caCertData, caKeyData []byte) ([]by
 	}
 
 	return certPEM.Bytes(), certPrivKeyPEM.Bytes(), nil
+}
+
+type managedClusterBuilder struct {
+	name                  string
+	setImportingCondition bool
+	annotations           map[string]string
+}
+
+func NewManagedClusterBuilder(name string) *managedClusterBuilder {
+	b := &managedClusterBuilder{
+		name:                  name,
+		setImportingCondition: true,
+		annotations:           map[string]string{},
+	}
+	return b
+}
+func (b *managedClusterBuilder) WithImportingCondition(set bool) *managedClusterBuilder {
+	b.setImportingCondition = set
+	return b
+}
+func (b *managedClusterBuilder) WithAnnotations(k, v string) *managedClusterBuilder {
+	b.annotations[k] = v
+	return b
+}
+
+func (b *managedClusterBuilder) Build() *clusterv1.ManagedCluster {
+	mc := &clusterv1.ManagedCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        b.name,
+			Annotations: b.annotations,
+		},
+	}
+	if b.setImportingCondition {
+		mc.Status.Conditions = []metav1.Condition{
+			{
+				Type:    constants.ConditionManagedClusterImportSucceeded,
+				Status:  metav1.ConditionFalse,
+				Reason:  constants.ConditionReasonManagedClusterImporting,
+				Message: "Start to import managed cluster test",
+			},
+		}
+	}
+	return mc
 }

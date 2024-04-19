@@ -324,7 +324,7 @@ func UpdateManagedClusterImportCondition(client client.Client, managedCluster *c
 	case constants.ConditionReasonManagedClusterImporting:
 		recorder.Eventf(mc, nil, corev1.EventTypeNormal,
 			constants.EventReasonManagedClusterImporting, constants.EventReasonManagedClusterImporting,
-			"The %s is being imported now: %s", mc.Name, cond.Message)
+			"The %s is being imported now", mc.Name)
 	case constants.ConditionReasonManagedClusterImported:
 		recorder.Eventf(mc, nil, corev1.EventTypeNormal,
 			constants.EventReasonManagedClusterImported, constants.EventReasonManagedClusterImported,

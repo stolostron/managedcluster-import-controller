@@ -17,6 +17,7 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/openshift/library-go/pkg/operator/events"
@@ -135,7 +136,7 @@ func defaultApplyResourcesFunc(backupRestore bool, client *ClientHolder,
 // Import uses the managedClusterKubeClientSecret to generate a managed cluster client,
 // then use this client to import the managed cluster, return managed cluster import condition
 // when finished apply
-func (i *ImportHelper) Import(backupRestore bool, clusterName string,
+func (i *ImportHelper) Import(backupRestore bool, cluster *clusterv1.ManagedCluster,
 	managedClusterKubeClientSecret *corev1.Secret, lastRetry, totalRetry int) (
 	reconcile.Result, metav1.Condition, bool, int, error) {
 	if i.generateClientHolderFunc == nil {
@@ -143,8 +144,19 @@ func (i *ImportHelper) Import(backupRestore bool, clusterName string,
 		utilruntime.Must(fmt.Errorf("the generateClientHolderFunc in the ImportHelper is nil"))
 	}
 
+	clusterName := cluster.Name
 	reqLogger := i.log.WithValues("Request.Name", clusterName)
 	currentRetry := lastRetry
+
+	// move to importing state for the condition
+	ic := meta.FindStatusCondition(cluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+	if ic == nil || ic.Reason == constants.ConditionReasonManagedClusterWaitForImporting {
+		return reconcile.Result{}, NewManagedClusterImportSucceededCondition(
+			metav1.ConditionFalse,
+			constants.ConditionReasonManagedClusterImporting,
+			"Start to import managed cluster",
+		), false, currentRetry, nil
+	}
 
 	// ensure the klusterlet manifest works exist
 	workSelector := labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: "true"})

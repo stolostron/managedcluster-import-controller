@@ -90,14 +90,8 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "auto import disabled",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
-						Annotations: map[string]string{
-							apiconstants.DisableAutoImportAnnotation: "",
-						},
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder("test").
+					WithAnnotations(apiconstants.DisableAutoImportAnnotation, "").Build(),
 				&hivev1.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
@@ -122,11 +116,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "clusterdeployment is not installed",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder("test").Build(),
 				&hivev1.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
@@ -140,11 +130,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "clusterdeployment is not claimed",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder("test").Build(),
 				&hivev1.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
@@ -162,11 +148,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "import cluster with auto-import secret",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder("test").Build(),
 				&hivev1.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
@@ -191,11 +173,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "import cluster with clusterdeployment secret",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder("test").Build(),
 				&hivev1.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",

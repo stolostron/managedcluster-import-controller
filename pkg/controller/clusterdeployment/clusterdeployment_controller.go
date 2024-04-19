@@ -143,7 +143,7 @@ func (r *ReconcileClusterDeployment) Reconcile(
 		return reconcile.Result{}, err
 	}
 
-	result, condition, modified, _, iErr := r.importHelper.Import(false, clusterName, hiveSecret, 0, 1)
+	result, condition, modified, _, iErr := r.importHelper.Import(false, managedCluster, hiveSecret, 0, 1)
 	// if resources are applied but NOT modified, will not update the condition, keep the original condition.
 	// This check is to prevent the current controller and import status controller from modifying the
 	// ManagedClusterImportSucceeded condition of the managed cluster in a loop

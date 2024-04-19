@@ -161,7 +161,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 
 	r.importHelper = r.importHelper.WithGenerateClientHolderFunc(generateClientHolderFunc)
 	result, condition, modified, currentRetry, iErr := r.importHelper.Import(
-		backupRestore, managedClusterName, autoImportSecret, lastRetry, totalRetry)
+		backupRestore, managedCluster, autoImportSecret, lastRetry, totalRetry)
 	// if resources are applied but NOT modified, will not update the condition, keep the original condition.
 	// This check is to prevent the current controller and import status controller from modifying the
 	// ManagedClusterImportSucceeded condition of the managed cluster in a loop
