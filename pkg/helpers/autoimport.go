@@ -151,11 +151,12 @@ func (i *ImportHelper) Import(backupRestore bool, cluster *clusterv1.ManagedClus
 	// move to importing state for the condition
 	ic := meta.FindStatusCondition(cluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
 	if ic == nil || ic.Reason == constants.ConditionReasonManagedClusterWaitForImporting {
-		return reconcile.Result{}, NewManagedClusterImportSucceededCondition(
-			metav1.ConditionFalse,
-			constants.ConditionReasonManagedClusterImporting,
-			"Start to import managed cluster",
-		), false, currentRetry, nil
+		return reconcile.Result{Requeue: true},
+			NewManagedClusterImportSucceededCondition(
+				metav1.ConditionFalse,
+				constants.ConditionReasonManagedClusterImporting,
+				"Start to import managed cluster",
+			), false, currentRetry, nil
 	}
 
 	// ensure the klusterlet manifest works exist
