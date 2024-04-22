@@ -14,6 +14,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 )
 
 var _ handler.EventHandler = &enqueueManagedClusterInKlusterletConfigAnnotation{}
@@ -61,9 +62,10 @@ func IndexManagedClusterByKlusterletconfigAnnotation(obj interface{}) ([]string,
 	if !ok {
 		return nil, fmt.Errorf("not a managedcluster object")
 	}
+	klusterletconfigs := []string{constants.GlobalKlusterletConfigName}
 	klusterletconfig, ok := managedCluster.GetAnnotations()[apiconstants.AnnotationKlusterletConfig]
 	if ok && klusterletconfig != "" {
-		return []string{klusterletconfig}, nil
+		klusterletconfigs = append(klusterletconfigs, klusterletconfig)
 	}
-	return nil, nil
+	return klusterletconfigs, nil
 }

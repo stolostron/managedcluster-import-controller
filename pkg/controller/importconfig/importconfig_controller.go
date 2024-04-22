@@ -23,8 +23,6 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 
 	listerklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/listers/klusterletconfig/v1alpha1"
-	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 
 	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
@@ -77,18 +75,16 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	// Get klusterletconfig
-	var kc *klusterletconfigv1alpha1.KlusterletConfig
-	klusterletconfigName, ok := managedCluster.GetAnnotations()[apiconstants.AnnotationKlusterletConfig]
-	if ok && klusterletconfigName != "" {
-		kc, err = r.klusterletconfigLister.Get(klusterletconfigName)
-		if err != nil && !apierrors.IsNotFound(err) {
-			return reconcile.Result{}, err
-		}
+	klusterletconfigName := managedCluster.GetAnnotations()[apiconstants.AnnotationKlusterletConfig]
+
+	// Get the merged KlusterletConfig, it merges the user assigned KlusterletConfig with the global KlusterletConfig.
+	mergedKlusterletConfig, err := helpers.GetMergedKlusterletConfigWithGlobal(klusterletconfigName, r.klusterletconfigLister)
+	if err != nil {
+		return reconcile.Result{}, err
 	}
 
 	// get the previous bootstrap kubeconfig and expiration
-	bootstrapKubeconfigData, expiration, err := getBootstrapKubeConfigDataFromImportSecret(ctx, r.clientHolder, managedCluster.Name, kc)
+	bootstrapKubeconfigData, expiration, err := getBootstrapKubeConfigDataFromImportSecret(ctx, r.clientHolder, managedCluster.Name, mergedKlusterletConfig)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -96,7 +92,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 	// if bootstrapKubeconfig not exist or expired, create a new one
 	if bootstrapKubeconfigData == nil {
 		bootstrapKubeconfigData, expiration, err = bootstrap.CreateBootstrapKubeConfig(ctx, r.clientHolder,
-			bootstrap.GetBootstrapSAName(managedCluster.Name), managedCluster.Name, 8640*3600, kc)
+			bootstrap.GetBootstrapSAName(managedCluster.Name), managedCluster.Name, 8640*3600, mergedKlusterletConfig)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -120,7 +116,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 			klusterletNamespace(managedCluster.GetAnnotations()),
 			bootstrapKubeconfigData).
 			WithManagedClusterAnnotations(managedCluster.GetAnnotations()).
-			WithKlusterletConfig(kc).
+			WithKlusterletConfig(mergedKlusterletConfig).
 			WithPriorityClassName(priorityClassName).
 			Generate(ctx, r.clientHolder)
 		if err != nil {
