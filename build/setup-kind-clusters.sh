@@ -25,9 +25,9 @@ E2E_MANAGED_KUBECONFIG="${WORK_DIR}/e2e-managed-kubeconfig"
 
 mkdir -p "${WORK_DIR}/bin"
 
-KIND_VERSION="v0.14.0"
+KIND_VERSION="v0.17.0"
 KIND="${WORK_DIR}/bin/kind"
-KUBE_VERSION="v1.24.0"
+KUBE_VERSION="v1.29.0"
 
 sleep 100 # test only
 

@@ -117,7 +117,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 		yamlcontent, err = bootstrap.NewKlusterletManifestsConfig(
 			mode,
 			managedCluster.Name,
-			klusterletNamespace(managedCluster.GetAnnotations()),
+			klusterletNamespace(managedCluster),
 			bootstrapKubeconfigData).
 			WithManagedClusterAnnotations(managedCluster.GetAnnotations()).
 			WithKlusterletConfig(kc).
@@ -136,11 +136,11 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 		if err != nil {
 			return reconcile.Result{}, err
 		}
-	case operatorv1.InstallModeHosted:
+	case operatorv1.InstallModeHosted, operatorv1.InstallModeSingletonHosted:
 		yamlcontent, err = bootstrap.NewKlusterletManifestsConfig(
 			mode,
 			managedCluster.Name,
-			klusterletNamespace(managedCluster.GetAnnotations()),
+			klusterletNamespace(managedCluster),
 			bootstrapKubeconfigData).
 			WithManagedClusterAnnotations(managedCluster.GetAnnotations()).
 			WithImagePullSecretGenerate(false).
