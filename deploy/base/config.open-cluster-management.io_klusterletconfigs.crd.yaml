@@ -36,6 +36,24 @@ spec:
           spec:
             description: Spec defines the desired state of KlusterletConfig
             properties:
+              agentInstallNamespace:
+                description: AgentInstallNamespace is the namespace to install klusterlet
+                  agent on the managed cluster. In hosted mode, it is the namespace
+                  on the managed cluster for service account of the agent. if it is
+                  not set, open-cluster-management-agent namespace will be used.
+                maxLength: 57
+                pattern: ^open-cluster-management-[-a-z0-9]*[a-z0-9]$
+                type: string
+              appliedManifestWorkEvictionGracePeriod:
+                description: AppliedManifestWorkEvictionGracePeriod is the eviction
+                  grace period the work agent will wait before evicting the AppliedManifestWorks,
+                  whose corresponding ManifestWorks are missing on the hub cluster,
+                  from the managed cluster. If not present, the default value of the
+                  work agent will be used. If its value is set to "INFINITE", it means
+                  the AppliedManifestWorks will never been evicted from the managed
+                  cluster.
+                pattern: ^([0-9]+(s|m|h))+$|^INFINITE$
+                type: string
               hubKubeAPIServerCABundle:
                 description: 'HubKubeAPIServerCABundle is the CA bundle to verify
                   the server certificate of the hub kube API against. If not present,

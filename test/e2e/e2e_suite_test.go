@@ -879,6 +879,49 @@ func assertBootstrapKubeconfigServerURLAndCABundle(serverURL string, caData []by
 	})
 }
 
+func AssertKlusterletNamespace(clusterName, name, namespace string) {
+	ginkgo.By("Klusterlet should be deployed in the namespace", func() {
+		gomega.Eventually(func() error {
+			var err error
+
+			importSecretName := fmt.Sprintf("%s-%s", clusterName, constants.ImportSecretNameSuffix)
+			importSecret, err := hubKubeClient.CoreV1().Secrets(clusterName).Get(context.TODO(), importSecretName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+
+			for _, yaml := range helpers.SplitYamls(importSecret.Data[constants.ImportSecretImportYamlKey]) {
+				obj := helpers.MustCreateObject(yaml)
+				kl, ok := obj.(*operatorv1.Klusterlet)
+				if ok {
+					if kl.Spec.Namespace != namespace {
+						return fmt.Errorf("klusterlet namespace in import secret is not correct, expect %s but got %s", namespace, kl.Spec.Namespace)
+					}
+					if kl.Name != name {
+						return fmt.Errorf("klusterlet name in import secret is not correct, expect %s but got %s", name, kl.Name)
+					}
+				}
+			}
+
+			klusterlet, err := hubOperatorClient.OperatorV1().Klusterlets().Get(context.TODO(), name, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+
+			if klusterlet.Spec.Namespace != namespace {
+				return fmt.Errorf("klusterlet namespace is not correct, expect %s but got %s", namespace, klusterlet.Spec.Namespace)
+			}
+
+			_, err = hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+
+			return nil
+		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+	})
+}
+
 func hasCertificate(certs []*x509.Certificate, cert *x509.Certificate) bool {
 	if cert == nil {
 		return true

@@ -266,6 +266,47 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 		// cluster should become available because custom server URL and CA bundle is removed
 		assertManagedClusterAvailable(managedClusterName)
 	})
+
+	It("Should deploy the klusterlet with customized namespace", func() {
+		By("Create managed cluster", func() {
+			_, err := util.CreateManagedClusterWithShortLeaseDuration(
+				hubClusterClient,
+				managedClusterName,
+				map[string]string{
+					"agent.open-cluster-management.io/klusterlet-config": klusterletConfigName,
+				},
+				util.NewLable("local-cluster", "true"))
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		// klusterletconfig is missing and it will be ignored
+		assertManagedClusterAvailable(managedClusterName)
+
+		By("Create KlusterletConfig with customized namespace", func() {
+			_, err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Create(context.TODO(), &klusterletconfigv1alpha1.KlusterletConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: klusterletConfigName,
+				},
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					AgentInstallNamespace: "open-cluster-management-local",
+				},
+			}, metav1.CreateOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		AssertKlusterletNamespace(managedClusterName, "klusterlet-local", "open-cluster-management-local")
+
+		assertManagedClusterAvailable(managedClusterName)
+
+		By("Delete Klusterletconfig", func() {
+			err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Delete(context.TODO(), klusterletConfigName, metav1.DeleteOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		AssertKlusterletNamespace(managedClusterName, "klusterlet-local", "open-cluster-management-agent")
+
+		assertManagedClusterAvailable(managedClusterName)
+	})
 })
 
 func newCert(commoneName string) ([]byte, []byte, error) {
@@ -315,12 +356,17 @@ func newCert(commoneName string) ([]byte, []byte, error) {
 	return caPEM.Bytes(), caPrivKeyPEM.Bytes(), nil
 }
 
-func restartAgentPods() {
-	pods, err := hubKubeClient.CoreV1().Pods("open-cluster-management-agent").List(context.TODO(), metav1.ListOptions{LabelSelector: "app=klusterlet-agent"})
-	Expect(err).ToNot(HaveOccurred())
-
-	for _, pod := range pods.Items {
-		err = hubKubeClient.CoreV1().Pods("open-cluster-management-agent").Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
+func restartAgentPods(namespaces ...string) {
+	if len(namespaces) == 0 {
+		namespaces = []string{"open-cluster-management-agent"}
+	}
+	for _, ns := range namespaces {
+		pods, err := hubKubeClient.CoreV1().Pods(ns).List(context.TODO(), metav1.ListOptions{LabelSelector: "app=klusterlet-agent"})
 		Expect(err).ToNot(HaveOccurred())
+
+		for _, pod := range pods.Items {
+			err = hubKubeClient.CoreV1().Pods(ns).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		}
 	}
 }

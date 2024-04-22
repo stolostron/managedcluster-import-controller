@@ -310,6 +310,51 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "customize namespace with klusterletconfig",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "new-ns",
+					},
+				},
+			},
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeDefault,
+				"test", // cluster name
+				"test", // klusterlet namespace
+				[]byte("bootstrap kubeconfig"),
+			).WithKlusterletConfig(&klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					AgentInstallNamespace: "new-ns",
+				},
+			}),
+			validateFunc: func(t *testing.T, objects []runtime.Object) {
+				if len(objects) != 10 {
+					t.Fatalf("Expected 10 objects, but got %d", len(objects))
+				}
+
+				klusterlet, ok := objects[8].(*operatorv1.Klusterlet)
+				if !ok {
+					t.Fatal("the klusterlet is not klusterlet")
+				}
+				if klusterlet.Spec.Namespace != "new-ns" {
+					t.Fatal("the klusterlet namespace is not replaced")
+				}
+				if klusterlet.Name != "klusterlet-new-ns" {
+					t.Fatal("the klusterlet name is not replaced.")
+				}
+
+				operater, ok := objects[6].(*appv1.Deployment)
+				if !ok {
+					t.Fatal("the operater is not deployment")
+				}
+
+				if operater.Namespace != "new-ns" {
+					t.Errorf("the operater namespace %s is not new-ns", operater.Namespace)
+				}
+			},
+		},
 	}
 
 	for _, testcase := range testcases {

@@ -143,6 +143,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 			// the hosting cluster should support PriorityClass API and have
 			// already had the default PriorityClass
 			WithPriorityClassName(constants.DefaultKlusterletPriorityClassName).
+			WithKlusterletConfig(mergedKlusterletConfig).
 			Generate(ctx, r.clientHolder)
 		if err != nil {
 			return reconcile.Result{}, err

@@ -556,7 +556,7 @@ func TestKlusterletNamespace(t *testing.T) {
 					Name: "test",
 				},
 			},
-			expectNamespace: defaultKlusterletNamespace,
+			expectNamespace: constants.DefaultKlusterletNamespace,
 		},
 		{
 			name: "hosted",
@@ -568,7 +568,7 @@ func TestKlusterletNamespace(t *testing.T) {
 					},
 				},
 			},
-			expectNamespace: defaultKlusterletNamespace + "-test",
+			expectNamespace: constants.DefaultKlusterletNamespace + "-test",
 		},
 		{
 			name: "default with ns override",

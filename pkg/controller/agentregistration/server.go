@@ -86,7 +86,7 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 		content, err := bootstrap.NewKlusterletManifestsConfig(
 			operatorv1.InstallModeDefault,
 			clusterID,
-			DefaultKlusterletNamespace,
+			constants.DefaultKlusterletNamespace,
 			bootstrapkubeconfig).
 			WithKlusterletClusterAnnotations(klusterletClusterAnnotations).
 			WithKlusterletConfig(mergedKlusterletConfig).
@@ -175,5 +175,4 @@ func authMiddleware(clientHolder *helpers.ClientHolder, next http.Handler) http.
 
 const (
 	AgentRegistrationDefaultBootstrapSAName = "agent-registration-bootstrap"
-	DefaultKlusterletNamespace              = "open-cluster-management-agent"
 )

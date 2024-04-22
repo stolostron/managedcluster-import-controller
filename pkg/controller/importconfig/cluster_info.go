@@ -24,8 +24,6 @@ import (
 	"k8s.io/klog/v2"
 )
 
-const defaultKlusterletNamespace = "open-cluster-management-agent"
-
 // getBootstrapKubeConfigDataFromImportSecret aims to reuse the bootstrap kubeconfig data if possible.
 // The return values are: 1. kubeconfig data, 2. token expiration, 3. error
 // Note that the kubeconfig data could be `nil` if the import secret is not found or the kubeconfig data is invalid.
@@ -236,7 +234,7 @@ func klusterletNamespace(managedCluster *clusterv1.ManagedCluster) string {
 	// if it is hosted mode, the default namespace is open-cluster-management-agent-{clusterName}
 	mode := helpers.DetermineKlusterletMode(managedCluster)
 	if mode == operatorv1.InstallModeHosted || mode == operatorv1.InstallModeSingletonHosted {
-		namespace := defaultKlusterletNamespace + "-" + managedCluster.Name
+		namespace := constants.DefaultKlusterletNamespace + "-" + managedCluster.Name
 		// klusterlet will also auto create an default addon ns with postfix of "-addon", so the maximum
 		// length here should be 57
 		if len(namespace) <= 57 {
@@ -245,5 +243,5 @@ func klusterletNamespace(managedCluster *clusterv1.ManagedCluster) string {
 		return namespace[:57]
 	}
 
-	return defaultKlusterletNamespace
+	return constants.DefaultKlusterletNamespace
 }

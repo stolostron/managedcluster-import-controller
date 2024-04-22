@@ -66,6 +66,7 @@ type RenderConfig struct {
 
 // KlusterletRenderConfig defines variables used in the klusterletFiles.
 type KlusterletRenderConfig struct {
+	KlusterletName            string
 	KlusterletNamespace       string
 	ManagedClusterNamespace   string
 	BootstrapKubeconfig       string
@@ -225,7 +226,8 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 	renderConfig := RenderConfig{
 		KlusterletRenderConfig: KlusterletRenderConfig{
 			ManagedClusterNamespace: b.ClusterName,
-			KlusterletNamespace:     b.KlusterletNamespace,
+			KlusterletName:          getKlusterletName(b.klusterletconfig, b.ClusterName, b.KlusterletNamespace, b.InstallMode),
+			KlusterletNamespace:     getKlusterletNamespace(b.KlusterletNamespace, b.klusterletconfig),
 			InstallMode:             string(b.InstallMode),
 
 			// BootstrapKubeConfig
@@ -327,6 +329,32 @@ func filesToObjects(files []string, config interface{}) ([]runtime.Object, error
 		objects = append(objects, helpers.MustCreateObjectFromTemplate(file, template, config))
 	}
 	return objects, nil
+}
+
+// getKlusterletNamespace returns agentInstallNamespace from config if it is set, otherwise return the
+// input namespace
+func getKlusterletNamespace(namespace string, config *klusterletconfigv1alpha1.KlusterletConfig) string {
+	if config == nil {
+		return namespace
+	}
+	if len(config.Spec.AgentInstallNamespace) == 0 {
+		return namespace
+	}
+	return config.Spec.AgentInstallNamespace
+}
+
+// getKlusterletName returns klusterlet by default, and klusterlet-{cluster name} in hosted mode,
+// and klusterlet-{postfix of install namespace in config}.
+func getKlusterletName(config *klusterletconfigv1alpha1.KlusterletConfig, clusterName, namespace string, mode operatorv1.InstallMode) string {
+	if mode == operatorv1.InstallModeHosted || mode == operatorv1.InstallModeSingletonHosted {
+		return fmt.Sprintf("klusterlet-%s", clusterName)
+	}
+	klusterletNamespace := getKlusterletNamespace(namespace, config)
+	if klusterletNamespace == constants.DefaultKlusterletNamespace {
+		return "klusterlet"
+	}
+	postFix := strings.TrimPrefix(klusterletNamespace, "open-cluster-management-")
+	return fmt.Sprintf("klusterlet-%s", postFix)
 }
 
 func getImage(envName string, kcRegistries []klusterletconfigv1alpha1.Registries, clusterAnnotations map[string]string) (string, error) {
