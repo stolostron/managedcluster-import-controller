@@ -16,19 +16,6 @@ import (
 )
 
 func TestEnqueueManagedClusterInKlusterletConfigAnnotation(t *testing.T) {
-	// Create a fake clientset and indexer
-	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
-		ManagedClusterKlusterletConfigAnnotationIndexKey: IndexManagedClusterByKlusterletconfigAnnotation,
-	})
-
-	// Create a new kcHandler
-	kcHandler := &enqueueManagedClusterInKlusterletConfigAnnotation{
-		managedclusterIndexer: indexer,
-	}
-
-	// Create a new queue
-	queue := workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
-
 	mcs := []*clusterv1.ManagedCluster{
 		{
 			ObjectMeta: v1.ObjectMeta{
@@ -50,20 +37,12 @@ func TestEnqueueManagedClusterInKlusterletConfigAnnotation(t *testing.T) {
 		},
 	}
 
-	// Add the managed clusters to the indexer
-	for _, mc := range mcs {
-		err := indexer.Add(mc)
-		if err != nil {
-			t.Fatalf("Failed to add managed cluster to indexer: %v", err)
-		}
-	}
-
 	testcases := []struct {
-		addEvent func(handler.EventHandler)
+		addEvent func(handler handler.EventHandler, queue workqueue.RateLimitingInterface)
 		verify   func(t *testing.T, queue workqueue.RateLimitingInterface)
 	}{
 		{
-			addEvent: func(h handler.EventHandler) {
+			addEvent: func(h handler.EventHandler, queue workqueue.RateLimitingInterface) {
 				// Create a new create event for the managed cluster
 				evt := event.CreateEvent{
 					Object: &klusterletconfigv1alpha1.KlusterletConfig{
@@ -92,7 +71,7 @@ func TestEnqueueManagedClusterInKlusterletConfigAnnotation(t *testing.T) {
 			},
 		},
 		{
-			addEvent: func(h handler.EventHandler) {
+			addEvent: func(h handler.EventHandler, queue workqueue.RateLimitingInterface) {
 				// Create a new create event for the managed cluster
 				evt := event.DeleteEvent{
 					Object: &klusterletconfigv1alpha1.KlusterletConfig{
@@ -109,10 +88,48 @@ func TestEnqueueManagedClusterInKlusterletConfigAnnotation(t *testing.T) {
 				}
 			},
 		},
+		{
+			addEvent: func(h handler.EventHandler, queue workqueue.RateLimitingInterface) {
+				// Create a new create event for the managed cluster
+				evt := event.CreateEvent{
+					Object: &klusterletconfigv1alpha1.KlusterletConfig{
+						ObjectMeta: v1.ObjectMeta{
+							Name: "global",
+						},
+					},
+				}
+				h.Create(context.Background(), evt, queue)
+			},
+			verify: func(t *testing.T, queue workqueue.RateLimitingInterface) {
+				if queue.Len() != 3 {
+					t.Errorf("Expected queue length to be 3, but got %d", queue.Len())
+				}
+			},
+		},
 	}
 
 	for _, tc := range testcases {
-		tc.addEvent(kcHandler)
+		// Create a fake clientset and indexer
+		indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
+			ManagedClusterKlusterletConfigAnnotationIndexKey: IndexManagedClusterByKlusterletconfigAnnotation,
+		})
+
+		// Create a new kcHandler
+		kcHandler := &enqueueManagedClusterInKlusterletConfigAnnotation{
+			managedclusterIndexer: indexer,
+		}
+
+		// Create a new queue
+		queue := workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
+		// Add the managed clusters to the indexer
+		for _, mc := range mcs {
+			err := indexer.Add(mc)
+			if err != nil {
+				t.Fatalf("Failed to add managed cluster to indexer: %v", err)
+			}
+		}
+
+		tc.addEvent(kcHandler, queue)
 		tc.verify(t, queue)
 	}
 }
@@ -138,8 +155,8 @@ func TestIndexManagedClusterByKlusterletconfigAnnotation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
-	if len(result) != 1 || result[0] != "test-klusterletconfig" {
-		t.Errorf("Expected result to be [\"test-klusterletconfig\"], but got %v", result)
+	if len(result) != 2 || result[0] != "global" || result[1] != "test-klusterletconfig" {
+		t.Errorf("Expected result to be [\"global, test-klusterletconfig\"], but got %v", result)
 	}
 
 	// Test the function with a managed cluster that does not have a klusterletconfig annotation
@@ -147,7 +164,7 @@ func TestIndexManagedClusterByKlusterletconfigAnnotation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Unexpected error: %v", err)
 	}
-	if result != nil {
-		t.Errorf("Expected result to be nil, but got %v", result)
+	if len(result) != 1 || result[0] != "global" {
+		t.Errorf("Expected result to be [\"global\"], but got %v", result)
 	}
 }

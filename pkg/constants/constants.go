@@ -140,3 +140,7 @@ const (
 const (
 	DefaultKlusterletPriorityClassName = "klusterlet-critical"
 )
+
+const (
+	GlobalKlusterletConfigName = "global"
+)
