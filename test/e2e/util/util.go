@@ -27,6 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
 	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
@@ -358,6 +359,35 @@ func NewExternalManagedKubeconfigSecret(kubeClient kubernetes.Interface, cluster
 			"kubeconfig": secret.Data["kubeconfig"],
 		},
 	}, nil
+}
+
+func NewManagedClient(kubeClient kubernetes.Interface) (kubernetes.Interface, error) {
+	name := "e2e-managed-external-secret"
+	secret, err := kubeClient.CoreV1().Secrets(ocmNamespace).Get(context.TODO(), name, metav1.GetOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	kubeconfigRaw, ok := secret.Data["kubeconfig"]
+	if !ok {
+		return nil, fmt.Errorf("no kubeconfig data in the secret")
+	}
+
+	kubeconfig, err := clientcmd.Load(kubeconfigRaw)
+	if err != nil {
+		return nil, err
+	}
+
+	clientConfig, err := clientcmd.NewDefaultClientConfig(*kubeconfig, &clientcmd.ConfigOverrides{}).ClientConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := kubernetes.NewForConfig(clientConfig)
+	if err != nil {
+		return nil, err
+	}
+	return client, nil
 }
 
 func NewCSR(labels ...Label) *certificatesv1.CertificateSigningRequest {

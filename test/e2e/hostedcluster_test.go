@@ -10,6 +10,7 @@ import (
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
@@ -111,11 +112,58 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 				secret, err := util.NewExternalManagedKubeconfigSecret(hubKubeClient, managedClusterName)
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
+				spokeKubeclient, err := util.NewManagedClient(hubKubeClient)
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
 				namespace := fmt.Sprintf("klusterlet-%s", managedClusterName)
 				assertNamespaceCreated(hubKubeClient, namespace)
 				_, err = hubKubeClient.CoreV1().Secrets(namespace).Create(
 					context.TODO(), secret, metav1.CreateOptions{})
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+				spokeNamespace := "open-cluster-management-agent-" + managedClusterName
+				spokeNamespace = spokeNamespace[:57]
+				assertNamespaceCreated(spokeKubeclient, spokeNamespace)
+			})
+
+			assertManagedClusterImportSecretApplied(managedClusterName, operatorv1.InstallModeHosted)
+			assertManagedClusterAvailable(managedClusterName)
+			assertManagedClusterPriorityClassHosted(managedClusterName)
+		})
+
+		ginkgo.It("Should override the klusterlet namespace by the annotation", func() {
+			ginkgo.By(fmt.Sprintf("Create hosted mode managed cluster %s", managedClusterName), func() {
+				_, err := util.CreateHostedManagedCluster(hubClusterClient, managedClusterName, hostingClusterName)
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			})
+
+			gomega.Eventually(func() error {
+				cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
+				if err != nil {
+					return err
+				}
+				cluster.Annotations[constants.KlusterletNamespaceAnnotation] = "open-cluster-management-agent-hosted"
+				_, err = hubClusterClient.ClusterV1().ManagedClusters().Update(context.TODO(), cluster, metav1.UpdateOptions{})
+				return err
+			}, 1*time.Minute, 1*time.Second).Should(gomega.Succeed())
+
+			assertManagedClusterImportSecretCreated(managedClusterName, "other", operatorv1.InstallModeHosted)
+			assertHostedManagedClusterManifestWorksAvailable(managedClusterName, hostingClusterName)
+
+			ginkgo.By(fmt.Sprintf("Create external managed kubeconfig %s with kubeconfig", managedClusterName), func() {
+				secret, err := util.NewExternalManagedKubeconfigSecret(hubKubeClient, managedClusterName)
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+				spokeKubeclient, err := util.NewManagedClient(hubKubeClient)
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+				namespace := fmt.Sprintf("klusterlet-%s", managedClusterName)
+				assertNamespaceCreated(hubKubeClient, namespace)
+				_, err = hubKubeClient.CoreV1().Secrets(namespace).Create(
+					context.TODO(), secret, metav1.CreateOptions{})
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+				assertNamespaceCreated(spokeKubeclient, "open-cluster-management-agent-hosted")
 			})
 
 			assertManagedClusterImportSecretApplied(managedClusterName, operatorv1.InstallModeHosted)

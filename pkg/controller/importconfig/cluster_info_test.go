@@ -605,7 +605,7 @@ func TestKlusterletNamespace(t *testing.T) {
 					},
 				},
 			},
-			expectNamespace: "open-cluster-management-agent-loooooooooooooooooooooooooooooooo",
+			expectNamespace: "open-cluster-management-agent-loooooooooooooooooooooooooo",
 		},
 	}
 
