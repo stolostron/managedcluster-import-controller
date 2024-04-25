@@ -19,6 +19,8 @@ ${KUBECTL} apply -f "$REPO_DIR/test/e2e/resources/assisted-service"
 echo "###### prepare required kubeconfigs"
 E2E_KUBECONFIG="${WORK_DIR}/e2e-kubeconfig"
 E2E_MANAGED_KUBECONFIG="${WORK_DIR}/e2e-managed-kubeconfig"
+E2E_EXTERNAL_MANAGED_KUBECONFIG="${WORK_DIR}/e2e-external-managed-kubeconfig"
 
 cp $KUBECONFIG $E2E_KUBECONFIG
 cp $KUBECONFIG $E2E_MANAGED_KUBECONFIG
+cp $KUBECONFIG $E2E_EXTERNAL_MANAGED_KUBECONFIG

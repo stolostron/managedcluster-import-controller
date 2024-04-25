@@ -21,6 +21,7 @@ mkdir -p "${WORK_DIR}"
 
 E2E_KUBECONFIG="${WORK_DIR}/e2e-kubeconfig"
 E2E_MANAGED_KUBECONFIG="${WORK_DIR}/e2e-managed-kubeconfig"
+E2E_EXTERNAL_MANAGED_KUBECONFIG="${WORK_DIR}/e2e-external-managed-kubeconfig"
 
 export OCM_BRANCH=$OCM_VERSION
 export REGISTRATION_OPERATOR_IMAGE=quay.io/stolostron/registration-operator:$OCM_VERSION
@@ -130,6 +131,8 @@ EOF
 echo "###### prepare auto-import-secret for hosted cluster"
 ${KUBECTL} delete secret e2e-managed-auto-import-secret -n open-cluster-management --ignore-not-found
 ${KUBECTL} create secret generic e2e-managed-auto-import-secret --from-file=kubeconfig=$E2E_MANAGED_KUBECONFIG -n open-cluster-management
+${KUBECTL} delete secret e2e-managed-external-secret -n open-cluster-management --ignore-not-found
+${KUBECTL} create secret generic e2e-managed-external-secret --from-file=kubeconfig=$E2E_EXTERNAL_MANAGED_KUBECONFIG -n open-cluster-management
 
 AGENT_REGISTRATION_ARG=${1:-disable-agent-registration}
 if [ "$AGENT_REGISTRATION_ARG"x = "enable-agent-registration"x ]; then
