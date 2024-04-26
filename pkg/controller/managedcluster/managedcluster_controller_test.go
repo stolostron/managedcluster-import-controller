@@ -7,23 +7,23 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
-	"k8s.io/apimachinery/pkg/api/errors"
-	"open-cluster-management.io/api/addon/v1alpha1"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-
 	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
-
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
-
+	"open-cluster-management.io/api/addon/v1alpha1"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 )
 
 var (
@@ -238,7 +238,7 @@ func TestReconcile(t *testing.T) {
 			validateFunc: func(t *testing.T, runtimeClient client.Client) {
 				addon := &v1alpha1.ManagedClusterAddOn{}
 				if err := runtimeClient.Get(context.TODO(), types.NamespacedName{Namespace: "test", Name: "test"}, addon); !errors.IsNotFound(err) {
-					t.Errorf("unexpected not found, but failed, %v", err)
+					t.Errorf("unexpected not found, but failed, %v, addon: %v", err, addon)
 				}
 			},
 		},
@@ -246,12 +246,17 @@ func TestReconcile(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			r := &ReconcileManagedCluster{
-				client:   fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.startObjs...).Build(),
-				recorder: eventstesting.NewTestingEventRecorder(t),
-			}
+			ctx := context.TODO()
+			kubeClient := kubefake.NewSimpleClientset()
+			runtimeClient := fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.startObjs...).
+				WithStatusSubresource(c.startObjs...).Build()
+			r := NewReconcileManagedCluster(
+				runtimeClient,
+				eventstesting.NewTestingEventRecorder(t),
+				helpers.NewManagedClusterEventRecorder(ctx, kubeClient, controllerName),
+			)
 
-			_, err := r.Reconcile(context.TODO(), c.request)
+			_, err := r.Reconcile(ctx, c.request)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}

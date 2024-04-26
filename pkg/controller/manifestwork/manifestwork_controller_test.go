@@ -663,22 +663,25 @@ func TestReconcile(t *testing.T) {
 				workInformer.GetStore().Add(work)
 			}
 
-			r := &ReconcileManifestWork{
-				clientHolder: &helpers.ClientHolder{
-					RuntimeClient:  fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.startObjs...).Build(),
+			ctx := context.TODO()
+			r := NewReconcileManifestWork(
+				&helpers.ClientHolder{
+					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).
+						WithObjects(c.startObjs...).WithStatusSubresource(c.startObjs...).Build(),
 					OperatorClient: operatorfake.NewSimpleClientset(),
 					KubeClient:     kubeClient,
 					WorkClient:     workClient,
 				},
-				informerHolder: &source.InformerHolder{
+				&source.InformerHolder{
 					ImportSecretLister:   kubeInformerFactory.Core().V1().Secrets().Lister(),
 					KlusterletWorkLister: workInformerFactory.Work().V1().ManifestWorks().Lister(),
 				},
-				scheme:   testscheme,
-				recorder: eventstesting.NewTestingEventRecorder(t),
-			}
+				testscheme,
+				eventstesting.NewTestingEventRecorder(t),
+				helpers.NewManagedClusterEventRecorder(ctx, kubeClient, controllerName),
+			)
 
-			_, err := r.Reconcile(context.TODO(), c.request)
+			_, err := r.Reconcile(ctx, c.request)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}

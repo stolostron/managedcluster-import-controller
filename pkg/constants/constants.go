@@ -118,6 +118,9 @@ const (
 	ConditionReasonManagedClusterImporting        = "ManagedClusterImporting"
 	ConditionReasonManagedClusterImportFailed     = "ManagedClusterImportFailed"
 	ConditionReasonManagedClusterImported         = "ManagedClusterImported"
+
+	ConditionReasonManagedClusterDetaching      = "ManagedClusterDetaching"
+	ConditionReasonManagedClusterForceDetaching = "ManagedClusterForceDetaching"
 )
 
 const (
@@ -125,6 +128,9 @@ const (
 	EventReasonManagedClusterImported     = "Imported"
 	EventReasonManagedClusterImporting    = "Importing"
 	EventReasonManagedClusterWait         = "WaitForImporting"
+
+	EventReasonManagedClusterDetaching      = "Detaching"
+	EventReasonManagedClusterForceDetaching = "ForceDetaching"
 )
 
 /* #nosec */

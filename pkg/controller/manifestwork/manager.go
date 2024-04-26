@@ -91,12 +91,13 @@ func Add(ctx context.Context,
 				},
 			}),
 		).
-		Complete(&ReconcileManifestWork{
-			clientHolder:   clientHolder,
-			informerHolder: informerHolder,
-			scheme:         mgr.GetScheme(),
-			recorder:       helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
-		})
+		Complete(NewReconcileManifestWork(
+			clientHolder,
+			informerHolder,
+			mgr.GetScheme(),
+			helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
+			helpers.NewManagedClusterEventRecorder(ctx, clientHolder.KubeClient, controllerName),
+		))
 	return controllerName, err
 }
 

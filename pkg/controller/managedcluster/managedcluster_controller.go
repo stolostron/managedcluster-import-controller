@@ -7,21 +7,21 @@ import (
 	"context"
 	"strings"
 
-	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	"open-cluster-management.io/api/addon/v1alpha1"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-
+	kevents "k8s.io/client-go/tools/events"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 )
 
 const clusterNameLabel = "name"
@@ -36,8 +36,22 @@ var log = logf.Log.WithName(controllerName)
 
 // ReconcileManagedCluster reconciles a ManagedCluster object
 type ReconcileManagedCluster struct {
-	client   client.Client
-	recorder events.Recorder
+	client     client.Client
+	recorder   events.Recorder
+	mcRecorder kevents.EventRecorder
+}
+
+// NewReconcileManagedCluster creates a new ReconcileManagedCluster
+func NewReconcileManagedCluster(
+	client client.Client,
+	recorder events.Recorder,
+	mcRecorder kevents.EventRecorder,
+) *ReconcileManagedCluster {
+	return &ReconcileManagedCluster{
+		client:     client,
+		recorder:   recorder,
+		mcRecorder: mcRecorder,
+	}
 }
 
 // blank assignment to verify that ReconcileManagedCluster implements reconcile.Reconciler
@@ -94,6 +108,26 @@ func (r *ReconcileManagedCluster) Reconcile(ctx context.Context, request reconci
 		r.recorder.Eventf("ManagedClusterNamespaceLabelUpdated",
 			"The managed cluster %s namespace label is added", managedCluster.Name)
 		return reconcile.Result{}, nil
+	}
+
+	// add a detaching condition to the managed cluster if the managed cluster is deleting
+	// if it is already in detaching or force deaching state, skip it
+	ic := meta.FindStatusCondition(managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+	if ic == nil || (ic.Reason != constants.ConditionReasonManagedClusterDetaching &&
+		ic.Reason != constants.ConditionReasonManagedClusterForceDetaching) {
+
+		if err := helpers.UpdateManagedClusterImportCondition(
+			r.client,
+			managedCluster,
+			helpers.NewManagedClusterImportSucceededCondition(
+				metav1.ConditionFalse,
+				constants.ConditionReasonManagedClusterDetaching,
+				"The managed cluster is being detached now",
+			),
+			r.mcRecorder,
+		); err != nil {
+			return reconcile.Result{}, err
+		}
 	}
 
 	if len(managedCluster.Finalizers) > 1 {
@@ -169,20 +203,7 @@ func (r *ReconcileManagedCluster) deleteManagedClusterAddon(
 	// force delete addons before delete cluster namespace in this case the addon is in deleting with finalizer.
 	// otherwise, the deleting addon may prevent the cluster namespace from being deleted.
 	// TODO: consider to delete this since addons should be deleted by the manifestwork controller.
-	addons := &v1alpha1.ManagedClusterAddOnList{}
-	if err := r.client.List(ctx, addons, client.InNamespace(clusterName)); err != nil {
-		return err
-	}
-	for _, addon := range addons.Items {
-		if err = helpers.ForceDeleteManagedClusterAddon(ctx, r.client, r.recorder,
-			addon.Namespace, addon.Name); err != nil {
-			return err
-		}
-	}
-
-	r.recorder.Eventf("ManagedClusterNamespaceDeleted",
-		"The managed cluster %s namespace is deleted", managedCluster.Name)
-	return nil
+	return helpers.ForceDeleteAllManagedClusterAddons(ctx, r.client, managedCluster, r.recorder, r.mcRecorder)
 }
 
 func ensureCreateViaAnnotation(modified *bool, cluster *clusterv1.ManagedCluster) {

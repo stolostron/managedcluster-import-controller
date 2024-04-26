@@ -324,7 +324,7 @@ func UpdateManagedClusterImportCondition(client client.Client, managedCluster *c
 	case constants.ConditionReasonManagedClusterImporting:
 		recorder.Eventf(mc, nil, corev1.EventTypeNormal,
 			constants.EventReasonManagedClusterImporting, constants.EventReasonManagedClusterImporting,
-			"The %s is being imported now", mc.Name)
+			"The %s is being imported now: %s", mc.Name, cond.Message)
 	case constants.ConditionReasonManagedClusterImported:
 		recorder.Eventf(mc, nil, corev1.EventTypeNormal,
 			constants.EventReasonManagedClusterImported, constants.EventReasonManagedClusterImported,
@@ -333,6 +333,14 @@ func UpdateManagedClusterImportCondition(client client.Client, managedCluster *c
 		recorder.Eventf(mc, nil, corev1.EventTypeWarning,
 			constants.EventReasonManagedClusterImportFailed, constants.EventReasonManagedClusterImportFailed,
 			"Fail to import the %s as a managed cluster due to: %s", mc.Name, cond.Message)
+	case constants.ConditionReasonManagedClusterDetaching:
+		recorder.Eventf(mc, nil, corev1.EventTypeNormal,
+			constants.EventReasonManagedClusterDetaching, constants.EventReasonManagedClusterDetaching,
+			"The managed cluster (%s) is being detached now", mc.Name)
+	case constants.ConditionReasonManagedClusterForceDetaching:
+		recorder.Eventf(mc, nil, corev1.EventTypeWarning,
+			constants.EventReasonManagedClusterForceDetaching, constants.EventReasonManagedClusterForceDetaching,
+			"The managed cluster (%s) is being detached forcely", mc.Name)
 	default:
 		return fmt.Errorf("the condition reason %s is not supported", cond.Reason)
 	}
@@ -871,12 +879,31 @@ func ForceDeleteManagedClusterAddon(
 func ForceDeleteAllManagedClusterAddons(
 	ctx context.Context,
 	runtimeClient client.Client,
+	cluster *clusterv1.ManagedCluster,
 	recorder events.Recorder,
-	clusterName string) error {
-	addons, err := ListManagedClusterAddons(ctx, runtimeClient, clusterName)
+	mcRecorder kevents.EventRecorder) error {
+
+	addons, err := ListManagedClusterAddons(ctx, runtimeClient, cluster.Name)
 	if err != nil {
 		return err
 	}
+
+	if len(addons.Items) > 0 {
+		// update the managed cluster import condition to force detaching if there are addons need to be deleted
+		if err := UpdateManagedClusterImportCondition(
+			runtimeClient,
+			cluster,
+			NewManagedClusterImportSucceededCondition(
+				metav1.ConditionFalse,
+				constants.ConditionReasonManagedClusterForceDetaching,
+				"The managed cluster is being detached forcely",
+			),
+			mcRecorder,
+		); err != nil {
+			return err
+		}
+	}
+
 	for _, item := range addons.Items {
 		if err := ForceDeleteManagedClusterAddon(ctx, runtimeClient, recorder, item.Namespace, item.Name); err != nil {
 			return err

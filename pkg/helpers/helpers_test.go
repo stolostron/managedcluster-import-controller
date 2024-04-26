@@ -269,6 +269,58 @@ func TestUpdateManagedClusterImportCondition(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "cluster is being detached",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test_cluster",
+				},
+			},
+			cond: metav1.Condition{
+				Type:    constants.ConditionManagedClusterImportSucceeded,
+				Status:  metav1.ConditionFalse,
+				Message: "test",
+				Reason:  constants.ConditionReasonManagedClusterDetaching,
+			},
+			validateAddonActions: func(t *testing.T, actions []clienttesting.Action) {
+				if len(actions) != 1 {
+					t.Errorf("expected 1 action, but got %d", len(actions))
+				}
+				action := actions[0]
+				if action.GetVerb() != "create" {
+					t.Errorf("expected create action, but got %s", action.GetVerb())
+				}
+				if action.GetResource().Resource != "events" {
+					t.Errorf("expected events resource, but got %s", action.GetResource().Resource)
+				}
+			},
+		},
+		{
+			name: "cluster is being forcibly detached",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test_cluster",
+				},
+			},
+			cond: metav1.Condition{
+				Type:    constants.ConditionManagedClusterImportSucceeded,
+				Status:  metav1.ConditionFalse,
+				Message: "test",
+				Reason:  constants.ConditionReasonManagedClusterForceDetaching,
+			},
+			validateAddonActions: func(t *testing.T, actions []clienttesting.Action) {
+				if len(actions) != 1 {
+					t.Errorf("expected 1 action, but got %d", len(actions))
+				}
+				action := actions[0]
+				if action.GetVerb() != "create" {
+					t.Errorf("expected create action, but got %s", action.GetVerb())
+				}
+				if action.GetResource().Resource != "events" {
+					t.Errorf("expected events resource, but got %s", action.GetResource().Resource)
+				}
+			},
+		},
 	}
 
 	for _, c := range cases {

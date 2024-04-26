@@ -9,14 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	"github.com/stolostron/managedcluster-import-controller/pkg/source"
-	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	operatorv1 "open-cluster-management.io/api/operator/v1"
-	workv1 "open-cluster-management.io/api/work/v1"
-
 	"github.com/ghodss/yaml"
 	"github.com/openshift/library-go/pkg/operator/events"
 	operatorhelpers "github.com/openshift/library-go/pkg/operator/v1helpers"
@@ -26,8 +18,17 @@ import (
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	kevents "k8s.io/client-go/tools/events"
+	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 )
 
 var log = logf.Log.WithName(controllerName)
@@ -38,6 +39,23 @@ type ReconcileManifestWork struct {
 	informerHolder *source.InformerHolder
 	scheme         *runtime.Scheme
 	recorder       events.Recorder
+	mcRecorder     kevents.EventRecorder
+}
+
+func NewReconcileManifestWork(
+	clientHolder *helpers.ClientHolder,
+	informerHolder *source.InformerHolder,
+	scheme *runtime.Scheme,
+	recorder events.Recorder,
+	mcRecorder kevents.EventRecorder,
+) *ReconcileManifestWork {
+	return &ReconcileManifestWork{
+		clientHolder:   clientHolder,
+		informerHolder: informerHolder,
+		scheme:         scheme,
+		recorder:       recorder,
+		mcRecorder:     mcRecorder,
+	}
 }
 
 // blank assignment to verify that ReconcileManifestWork implements reconcile.Reconciler
@@ -138,7 +156,7 @@ func (r *ReconcileManifestWork) deleteAddonsAndWorks(ctx context.Context,
 	cluster *clusterv1.ManagedCluster, works []workv1.ManifestWork) error {
 	errs := append(
 		[]error{},
-		helpers.DeleteManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster),
+		helpers.DeleteManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, cluster, r.recorder, r.mcRecorder),
 		r.deleteManifestWorks(ctx, cluster, works),
 	)
 	return operatorhelpers.NewMultiLineAggregate(errs)

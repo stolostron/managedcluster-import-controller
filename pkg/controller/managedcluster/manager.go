@@ -61,10 +61,11 @@ func Add(ctx context.Context,
 				},
 			}),
 		).
-		Complete(&ReconcileManagedCluster{
-			client:   clientHolder.RuntimeClient,
-			recorder: helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
-		})
+		Complete(NewReconcileManagedCluster(
+			clientHolder.RuntimeClient,
+			helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
+			helpers.NewManagedClusterEventRecorder(ctx, clientHolder.KubeClient, controllerName),
+		))
 
 	return controllerName, err
 }

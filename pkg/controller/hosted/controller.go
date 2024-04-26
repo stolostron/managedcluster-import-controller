@@ -17,6 +17,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -98,6 +99,19 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 
 	if !managedCluster.DeletionTimestamp.IsZero() {
 		return r.cleanup(ctx, managedCluster)
+	}
+
+	cn := meta.FindStatusCondition(managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+	if cn == nil {
+		return reconcile.Result{Requeue: true}, helpers.UpdateManagedClusterImportCondition(
+			r.clientHolder.RuntimeClient,
+			managedCluster,
+			helpers.NewManagedClusterImportSucceededCondition(
+				metav1.ConditionFalse,
+				constants.ConditionReasonManagedClusterWaitForImporting,
+				"Wait for importing"),
+			r.mcRecorder,
+		)
 	}
 
 	autoImportSecret, err := r.informerHolder.AutoImportSecretLister.Secrets(managedCluster.Name).Get(
@@ -361,7 +375,7 @@ func (r *ReconcileHosted) deleteAddonsAndWorks(
 	ctx context.Context, cluster *clusterv1.ManagedCluster, works, hostingWorks []workv1.ManifestWork) error {
 	errs := append(
 		[]error{},
-		helpers.DeleteManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster),
+		helpers.DeleteManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, cluster, r.recorder, r.mcRecorder),
 		r.deleteManifestWorks(ctx, cluster, works, hostingWorks),
 	)
 	return operatorhelpers.NewMultiLineAggregate(errs)

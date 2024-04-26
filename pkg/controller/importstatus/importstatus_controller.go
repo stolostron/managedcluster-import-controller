@@ -84,7 +84,7 @@ func (r *ReconcileImportStatus) Reconcile(ctx context.Context, request reconcile
 		managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
 	if existedCondition == nil {
 		reqLogger.V(5).Info("Add ImportSucceededCondition with WaitForImporting reason")
-		return reconcile.Result{}, helpers.UpdateManagedClusterImportCondition(
+		return reconcile.Result{Requeue: true}, helpers.UpdateManagedClusterImportCondition(
 			r.client,
 			managedCluster,
 			helpers.NewManagedClusterImportSucceededCondition(
