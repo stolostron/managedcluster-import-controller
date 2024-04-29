@@ -118,10 +118,9 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder
 			}),
 		).
 		Complete(&ReconcileImportConfig{
-			clientHolder:           clientHolder,
-			klusterletconfigLister: informerHolder.KlusterletConfigLister,
-			scheme:                 mgr.GetScheme(),
-			recorder:               helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
+			clientHolder: clientHolder,
+			scheme:       mgr.GetScheme(),
+			recorder:     helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
 		})
 	return controllerName, err
 }

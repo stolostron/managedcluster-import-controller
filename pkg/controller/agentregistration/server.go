@@ -12,7 +12,6 @@ import (
 	authenticationv1 "k8s.io/api/authentication/v1"
 	authorizationv1 "k8s.io/api/authorization/v1"
 
-	listerklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/listers/klusterletconfig/v1alpha1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/bootstrap"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
@@ -23,8 +22,7 @@ import (
 	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 )
 
-func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *helpers.ClientHolder,
-	klusterletconfigLister listerklusterletconfigv1alpha1.KlusterletConfigLister) error {
+func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *helpers.ClientHolder) error {
 	mux := http.NewServeMux()
 
 	mux.Handle("/agent-registration/crds/v1", authMiddleware(clientHolder, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -58,7 +56,7 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 		klusterletconfigName := r.URL.Query().Get("klusterletconfig")
 
 		// Get the merged KlusterletConfig, it merges the user assigned KlusterletConfig with the global KlusterletConfig.
-		mergedKlusterletConfig, err := helpers.GetMergedKlusterletConfigWithGlobal(klusterletconfigName, klusterletconfigLister)
+		mergedKlusterletConfig, err := helpers.GetMergedKlusterletConfigWithGlobal(klusterletconfigName, clientHolder.KlusterletConfigClient)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

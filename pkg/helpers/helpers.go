@@ -59,6 +59,8 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
+
+	klusterletconfigclient "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned"
 )
 
 const maxConcurrentReconcilesEnvVarName = "MAX_CONCURRENT_RECONCILES"
@@ -93,12 +95,13 @@ func init() {
 }
 
 type ClientHolder struct {
-	KubeClient          kubernetes.Interface
-	APIExtensionsClient apiextensionsclient.Interface
-	OperatorClient      operatorclient.Interface
-	RuntimeClient       client.Client
-	ImageRegistryClient imageregistry.Interface
-	WorkClient          workclient.Interface
+	KubeClient             kubernetes.Interface
+	APIExtensionsClient    apiextensionsclient.Interface
+	OperatorClient         operatorclient.Interface
+	RuntimeClient          client.Client
+	ImageRegistryClient    imageregistry.Interface
+	WorkClient             workclient.Interface
+	KlusterletConfigClient klusterletconfigclient.Interface
 }
 
 // GetMaxConcurrentReconciles get the max concurrent reconciles from MAX_CONCURRENT_RECONCILES env,

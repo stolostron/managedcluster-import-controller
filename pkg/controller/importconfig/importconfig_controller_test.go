@@ -18,7 +18,6 @@ import (
 
 	fakeklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned/fake"
 	klusterletconfiginformerv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/informers/externalversions/klusterletconfig/v1alpha1"
-	listerklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/listers/klusterletconfig/v1alpha1"
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
@@ -946,19 +945,18 @@ func TestReconcile(t *testing.T) {
 			if c.klusterletconfig != nil {
 				klusterletconfigInformer.GetStore().Add(c.klusterletconfig)
 			}
-			klusterletconfigLister := listerklusterletconfigv1alpha1.NewKlusterletConfigLister(klusterletconfigInformer.GetIndexer())
 
 			clientHolder := &helpers.ClientHolder{
-				KubeClient:          kubeClient,
-				RuntimeClient:       fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.clientObjs...).Build(),
-				ImageRegistryClient: imageregistry.NewClient(kubeClient),
+				KubeClient:             kubeClient,
+				RuntimeClient:          fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.clientObjs...).Build(),
+				ImageRegistryClient:    imageregistry.NewClient(kubeClient),
+				KlusterletConfigClient: fakeklusterletconfigClient,
 			}
 
 			r := &ReconcileImportConfig{
-				clientHolder:           clientHolder,
-				scheme:                 testscheme,
-				klusterletconfigLister: klusterletconfigLister,
-				recorder:               eventstesting.NewTestingEventRecorder(t),
+				clientHolder: clientHolder,
+				scheme:       testscheme,
+				recorder:     eventstesting.NewTestingEventRecorder(t),
 			}
 
 			_, err := r.Reconcile(context.TODO(), c.request)

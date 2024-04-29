@@ -22,7 +22,6 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 
-	listerklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/listers/klusterletconfig/v1alpha1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 
 	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
@@ -32,10 +31,9 @@ var log = logf.Log.WithName(controllerName)
 
 // ReconcileImportConfig reconciles a managed cluster to prepare its import secret
 type ReconcileImportConfig struct {
-	clientHolder           *helpers.ClientHolder
-	klusterletconfigLister listerklusterletconfigv1alpha1.KlusterletConfigLister
-	scheme                 *runtime.Scheme
-	recorder               events.Recorder
+	clientHolder *helpers.ClientHolder
+	scheme       *runtime.Scheme
+	recorder     events.Recorder
 }
 
 // blank assignment to verify that ReconcileImportConfig implements reconcile.Reconciler
@@ -78,7 +76,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 	klusterletconfigName := managedCluster.GetAnnotations()[apiconstants.AnnotationKlusterletConfig]
 
 	// Get the merged KlusterletConfig, it merges the user assigned KlusterletConfig with the global KlusterletConfig.
-	mergedKlusterletConfig, err := helpers.GetMergedKlusterletConfigWithGlobal(klusterletconfigName, r.klusterletconfigLister)
+	mergedKlusterletConfig, err := helpers.GetMergedKlusterletConfigWithGlobal(klusterletconfigName, r.clientHolder.KlusterletConfigClient)
 	if err != nil {
 		return reconcile.Result{}, err
 	}

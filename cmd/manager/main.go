@@ -235,12 +235,13 @@ func main() {
 	}
 
 	clientHolder := &helpers.ClientHolder{
-		KubeClient:          kubeClient,
-		APIExtensionsClient: apiExtensionsClient,
-		OperatorClient:      operatorClient,
-		RuntimeClient:       mgr.GetClient(),
-		ImageRegistryClient: imageregistry.NewClient(kubeClient),
-		WorkClient:          workClient,
+		KubeClient:             kubeClient,
+		APIExtensionsClient:    apiExtensionsClient,
+		OperatorClient:         operatorClient,
+		RuntimeClient:          mgr.GetClient(),
+		ImageRegistryClient:    imageregistry.NewClient(kubeClient),
+		WorkClient:             workClient,
+		KlusterletConfigClient: klusterletconfigClient,
 	}
 
 	setupLog.Info("Registering Controllers")
@@ -281,8 +282,7 @@ func main() {
 	// Start the agent-registratioin server
 	if features.DefaultMutableFeatureGate.Enabled(features.AgentRegistration) {
 		go func() {
-			if err := agentregistration.RunAgentRegistrationServer(ctx, 9091, clientHolder,
-				klusterletconfigLister); err != nil {
+			if err := agentregistration.RunAgentRegistrationServer(ctx, 9091, clientHolder); err != nil {
 				setupLog.Error(err, "failed to start agent registration server")
 			}
 		}()
