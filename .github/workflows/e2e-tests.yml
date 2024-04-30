@@ -31,3 +31,8 @@ jobs:
     - if:  ${{ failure() }}
       name: Logs after Tests Failed
       run: kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=-1
+
+    - if: ${{ failure() }}
+      name: Setup tmate session after Tests Failed
+      uses: mxschmitt/action-tmate@v3
+      timeout-minutes: 120 # 120 minutes timeout

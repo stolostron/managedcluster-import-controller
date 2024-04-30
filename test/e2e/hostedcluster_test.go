@@ -85,7 +85,6 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 
 	ginkgo.Context("Import one hosted managed cluster manually", func() {
 		var managedClusterName string
-
 		ginkgo.JustBeforeEach(func() {
 			managedClusterName = fmt.Sprintf("autoimport-test-hosted-%s", rand.String(6))
 			ginkgo.By(fmt.Sprintf("Create managed cluster namespace %s", managedClusterName), func() {
@@ -96,7 +95,11 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 		})
 
 		ginkgo.JustAfterEach(func() {
-			assertHostedManagedClusterDeleted(managedClusterName, hostingClusterName)
+			ginkgo.By(fmt.Sprintf("Clean up resources for managed cluster %s, test failed: %v",
+				managedClusterName, ginkgo.CurrentSpecReport().Failed()))
+			if !ginkgo.CurrentSpecReport().Failed() {
+				assertHostedManagedClusterDeleted(managedClusterName, hostingClusterName)
+			}
 		})
 
 		ginkgo.It("Should import the cluster by creating the external managed kubeconfig secret manually", func() {
