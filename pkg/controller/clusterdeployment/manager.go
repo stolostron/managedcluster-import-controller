@@ -11,6 +11,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/types"
+	kevents "k8s.io/client-go/tools/events"
 	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -32,7 +33,10 @@ const controllerName = "clusterdeployment-controller"
 // Add creates a new managedcluster controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(ctx context.Context,
-	mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder *source.InformerHolder) (string, error) {
+	mgr manager.Manager,
+	clientHolder *helpers.ClientHolder,
+	informerHolder *source.InformerHolder,
+	mcRecorder kevents.EventRecorder) (string, error) {
 
 	err := ctrl.NewControllerManagedBy(mgr).Named(controllerName).
 		WithOptions(controller.Options{
@@ -108,7 +112,7 @@ func Add(ctx context.Context,
 			clientHolder.KubeClient,
 			informerHolder,
 			helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
-			helpers.NewManagedClusterEventRecorder(ctx, clientHolder.KubeClient, controllerName),
+			mcRecorder,
 		))
 
 	return controllerName, err

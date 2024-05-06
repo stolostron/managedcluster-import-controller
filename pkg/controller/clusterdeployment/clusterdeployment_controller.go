@@ -33,7 +33,7 @@ type ReconcileClusterDeployment struct {
 	client         client.Client
 	kubeClient     kubernetes.Interface
 	informerHolder *source.InformerHolder
-	globalRecorder events.Recorder
+	recorder       events.Recorder
 	mcRecorder     kevents.EventRecorder
 	importHelper   *helpers.ImportHelper
 }
@@ -42,7 +42,7 @@ func NewReconcileClusterDeployment(
 	client client.Client,
 	kubeClient kubernetes.Interface,
 	informerHolder *source.InformerHolder,
-	globalRecorder events.Recorder,
+	recorder events.Recorder,
 	mcRecorder kevents.EventRecorder,
 ) *ReconcileClusterDeployment {
 
@@ -50,9 +50,9 @@ func NewReconcileClusterDeployment(
 		client:         client,
 		kubeClient:     kubeClient,
 		informerHolder: informerHolder,
-		globalRecorder: globalRecorder,
+		recorder:       recorder,
 		mcRecorder:     mcRecorder,
-		importHelper: helpers.NewImportHelper(informerHolder, globalRecorder, log).
+		importHelper: helpers.NewImportHelper(informerHolder, recorder, log).
 			WithGenerateClientHolderFunc(helpers.GenerateImportClientFromKubeConfigSecret),
 	}
 }
@@ -192,7 +192,7 @@ func (r *ReconcileClusterDeployment) setCreatedViaAnnotation(
 		return err
 	}
 
-	r.globalRecorder.Eventf("ManagedClusterLabelsUpdated", "The managed cluster %s labels is added", cluster.Name)
+	r.recorder.Eventf("ManagedClusterLabelsUpdated", "The managed cluster %s labels is added", cluster.Name)
 	return nil
 }
 
@@ -228,7 +228,7 @@ func (r *ReconcileClusterDeployment) removeImportFinalizer(
 		return err
 	}
 
-	r.globalRecorder.Eventf("ClusterDeploymentFinalizerRemoved",
+	r.recorder.Eventf("ClusterDeploymentFinalizerRemoved",
 		"The clusterdeployment %s finalizer %s is removed", clusterDeployment.Name, constants.ImportFinalizer)
 	return nil
 }

@@ -330,7 +330,7 @@ func TestUpdateManagedClusterImportCondition(t *testing.T) {
 			kubeClient := kubefake.NewSimpleClientset()
 
 			ctx := context.TODO()
-			recorder := NewManagedClusterEventRecorder(ctx, kubeClient, "test")
+			recorder := NewManagedClusterEventRecorder(ctx, kubeClient)
 
 			err := UpdateManagedClusterImportCondition(fakeClient, c.managedCluster, c.cond, recorder)
 			if len(c.expectedErr) > 0 {

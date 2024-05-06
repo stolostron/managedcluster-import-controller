@@ -678,7 +678,7 @@ func TestReconcile(t *testing.T) {
 				},
 				testscheme,
 				eventstesting.NewTestingEventRecorder(t),
-				helpers.NewManagedClusterEventRecorder(ctx, kubeClient, controllerName),
+				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
 			)
 
 			_, err := r.Reconcile(ctx, c.request)

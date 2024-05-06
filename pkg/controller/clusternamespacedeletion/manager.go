@@ -8,15 +8,9 @@ import (
 
 	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
-	clustercontroller "github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	"github.com/stolostron/managedcluster-import-controller/pkg/source"
-	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-
+	kevents "k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,6 +20,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+
+	clustercontroller "github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 )
 
 const controllerName = "clusternamespacedeletion-controller"
@@ -33,7 +34,10 @@ const controllerName = "clusternamespacedeletion-controller"
 // Add creates a new managedcluster controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(ctx context.Context,
-	mgr manager.Manager, clientHolder *helpers.ClientHolder, _ *source.InformerHolder) (string, error) {
+	mgr manager.Manager,
+	clientHolder *helpers.ClientHolder,
+	_ *source.InformerHolder,
+	mcRecorder kevents.EventRecorder) (string, error) {
 
 	err := ctrl.NewControllerManagedBy(mgr).Named(controllerName).
 		WithOptions(controller.Options{

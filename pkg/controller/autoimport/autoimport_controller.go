@@ -36,7 +36,7 @@ type ReconcileAutoImport struct {
 	client                client.Client
 	kubeClient            kubernetes.Interface
 	informerHolder        *source.InformerHolder
-	globalRecorder        events.Recorder
+	recorder              events.Recorder
 	mcRecorder            kevents.EventRecorder
 	importHelper          *helpers.ImportHelper
 	rosaKubeConfigGetters map[string]*helpers.RosaKubeConfigGetter
@@ -46,16 +46,16 @@ func NewReconcileAutoImport(
 	client client.Client,
 	kubeClient kubernetes.Interface,
 	informerHolder *source.InformerHolder,
-	globalRecorder events.Recorder,
+	recorder events.Recorder,
 	mcRecorder kevents.EventRecorder,
 ) *ReconcileAutoImport {
 	return &ReconcileAutoImport{
 		client:                client,
 		kubeClient:            kubeClient,
 		informerHolder:        informerHolder,
-		globalRecorder:        globalRecorder,
+		recorder:              recorder,
 		mcRecorder:            mcRecorder,
-		importHelper:          helpers.NewImportHelper(informerHolder, globalRecorder, log),
+		importHelper:          helpers.NewImportHelper(informerHolder, recorder, log),
 		rosaKubeConfigGetters: make(map[string]*helpers.RosaKubeConfigGetter),
 	}
 }
@@ -105,6 +105,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	reqLogger.V(5).Info("Reconciling auto import secret")
+
 	lastRetry := 0
 	totalRetry := 1
 	if len(autoImportSecret.Annotations[constants.AnnotationAutoImportCurrentRetry]) != 0 {
@@ -191,7 +192,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		}
 
 		// delete secret
-		if err := helpers.DeleteAutoImportSecret(ctx, r.kubeClient, autoImportSecret, r.globalRecorder); err != nil {
+		if err := helpers.DeleteAutoImportSecret(ctx, r.kubeClient, autoImportSecret, r.recorder); err != nil {
 			return reconcile.Result{}, err
 		}
 		return reconcile.Result{}, nil

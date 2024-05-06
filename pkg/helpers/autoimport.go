@@ -96,7 +96,7 @@ type GenerateClientHolderFunc func(secret *corev1.Secret) (reconcile.Result, *Cl
 // ImportHelper is used to helper controller to import managed cluster
 type ImportHelper struct {
 	informerHolder *source.InformerHolder
-	globalRecorder events.Recorder
+	recorder       events.Recorder
 	log            logr.Logger
 
 	generateClientHolderFunc GenerateClientHolderFunc
@@ -119,7 +119,7 @@ func NewImportHelper(informerHolder *source.InformerHolder,
 	return &ImportHelper{
 		informerHolder:     informerHolder,
 		log:                log,
-		globalRecorder:     recorder,
+		recorder:           recorder,
 		applyResourcesFunc: defaultApplyResourcesFunc,
 	}
 }
@@ -220,7 +220,7 @@ func (i *ImportHelper) Import(backupRestore bool, cluster *clusterv1.ManagedClus
 	}
 
 	currentRetry++
-	modified, err := i.applyResourcesFunc(backupRestore, clientHolder, restMapper, i.globalRecorder, importSecret)
+	modified, err := i.applyResourcesFunc(backupRestore, clientHolder, restMapper, i.recorder, importSecret)
 	if err != nil {
 		condition := NewManagedClusterImportSucceededCondition(
 			metav1.ConditionFalse,

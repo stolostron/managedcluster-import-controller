@@ -220,7 +220,7 @@ func TestReconcile(t *testing.T) {
 				fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).WithStatusSubresource(c.objs...).Build(),
 				kubeClient,
 				workClient,
-				helpers.NewManagedClusterEventRecorder(ctx, kubeClient, controllerName),
+				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
 			)
 
 			req := reconcile.Request{

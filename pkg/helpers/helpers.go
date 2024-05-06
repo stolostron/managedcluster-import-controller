@@ -721,11 +721,11 @@ func NewEventRecorder(kubeClient kubernetes.Interface, controllerName string) ev
 }
 
 func NewManagedClusterEventRecorder(ctx context.Context,
-	kubeClient kubernetes.Interface, controllerName string) kevents.EventRecorder {
+	kubeClient kubernetes.Interface) kevents.EventRecorder {
 	broadcaster := kevents.NewBroadcaster(&kevents.EventSinkImpl{Interface: kubeClient.EventsV1()})
 	broadcaster.StartRecordingToSink(ctx.Done())
 	broadcaster.StartStructuredLogging(0)
-	recorder := broadcaster.NewRecorder(clusterscheme.Scheme, controllerName)
+	recorder := broadcaster.NewRecorder(clusterscheme.Scheme, constants.ComponentName)
 	return recorder
 }
 

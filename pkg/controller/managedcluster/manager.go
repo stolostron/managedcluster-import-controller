@@ -6,13 +6,10 @@ package managedcluster
 import (
 	"context"
 
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	"github.com/stolostron/managedcluster-import-controller/pkg/source"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
-
+	kevents "k8s.io/client-go/tools/events"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -20,6 +17,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 )
 
 const controllerName = "managedcluster-controller"
@@ -27,7 +27,10 @@ const controllerName = "managedcluster-controller"
 // Add creates a new managedcluster controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(ctx context.Context,
-	mgr manager.Manager, clientHolder *helpers.ClientHolder, _ *source.InformerHolder) (string, error) {
+	mgr manager.Manager,
+	clientHolder *helpers.ClientHolder,
+	_ *source.InformerHolder,
+	mcRecorder kevents.EventRecorder) (string, error) {
 
 	err := ctrl.NewControllerManagedBy(mgr).Named(controllerName).
 		WithOptions(controller.Options{
@@ -64,7 +67,7 @@ func Add(ctx context.Context,
 		Complete(NewReconcileManagedCluster(
 			clientHolder.RuntimeClient,
 			helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
-			helpers.NewManagedClusterEventRecorder(ctx, clientHolder.KubeClient, controllerName),
+			mcRecorder,
 		))
 
 	return controllerName, err

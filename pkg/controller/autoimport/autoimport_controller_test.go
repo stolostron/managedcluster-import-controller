@@ -643,7 +643,7 @@ func TestReconcile(t *testing.T) {
 					KlusterletWorkLister:   workInformerFactory.Work().V1().ManifestWorks().Lister(),
 				},
 				eventstesting.NewTestingEventRecorder(t),
-				helpers.NewManagedClusterEventRecorder(ctx, kubeClient, controllerName),
+				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
 			)
 
 			req := reconcile.Request{NamespacedName: types.NamespacedName{Namespace: managedClusterName}}

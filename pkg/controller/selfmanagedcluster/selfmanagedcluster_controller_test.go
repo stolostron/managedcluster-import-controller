@@ -294,7 +294,7 @@ func TestReconcile(t *testing.T) {
 				},
 				restmapper.NewDiscoveryRESTMapper(apiGroupResources),
 				eventstesting.NewTestingEventRecorder(t),
-				helpers.NewManagedClusterEventRecorder(ctx, kubeClient, controllerName),
+				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
 			)
 
 			_, err := r.Reconcile(context.TODO(), reconcile.Request{

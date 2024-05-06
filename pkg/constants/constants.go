@@ -157,3 +157,7 @@ const (
 const (
 	GlobalKlusterletConfigName = "global"
 )
+
+const (
+	ComponentName = "managedcluster-import-controller"
+)

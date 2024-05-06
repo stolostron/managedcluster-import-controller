@@ -253,7 +253,7 @@ func TestReconcile(t *testing.T) {
 					KlusterletWorkLister:   workInformerFactory.Work().V1().ManifestWorks().Lister(),
 				},
 				eventstesting.NewTestingEventRecorder(t),
-				helpers.NewManagedClusterEventRecorder(ctx, kubeClient, controllerName),
+				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
 			)
 
 			_, err := r.Reconcile(context.TODO(), reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}})

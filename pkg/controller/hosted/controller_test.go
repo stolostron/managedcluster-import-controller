@@ -1035,7 +1035,7 @@ metadata:
 				},
 				testscheme,
 				eventstesting.NewTestingEventRecorder(t),
-				helpers.NewManagedClusterEventRecorder(ctx, kubeClient, controllerName),
+				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
 			)
 			response, err := r.Reconcile(context.Background(), c.request)
 			c.vaildateFunc(t, response, err, r.clientHolder)

@@ -26,6 +26,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
+	kevents "k8s.io/client-go/tools/events"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
@@ -33,7 +34,8 @@ import (
 var log = logf.Log.WithName("controllers")
 
 type AddToManagerFunc func(
-	context.Context, manager.Manager, *helpers.ClientHolder, *source.InformerHolder) (string, error)
+	context.Context, manager.Manager, *helpers.ClientHolder, *source.InformerHolder, kevents.EventRecorder,
+) (string, error)
 
 // AddToManagerFuncs is a list of functions to add all controllers to the manager
 var AddToManagerFuncs = []AddToManagerFunc{
@@ -50,9 +52,12 @@ var AddToManagerFuncs = []AddToManagerFunc{
 
 // AddToManager adds all controllers to the manager
 func AddToManager(ctx context.Context,
-	manager manager.Manager, clientHolder *helpers.ClientHolder, informerHolder *source.InformerHolder) error {
+	manager manager.Manager,
+	clientHolder *helpers.ClientHolder,
+	informerHolder *source.InformerHolder,
+	mcRecorder kevents.EventRecorder) error {
 	for _, addFunc := range AddToManagerFuncs {
-		name, err := addFunc(ctx, manager, clientHolder, informerHolder)
+		name, err := addFunc(ctx, manager, clientHolder, informerHolder, mcRecorder)
 		if err != nil {
 			return err
 		}
@@ -61,7 +66,7 @@ func AddToManager(ctx context.Context,
 	}
 
 	if features.DefaultMutableFeatureGate.Enabled(features.KlusterletHostedMode) {
-		name, err := hosted.Add(ctx, manager, clientHolder, informerHolder)
+		name, err := hosted.Add(ctx, manager, clientHolder, informerHolder, mcRecorder)
 		if err != nil {
 			return err
 		}
