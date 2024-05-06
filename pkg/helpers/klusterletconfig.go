@@ -28,5 +28,6 @@ func GetMergedKlusterletConfigWithGlobal(
 		return nil, fmt.Errorf("failed to get global klusterletconfig: %v", err)
 	}
 
-	return klusterletconfighelper.MergeKlusterletConfigs(globalKlusterletConfig, kc)
+	// The object get from a lister should be be modified directly.
+	return klusterletconfighelper.MergeKlusterletConfigs(globalKlusterletConfig.DeepCopy(), kc.DeepCopy())
 }
