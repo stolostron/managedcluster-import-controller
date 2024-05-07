@@ -245,6 +245,10 @@ spec:
         params:
           - name: BASE_IMAGES_DIGESTS
             value: $(tasks.build-container.results.BASE_IMAGES_DIGESTS)
+          - name: IMAGE_URL
+            value: $(tasks.build-container.results.IMAGE_URL)
+          - name: IMAGE_DIGEST
+            value: $(tasks.build-container.results.IMAGE_DIGEST)
         taskRef:
           bundle: quay.io/redhat-appstudio-tekton-catalog/task-deprecated-image-check:0.3@sha256:ba55ff56b8718406278d72fd5e3de88da110dd4391aa7581923b8d219a29f841
           name: deprecated-image-check
