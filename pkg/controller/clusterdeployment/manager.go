@@ -7,12 +7,19 @@ import (
 	"context"
 	"strings"
 
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
+
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
+
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/types"
 	kevents "k8s.io/client-go/tools/events"
-	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -22,10 +29,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 )
 
 const controllerName = "clusterdeployment-controller"
@@ -54,6 +57,23 @@ func Add(ctx context.Context,
 					},
 				}
 			}),
+		).
+		Watches( // watch the managed cluster
+			&clusterv1.ManagedCluster{},
+			&handler.EnqueueRequestForObject{},
+			builder.WithPredicates(
+				predicate.Funcs{
+					GenericFunc: func(e event.GenericEvent) bool { return false },
+					DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+					CreateFunc:  func(e event.CreateEvent) bool { return false },
+					UpdateFunc: func(e event.UpdateEvent) bool {
+						// handle the removal of the disable-auto-import annotation
+						_, oldAutoImportDisabled := e.ObjectOld.GetAnnotations()[apiconstants.DisableAutoImportAnnotation]
+						_, newAutoImportDisabled := e.ObjectNew.GetAnnotations()[apiconstants.DisableAutoImportAnnotation]
+						return oldAutoImportDisabled && !newAutoImportDisabled
+					},
+				},
+			),
 		).
 		WatchesRawSource( // watch the import secret
 			source.NewImportSecretSource(informerHolder.ImportSecretInformer),

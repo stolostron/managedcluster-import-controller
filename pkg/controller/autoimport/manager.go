@@ -9,17 +9,21 @@ import (
 
 	workv1 "open-cluster-management.io/api/work/v1"
 
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/types"
 	kevents "k8s.io/client-go/tools/events"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const controllerName = "autoimport-controller"
@@ -82,6 +86,34 @@ func Add(ctx context.Context,
 					return !equality.Semantic.DeepEqual(old.Data, new.Data)
 				}
 				return false
+			},
+		}),
+	); err != nil {
+		return controllerName, err
+	}
+
+	// watch the managed clusters
+	if err := c.Watch(
+		source.NewManagedClusterSource(informerHolder.ManagedClusterInformer),
+		&source.ManagedClusterResourceEventHandler{
+			MapFunc: func(obj client.Object) reconcile.Request {
+				return reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Namespace: obj.GetName(),
+						Name:      obj.GetName(),
+					},
+				}
+			},
+		},
+		predicate.Predicate(predicate.Funcs{
+			GenericFunc: func(e event.GenericEvent) bool { return false },
+			DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+			CreateFunc:  func(e event.CreateEvent) bool { return false },
+			UpdateFunc: func(e event.UpdateEvent) bool {
+				// handle the removal of the disable-auto-import annotation
+				_, oldAutoImportDisabled := e.ObjectOld.GetAnnotations()[apiconstants.DisableAutoImportAnnotation]
+				_, newAutoImportDisabled := e.ObjectNew.GetAnnotations()[apiconstants.DisableAutoImportAnnotation]
+				return oldAutoImportDisabled && !newAutoImportDisabled
 			},
 		}),
 	); err != nil {
