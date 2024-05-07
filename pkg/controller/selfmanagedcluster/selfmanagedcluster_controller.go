@@ -7,19 +7,20 @@ import (
 	"context"
 	"strings"
 
-	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
-	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	"github.com/stolostron/managedcluster-import-controller/pkg/source"
-
 	"github.com/openshift/library-go/pkg/operator/events"
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
+	kevents "k8s.io/client-go/tools/events"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 )
 
 var log = logf.Log.WithName(controllerName)
@@ -30,6 +31,7 @@ type ReconcileLocalCluster struct {
 	restMapper     meta.RESTMapper
 	informerHolder *source.InformerHolder
 	recorder       events.Recorder
+	mcRecorder     kevents.EventRecorder
 	importHelper   *helpers.ImportHelper
 }
 
@@ -38,6 +40,7 @@ func NewReconcileLocalCluster(
 	informerHolder *source.InformerHolder,
 	restMapper meta.RESTMapper,
 	recorder events.Recorder,
+	mcRecorder kevents.EventRecorder,
 ) *ReconcileLocalCluster {
 
 	return &ReconcileLocalCluster{
@@ -45,6 +48,7 @@ func NewReconcileLocalCluster(
 		restMapper:     restMapper,
 		informerHolder: informerHolder,
 		recorder:       recorder,
+		mcRecorder:     mcRecorder,
 		importHelper: helpers.NewImportHelper(informerHolder, recorder, log).WithGenerateClientHolderFunc(
 			func(secret *v1.Secret) (reconcile.Result, *helpers.ClientHolder, meta.RESTMapper, error) {
 				return reconcile.Result{}, clientHolder, restMapper, nil
@@ -100,15 +104,16 @@ func (r *ReconcileLocalCluster) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	result, condition, modified, _, iErr := r.importHelper.Import(false, request.Name, nil, 0, 1)
+	result, condition, modified, _, iErr := r.importHelper.Import(false, managedCluster, nil, 0, 1)
 	// if resources are applied but NOT modified, will not update the condition, keep the original condition.
 	// This check is to prevent the current controller and import status controller from modifying the
 	// ManagedClusterImportSucceeded condition of the managed cluster in a loop
 	if !helpers.ImportingResourcesApplied(&condition) || modified {
-		if err := helpers.UpdateManagedClusterStatus(
+		if err := helpers.UpdateManagedClusterImportCondition(
 			r.clientHolder.RuntimeClient,
-			request.Name,
+			managedCluster,
 			condition,
+			r.mcRecorder,
 		); err != nil {
 			return reconcile.Result{}, err
 		}

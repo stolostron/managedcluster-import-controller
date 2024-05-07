@@ -4,17 +4,11 @@
 package importstatus
 
 import (
+	"context"
 	"strings"
 
-	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 	"k8s.io/apimachinery/pkg/api/equality"
-
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	operatorv1 "open-cluster-management.io/api/operator/v1"
-	workv1 "open-cluster-management.io/api/work/v1"
-
+	kevents "k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -23,13 +17,25 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 )
 
 const controllerName = "import-status-controller"
 
 // Add creates a new manifestwork controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
-func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder *source.InformerHolder) (string, error) {
+func Add(ctx context.Context,
+	mgr manager.Manager,
+	clientHolder *helpers.ClientHolder,
+	informerHolder *source.InformerHolder,
+	mcRecorder kevents.EventRecorder) (string, error) {
 
 	err := ctrl.NewControllerManagedBy(mgr).Named(controllerName).
 		WithOptions(controller.Options{
@@ -70,12 +76,12 @@ func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder
 				UpdateFunc:  func(e event.UpdateEvent) bool { return isDefaultModeObject(e.ObjectNew) },
 			}),
 		).
-		Complete(&ReconcileImportStatus{
-			client:     clientHolder.RuntimeClient,
-			kubeClient: clientHolder.KubeClient,
-			workClient: clientHolder.WorkClient,
-			recorder:   helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
-		})
+		Complete(NewReconcileImportStatus(
+			clientHolder.RuntimeClient,
+			clientHolder.KubeClient,
+			clientHolder.WorkClient,
+			mcRecorder,
+		))
 
 	return controllerName, err
 }

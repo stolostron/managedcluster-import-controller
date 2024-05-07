@@ -37,6 +37,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/restmapper"
+	clienttesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/utils/diff"
@@ -152,6 +153,206 @@ func TestGenerateClientFromSecret(t *testing.T) {
 	}
 }
 
+func TestUpdateManagedClusterImportCondition(t *testing.T) {
+	cases := []struct {
+		name                 string
+		managedCluster       *clusterv1.ManagedCluster
+		cond                 metav1.Condition
+		expectedErr          string
+		validateAddonActions func(t *testing.T, actions []clienttesting.Action)
+	}{
+		{
+			name: "invalid condition type",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test_cluster",
+				},
+			},
+			cond: metav1.Condition{
+				Type:    "test",
+				Status:  metav1.ConditionTrue,
+				Message: "test",
+				Reason:  "test",
+			},
+			expectedErr: "the condition type test is not supported",
+		},
+		{
+			name: "invalid condition reason",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test_cluster",
+				},
+			},
+			cond: metav1.Condition{
+				Type:    constants.ConditionManagedClusterImportSucceeded,
+				Status:  metav1.ConditionTrue,
+				Message: "test",
+				Reason:  "test",
+			},
+			expectedErr: "the condition reason test is not supported",
+		},
+		{
+			name: "cluster importing event",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test_cluster",
+				},
+			},
+			cond: metav1.Condition{
+				Type:    constants.ConditionManagedClusterImportSucceeded,
+				Status:  metav1.ConditionFalse,
+				Message: "test",
+				Reason:  constants.ConditionReasonManagedClusterImporting,
+			},
+			validateAddonActions: func(t *testing.T, actions []clienttesting.Action) {
+				if len(actions) != 1 {
+					t.Errorf("expected 1 action, but got %d", len(actions))
+				}
+				action := actions[0]
+				if action.GetVerb() != "create" {
+					t.Errorf("expected create action, but got %s", action.GetVerb())
+				}
+				if action.GetResource().Resource != "events" {
+					t.Errorf("expected events resource, but got %s", action.GetResource().Resource)
+				}
+			},
+		},
+		{
+			name: "cluster imported event",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test_cluster",
+				},
+			},
+			cond: metav1.Condition{
+				Type:    constants.ConditionManagedClusterImportSucceeded,
+				Status:  metav1.ConditionFalse,
+				Message: "test",
+				Reason:  constants.ConditionReasonManagedClusterImported,
+			},
+			validateAddonActions: func(t *testing.T, actions []clienttesting.Action) {
+				if len(actions) != 1 {
+					t.Errorf("expected 1 action, but got %d", len(actions))
+				}
+				action := actions[0]
+				if action.GetVerb() != "create" {
+					t.Errorf("expected create action, but got %s", action.GetVerb())
+				}
+				if action.GetResource().Resource != "events" {
+					t.Errorf("expected events resource, but got %s", action.GetResource().Resource)
+				}
+			},
+		},
+		{
+			name: "cluster importing failed",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test_cluster",
+				},
+			},
+			cond: metav1.Condition{
+				Type:    constants.ConditionManagedClusterImportSucceeded,
+				Status:  metav1.ConditionFalse,
+				Message: "test",
+				Reason:  constants.ConditionReasonManagedClusterImportFailed,
+			},
+			validateAddonActions: func(t *testing.T, actions []clienttesting.Action) {
+				if len(actions) != 1 {
+					t.Errorf("expected 1 action, but got %d", len(actions))
+				}
+				action := actions[0]
+				if action.GetVerb() != "create" {
+					t.Errorf("expected create action, but got %s", action.GetVerb())
+				}
+				if action.GetResource().Resource != "events" {
+					t.Errorf("expected events resource, but got %s", action.GetResource().Resource)
+				}
+			},
+		},
+		{
+			name: "cluster is being detached",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test_cluster",
+				},
+			},
+			cond: metav1.Condition{
+				Type:    constants.ConditionManagedClusterImportSucceeded,
+				Status:  metav1.ConditionFalse,
+				Message: "test",
+				Reason:  constants.ConditionReasonManagedClusterDetaching,
+			},
+			validateAddonActions: func(t *testing.T, actions []clienttesting.Action) {
+				if len(actions) != 1 {
+					t.Errorf("expected 1 action, but got %d", len(actions))
+				}
+				action := actions[0]
+				if action.GetVerb() != "create" {
+					t.Errorf("expected create action, but got %s", action.GetVerb())
+				}
+				if action.GetResource().Resource != "events" {
+					t.Errorf("expected events resource, but got %s", action.GetResource().Resource)
+				}
+			},
+		},
+		{
+			name: "cluster is being forcibly detached",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test_cluster",
+				},
+			},
+			cond: metav1.Condition{
+				Type:    constants.ConditionManagedClusterImportSucceeded,
+				Status:  metav1.ConditionFalse,
+				Message: "test",
+				Reason:  constants.ConditionReasonManagedClusterForceDetaching,
+			},
+			validateAddonActions: func(t *testing.T, actions []clienttesting.Action) {
+				if len(actions) != 1 {
+					t.Errorf("expected 1 action, but got %d", len(actions))
+				}
+				action := actions[0]
+				if action.GetVerb() != "create" {
+					t.Errorf("expected create action, but got %s", action.GetVerb())
+				}
+				if action.GetResource().Resource != "events" {
+					t.Errorf("expected events resource, but got %s", action.GetResource().Resource)
+				}
+			},
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			fakeClient := fake.NewClientBuilder().WithScheme(testscheme).
+				WithObjects(c.managedCluster).WithStatusSubresource(c.managedCluster).Build()
+			kubeClient := kubefake.NewSimpleClientset()
+
+			ctx := context.TODO()
+			recorder := NewManagedClusterEventRecorder(ctx, kubeClient)
+
+			err := UpdateManagedClusterImportCondition(fakeClient, c.managedCluster, c.cond, recorder)
+			if len(c.expectedErr) > 0 {
+				if err == nil {
+					t.Errorf("expected error %s, but got nil", c.expectedErr)
+				}
+				if err.Error() != c.expectedErr {
+					t.Errorf("expected error %s, but got %s", c.expectedErr, err.Error())
+				}
+			} else if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+
+			if c.validateAddonActions != nil {
+				// under the hood, the events are created asynchronously, so we need to wait a bit
+				time.Sleep(100 * time.Microsecond)
+				c.validateAddonActions(t, kubeClient.Actions())
+			}
+		})
+	}
+}
+
 func TestUpdateManagedClusterStatus(t *testing.T) {
 	cases := []struct {
 		name           string
@@ -227,7 +428,7 @@ func TestUpdateManagedClusterStatus(t *testing.T) {
 			fakeClient := fake.NewClientBuilder().WithScheme(testscheme).
 				WithObjects(c.managedCluster).WithStatusSubresource(c.managedCluster).Build()
 
-			err := UpdateManagedClusterStatus(fakeClient, c.managedCluster.Name, c.cond)
+			_, err := updateManagedClusterStatus(fakeClient, c.managedCluster.Name, c.cond)
 			if err != nil {
 				t.Errorf("unexpected error: %v", err)
 			}

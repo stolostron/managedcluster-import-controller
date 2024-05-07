@@ -5,14 +5,14 @@ package importstatus
 
 import (
 	"context"
-	operatorv1 "open-cluster-management.io/api/operator/v1"
 	"testing"
 	"time"
+
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 
-	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -215,19 +215,20 @@ func TestReconcile(t *testing.T) {
 				workInformer.GetStore().Add(work)
 			}
 
-			r := ReconcileImportStatus{
-				client:     fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).WithStatusSubresource(c.objs...).Build(),
-				kubeClient: kubeClient,
-				workClient: workClient,
-				recorder:   eventstesting.NewTestingEventRecorder(t),
-			}
+			ctx := context.TODO()
+			r := NewReconcileImportStatus(
+				fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).WithStatusSubresource(c.objs...).Build(),
+				kubeClient,
+				workClient,
+				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
+			)
 
 			req := reconcile.Request{
 				NamespacedName: types.NamespacedName{
 					Name: managedClusterName,
 				},
 			}
-			ctx := context.TODO()
+
 			_, err := r.Reconcile(ctx, req)
 			if c.expectedErr && err == nil {
 				t.Errorf("expected error, but failed")

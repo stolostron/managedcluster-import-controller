@@ -243,8 +243,13 @@ func main() {
 		WorkClient:          workClient,
 	}
 
+	// Create a new ManagedCluster EventRecorder which can be used to record events
+	// with involvedObject set to the ManagedCluster.
+	mcRecorder := helpers.NewManagedClusterEventRecorder(ctx, clientHolder.KubeClient)
+
 	setupLog.Info("Registering Controllers")
 	if err := controller.AddToManager(
+		ctx,
 		mgr,
 		clientHolder,
 		&source.InformerHolder{
@@ -259,6 +264,7 @@ func main() {
 			KlusterletConfigLister:   klusterletconfigLister,
 			ManagedClusterInformer:   managedclusterInformer,
 		},
+		mcRecorder,
 	); err != nil {
 		setupLog.Error(err, "failed to register controller")
 		os.Exit(1)

@@ -4,14 +4,13 @@
 package importconfig
 
 import (
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	"github.com/stolostron/managedcluster-import-controller/pkg/source"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	"context"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
-
+	kevents "k8s.io/client-go/tools/events"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -21,13 +20,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 )
 
 const controllerName = "importconfig-controller"
 
 // Add creates a new importconfig controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
-func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder *source.InformerHolder) (string, error) {
+func Add(ctx context.Context,
+	mgr manager.Manager,
+	clientHolder *helpers.ClientHolder,
+	informerHolder *source.InformerHolder,
+	mcRecorder kevents.EventRecorder) (string, error) {
 
 	err := ctrl.NewControllerManagedBy(mgr).Named(controllerName).
 		WithOptions(controller.Options{

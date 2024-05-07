@@ -3,10 +3,10 @@
 package csr
 
 import (
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	"github.com/stolostron/managedcluster-import-controller/pkg/source"
-	certificatesv1 "k8s.io/api/certificates/v1"
+	"context"
 
+	certificatesv1 "k8s.io/api/certificates/v1"
+	kevents "k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -14,13 +14,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 )
 
 const controllerName = "csr-controller"
 
 // Add creates a new CSR Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
-func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, _ *source.InformerHolder) (string, error) {
+func Add(ctx context.Context,
+	mgr manager.Manager,
+	clientHolder *helpers.ClientHolder,
+	_ *source.InformerHolder,
+	mcRecorder kevents.EventRecorder) (string, error) {
 
 	err := ctrl.NewControllerManagedBy(mgr).Named(controllerName).
 		WithOptions(controller.Options{

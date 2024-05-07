@@ -20,6 +20,7 @@ import (
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	workfake "open-cluster-management.io/api/client/work/clientset/versioned/fake"
 	workinformers "open-cluster-management.io/api/client/work/informers/externalversions"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -140,6 +141,7 @@ func TestImportHelper(t *testing.T) {
 	managedClusterName := "test"
 	cases := []struct {
 		name                     string
+		managedCluster           *clusterv1.ManagedCluster
 		autoImportSecret         *corev1.Secret
 		importSecret             *corev1.Secret
 		works                    []runtime.Object
@@ -387,6 +389,19 @@ func TestImportHelper(t *testing.T) {
 			expectedConditionStatus:  metav1.ConditionFalse,
 			expectedConditionReason:  constants.ConditionReasonManagedClusterImporting,
 		},
+		{
+			name: "importing condition does not exist",
+			managedCluster: testinghelpers.NewManagedClusterBuilder(managedClusterName).
+				WithImportingCondition(false).Build(),
+			lastRetry:                0,
+			totalRetry:               1,
+			generateClientHolderFunc: GenerateImportClientFromKubeConfigSecret,
+			expectedErr:              false,
+			expectedCurrentRetry:     0,
+			expectedRequeueAfter:     0,
+			expectedConditionStatus:  metav1.ConditionFalse,
+			expectedConditionReason:  constants.ConditionReasonManagedClusterImporting,
+		},
 	}
 
 	for _, c := range cases {
@@ -426,8 +441,13 @@ func TestImportHelper(t *testing.T) {
 				}
 			}
 
+			managedCluster := testinghelpers.NewManagedClusterBuilder(managedClusterName).Build()
+			if c.managedCluster != nil {
+				managedCluster = c.managedCluster
+			}
+
 			result, condition, _, currentRetry, err := importHelper.Import(
-				backupRestore, managedClusterName, c.autoImportSecret, c.lastRetry, c.totalRetry)
+				backupRestore, managedCluster, c.autoImportSecret, c.lastRetry, c.totalRetry)
 			if c.expectedErr && err == nil {
 				t.Errorf("name %v : expected error, but failed", c.name)
 			}
@@ -453,7 +473,6 @@ func TestImportHelper(t *testing.T) {
 			if currentRetry != c.expectedCurrentRetry {
 				t.Errorf("name %v : expected currentRetry %v, but got %v", c.name, c.expectedCurrentRetry, currentRetry)
 			}
-
 		})
 	}
 }

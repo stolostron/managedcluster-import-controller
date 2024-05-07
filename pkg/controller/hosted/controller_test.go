@@ -91,6 +91,54 @@ func TestReconcile(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "managedcluster is Hosted mode, but no wait for importing condition",
+			runtimeObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
+						},
+					},
+				},
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+			},
+			kubeObjs: []runtime.Object{},
+			workObjs: []runtime.Object{
+				// manifestworks
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Namespace: "test",
+						Name:      "manifest1",
+					},
+				},
+			},
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}, // managedcluster name
+			vaildateFunc: func(t *testing.T, reconcileResult reconcile.Result, reconcileErr error, ch *helpers.ClientHolder) {
+				if reconcileErr != nil {
+					t.Errorf("unexpected error: %v", reconcileErr)
+				}
+				managedCluster := &clusterv1.ManagedCluster{}
+				err := ch.RuntimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, managedCluster)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+
+				condition := meta.FindStatusCondition(
+					managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+				if condition.Status != metav1.ConditionFalse {
+					t.Errorf("unexpected condition status: %v", condition.Status)
+				}
+				if condition.Reason != constants.ConditionReasonManagedClusterWaitForImporting {
+					t.Errorf("unexpected condition reason: %v", condition.Reason)
+				}
+			},
+		},
 		// managedcluster is Hosted mode, but annotation hostingClusterName not found
 		{
 			name: "managedcluster is Hosted mode, but annotation hostingClusterName not found",
@@ -100,6 +148,15 @@ func TestReconcile(t *testing.T) {
 						Name: "test",
 						Annotations: map[string]string{
 							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
+						},
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []metav1.Condition{
+							helpers.NewManagedClusterImportSucceededCondition(
+								metav1.ConditionFalse,
+								constants.ConditionReasonManagedClusterWaitForImporting,
+								"Wait for importing",
+							),
 						},
 					},
 				},
@@ -151,6 +208,15 @@ func TestReconcile(t *testing.T) {
 							constants.HostingClusterNameAnnotation:   "cluster1", // hosting cluster name
 						},
 					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []metav1.Condition{
+							helpers.NewManagedClusterImportSucceededCondition(
+								metav1.ConditionFalse,
+								constants.ConditionReasonManagedClusterWaitForImporting,
+								"Wait for importing",
+							),
+						},
+					},
 				},
 			},
 			kubeObjs: []runtime.Object{},
@@ -184,6 +250,15 @@ func TestReconcile(t *testing.T) {
 						Annotations: map[string]string{
 							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 							constants.HostingClusterNameAnnotation:   "cluster1", // hosting cluster name
+						},
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []metav1.Condition{
+							helpers.NewManagedClusterImportSucceededCondition(
+								metav1.ConditionFalse,
+								constants.ConditionReasonManagedClusterWaitForImporting,
+								"Wait for importing",
+							),
 						},
 					},
 				},
@@ -229,6 +304,15 @@ func TestReconcile(t *testing.T) {
 							constants.HostingClusterNameAnnotation:   "cluster1", // hosting cluster name
 						},
 						Finalizers: []string{constants.ManifestWorkFinalizer},
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []metav1.Condition{
+							helpers.NewManagedClusterImportSucceededCondition(
+								metav1.ConditionFalse,
+								constants.ConditionReasonManagedClusterWaitForImporting,
+								"Wait for importing",
+							),
+						},
 					},
 				},
 				&clusterv1.ManagedCluster{
@@ -466,6 +550,15 @@ func TestReconcile(t *testing.T) {
 							constants.HostingClusterNameAnnotation:   "cluster1",
 						},
 					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []metav1.Condition{
+							helpers.NewManagedClusterImportSucceededCondition(
+								metav1.ConditionFalse,
+								constants.ConditionReasonManagedClusterWaitForImporting,
+								"Wait for importing",
+							),
+						},
+					},
 				},
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
@@ -536,6 +629,15 @@ func TestReconcile(t *testing.T) {
 						Annotations: map[string]string{
 							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 							constants.HostingClusterNameAnnotation:   "cluster1",
+						},
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []metav1.Condition{
+							helpers.NewManagedClusterImportSucceededCondition(
+								metav1.ConditionFalse,
+								constants.ConditionReasonManagedClusterWaitForImporting,
+								"Wait for importing",
+							),
 						},
 					},
 				},
@@ -615,6 +717,15 @@ func TestReconcile(t *testing.T) {
 						Annotations: map[string]string{
 							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 							constants.HostingClusterNameAnnotation:   "cluster1",
+						},
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []metav1.Condition{
+							helpers.NewManagedClusterImportSucceededCondition(
+								metav1.ConditionFalse,
+								constants.ConditionReasonManagedClusterWaitForImporting,
+								"Wait for importing",
+							),
 						},
 					},
 				},
@@ -703,6 +814,15 @@ metadata:
 							constants.HostingClusterNameAnnotation:   "cluster1",
 						},
 					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []metav1.Condition{
+							helpers.NewManagedClusterImportSucceededCondition(
+								metav1.ConditionFalse,
+								constants.ConditionReasonManagedClusterWaitForImporting,
+								"Wait for importing",
+							),
+						},
+					},
 				},
 				&clusterv1.ManagedCluster{
 					ObjectMeta: metav1.ObjectMeta{
@@ -782,6 +902,15 @@ metadata:
 						Annotations: map[string]string{
 							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 							constants.HostingClusterNameAnnotation:   "cluster1",
+						},
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []metav1.Condition{
+							helpers.NewManagedClusterImportSucceededCondition(
+								metav1.ConditionFalse,
+								constants.ConditionReasonManagedClusterWaitForImporting,
+								"Wait for importing",
+							),
 						},
 					},
 				},
@@ -891,21 +1020,23 @@ metadata:
 				workInformer.GetStore().Add(work)
 			}
 
-			r := &ReconcileHosted{
-				clientHolder: &helpers.ClientHolder{
+			ctx := context.TODO()
+			r := NewReconcileHosted(
+				&helpers.ClientHolder{
 					RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).
 						WithObjects(c.runtimeObjs...).WithStatusSubresource(c.runtimeObjs...).Build(),
 					KubeClient: kubeClient,
 					WorkClient: workClient,
 				},
-				informerHolder: &source.InformerHolder{
+				&source.InformerHolder{
 					ImportSecretLister:     kubeInformerFactory.Core().V1().Secrets().Lister(),
 					AutoImportSecretLister: kubeInformerFactory.Core().V1().Secrets().Lister(),
 					HostedWorkLister:       workInformerFactory.Work().V1().ManifestWorks().Lister(),
 				},
-				recorder: eventstesting.NewTestingEventRecorder(t),
-				scheme:   testscheme,
-			}
+				testscheme,
+				eventstesting.NewTestingEventRecorder(t),
+				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
+			)
 			response, err := r.Reconcile(context.Background(), c.request)
 			c.vaildateFunc(t, response, err, r.clientHolder)
 		})

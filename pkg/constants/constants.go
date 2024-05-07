@@ -35,7 +35,7 @@ const (
 	RegistrationOperatorImageEnvVarName = "REGISTRATION_OPERATOR_IMAGE"
 	RegistrationImageEnvVarName         = "REGISTRATION_IMAGE"
 	WorkImageEnvVarName                 = "WORK_IMAGE"
-	DefaultImagePullSecretEnvVarName    = "DEFAULT_IMAGE_PULL_SECRET"
+	DefaultImagePullSecretEnvVarName    = "DEFAULT_IMAGE_PULL_SECRET" // #nosec G101
 )
 
 const PodNamespaceEnvVarName = "POD_NAMESPACE"
@@ -62,9 +62,9 @@ const (
 const (
 	ImportSecretNameSuffix         = "import"
 	ImportSecretImportYamlKey      = "import.yaml"
-	ImportSecretCRDSYamlKey        = "crds.yaml"
-	ImportSecretCRDSV1YamlKey      = "crdsv1.yaml"
-	ImportSecretCRDSV1beta1YamlKey = "crdsv1beta1.yaml"
+	ImportSecretCRDSYamlKey        = "crds.yaml"        // #nosec G101
+	ImportSecretCRDSV1YamlKey      = "crdsv1.yaml"      // #nosec G101
+	ImportSecretCRDSV1beta1YamlKey = "crdsv1beta1.yaml" // #nosec G101
 	ImportSecretTokenExpiration    = "expiration"
 )
 
@@ -118,14 +118,27 @@ const (
 	ConditionReasonManagedClusterImporting        = "ManagedClusterImporting"
 	ConditionReasonManagedClusterImportFailed     = "ManagedClusterImportFailed"
 	ConditionReasonManagedClusterImported         = "ManagedClusterImported"
+
+	ConditionReasonManagedClusterDetaching      = "ManagedClusterDetaching"
+	ConditionReasonManagedClusterForceDetaching = "ManagedClusterForceDetaching"
+)
+
+const (
+	EventReasonManagedClusterImportFailed = "Failed"
+	EventReasonManagedClusterImported     = "Imported"
+	EventReasonManagedClusterImporting    = "Importing"
+	EventReasonManagedClusterWait         = "WaitForImporting"
+
+	EventReasonManagedClusterDetaching      = "Detaching"
+	EventReasonManagedClusterForceDetaching = "ForceDetaching"
 )
 
 /* #nosec */
 const (
-	AutoImportSecretKubeConfig    corev1.SecretType = "auto-import/kubeconfig"
-	AutoImportSecretKubeConfigKey string            = "kubeconfig"
+	AutoImportSecretKubeConfig    corev1.SecretType = "auto-import/kubeconfig" // #nosec G101
+	AutoImportSecretKubeConfigKey string            = "kubeconfig"             // #nosec G101
 
-	AutoImportSecretKubeToken     corev1.SecretType = "auto-import/kubetoken"
+	AutoImportSecretKubeToken     corev1.SecretType = "auto-import/kubetoken" // #nosec G101
 	AutoImportSecretKubeServerKey string            = "server"
 	AutoImportSecretKubeTokenKey  string            = "token"
 
@@ -143,4 +156,8 @@ const (
 
 const (
 	GlobalKlusterletConfigName = "global"
+)
+
+const (
+	ComponentName = "managedcluster-import-controller"
 )

@@ -17,10 +17,12 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	kevents "k8s.io/client-go/tools/events"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
@@ -46,10 +48,22 @@ type ReconcileHosted struct {
 	informerHolder *source.InformerHolder
 	scheme         *runtime.Scheme
 	recorder       events.Recorder
+	mcRecorder     kevents.EventRecorder
 }
 
 // blank assignment to verify that ReconcileHosted implements reconcile.Reconciler
 var _ reconcile.Reconciler = &ReconcileHosted{}
+
+func NewReconcileHosted(clientHolder *helpers.ClientHolder, informerHolder *source.InformerHolder,
+	scheme *runtime.Scheme, recorder events.Recorder, mcRecorder kevents.EventRecorder) *ReconcileHosted {
+	return &ReconcileHosted{
+		clientHolder:   clientHolder,
+		informerHolder: informerHolder,
+		scheme:         scheme,
+		recorder:       recorder,
+		mcRecorder:     mcRecorder,
+	}
+}
 
 // Reconcile the hosted mode ManagedClusters of the ManifestWorks.
 //   - When a hosted mode ManagedCluster created, we will create a klusterlet manifestwork to trigger the
@@ -87,6 +101,19 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 		return r.cleanup(ctx, managedCluster)
 	}
 
+	cn := meta.FindStatusCondition(managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+	if cn == nil {
+		return reconcile.Result{Requeue: true}, helpers.UpdateManagedClusterImportCondition(
+			r.clientHolder.RuntimeClient,
+			managedCluster,
+			helpers.NewManagedClusterImportSucceededCondition(
+				metav1.ConditionFalse,
+				constants.ConditionReasonManagedClusterWaitForImporting,
+				"Wait for importing"),
+			r.mcRecorder,
+		)
+	}
+
 	autoImportSecret, err := r.informerHolder.AutoImportSecretLister.Secrets(managedCluster.Name).Get(
 		constants.AutoImportSecretName)
 	// if it is not found error, still continue to check other things
@@ -95,10 +122,11 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 	}
 
 	result, condition, iErr := r.importCluster(ctx, managedCluster, autoImportSecret)
-	if err := helpers.UpdateManagedClusterStatus(
+	if err := helpers.UpdateManagedClusterImportCondition(
 		r.clientHolder.RuntimeClient,
-		request.Name,
+		managedCluster,
 		condition,
+		r.mcRecorder,
 	); err != nil {
 		return reconcile.Result{}, err
 	}
@@ -347,7 +375,7 @@ func (r *ReconcileHosted) deleteAddonsAndWorks(
 	ctx context.Context, cluster *clusterv1.ManagedCluster, works, hostingWorks []workv1.ManifestWork) error {
 	errs := append(
 		[]error{},
-		helpers.DeleteManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, r.recorder, cluster),
+		helpers.DeleteManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, cluster, r.recorder, r.mcRecorder),
 		r.deleteManifestWorks(ctx, cluster, works, hostingWorks),
 	)
 	return operatorhelpers.NewMultiLineAggregate(errs)

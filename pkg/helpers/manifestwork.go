@@ -14,11 +14,11 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
-
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	kevents "k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
@@ -184,11 +184,12 @@ func NoManagedClusterAddons(ctx context.Context, runtimeClient client.Client, cl
 func DeleteManagedClusterAddons(
 	ctx context.Context,
 	runtimeClient client.Client,
+	cluster *clusterv1.ManagedCluster,
 	recorder events.Recorder,
-	cluster *clusterv1.ManagedCluster) error {
+	mcRecorder kevents.EventRecorder) error {
 	if IsClusterUnavailable(cluster) {
 		// the managed cluster is offline, force delete all managed cluster addons
-		return ForceDeleteAllManagedClusterAddons(ctx, runtimeClient, recorder, cluster.GetName())
+		return ForceDeleteAllManagedClusterAddons(ctx, runtimeClient, cluster, recorder, mcRecorder)
 	}
 
 	return runtimeClient.DeleteAllOf(ctx, &addonv1alpha1.ManagedClusterAddOn{}, client.InNamespace(cluster.GetName()))

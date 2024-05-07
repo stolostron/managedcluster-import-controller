@@ -8,10 +8,9 @@ import (
 	"testing"
 	"time"
 
-	operatorv1 "open-cluster-management.io/api/operator/v1"
-
 	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
@@ -28,6 +27,7 @@ import (
 	workfake "open-cluster-management.io/api/client/work/clientset/versioned/fake"
 	workinformers "open-cluster-management.io/api/client/work/informers/externalversions"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -104,14 +104,9 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "hosted cluster",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: managedClusterName,
-						Annotations: map[string]string{
-							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
-						},
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).
+					WithAnnotations(constants.KlusterletDeployModeAnnotation, string(operatorv1.InstallModeHosted)).
+					Build(),
 			},
 			works:       []runtime.Object{},
 			secrets:     []runtime.Object{},
@@ -120,14 +115,9 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "auto import disabled",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: managedClusterName,
-						Annotations: map[string]string{
-							apiconstants.DisableAutoImportAnnotation: "",
-						},
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).
+					WithAnnotations(apiconstants.DisableAutoImportAnnotation, "").
+					Build(),
 			},
 			works:       []runtime.Object{},
 			secrets:     []runtime.Object{},
@@ -136,11 +126,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "no auto-import-secret",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: managedClusterName,
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).Build(),
 			},
 			works:       []runtime.Object{},
 			secrets:     []runtime.Object{},
@@ -149,11 +135,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "auto-import-secret AutoImportRetry invalid",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: managedClusterName,
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).Build(),
 			},
 			works: []runtime.Object{},
 			secrets: []runtime.Object{
@@ -174,11 +156,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "auto-import-secret current retry annotation invalid",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: managedClusterName,
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).Build(),
 			},
 			works: []runtime.Object{},
 			secrets: []runtime.Object{
@@ -200,11 +178,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "unsupported auto-import-secret type",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: managedClusterName,
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).Build(),
 			},
 			works: []runtime.Object{},
 			secrets: []runtime.Object{
@@ -223,11 +197,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "no manifest works",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: managedClusterName,
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).Build(),
 			},
 			works: []runtime.Object{},
 			secrets: []runtime.Object{
@@ -254,11 +224,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "no manifest works (compatibility)",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: managedClusterName,
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).Build(),
 			},
 			works: []runtime.Object{},
 			secrets: []runtime.Object{
@@ -285,11 +251,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "no import-secret",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: managedClusterName,
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).Build(),
 			},
 			works: []runtime.Object{
 				&workv1.ManifestWork{
@@ -331,11 +293,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "update auto import secret current retry times",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: managedClusterName,
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).Build(),
 			},
 			works: []runtime.Object{
 				&workv1.ManifestWork{
@@ -378,11 +336,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "import cluster with auto-import secret invalid",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: managedClusterName,
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).Build(),
 			},
 			works: []runtime.Object{
 				&workv1.ManifestWork{
@@ -426,11 +380,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "import cluster with auto-import secret invalid (compatibility)",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: managedClusterName,
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).Build(),
 			},
 			works: []runtime.Object{
 				&workv1.ManifestWork{
@@ -474,11 +424,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "import rosa cluster with auto-import secret invalid",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: managedClusterName,
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).Build(),
 			},
 			works: []runtime.Object{
 				&workv1.ManifestWork{
@@ -518,11 +464,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "only update the bootstrap secret",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: managedClusterName,
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).Build(),
 			},
 			works: []runtime.Object{
 				&workv1.ManifestWork{
@@ -568,11 +510,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "only update the bootstrap secret - works unavailable",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: managedClusterName,
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).Build(),
 			},
 			works: []runtime.Object{
 				&workv1.ManifestWork{
@@ -618,11 +556,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "only update the bootstrap secret - works available",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: managedClusterName,
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).Build(),
 			},
 			works: []runtime.Object{
 				&workv1.ManifestWork{
@@ -699,6 +633,7 @@ func TestReconcile(t *testing.T) {
 				workInformer.GetStore().Add(work)
 			}
 
+			ctx := context.TODO()
 			r := NewReconcileAutoImport(
 				fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).WithStatusSubresource(c.objs...).Build(),
 				kubeClient,
@@ -708,10 +643,10 @@ func TestReconcile(t *testing.T) {
 					KlusterletWorkLister:   workInformerFactory.Work().V1().ManifestWorks().Lister(),
 				},
 				eventstesting.NewTestingEventRecorder(t),
+				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
 			)
 
 			req := reconcile.Request{NamespacedName: types.NamespacedName{Namespace: managedClusterName}}
-			ctx := context.TODO()
 			_, err := r.Reconcile(ctx, req)
 			if c.expectedErr && err == nil {
 				t.Errorf("name: %v, expected error, but failed", c.name)

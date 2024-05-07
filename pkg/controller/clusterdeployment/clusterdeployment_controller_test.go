@@ -18,6 +18,7 @@ import (
 
 	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
@@ -89,14 +90,8 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "auto import disabled",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
-						Annotations: map[string]string{
-							apiconstants.DisableAutoImportAnnotation: "",
-						},
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder("test").
+					WithAnnotations(apiconstants.DisableAutoImportAnnotation, "").Build(),
 				&hivev1.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
@@ -121,11 +116,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "clusterdeployment is not installed",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder("test").Build(),
 				&hivev1.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
@@ -139,11 +130,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "clusterdeployment is not claimed",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder("test").Build(),
 				&hivev1.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
@@ -161,11 +148,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "import cluster with auto-import secret",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder("test").Build(),
 				&hivev1.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
@@ -190,11 +173,7 @@ func TestReconcile(t *testing.T) {
 		{
 			name: "import cluster with clusterdeployment secret",
 			objs: []client.Object{
-				&clusterv1.ManagedCluster{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
-					},
-				},
+				testinghelpers.NewManagedClusterBuilder("test").Build(),
 				&hivev1.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
@@ -264,6 +243,7 @@ func TestReconcile(t *testing.T) {
 				workInformer.GetStore().Add(work)
 			}
 
+			ctx := context.TODO()
 			r := NewReconcileClusterDeployment(
 				fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).WithStatusSubresource(c.objs...).Build(),
 				kubeClient,
@@ -273,6 +253,7 @@ func TestReconcile(t *testing.T) {
 					KlusterletWorkLister:   workInformerFactory.Work().V1().ManifestWorks().Lister(),
 				},
 				eventstesting.NewTestingEventRecorder(t),
+				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
 			)
 
 			_, err := r.Reconcile(context.TODO(), reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}})

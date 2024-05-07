@@ -18,6 +18,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+	kevents "k8s.io/client-go/tools/events"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -33,6 +34,7 @@ type ReconcileClusterDeployment struct {
 	kubeClient     kubernetes.Interface
 	informerHolder *source.InformerHolder
 	recorder       events.Recorder
+	mcRecorder     kevents.EventRecorder
 	importHelper   *helpers.ImportHelper
 }
 
@@ -41,6 +43,7 @@ func NewReconcileClusterDeployment(
 	kubeClient kubernetes.Interface,
 	informerHolder *source.InformerHolder,
 	recorder events.Recorder,
+	mcRecorder kevents.EventRecorder,
 ) *ReconcileClusterDeployment {
 
 	return &ReconcileClusterDeployment{
@@ -48,6 +51,7 @@ func NewReconcileClusterDeployment(
 		kubeClient:     kubeClient,
 		informerHolder: informerHolder,
 		recorder:       recorder,
+		mcRecorder:     mcRecorder,
 		importHelper: helpers.NewImportHelper(informerHolder, recorder, log).
 			WithGenerateClientHolderFunc(helpers.GenerateImportClientFromKubeConfigSecret),
 	}
@@ -139,15 +143,16 @@ func (r *ReconcileClusterDeployment) Reconcile(
 		return reconcile.Result{}, err
 	}
 
-	result, condition, modified, _, iErr := r.importHelper.Import(false, clusterName, hiveSecret, 0, 1)
+	result, condition, modified, _, iErr := r.importHelper.Import(false, managedCluster, hiveSecret, 0, 1)
 	// if resources are applied but NOT modified, will not update the condition, keep the original condition.
 	// This check is to prevent the current controller and import status controller from modifying the
 	// ManagedClusterImportSucceeded condition of the managed cluster in a loop
 	if !helpers.ImportingResourcesApplied(&condition) || modified {
-		if err := helpers.UpdateManagedClusterStatus(
+		if err := helpers.UpdateManagedClusterImportCondition(
 			r.client,
-			clusterName,
+			managedCluster,
 			condition,
+			r.mcRecorder,
 		); err != nil {
 			return reconcile.Result{}, err
 		}

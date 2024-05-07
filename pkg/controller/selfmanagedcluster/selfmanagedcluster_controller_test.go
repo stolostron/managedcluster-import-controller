@@ -278,6 +278,7 @@ func TestReconcile(t *testing.T) {
 				workInformer.GetStore().Add(work)
 			}
 
+			ctx := context.TODO()
 			r := NewReconcileLocalCluster(
 				&helpers.ClientHolder{
 					KubeClient:          kubeClient,
@@ -293,6 +294,7 @@ func TestReconcile(t *testing.T) {
 				},
 				restmapper.NewDiscoveryRESTMapper(apiGroupResources),
 				eventstesting.NewTestingEventRecorder(t),
+				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
 			)
 
 			_, err := r.Reconcile(context.TODO(), reconcile.Request{

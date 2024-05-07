@@ -137,7 +137,7 @@ func assertManagedClusterImportSecretCreated(clusterName, createdVia string, mod
 }
 
 func assertManagedClusterFinalizer(clusterName, expected string) {
-	ginkgo.By(fmt.Sprintf("Managed cluster %s should has expected finalizer: %s", clusterName, expected), func() {
+	ginkgo.By(fmt.Sprintf("Managed cluster %s should have expected finalizer: %s", clusterName, expected), func() {
 		gomega.Eventually(func() error {
 			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if err != nil {
@@ -156,7 +156,7 @@ func assertManagedClusterFinalizer(clusterName, expected string) {
 }
 
 func assertManagedClusterCreatedViaAnnotation(clusterName, expected string) {
-	ginkgo.By(fmt.Sprintf("Managed cluster %s should has expected annotation: %s", clusterName, expected), func() {
+	ginkgo.By(fmt.Sprintf("Managed cluster %s should have expected annotation: %s", clusterName, expected), func() {
 		gomega.Eventually(func() error {
 			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if err != nil {
@@ -178,7 +178,7 @@ func assertManagedClusterCreatedViaAnnotation(clusterName, expected string) {
 }
 
 func assertManagedClusterNameLabel(clusterName string) {
-	ginkgo.By(fmt.Sprintf("Managed cluster %s should has cluster name label", clusterName), func() {
+	ginkgo.By(fmt.Sprintf("Managed cluster %s should have cluster name label", clusterName), func() {
 		gomega.Eventually(func() error {
 			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if err != nil {
@@ -200,7 +200,7 @@ func assertManagedClusterNameLabel(clusterName string) {
 }
 
 func assertManagedClusterNamespaceLabel(clusterName string) {
-	ginkgo.By(fmt.Sprintf("Managed cluster namespace %s should has cluster label", clusterName), func() {
+	ginkgo.By(fmt.Sprintf("Managed cluster namespace %s should have cluster label", clusterName), func() {
 		gomega.Eventually(func() error {
 			ns, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if err != nil {
@@ -222,7 +222,7 @@ func assertManagedClusterNamespaceLabel(clusterName string) {
 }
 
 func assertManagedClusterRBAC(managedClusterName string) {
-	ginkgo.By("Should has clusterrole", func() {
+	ginkgo.By("Should have clusterrole", func() {
 		gomega.Eventually(func() error {
 			name := fmt.Sprintf("system:open-cluster-management:managedcluster:bootstrap:%s", managedClusterName)
 			_, err := hubKubeClient.RbacV1().ClusterRoles().Get(context.TODO(), name, metav1.GetOptions{})
@@ -234,7 +234,7 @@ func assertManagedClusterRBAC(managedClusterName string) {
 		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 
-	ginkgo.By("Should has cluserrolebiding", func() {
+	ginkgo.By("Should have cluserrolebiding", func() {
 		gomega.Eventually(func() error {
 			name := fmt.Sprintf("system:open-cluster-management:managedcluster:bootstrap:%s", managedClusterName)
 			_, err := hubKubeClient.RbacV1().ClusterRoleBindings().Get(context.TODO(), name, metav1.GetOptions{})
@@ -246,7 +246,7 @@ func assertManagedClusterRBAC(managedClusterName string) {
 		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 
-	ginkgo.By("Should has bootstrap sa", func() {
+	ginkgo.By("Should have bootstrap sa", func() {
 		gomega.Eventually(func() error {
 			name := fmt.Sprintf("%s-bootstrap-sa", managedClusterName)
 			_, err := hubKubeClient.CoreV1().ServiceAccounts(managedClusterName).Get(context.TODO(), name, metav1.GetOptions{})

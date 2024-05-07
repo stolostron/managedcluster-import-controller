@@ -4,6 +4,7 @@
 package autoimport
 
 import (
+	"context"
 	"strings"
 
 	workv1 "open-cluster-management.io/api/work/v1"
@@ -14,7 +15,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
-
+	kevents "k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -25,13 +26,19 @@ const controllerName = "autoimport-controller"
 
 // Add creates a new autoimport controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
-func Add(mgr manager.Manager, clientHolder *helpers.ClientHolder, informerHolder *source.InformerHolder) (string, error) {
+func Add(ctx context.Context,
+	mgr manager.Manager,
+	clientHolder *helpers.ClientHolder,
+	informerHolder *source.InformerHolder,
+	mcRecorder kevents.EventRecorder) (string, error) {
+
 	c, err := controller.New(controllerName, mgr, controller.Options{
 		Reconciler: NewReconcileAutoImport(
 			clientHolder.RuntimeClient,
 			clientHolder.KubeClient,
 			informerHolder,
 			helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
+			mcRecorder,
 		),
 		MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
 	})
