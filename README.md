@@ -53,4 +53,3 @@ current functionality of `managedcluster-import-controller`
 [Selective initilization of controllers](docs/selective_controller_init.md)
 
 
-
