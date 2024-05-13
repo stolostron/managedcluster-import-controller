@@ -203,7 +203,7 @@ func buildImportClient(config *clientcmdapi.Config) (reconcile.Result, *ClientHo
 	if err != nil {
 		return reconcile.Result{}, nil, nil, err
 	}
-	mapper, err := apiutil.NewDiscoveryRESTMapper(clientConfig, httpclient)
+	mapper, err := apiutil.NewDynamicRESTMapper(clientConfig, httpclient)
 	if err != nil {
 		return reconcile.Result{}, nil, nil, err
 	}

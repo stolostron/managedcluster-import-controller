@@ -45,6 +45,11 @@ const ImportFinalizer string = "managedcluster-import-controller.open-cluster-ma
 const SelfManagedLabel string = "local-cluster"
 
 const (
+	AppliedManifestWorkEvictionGracePeriodInfinite string = "INFINITE"
+	AppliedManifestWorkEvictionGracePeriod100Years string = "876000h" // 100 * 365 * 24h
+)
+
+const (
 	ClusterImportSecretLabel = "managedcluster-import-controller.open-cluster-management.io/import-secret"
 	KlusterletWorksLabel     = "import.open-cluster-management.io/klusterlet-works"
 	HostedClusterLabel       = "import.open-cluster-management.io/hosted-cluster"

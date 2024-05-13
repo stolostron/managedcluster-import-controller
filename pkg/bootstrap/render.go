@@ -66,19 +66,20 @@ type RenderConfig struct {
 
 // KlusterletRenderConfig defines variables used in the klusterletFiles.
 type KlusterletRenderConfig struct {
-	KlusterletName            string
-	KlusterletNamespace       string
-	ManagedClusterNamespace   string
-	BootstrapKubeconfig       string
-	RegistrationOperatorImage string
-	RegistrationImageName     string
-	WorkImageName             string
-	ImageName                 string
-	PriorityClassName         string
-	NodeSelector              map[string]string
-	Tolerations               []corev1.Toleration
-	InstallMode               string
-	ClusterAnnotations        map[string]string
+	KlusterletName                         string
+	KlusterletNamespace                    string
+	ManagedClusterNamespace                string
+	BootstrapKubeconfig                    string
+	RegistrationOperatorImage              string
+	RegistrationImageName                  string
+	WorkImageName                          string
+	ImageName                              string
+	PriorityClassName                      string
+	AppliedManifestWorkEvictionGracePeriod string
+	NodeSelector                           map[string]string
+	Tolerations                            []corev1.Toleration
+	InstallMode                            string
+	ClusterAnnotations                     map[string]string
 }
 
 type ImagePullSecretConfig struct {
@@ -171,10 +172,14 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 	var kcRegistries []klusterletconfigv1alpha1.Registries
 	var kcNodePlacement *operatorv1.NodePlacement
 	var kcImagePullSecret corev1.ObjectReference
+	var appliedManifestWorkEvictionGracePeriod string
 	if b.klusterletconfig != nil {
-		kcRegistries = b.klusterletconfig.Spec.Registries
-		kcNodePlacement = b.klusterletconfig.Spec.NodePlacement
-		kcImagePullSecret = b.klusterletconfig.Spec.PullSecret
+		if b.InstallMode == operatorv1.InstallModeDefault || b.InstallMode == operatorv1.InstallModeSingleton {
+			kcRegistries = b.klusterletconfig.Spec.Registries
+			kcNodePlacement = b.klusterletconfig.Spec.NodePlacement
+			kcImagePullSecret = b.klusterletconfig.Spec.PullSecret
+		}
+		appliedManifestWorkEvictionGracePeriod = b.klusterletconfig.Spec.AppliedManifestWorkEvictionGracePeriod
 	}
 
 	// Images override
@@ -227,6 +232,11 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 	klusterletName, klusterletNamespace := getKlusterletNamespaceName(
 		b.klusterletconfig, b.ClusterName, b.ManagedClusterAnnotations, b.InstallMode)
 
+	// AppliedManifestWorkEvictionGracePeriod
+	if appliedManifestWorkEvictionGracePeriod == constants.AppliedManifestWorkEvictionGracePeriodInfinite {
+		appliedManifestWorkEvictionGracePeriod = constants.AppliedManifestWorkEvictionGracePeriod100Years
+	}
+
 	renderConfig := RenderConfig{
 		KlusterletRenderConfig: KlusterletRenderConfig{
 			ManagedClusterNamespace: b.ClusterName,
@@ -244,7 +254,8 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 			ImageName:                 registrationOperatorImageName,
 
 			// PriorityClassName
-			PriorityClassName: b.PriorityClassName,
+			PriorityClassName:                      b.PriorityClassName,
+			AppliedManifestWorkEvictionGracePeriod: appliedManifestWorkEvictionGracePeriod,
 
 			// NodePlacement
 			NodeSelector: nodeSelector,

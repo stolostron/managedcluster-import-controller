@@ -45,3 +45,7 @@ spec:
 {{- if .PriorityClassName }}
   priorityClassName: "{{ .PriorityClassName }}"
 {{- end }}
+{{- if .AppliedManifestWorkEvictionGracePeriod }}
+  workConfiguration:
+    appliedManifestWorkEvictionGracePeriod: "{{ .AppliedManifestWorkEvictionGracePeriod }}"
+{{- end }}
