@@ -288,7 +288,12 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 					Name: klusterletConfigName,
 				},
 				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
-					AgentInstallNamespace: "open-cluster-management-local",
+					InstallMode: &klusterletconfigv1alpha1.InstallMode{
+						Type: klusterletconfigv1alpha1.InstallModeNoOperator,
+						NoOperator: &klusterletconfigv1alpha1.NoOperator{
+							Postfix: "local",
+						},
+					},
 				},
 			}, metav1.CreateOptions{})
 			Expect(err).ToNot(HaveOccurred())
@@ -303,7 +308,7 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		AssertKlusterletNamespace(managedClusterName, "klusterlet-local", "open-cluster-management-agent")
+		AssertKlusterletNamespace(managedClusterName, "klusterlet", "open-cluster-management-agent")
 
 		assertManagedClusterAvailable(managedClusterName)
 	})

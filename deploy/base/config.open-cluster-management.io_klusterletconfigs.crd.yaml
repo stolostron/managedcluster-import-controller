@@ -36,14 +36,6 @@ spec:
           spec:
             description: Spec defines the desired state of KlusterletConfig
             properties:
-              agentInstallNamespace:
-                description: AgentInstallNamespace is the namespace to install klusterlet
-                  agent on the managed cluster. In hosted mode, it is the namespace
-                  on the managed cluster for service account of the agent. if it is
-                  not set, open-cluster-management-agent namespace will be used.
-                maxLength: 57
-                pattern: ^open-cluster-management-[-a-z0-9]*[a-z0-9]$
-                type: string
               appliedManifestWorkEvictionGracePeriod:
                 description: AppliedManifestWorkEvictionGracePeriod is the eviction
                   grace period the work agent will wait before evicting the AppliedManifestWorks,
@@ -91,6 +83,30 @@ spec:
                   will be used as the default value. e.g. `oc get infrastructure cluster
                   -o jsonpath='{.status.apiServerURL}'`
                 type: string
+              installMode:
+                description: InstallMode is the mode to install the klusterlet
+                properties:
+                  noOperator:
+                    description: NoOperator is the setting of klusterlet installation
+                      when install type is noOperator.
+                    properties:
+                      postfix:
+                        description: Postfix is the postfix of the klusterlet name.
+                          The name of the klusterlet is "klusterlet" if it is not
+                          set, and "klusterlet-{Postfix}". The install namespace is
+                          "open-cluster-management-agent" if it is not set, and "open-cluster-management-{Postfix}".
+                        maxLength: 33
+                        pattern: ^[-a-z0-9]*[a-z0-9]$
+                        type: string
+                    type: object
+                  type:
+                    default: default
+                    description: InstallModeType is the type of install mode.
+                    enum:
+                    - default
+                    - noOperator
+                    type: string
+                type: object
               nodePlacement:
                 description: NodePlacement enables explicit control over the scheduling
                   of the agent components. If the placement is nil, the placement

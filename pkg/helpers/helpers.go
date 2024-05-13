@@ -298,26 +298,6 @@ func UpdateManagedClusterStatus(client client.Client, managedClusterName string,
 
 // ValidateImportSecret validate managed cluster import secret
 func ValidateImportSecret(importSecret *corev1.Secret) error {
-	if data, ok := importSecret.Data[constants.ImportSecretCRDSYamlKey]; !ok || len(data) == 0 {
-		return fmt.Errorf("the %s is required", constants.ImportSecretCRDSYamlKey)
-	}
-
-	if data, ok := importSecret.Data[constants.ImportSecretCRDSV1beta1YamlKey]; !ok || len(data) == 0 {
-		return fmt.Errorf("the %s is required", constants.ImportSecretCRDSV1beta1YamlKey)
-	}
-
-	if data, ok := importSecret.Data[constants.ImportSecretCRDSV1YamlKey]; !ok || len(data) == 0 {
-		return fmt.Errorf("the %s is required", constants.ImportSecretCRDSV1YamlKey)
-	}
-
-	if data, ok := importSecret.Data[constants.ImportSecretImportYamlKey]; !ok || len(data) == 0 {
-		return fmt.Errorf("the %s is required", constants.ImportSecretImportYamlKey)
-	}
-	return nil
-}
-
-// ValidateHostedImportSecret validate hosted mode managed cluster import secret
-func ValidateHostedImportSecret(importSecret *corev1.Secret) error {
 	if data, ok := importSecret.Data[constants.ImportSecretImportYamlKey]; !ok || len(data) == 0 {
 		return fmt.Errorf("the %s is required", constants.ImportSecretImportYamlKey)
 	}
@@ -338,7 +318,9 @@ func ImportManagedClusterFromSecret(client *ClientHolder, restMapper meta.RESTMa
 	}
 
 	objs := []runtime.Object{}
-	objs = append(objs, MustCreateObject(importSecret.Data[crdsKey]))
+	if val, ok := importSecret.Data[crdsKey]; ok && len(val) > 0 {
+		objs = append(objs, MustCreateObject(importSecret.Data[crdsKey]))
+	}
 	for _, yaml := range SplitYamls(importSecret.Data[constants.ImportSecretImportYamlKey]) {
 		objs = append(objs, MustCreateObject(yaml))
 	}

@@ -231,7 +231,7 @@ func (r *ReconcileHosted) importCluster(ctx context.Context, managedCluster *clu
 			err
 	}
 
-	if err := helpers.ValidateHostedImportSecret(importSecret); err != nil {
+	if err := helpers.ValidateImportSecret(importSecret); err != nil {
 		return reconcile.Result{},
 			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImportFailed,

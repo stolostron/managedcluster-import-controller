@@ -381,7 +381,7 @@ func assertHostedManagedClusterImportSecret(managedClusterName string) {
 				return err
 			}
 
-			if err := helpers.ValidateHostedImportSecret(secret); err != nil {
+			if err := helpers.ValidateImportSecret(secret); err != nil {
 				return fmt.Errorf("invalidated import secret:%v", err)
 			}
 			return nil
@@ -880,28 +880,9 @@ func assertBootstrapKubeconfigServerURLAndCABundle(serverURL string, caData []by
 }
 
 func AssertKlusterletNamespace(clusterName, name, namespace string) {
-	ginkgo.By("Klusterlet should be deployed in the namespace", func() {
+	ginkgo.By(fmt.Sprintf("Klusterlet %s should be deployed in the namespace %s", name, namespace), func() {
 		gomega.Eventually(func() error {
 			var err error
-
-			importSecretName := fmt.Sprintf("%s-%s", clusterName, constants.ImportSecretNameSuffix)
-			importSecret, err := hubKubeClient.CoreV1().Secrets(clusterName).Get(context.TODO(), importSecretName, metav1.GetOptions{})
-			if err != nil {
-				return err
-			}
-
-			for _, yaml := range helpers.SplitYamls(importSecret.Data[constants.ImportSecretImportYamlKey]) {
-				obj := helpers.MustCreateObject(yaml)
-				kl, ok := obj.(*operatorv1.Klusterlet)
-				if ok {
-					if kl.Spec.Namespace != namespace {
-						return fmt.Errorf("klusterlet namespace in import secret is not correct, expect %s but got %s", namespace, kl.Spec.Namespace)
-					}
-					if kl.Name != name {
-						return fmt.Errorf("klusterlet name in import secret is not correct, expect %s but got %s", name, kl.Name)
-					}
-				}
-			}
 
 			klusterlet, err := hubOperatorClient.OperatorV1().Klusterlets().Get(context.TODO(), name, metav1.GetOptions{})
 			if err != nil {
@@ -910,6 +891,10 @@ func AssertKlusterletNamespace(clusterName, name, namespace string) {
 
 			if klusterlet.Spec.Namespace != namespace {
 				return fmt.Errorf("klusterlet namespace is not correct, expect %s but got %s", namespace, klusterlet.Spec.Namespace)
+			}
+
+			if klusterlet.Name != name {
+				return fmt.Errorf("klusterlet name is not correct, expect %s but got %s", name, klusterlet.Name)
 			}
 
 			_, err = hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), namespace, metav1.GetOptions{})

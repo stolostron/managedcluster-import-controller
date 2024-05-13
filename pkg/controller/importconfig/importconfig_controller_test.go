@@ -393,7 +393,7 @@ func TestReconcile(t *testing.T) {
 					if !ok {
 						t.Fatalf("import secret data %s, the second element is not klusterlet", constants.ImportSecretImportYamlKey)
 					}
-					if klusterlet.Spec.Namespace != constants.DefaultKlusterletNamespace+"-test" {
+					if klusterlet.Spec.Namespace != "open-cluster-management-test" {
 						t.Errorf("import secret data %s, the klusterlet namespace %s is not %s",
 							constants.ImportSecretImportYamlKey, klusterlet.Namespace, constants.DefaultKlusterletNamespace)
 					}

@@ -128,8 +128,7 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 		r.recorder,
 		r.scheme,
 		managedCluster,
-		createKlusterletCRDsManifestWork(managedCluster, importSecret),
-		createKlusterletManifestWork(managedCluster, importSecret),
+		createManifestWorks(managedCluster, importSecret)...,
 	)
 	return reconcile.Result{}, err
 }
@@ -243,7 +242,12 @@ func (r *ReconcileManifestWork) deleteManifestWorks(
 	return helpers.DeleteManifestWork(ctx, r.clientHolder.WorkClient, r.recorder, klusterletWork.Namespace, klusterletWork.Name)
 }
 
-func createKlusterletCRDsManifestWork(managedCluster *clusterv1.ManagedCluster, importSecret *corev1.Secret) *workv1.ManifestWork {
+func createManifestWorks(
+	managedCluster *clusterv1.ManagedCluster,
+	importSecret *corev1.Secret) []runtime.Object {
+	var works []runtime.Object
+
+	// create crd work if it contains in the secret.
 	crdsKey := constants.ImportSecretCRDSV1YamlKey
 	if managedCluster.Status.Version.Kubernetes != "" &&
 		!helpers.IsAPIExtensionV1Supported(managedCluster.Status.Version.Kubernetes) {
@@ -252,31 +256,33 @@ func createKlusterletCRDsManifestWork(managedCluster *clusterv1.ManagedCluster, 
 	}
 
 	crdYaml := importSecret.Data[crdsKey]
-	jsonData, err := yaml.YAMLToJSON(crdYaml)
-	if err != nil {
-		panic(err)
-	}
+	if len(crdYaml) > 0 {
+		jsonData, err := yaml.YAMLToJSON(crdYaml)
+		if err != nil {
+			panic(err)
+		}
 
-	return &workv1.ManifestWork{
-		TypeMeta: metav1.TypeMeta{},
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      fmt.Sprintf("%s-%s", managedCluster.Name, constants.KlusterletCRDsSuffix),
-			Namespace: managedCluster.Name,
-			Labels: map[string]string{
-				constants.KlusterletWorksLabel: "true",
-			},
-		},
-		Spec: workv1.ManifestWorkSpec{
-			Workload: workv1.ManifestsTemplate{
-				Manifests: []workv1.Manifest{
-					{RawExtension: runtime.RawExtension{Raw: jsonData}},
+		crdWork := &workv1.ManifestWork{
+			TypeMeta: metav1.TypeMeta{},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      fmt.Sprintf("%s-%s", managedCluster.Name, constants.KlusterletCRDsSuffix),
+				Namespace: managedCluster.Name,
+				Labels: map[string]string{
+					constants.KlusterletWorksLabel: "true",
 				},
 			},
-		},
-	}
-}
+			Spec: workv1.ManifestWorkSpec{
+				Workload: workv1.ManifestsTemplate{
+					Manifests: []workv1.Manifest{
+						{RawExtension: runtime.RawExtension{Raw: jsonData}},
+					},
+				},
+			},
+		}
 
-func createKlusterletManifestWork(managedCluster *clusterv1.ManagedCluster, importSecret *corev1.Secret) *workv1.ManifestWork {
+		works = append(works, crdWork)
+	}
+
 	manifests := []workv1.Manifest{}
 	importYaml := importSecret.Data[constants.ImportSecretImportYamlKey]
 	for _, yamlData := range helpers.SplitYamls(importYaml) {
@@ -289,7 +295,7 @@ func createKlusterletManifestWork(managedCluster *clusterv1.ManagedCluster, impo
 		})
 	}
 
-	return &workv1.ManifestWork{
+	klwork := &workv1.ManifestWork{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      fmt.Sprintf("%s-%s", managedCluster.Name, constants.KlusterletSuffix),
@@ -307,4 +313,16 @@ func createKlusterletManifestWork(managedCluster *clusterv1.ManagedCluster, impo
 			},
 		},
 	}
+
+	works = append(works, klwork)
+
+	// if crd is not set, we only apply klusterlet only, and the deletOption
+	// should be foreground.
+	if len(crdYaml) == 0 {
+		klwork.Spec.DeleteOption = &workv1.DeleteOption{
+			PropagationPolicy: workv1.DeletePropagationPolicyTypeForeground,
+		}
+	}
+
+	return works
 }
