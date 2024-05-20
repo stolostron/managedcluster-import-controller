@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
@@ -69,10 +70,17 @@ func Add(ctx context.Context,
 					DeleteFunc:  func(e event.DeleteEvent) bool { return false },
 					CreateFunc:  func(e event.CreateEvent) bool { return false },
 					UpdateFunc: func(e event.UpdateEvent) bool {
-						// only handle the label changed and new self managed label is true
+						// case 1: handle the label changed and new self managed label is true
 						newLabels := e.ObjectNew.GetLabels()
-						return !equality.Semantic.DeepEqual(e.ObjectOld.GetLabels(), newLabels) &&
-							strings.EqualFold(newLabels[constants.SelfManagedLabel], "true")
+						if !equality.Semantic.DeepEqual(e.ObjectOld.GetLabels(), newLabels) &&
+							strings.EqualFold(newLabels[constants.SelfManagedLabel], "true") {
+							return true
+						}
+
+						// case 2: handle the removal of the disable-auto-import annotation
+						_, oldAutoImportDisabled := e.ObjectOld.GetAnnotations()[apiconstants.DisableAutoImportAnnotation]
+						_, newAutoImportDisabled := e.ObjectNew.GetAnnotations()[apiconstants.DisableAutoImportAnnotation]
+						return oldAutoImportDisabled && !newAutoImportDisabled
 					},
 				},
 			),

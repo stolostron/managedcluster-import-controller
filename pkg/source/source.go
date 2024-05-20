@@ -16,6 +16,7 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
 	workv1lister "open-cluster-management.io/api/client/work/listers/work/v1"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
@@ -83,7 +84,7 @@ func NewHostedWorkSource(workInformer cache.SharedIndexInformer) *Source {
 func NewManagedClusterSource(mcInformer cache.SharedIndexInformer) *Source {
 	return &Source{
 		informer:     mcInformer,
-		expectedType: reflect.TypeOf(&workv1.ManifestWork{}),
+		expectedType: reflect.TypeOf(&clusterv1.ManagedCluster{}),
 		name:         "managed-cluster",
 	}
 }
