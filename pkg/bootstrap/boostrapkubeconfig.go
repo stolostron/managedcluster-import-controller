@@ -56,22 +56,28 @@ func CreateBootstrapKubeConfig(ctx context.Context, clientHolder *helpers.Client
 		return nil, nil, err
 	}
 
+	currentCluster, err := GetKubeconfigClusterName(ctx, clientHolder.RuntimeClient)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	proxyURL, _ := GetProxySettings(klusterletConfig)
 	bootstrapConfig := clientcmdapi.Config{
 		// Define a cluster stanza based on the bootstrap kubeconfig.
-		Clusters: map[string]*clientcmdapi.Cluster{"default-cluster": {
-			Server:                   kubeAPIServer,
-			InsecureSkipTLSVerify:    false,
-			CertificateAuthorityData: certData,
-			ProxyURL:                 proxyURL,
-		}},
+		Clusters: map[string]*clientcmdapi.Cluster{
+			currentCluster: {
+				Server:                   kubeAPIServer,
+				InsecureSkipTLSVerify:    false,
+				CertificateAuthorityData: certData,
+				ProxyURL:                 proxyURL,
+			}},
 		// Define auth based on the obtained client cert.
 		AuthInfos: map[string]*clientcmdapi.AuthInfo{"default-auth": {
 			Token: string(token),
 		}},
 		// Define a context that connects the auth info and cluster, and set it as the default
 		Contexts: map[string]*clientcmdapi.Context{"default-context": {
-			Cluster:   "default-cluster",
+			Cluster:   currentCluster,
 			AuthInfo:  "default-auth",
 			Namespace: "default",
 		}},
@@ -181,6 +187,26 @@ func GetKubeAPIServerAddress(ctx context.Context, client client.Client,
 	return "", err
 }
 
+func GetKubeconfigClusterName(ctx context.Context, client client.Client) (string, error) {
+	defaultCluster := "default-cluster"
+	if !helpers.DeployOnOCP {
+		klog.Infof("Deploying on non-OCP cluster, using %s as the cluster name", defaultCluster)
+		return defaultCluster, nil
+	}
+
+	infraConfig := &ocinfrav1.Infrastructure{}
+	err := client.Get(ctx, types.NamespacedName{Name: "cluster"}, infraConfig)
+	if err == nil {
+		return string(infraConfig.UID), nil
+	}
+	if helpers.ResourceIsNotFound(err) {
+		klog.Infof("Infrastructure is not found, using %s as the cluster name", defaultCluster)
+		return defaultCluster, nil
+	}
+
+	return "", err
+}
+
 func GetBootstrapCAData(ctx context.Context, clientHolder *helpers.ClientHolder, kubeAPIServer string,
 	caNamespace string, klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) ([]byte, error) {
 	apiServerCAData, err := getKubeAPIServerCAData(ctx, clientHolder, kubeAPIServer, caNamespace, klusterletConfig)
@@ -261,7 +287,7 @@ func getCABundleFromConfigmap(ctx context.Context, clientHolder *helpers.ClientH
 func getKubeAPIServerSecretName(ctx context.Context, client client.Client, dnsName string) (string, error) {
 	apiserver := &ocinfrav1.APIServer{}
 	if err := client.Get(ctx, types.NamespacedName{Name: "cluster"}, apiserver); err != nil {
-		if apierrors.IsNotFound(err) || helpers.ResourceIsNotFound(err) {
+		if helpers.ResourceIsNotFound(err) {
 			klog.Info("Ignore ocp apiserver, it is not found")
 			return "", nil
 		}

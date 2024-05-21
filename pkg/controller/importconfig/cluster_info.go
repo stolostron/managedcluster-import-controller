@@ -107,14 +107,21 @@ func extractBootstrapKubeConfigDataFromImportSecret(importSecret *corev1.Secret)
 	return nil
 }
 
-func parseKubeConfigData(kubeConfigData []byte) (kubeAPIServer, proxyURL string, caData []byte, token string, err error) {
+func parseKubeConfigData(kubeConfigData []byte) (
+	kubeAPIServer, proxyURL string, caData []byte, token string, err error) {
+
 	config, err := clientcmd.Load(kubeConfigData)
 	if err != nil {
 		// kubeconfig data is invalid
 		return "", "", nil, "", err
 	}
 
-	if cluster, ok := config.Clusters["default-cluster"]; ok {
+	context := config.Contexts[config.CurrentContext]
+	if context == nil {
+		return "", "", nil, "", fmt.Errorf("failed to get current context")
+	}
+
+	if cluster, ok := config.Clusters[context.Cluster]; ok {
 		kubeAPIServer = cluster.Server
 		caData = cluster.CertificateAuthorityData
 		proxyURL = cluster.ProxyURL
