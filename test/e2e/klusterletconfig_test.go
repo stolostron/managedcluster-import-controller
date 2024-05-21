@@ -312,6 +312,48 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 
 		assertManagedClusterAvailable(managedClusterName)
 	})
+
+	It("Should deploy the klusterlet with custom AppliedManifestWork eviction grace period", func() {
+		By("Create managed cluster", func() {
+			_, err := util.CreateManagedClusterWithShortLeaseDuration(
+				hubClusterClient,
+				managedClusterName,
+				map[string]string{
+					"agent.open-cluster-management.io/klusterlet-config": klusterletConfigName,
+				},
+				util.NewLable("local-cluster", "true"))
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		// klusterletconfig is missing and it will be ignored
+		assertAppliedManifestWorkEvictionGracePeriod(nil)
+		assertManagedClusterAvailable(managedClusterName)
+
+		By("Create KlusterletConfig with custom AppliedManifestWork eviction grace period", func() {
+			_, err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Create(context.TODO(), &klusterletconfigv1alpha1.KlusterletConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: klusterletConfigName,
+				},
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					AppliedManifestWorkEvictionGracePeriod: "120m",
+				},
+			}, metav1.CreateOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		assertAppliedManifestWorkEvictionGracePeriod(&metav1.Duration{
+			Duration: 120 * time.Minute,
+		})
+		assertManagedClusterAvailable(managedClusterName)
+
+		By("Delete Klusterletconfig", func() {
+			err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Delete(context.TODO(), klusterletConfigName, metav1.DeleteOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		assertAppliedManifestWorkEvictionGracePeriod(nil)
+		assertManagedClusterAvailable(managedClusterName)
+	})
 })
 
 func newCert(commoneName string) ([]byte, []byte, error) {

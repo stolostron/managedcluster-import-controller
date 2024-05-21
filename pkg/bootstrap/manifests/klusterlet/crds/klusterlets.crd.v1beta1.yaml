@@ -77,7 +77,7 @@ spec:
             namespace:
               description: Namespace is the namespace to deploy the agent on the managed cluster. The namespace must have a prefix of "open-cluster-management-", and if it is not set, the namespace of "open-cluster-management-agent" is used to deploy agent. In addition, the add-ons are deployed to the namespace of "{Namespace}-addon". In the Hosted mode, this namespace still exists on the managed cluster to contain necessary resources, like service accounts, roles and rolebindings, while the agent is deployed to the namespace with the same name as klusterlet on the management cluster.
               type: string
-              maxLength: 63
+              maxLength: 57
               pattern: ^open-cluster-management-[-a-z0-9]*[a-z0-9]$
             nodePlacement:
               description: NodePlacement enables explicit control over the scheduling of the deployed pods.
@@ -118,6 +118,32 @@ spec:
               description: RegistrationConfiguration contains the configuration of registration
               type: object
               properties:
+                bootstrapKubeConfigs:
+                  description: "BootstrapKubeConfigs defines the ordered list of bootstrap kubeconfigs. The order decides which bootstrap kubeconfig to use first when rebootstrap. \n When the agent loses the connection to the current hub over HubConnectionTimeoutSeconds, or the managedcluster CR is set `hubAcceptsClient=false` on the hub, the controller marks the related bootstrap kubeconfig as \"failed\". \n A failed bootstrapkubeconfig won't be used for the duration specified by SkipFailedBootstrapKubeConfigSeconds. But if the user updates the content of a failed bootstrapkubeconfig, the \"failed\" mark will be cleared."
+                  type: object
+                  properties:
+                    localSecretsConfig:
+                      description: LocalSecretsConfig include a list of secrets that contains the kubeconfigs for ordered bootstrap kubeconifigs. The secrets must be in the same namespace where the agent controller runs.
+                      type: object
+                      properties:
+                        hubConnectionTimeoutSeconds:
+                          description: HubConnectionTimeoutSeconds is used to set the timeout of connecting to the hub cluster. When agent loses the connection to the hub over the timeout seconds, the agent do a rebootstrap. By default is 10 mins.
+                          type: integer
+                          format: int32
+                          default: 600
+                          minimum: 180
+                        secretNames:
+                          description: SecretNames is a list of secret names. The secrets are in the same namespace where the agent controller runs.
+                          type: array
+                          items:
+                            type: string
+                    type:
+                      description: Type specifies the type of priority bootstrap kubeconfigs. By default, it is set to None, representing no priority bootstrap kubeconfigs are set.
+                      type: string
+                      default: None
+                      enum:
+                        - None
+                        - LocalSecrets
                 clientCertExpirationSeconds:
                   description: clientCertExpirationSeconds represents the seconds of a client certificate to expire. If it is not set or 0, the default duration seconds will be set by the hub cluster. If the value is larger than the max signing duration seconds set on the hub cluster, the max signing duration seconds will be set.
                   type: integer
@@ -141,6 +167,7 @@ spec:
                       mode:
                         description: Mode is either Enable, Disable, "" where "" is Disable by default. In Enable mode, a valid feature gate `featuregate/Foo` will be set to "--featuregate/Foo=true". In Disable mode, a valid feature gate `featuregate/Foo` will be set to "--featuregate/Foo=false".
                         type: string
+                        default: Disable
                         enum:
                           - Enable
                           - Disable
@@ -148,10 +175,12 @@ spec:
                   description: 'KubeAPIBurst indicates the maximum burst of the throttle while talking with apiserver of hub cluster from the spoke cluster. If it is set empty, use the default value: 100'
                   type: integer
                   format: int32
+                  default: 100
                 kubeAPIQPS:
                   description: 'KubeAPIQPS indicates the maximum QPS while talking with apiserver of hub cluster from the spoke cluster. If it is set empty, use the default value: 50'
                   type: integer
                   format: int32
+                  default: 50
             registrationImagePullSpec:
               description: RegistrationImagePullSpec represents the desired image configuration of registration agent. quay.io/open-cluster-management.io/registration:latest will be used if unspecified.
               type: string
@@ -198,6 +227,7 @@ spec:
                         x-kubernetes-int-or-string: true
                 type:
                   type: string
+                  default: Default
                   enum:
                     - Default
                     - BestEffort
@@ -206,6 +236,10 @@ spec:
               description: WorkConfiguration contains the configuration of work
               type: object
               properties:
+                appliedManifestWorkEvictionGracePeriod:
+                  description: AppliedManifestWorkEvictionGracePeriod is the eviction grace period the work agent will wait before evicting the AppliedManifestWorks, whose corresponding ManifestWorks are missing on the hub cluster, from the managed cluster. If not present, the default value of the work agent will be used.
+                  type: string
+                  pattern: ^([0-9]+(s|m|h))+$
                 featureGates:
                   description: "FeatureGates represents the list of feature gates for work If it is set empty, default feature gates will be used. If it is set, featuregate/Foo is an example of one item in FeatureGates:   1. If featuregate/Foo does not exist, registration-operator will discard it   2. If featuregate/Foo exists and is false by default. It is now possible to set featuregate/Foo=[false|true]   3. If featuregate/Foo exists and is true by default. If a cluster-admin upgrading from 1 to 2 wants to continue having featuregate/Foo=false,  \the can set featuregate/Foo=false before upgrading. Let's say the cluster-admin wants featuregate/Foo=false."
                   type: array
@@ -220,6 +254,7 @@ spec:
                       mode:
                         description: Mode is either Enable, Disable, "" where "" is Disable by default. In Enable mode, a valid feature gate `featuregate/Foo` will be set to "--featuregate/Foo=true". In Disable mode, a valid feature gate `featuregate/Foo` will be set to "--featuregate/Foo=false".
                         type: string
+                        default: Disable
                         enum:
                           - Enable
                           - Disable
@@ -227,10 +262,12 @@ spec:
                   description: 'KubeAPIBurst indicates the maximum burst of the throttle while talking with apiserver of hub cluster from the spoke cluster. If it is set empty, use the default value: 100'
                   type: integer
                   format: int32
+                  default: 100
                 kubeAPIQPS:
                   description: 'KubeAPIQPS indicates the maximum QPS while talking with apiserver of hub cluster from the spoke cluster. If it is set empty, use the default value: 50'
                   type: integer
                   format: int32
+                  default: 50
             workImagePullSpec:
               description: WorkImagePullSpec represents the desired image configuration of work agent. quay.io/open-cluster-management.io/work:latest will be used if unspecified.
               type: string

@@ -11,6 +11,7 @@ import (
 	"os/user"
 	"path"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -118,7 +119,7 @@ var _ = ginkgo.BeforeSuite(func() {
 	hubRecorder = helpers.NewEventRecorder(hubKubeClient, "e2e-test")
 	httpclient, err := rest.HTTPClientFor(clusterCfg)
 	gomega.Expect(err).Should(gomega.BeNil())
-	hubMapper, err = apiutil.NewDiscoveryRESTMapper(clusterCfg, httpclient)
+	hubMapper, err = apiutil.NewDynamicRESTMapper(clusterCfg, httpclient)
 	gomega.Expect(err).Should(gomega.BeNil())
 })
 
@@ -904,6 +905,47 @@ func AssertKlusterletNamespace(clusterName, name, namespace string) {
 
 			return nil
 		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+	})
+}
+
+func assertAppliedManifestWorkEvictionGracePeriod(evictionGracePeriod *metav1.Duration) {
+	ginkgo.By("Klusterlet should have expected AppliedManifestWorkEvictionGracePeriod", func() {
+		gomega.Eventually(func() error {
+			deploy, err := hubKubeClient.AppsV1().Deployments("open-cluster-management-agent").Get(context.TODO(), "klusterlet-agent", metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			if len(deploy.Spec.Template.Spec.Containers) != 1 {
+				return fmt.Errorf("Unexpected number of contianers found for klusterlet-agent: %v", len(deploy.Spec.Template.Spec.Containers))
+			}
+
+			found := false
+			prefix := "--appliedmanifestwork-eviction-grace-period="
+			argValue := ""
+			for _, arg := range deploy.Spec.Template.Spec.Containers[0].Args {
+				if strings.HasPrefix(arg, prefix) {
+					found = true
+					argValue = strings.TrimPrefix(arg, prefix)
+					break
+				}
+			}
+
+			switch {
+			case evictionGracePeriod == nil && !found:
+				return nil
+			case evictionGracePeriod == nil && found:
+				return fmt.Errorf("Expected nil evictionGracePeriod but got %v", argValue)
+			case evictionGracePeriod != nil && found:
+				if evictionGracePeriod.Duration.String() == argValue {
+					return nil
+				}
+				return fmt.Errorf("Expected evictionGracePeriod %q but got %v", evictionGracePeriod.Duration.String(), argValue)
+			case evictionGracePeriod != nil && !found:
+				return fmt.Errorf("Expected evictionGracePeriod %q but found no argument", evictionGracePeriod.Duration.String())
+			default:
+				return fmt.Errorf("Should not step into this branch")
+			}
+		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 }
 
