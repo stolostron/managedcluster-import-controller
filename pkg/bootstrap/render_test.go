@@ -49,7 +49,6 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 			config: NewKlusterletManifestsConfig(
 				operatorv1.InstallModeDefault,
 				"test", // cluster name
-				"test", // klusterlet namespace
 				[]byte("bootstrap kubeconfig"),
 			),
 			validateFunc: func(t *testing.T, objs []runtime.Object) {
@@ -106,7 +105,6 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 			config: NewKlusterletManifestsConfig(
 				operatorv1.InstallModeDefault,
 				"test", // cluster name
-				"test", // klusterlet namespace
 				[]byte("bootstrap kubeconfig"),
 			),
 			validateFunc: func(t *testing.T, objs []runtime.Object) {
@@ -155,12 +153,63 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 			config: NewKlusterletManifestsConfig(
 				operatorv1.InstallModeHosted,
 				"test", // cluster name
-				"test", // klusterlet namespace
 				[]byte("bootstrap kubeconfig"),
 			).WithImagePullSecretGenerate(false),
 			validateFunc: func(t *testing.T, objects []runtime.Object) {
 				if len(objects) != 2 {
 					t.Fatalf("Expected 2 objects, but got %d", len(objects))
+				}
+				klusterlet, ok := objects[1].(*operatorv1.Klusterlet)
+				if !ok {
+					t.Fatal("the klusterlet is not klusterlet")
+				}
+				if klusterlet.Spec.Namespace != "open-cluster-management-test" {
+					t.Fatal("the klusterlet namespace is not replaced")
+				}
+				if klusterlet.Name != "klusterlet-test" {
+					t.Fatal("the klusterlet name is not replaced.")
+				}
+			},
+		},
+		{
+			name: "hosted with long cluster name",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+			},
+			defaultImagePullSecret: "test-image-pull-secret",
+			runtimeObjs: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-image-pull-secret",
+					},
+					Data: map[string][]byte{
+						corev1.DockerConfigKey: []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeDockercfg,
+				},
+			},
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeHosted,
+				"loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong-cluster", // cluster name
+				[]byte("bootstrap kubeconfig"),
+			).WithImagePullSecretGenerate(false),
+			validateFunc: func(t *testing.T, objects []runtime.Object) {
+				if len(objects) != 2 {
+					t.Fatalf("Expected 2 objects, but got %d", len(objects))
+				}
+				klusterlet, ok := objects[1].(*operatorv1.Klusterlet)
+				if !ok {
+					t.Fatal("the klusterlet is not klusterlet")
+				}
+				if klusterlet.Spec.Namespace != "open-cluster-management-loooooooooooooooooooooooooooooooo" {
+					t.Fatal("the klusterlet namespace is not replaced")
+				}
+				if klusterlet.Name != "klusterlet-loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong-cluster" {
+					t.Fatal("the klusterlet name is not replaced.")
 				}
 			},
 		},
@@ -188,7 +237,6 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 			config: NewKlusterletManifestsConfig(
 				operatorv1.InstallModeDefault,
 				"test", // cluster name
-				"test", // klusterlet namespace
 				[]byte("bootstrap kubeconfig"),
 			).WithKlusterletClusterAnnotations(map[string]string{
 				"agent.open-cluster-management.io/test": "test",
@@ -249,7 +297,6 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 			config: NewKlusterletManifestsConfig(
 				operatorv1.InstallModeDefault,
 				"test", // cluster name
-				"test", // klusterlet namespace
 				[]byte("bootstrap kubeconfig"),
 			).WithKlusterletConfig(&klusterletconfigv1alpha1.KlusterletConfig{
 				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
@@ -307,6 +354,83 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				if operater.Spec.Template.Spec.Tolerations[0].Key != "foo" {
 					t.Errorf("the operater tolerations %s is not %s",
 						operater.Spec.Template.Spec.Tolerations[0].Key, "foo")
+				}
+			},
+		},
+		{
+			name: "customize namespace with klusterletconfig no klusterlet name postfix",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "open-cluster-management-local",
+					},
+				},
+			},
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeDefault,
+				"test", // cluster name
+				[]byte("bootstrap kubeconfig"),
+			).WithKlusterletConfig(&klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					InstallMode: &klusterletconfigv1alpha1.InstallMode{
+						Type: klusterletconfigv1alpha1.InstallModeNoOperator,
+					},
+				},
+			}),
+			validateFunc: func(t *testing.T, objects []runtime.Object) {
+				if len(objects) != 3 {
+					t.Fatalf("Expected 10 objects, but got %d", len(objects))
+				}
+
+				klusterlet, ok := objects[1].(*operatorv1.Klusterlet)
+				if !ok {
+					t.Fatal("the klusterlet is not klusterlet")
+				}
+				if klusterlet.Spec.Namespace != constants.DefaultKlusterletNamespace {
+					t.Fatal("the klusterlet namespace is not replaced")
+				}
+				if klusterlet.Name != "klusterlet" {
+					t.Fatal("the klusterlet name is not replaced.")
+				}
+			},
+		},
+		{
+			name: "customize namespace with klusterletconfig",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "open-cluster-management-local",
+					},
+				},
+			},
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeDefault,
+				"test", // cluster name
+				[]byte("bootstrap kubeconfig"),
+			).WithKlusterletConfig(&klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					InstallMode: &klusterletconfigv1alpha1.InstallMode{
+						Type: klusterletconfigv1alpha1.InstallModeNoOperator,
+						NoOperator: &klusterletconfigv1alpha1.NoOperator{
+							Postfix: "local",
+						},
+					},
+				},
+			}),
+			validateFunc: func(t *testing.T, objects []runtime.Object) {
+				if len(objects) != 3 {
+					t.Fatalf("Expected 10 objects, but got %d", len(objects))
+				}
+
+				klusterlet, ok := objects[1].(*operatorv1.Klusterlet)
+				if !ok {
+					t.Fatal("the klusterlet is not klusterlet")
+				}
+				if klusterlet.Spec.Namespace != "open-cluster-management-local" {
+					t.Fatal("the klusterlet namespace is not replaced")
+				}
+				if klusterlet.Name != "klusterlet-local" {
+					t.Fatal("the klusterlet name is not replaced.")
 				}
 			},
 		},

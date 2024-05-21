@@ -36,6 +36,16 @@ spec:
           spec:
             description: Spec defines the desired state of KlusterletConfig
             properties:
+              appliedManifestWorkEvictionGracePeriod:
+                description: AppliedManifestWorkEvictionGracePeriod is the eviction
+                  grace period the work agent will wait before evicting the AppliedManifestWorks,
+                  whose corresponding ManifestWorks are missing on the hub cluster,
+                  from the managed cluster. If not present, the default value of the
+                  work agent will be used. If its value is set to "INFINITE", it means
+                  the AppliedManifestWorks will never been evicted from the managed
+                  cluster.
+                pattern: ^([0-9]+(s|m|h))+$|^INFINITE$
+                type: string
               hubKubeAPIServerCABundle:
                 description: 'HubKubeAPIServerCABundle is the CA bundle to verify
                   the server certificate of the hub kube API against. If not present,
@@ -73,6 +83,30 @@ spec:
                   will be used as the default value. e.g. `oc get infrastructure cluster
                   -o jsonpath='{.status.apiServerURL}'`
                 type: string
+              installMode:
+                description: InstallMode is the mode to install the klusterlet
+                properties:
+                  noOperator:
+                    description: NoOperator is the setting of klusterlet installation
+                      when install type is noOperator.
+                    properties:
+                      postfix:
+                        description: Postfix is the postfix of the klusterlet name.
+                          The name of the klusterlet is "klusterlet" if it is not
+                          set, and "klusterlet-{Postfix}". The install namespace is
+                          "open-cluster-management-agent" if it is not set, and "open-cluster-management-{Postfix}".
+                        maxLength: 33
+                        pattern: ^[-a-z0-9]*[a-z0-9]$
+                        type: string
+                    type: object
+                  type:
+                    default: default
+                    description: InstallModeType is the type of install mode.
+                    enum:
+                    - default
+                    - noOperator
+                    type: string
+                type: object
               nodePlacement:
                 description: NodePlacement enables explicit control over the scheduling
                   of the agent components. If the placement is nil, the placement

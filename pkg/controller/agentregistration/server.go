@@ -28,7 +28,11 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 	mux := http.NewServeMux()
 
 	mux.Handle("/agent-registration/crds/v1", authMiddleware(clientHolder, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		content, err := bootstrap.GenerateKlusterletCRDsV1()
+		config := bootstrap.NewKlusterletManifestsConfig(
+			operatorv1.InstallModeDefault,
+			"dummy",
+			nil)
+		content, err := config.GenerateKlusterletCRDsV1()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -39,7 +43,11 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 	})))
 
 	mux.Handle("/agent-registration/crds/v1beta1", authMiddleware(clientHolder, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		content, err := bootstrap.GenerateKlusterletCRDsV1Beta1()
+		config := bootstrap.NewKlusterletManifestsConfig(
+			operatorv1.InstallModeDefault,
+			"dummy",
+			nil)
+		content, err := config.GenerateKlusterletCRDsV1Beta1()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -86,7 +94,6 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 		content, err := bootstrap.NewKlusterletManifestsConfig(
 			operatorv1.InstallModeDefault,
 			clusterID,
-			DefaultKlusterletNamespace,
 			bootstrapkubeconfig).
 			WithKlusterletClusterAnnotations(klusterletClusterAnnotations).
 			WithKlusterletConfig(mergedKlusterletConfig).
@@ -175,5 +182,4 @@ func authMiddleware(clientHolder *helpers.ClientHolder, next http.Handler) http.
 
 const (
 	AgentRegistrationDefaultBootstrapSAName = "agent-registration-bootstrap"
-	DefaultKlusterletNamespace              = "open-cluster-management-agent"
 )

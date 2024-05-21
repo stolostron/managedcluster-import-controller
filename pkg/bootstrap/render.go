@@ -66,6 +66,7 @@ type RenderConfig struct {
 
 // KlusterletRenderConfig defines variables used in the klusterletFiles.
 type KlusterletRenderConfig struct {
+	KlusterletName            string
 	KlusterletNamespace       string
 	ManagedClusterNamespace   string
 	BootstrapKubeconfig       string
@@ -108,11 +109,10 @@ type KlusterletManifestsConfig struct {
 }
 
 func NewKlusterletManifestsConfig(installMode operatorv1.InstallMode,
-	clusterName, klusterletNamespace string, bootstrapKubeconfig []byte) *KlusterletManifestsConfig {
+	clusterName string, bootstrapKubeconfig []byte) *KlusterletManifestsConfig {
 	return &KlusterletManifestsConfig{
 		InstallMode:             installMode,
 		ClusterName:             clusterName,
-		KlusterletNamespace:     klusterletNamespace,
 		BootstrapKubeconfig:     bootstrapKubeconfig,
 		generateImagePullSecret: true,
 	}
@@ -159,7 +159,9 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 		if b.PriorityClassName == constants.DefaultKlusterletPriorityClassName {
 			files = append(files, priorityClassFiles...)
 		}
-		files = append(files, klusterletOperatorFiles...)
+		if !installNoOperator(b.InstallMode, b.klusterletconfig) {
+			files = append(files, klusterletOperatorFiles...)
+		}
 		files = append(files, klusterletFiles...)
 	default:
 		return nil, fmt.Errorf("invalid install mode: %s", b.InstallMode)
@@ -222,10 +224,14 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 		return nil, fmt.Errorf("invalid tolerations annotation %v", err)
 	}
 
+	klusterletName, klusterletNamespace := getKlusterletNamespaceName(
+		b.klusterletconfig, b.ClusterName, b.ManagedClusterAnnotations, b.InstallMode)
+
 	renderConfig := RenderConfig{
 		KlusterletRenderConfig: KlusterletRenderConfig{
 			ManagedClusterNamespace: b.ClusterName,
-			KlusterletNamespace:     b.KlusterletNamespace,
+			KlusterletName:          klusterletName,
+			KlusterletNamespace:     klusterletNamespace,
 			InstallMode:             string(b.InstallMode),
 
 			// BootstrapKubeConfig
@@ -280,11 +286,17 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 	return manifestsBytes, nil
 }
 
-func GenerateKlusterletCRDsV1() ([]byte, error) {
+func (b *KlusterletManifestsConfig) GenerateKlusterletCRDsV1() ([]byte, error) {
+	if installNoOperator(b.InstallMode, b.klusterletconfig) {
+		return []byte{}, nil
+	}
 	return filesToTemplateBytes([]string{klusterletCrdsV1File}, nil)
 }
 
-func GenerateKlusterletCRDsV1Beta1() ([]byte, error) {
+func (b *KlusterletManifestsConfig) GenerateKlusterletCRDsV1Beta1() ([]byte, error) {
+	if installNoOperator(b.InstallMode, b.klusterletconfig) {
+		return []byte{}, nil
+	}
 	return filesToTemplateBytes([]string{klusterletCrdsV1beta1File}, nil)
 }
 
@@ -327,6 +339,55 @@ func filesToObjects(files []string, config interface{}) ([]runtime.Object, error
 		objects = append(objects, helpers.MustCreateObjectFromTemplate(file, template, config))
 	}
 	return objects, nil
+}
+
+// installNoOperator return true if operator is not to be installed.
+func installNoOperator(mode operatorv1.InstallMode, config *klusterletconfigv1alpha1.KlusterletConfig) bool {
+	if mode == operatorv1.InstallModeHosted || mode == operatorv1.InstallModeSingletonHosted {
+		return true
+	}
+	if config == nil || config.Spec.InstallMode == nil {
+		return false
+	}
+	if config.Spec.InstallMode.Type == klusterletconfigv1alpha1.InstallModeNoOperator {
+		return true
+	}
+	return false
+}
+
+// getKlusterletName returns klusterlet by default, and klusterlet-{cluster name} in hosted mode,
+// and klusterlet-{postfix} if install mode in config is set with postfix.
+func getKlusterletNamespaceName(
+	config *klusterletconfigv1alpha1.KlusterletConfig,
+	clusterName string, annotation map[string]string, mode operatorv1.InstallMode) (string, string) {
+	klusterletName := constants.KlusterletSuffix
+	klusterletNamespace := constants.DefaultKlusterletNamespace
+	if mode == operatorv1.InstallModeHosted || mode == operatorv1.InstallModeSingletonHosted {
+		klusterletName = fmt.Sprintf("%s-%s", constants.KlusterletSuffix, clusterName)
+		klusterletNamespace = fmt.Sprintf("open-cluster-management-%s", clusterName)
+		if len(klusterletNamespace) > 57 {
+			klusterletNamespace = klusterletNamespace[:57]
+		}
+	}
+
+	if v, ok := annotation[constants.KlusterletNamespaceAnnotation]; ok {
+		klusterletNamespace = v
+	}
+
+	if config == nil || config.Spec.InstallMode == nil {
+		return klusterletName, klusterletNamespace
+	}
+	if config.Spec.InstallMode.Type != klusterletconfigv1alpha1.InstallModeNoOperator {
+		return klusterletName, klusterletNamespace
+	}
+	if config.Spec.InstallMode.NoOperator == nil {
+		return klusterletName, klusterletNamespace
+	}
+
+	klusterletName = fmt.Sprintf("%s-%s", klusterletName, config.Spec.InstallMode.NoOperator.Postfix)
+	klusterletNamespace = fmt.Sprintf("open-cluster-management-%s", config.Spec.InstallMode.NoOperator.Postfix)
+
+	return klusterletName, klusterletNamespace
 }
 
 func getImage(envName string, kcRegistries []klusterletconfigv1alpha1.Registries, clusterAnnotations map[string]string) (string, error) {

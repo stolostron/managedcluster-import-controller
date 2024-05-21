@@ -1,11 +1,7 @@
 apiVersion: operator.open-cluster-management.io/v1
 kind: Klusterlet
 metadata:
-{{- if eq .InstallMode "Hosted"}}
-  name: klusterlet-{{ .ManagedClusterNamespace }}
-{{- else }}
-  name: klusterlet
-{{- end}}
+  name: "{{ .KlusterletName }}"
 spec:
   deployOption:
 {{- if eq .InstallMode "Hosted"}}

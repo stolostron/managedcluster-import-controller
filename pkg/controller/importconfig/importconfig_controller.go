@@ -110,25 +110,24 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 		if supportPriorityClass {
 			priorityClassName = constants.DefaultKlusterletPriorityClassName
 		}
-		yamlcontent, err = bootstrap.NewKlusterletManifestsConfig(
+		config := bootstrap.NewKlusterletManifestsConfig(
 			mode,
 			managedCluster.Name,
-			klusterletNamespace(managedCluster),
 			bootstrapKubeconfigData).
 			WithManagedClusterAnnotations(managedCluster.GetAnnotations()).
 			WithKlusterletConfig(mergedKlusterletConfig).
-			WithPriorityClassName(priorityClassName).
-			Generate(ctx, r.clientHolder)
+			WithPriorityClassName(priorityClassName)
+		yamlcontent, err = config.Generate(ctx, r.clientHolder)
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 
-		crdsV1beta1YAML, err = bootstrap.GenerateKlusterletCRDsV1Beta1()
+		crdsV1beta1YAML, err = config.GenerateKlusterletCRDsV1Beta1()
 		if err != nil {
 			return reconcile.Result{}, err
 		}
 
-		crdsV1YAML, err = bootstrap.GenerateKlusterletCRDsV1()
+		crdsV1YAML, err = config.GenerateKlusterletCRDsV1()
 		if err != nil {
 			return reconcile.Result{}, err
 		}
@@ -136,13 +135,13 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 		yamlcontent, err = bootstrap.NewKlusterletManifestsConfig(
 			mode,
 			managedCluster.Name,
-			klusterletNamespace(managedCluster),
 			bootstrapKubeconfigData).
 			WithManagedClusterAnnotations(managedCluster.GetAnnotations()).
 			WithImagePullSecretGenerate(false).
 			// the hosting cluster should support PriorityClass API and have
 			// already had the default PriorityClass
 			WithPriorityClassName(constants.DefaultKlusterletPriorityClassName).
+			WithKlusterletConfig(mergedKlusterletConfig).
 			Generate(ctx, r.clientHolder)
 		if err != nil {
 			return reconcile.Result{}, err

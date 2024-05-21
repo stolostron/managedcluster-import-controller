@@ -13,9 +13,6 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/bootstrap"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	operatorv1 "open-cluster-management.io/api/operator/v1"
-
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,8 +20,6 @@ import (
 	certutil "k8s.io/client-go/util/cert"
 	"k8s.io/klog/v2"
 )
-
-const defaultKlusterletNamespace = "open-cluster-management-agent"
 
 // getBootstrapKubeConfigDataFromImportSecret aims to reuse the bootstrap kubeconfig data if possible.
 // The return values are: 1. kubeconfig data, 2. token expiration, 3. error
@@ -225,25 +220,4 @@ func hasCertificates(supersetCertData, subsetCertData []byte) (bool, error) {
 		}
 	}
 	return true, nil
-}
-
-func klusterletNamespace(managedCluster *clusterv1.ManagedCluster) string {
-	annotation := managedCluster.GetAnnotations()
-	if klusterletNamespace, ok := annotation[constants.KlusterletNamespaceAnnotation]; ok {
-		return klusterletNamespace
-	}
-
-	// if it is hosted mode, the default namespace is open-cluster-management-agent-{clusterName}
-	mode := helpers.DetermineKlusterletMode(managedCluster)
-	if mode == operatorv1.InstallModeHosted || mode == operatorv1.InstallModeSingletonHosted {
-		namespace := defaultKlusterletNamespace + "-" + managedCluster.Name
-		// klusterlet will also auto create an default addon ns with postfix of "-addon", so the maximum
-		// length here should be 57
-		if len(namespace) <= 57 {
-			return namespace
-		}
-		return namespace[:57]
-	}
-
-	return defaultKlusterletNamespace
 }

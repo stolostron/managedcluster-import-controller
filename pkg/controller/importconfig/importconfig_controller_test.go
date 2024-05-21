@@ -191,8 +191,9 @@ func TestReconcile(t *testing.T) {
 					if !ok {
 						t.Errorf("import secret data %s, the first element is not namespace", constants.ImportSecretImportYamlKey)
 					}
-					if ns.Name != defaultKlusterletNamespace {
-						t.Errorf("import secret data %s, the namespace name %s is not %s", constants.ImportSecretImportYamlKey, ns.Name, defaultKlusterletNamespace)
+					if ns.Name != constants.DefaultKlusterletNamespace {
+						t.Errorf("import secret data %s, the namespace name %s is not %s",
+							constants.ImportSecretImportYamlKey, ns.Name, constants.DefaultKlusterletNamespace)
 					}
 					pullSecret, ok := objs[9].(*corev1.Secret)
 					if !ok {
@@ -392,8 +393,9 @@ func TestReconcile(t *testing.T) {
 					if !ok {
 						t.Fatalf("import secret data %s, the second element is not klusterlet", constants.ImportSecretImportYamlKey)
 					}
-					if klusterlet.Spec.Namespace != defaultKlusterletNamespace+"-test" {
-						t.Errorf("import secret data %s, the klusterlet namespace %s is not %s", constants.ImportSecretImportYamlKey, klusterlet.Namespace, defaultKlusterletNamespace)
+					if klusterlet.Spec.Namespace != "open-cluster-management-test" {
+						t.Errorf("import secret data %s, the klusterlet namespace %s is not %s",
+							constants.ImportSecretImportYamlKey, klusterlet.Namespace, constants.DefaultKlusterletNamespace)
 					}
 				}
 			},
@@ -490,7 +492,8 @@ func TestReconcile(t *testing.T) {
 						t.Fatalf("import secret data %s, the second element is not klusterlet", constants.ImportSecretImportYamlKey)
 					}
 					if klusterlet.Spec.Namespace != "test-ns" {
-						t.Errorf("import secret data %s, the klusterlet namespace %s is not %s", constants.ImportSecretImportYamlKey, klusterlet.Namespace, defaultKlusterletNamespace)
+						t.Errorf("import secret data %s, the klusterlet namespace %s is not %s",
+							constants.ImportSecretImportYamlKey, klusterlet.Namespace, constants.DefaultKlusterletNamespace)
 					}
 				}
 			},

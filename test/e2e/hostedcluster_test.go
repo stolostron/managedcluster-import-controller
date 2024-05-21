@@ -124,8 +124,10 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 					context.TODO(), secret, metav1.CreateOptions{})
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
-				spokeNamespace := "open-cluster-management-agent-" + managedClusterName
-				spokeNamespace = spokeNamespace[:57]
+				spokeNamespace := "open-cluster-management-" + managedClusterName
+				if len(spokeNamespace) > 57 {
+					spokeNamespace = spokeNamespace[:57]
+				}
 				assertNamespaceCreated(spokeKubeclient, spokeNamespace)
 			})
 

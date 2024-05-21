@@ -102,6 +102,8 @@ const (
 
 	// ManifestWorkPostponeDeleteTime is the postponed time to delete manifest work with postpone-delete annotation
 	ManifestWorkPostponeDeleteTime = 10 * time.Minute
+
+	DefaultKlusterletNamespace = "open-cluster-management-agent"
 )
 
 const (

@@ -17,7 +17,6 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
@@ -538,82 +537,6 @@ func TestHasCertificates(t *testing.T) {
 				if result != c.result {
 					t.Errorf("expected %v, but got %v", c.result, result)
 				}
-			}
-		})
-	}
-}
-
-func TestKlusterletNamespace(t *testing.T) {
-	cases := []struct {
-		name            string
-		cluster         *clusterv1.ManagedCluster
-		expectNamespace string
-	}{
-		{
-			name: "default",
-			cluster: &clusterv1.ManagedCluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test",
-				},
-			},
-			expectNamespace: defaultKlusterletNamespace,
-		},
-		{
-			name: "hosted",
-			cluster: &clusterv1.ManagedCluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test",
-					Annotations: map[string]string{
-						constants.KlusterletDeployModeAnnotation: "Hosted",
-					},
-				},
-			},
-			expectNamespace: defaultKlusterletNamespace + "-test",
-		},
-		{
-			name: "default with ns override",
-			cluster: &clusterv1.ManagedCluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test",
-					Annotations: map[string]string{
-						constants.KlusterletNamespaceAnnotation: "test-ns",
-					},
-				},
-			},
-			expectNamespace: "test-ns",
-		},
-		{
-			name: "hosted with namespace override",
-			cluster: &clusterv1.ManagedCluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "test",
-					Annotations: map[string]string{
-						constants.KlusterletDeployModeAnnotation: "Hosted",
-						constants.KlusterletNamespaceAnnotation:  "test-ns",
-					},
-				},
-			},
-			expectNamespace: "test-ns",
-		},
-		{
-			name: "long cluster name",
-			cluster: &clusterv1.ManagedCluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong-cluster",
-					Annotations: map[string]string{
-						constants.KlusterletDeployModeAnnotation: "Hosted",
-					},
-				},
-			},
-			expectNamespace: "open-cluster-management-agent-loooooooooooooooooooooooooo",
-		},
-	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			ns := klusterletNamespace(c.cluster)
-			if c.expectNamespace != ns {
-				t.Errorf("expect ns %s, but got %s", c.expectNamespace, ns)
 			}
 		})
 	}

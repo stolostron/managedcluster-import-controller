@@ -31,4 +31,4 @@ resources:
 - ./service_account.yaml
 - ./clusterrole_binding.yaml
 - ./deployment.yaml
-- ./config.open-cluster-management.io_klusterletconfig.crd.yaml
+- ./config.open-cluster-management.io_klusterletconfigs.crd.yaml
