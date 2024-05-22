@@ -380,11 +380,11 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				},
 			}),
 			validateFunc: func(t *testing.T, objects []runtime.Object) {
-				if len(objects) != 3 {
-					t.Fatalf("Expected 10 objects, but got %d", len(objects))
+				if len(objects) != 4 {
+					t.Fatalf("Expected 4 objects, but got %d", len(objects))
 				}
 
-				klusterlet, ok := objects[1].(*operatorv1.Klusterlet)
+				klusterlet, ok := objects[2].(*operatorv1.Klusterlet)
 				if !ok {
 					t.Fatal("the klusterlet is not klusterlet")
 				}
@@ -420,11 +420,11 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				},
 			}),
 			validateFunc: func(t *testing.T, objects []runtime.Object) {
-				if len(objects) != 3 {
-					t.Fatalf("Expected 10 objects, but got %d", len(objects))
+				if len(objects) != 4 {
+					t.Fatalf("Expected 4 objects, but got %d", len(objects))
 				}
 
-				klusterlet, ok := objects[1].(*operatorv1.Klusterlet)
+				klusterlet, ok := objects[2].(*operatorv1.Klusterlet)
 				if !ok {
 					t.Fatal("the klusterlet is not klusterlet")
 				}

@@ -10,7 +10,9 @@ import (
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
+	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/rand"
@@ -151,7 +153,7 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 				if meta.IsStatusConditionFalse(cluster.Status.Conditions, "ManagedClusterImportSucceeded") {
 					return nil
 				} else {
-					return fmt.Errorf("Managed cluster %s should not be imported", managedClusterName)
+					return fmt.Errorf("managed cluster %s should not be imported", managedClusterName)
 				}
 			}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
 		})
@@ -239,5 +241,69 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 		})
 
 		assertAutoImportSecretDeleted(managedClusterName)
+	})
+
+	ginkgo.It("Should auto import the cluster with config", func() {
+		ginkgo.By(fmt.Sprintf("Create auto-import-secret for managed cluster %s with kubeconfig", managedClusterName), func() {
+			secret, err := util.NewAutoImportSecret(hubKubeClient, managedClusterName)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			_, err = hubKubeClient.CoreV1().Secrets(managedClusterName).Create(context.TODO(), secret, metav1.CreateOptions{})
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		})
+
+		ginkgo.By("Create local cluster so we have the operator running", func() {
+			_, err := util.CreateManagedCluster(hubClusterClient, managedClusterName, util.NewLable("local-cluster", "true"))
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		})
+		assertManagedClusterImportSecretApplied(managedClusterName)
+		assertManagedClusterAvailable(managedClusterName)
+
+		configName := "autoimport-config"
+		testcluster := fmt.Sprintf("custom-%s", managedClusterName)
+		ginkgo.By("Create KlusterletConfig with customized namespace", func() {
+			_, err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Create(context.TODO(), &klusterletconfigv1alpha1.KlusterletConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: configName,
+				},
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					InstallMode: &klusterletconfigv1alpha1.InstallMode{
+						Type: klusterletconfigv1alpha1.InstallModeNoOperator,
+						NoOperator: &klusterletconfigv1alpha1.NoOperator{
+							Postfix: "local",
+						},
+					},
+				},
+			}, metav1.CreateOptions{})
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		})
+
+		ginkgo.By("Create managed cluster", func() {
+			_, err := util.CreateManagedClusterWithShortLeaseDuration(
+				hubClusterClient,
+				testcluster,
+				map[string]string{
+					"agent.open-cluster-management.io/klusterlet-config": configName,
+				},
+				util.NewLable("local-cluster", "true"))
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		})
+
+		assertManagedClusterImportSecretCreated(testcluster, "other")
+		assertManagedClusterImportSecretApplied(testcluster)
+		assertManagedClusterAvailable(testcluster)
+
+		AssertKlusterletNamespace(testcluster, "klusterlet-local", "open-cluster-management-local")
+
+		ginkgo.By(fmt.Sprintf("Delete the hosted mode managed cluster %s", testcluster), func() {
+			err := hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), testcluster, metav1.DeleteOptions{})
+			if err != nil && !errors.IsNotFound(err) {
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			}
+		})
+		assertManagedClusterDeletedFromHub(testcluster)
+
+		err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Delete(context.TODO(), configName, metav1.DeleteOptions{})
+		gomega.Expect(err).ToNot(gomega.HaveOccurred())
 	})
 })

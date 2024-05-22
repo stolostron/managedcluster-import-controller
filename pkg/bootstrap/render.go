@@ -37,8 +37,9 @@ var hubFiles = []string{
 	"manifests/hub/managedcluster-clusterrolebinding.yaml",
 }
 
+var klusterletNamespaceFile = "manifests/klusterlet/namespace.yaml"
+
 var klusterletOperatorFiles = []string{
-	"manifests/klusterlet/namespace.yaml",
 	"manifests/klusterlet/service_account.yaml",
 	"manifests/klusterlet/cluster_role.yaml",
 	"manifests/klusterlet/clusterrole_bootstrap.yaml",
@@ -160,6 +161,7 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 		if b.PriorityClassName == constants.DefaultKlusterletPriorityClassName {
 			files = append(files, priorityClassFiles...)
 		}
+		files = append(files, klusterletNamespaceFile)
 		if !installNoOperator(b.InstallMode, b.klusterletconfig) {
 			files = append(files, klusterletOperatorFiles...)
 		}
