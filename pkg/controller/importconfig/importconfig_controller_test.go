@@ -391,7 +391,7 @@ func TestReconcile(t *testing.T) {
 					}
 					klusterlet, ok := objs[1].(*operatorv1.Klusterlet)
 					if !ok {
-						t.Fatalf("import secret data %s, the second element is not klusterlet", constants.ImportSecretImportYamlKey)
+						t.Fatalf("import secret data %s, the first element is not klusterlet", constants.ImportSecretImportYamlKey)
 					}
 					if klusterlet.Spec.Namespace != "open-cluster-management-test" {
 						t.Errorf("import secret data %s, the klusterlet namespace %s is not %s",
@@ -489,7 +489,7 @@ func TestReconcile(t *testing.T) {
 					}
 					klusterlet, ok := objs[1].(*operatorv1.Klusterlet)
 					if !ok {
-						t.Fatalf("import secret data %s, the second element is not klusterlet", constants.ImportSecretImportYamlKey)
+						t.Fatalf("import secret data %s, the first element is not klusterlet", constants.ImportSecretImportYamlKey)
 					}
 					if klusterlet.Spec.Namespace != "test-ns" {
 						t.Errorf("import secret data %s, the klusterlet namespace %s is not %s",
@@ -808,7 +808,7 @@ func TestReconcile(t *testing.T) {
 					}
 					klusterlet, ok := objs[8].(*operatorv1.Klusterlet)
 					if !ok {
-						t.Errorf("import secret data %s, the objs[8] is not klusterlet", constants.ImportSecretImportYamlKey)
+						t.Errorf("import secret data %s, the objs[7] is not klusterlet", constants.ImportSecretImportYamlKey)
 					}
 					if klusterlet.Spec.NodePlacement.NodeSelector["kubernetes.io/os"] != "linux" {
 						t.Errorf("the klusterlet node selector %s is not %s",

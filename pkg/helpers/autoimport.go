@@ -170,13 +170,19 @@ func (i *ImportHelper) Import(backupRestore bool, cluster *clusterv1.ManagedClus
 				fmt.Sprintf("Get klusterlet manifestwork failed: %v. Will retry", err),
 			), false, currentRetry, err
 	}
-	if errors.IsNotFound(err) || len(manifestWorks) != 2 {
+	// This check is to ensure when the hub is restored on another cluster, the klusterlet manifestworks are
+	// created before calling the managed cluster to import. Otherwise, it is possible that klusterlet-agent
+	// evicts the klusterlet manifestworks after it is imported to the new hub and klusterlet manifestworks
+	// has not been created yet.
+	// We do not need to check the specific number, since we do not know if there is crd manifestworks created.
+	// It will not be created if installMode is noOperator.
+	if errors.IsNotFound(err) || len(manifestWorks) == 0 {
 		reqLogger.Info(fmt.Sprintf("Waiting for klusterlet manifest works for managed cluster %s", clusterName))
 		return reconcile.Result{RequeueAfter: 3 * time.Second},
 			NewManagedClusterImportSucceededCondition(
 				metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImporting,
-				fmt.Sprintf("Expect 2 manifestworks, but got %v. Will retry", len(manifestWorks)),
+				"Expect klusterlet manifestworks created, but got none. Will retry",
 			), false, currentRetry, nil
 	}
 

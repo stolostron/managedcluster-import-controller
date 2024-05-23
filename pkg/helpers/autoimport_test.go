@@ -171,7 +171,7 @@ func TestImportHelper(t *testing.T) {
 			},
 			importSecret: testinghelpers.GetImportSecret(managedClusterName),
 			generateClientHolderFunc: func(secret *corev1.Secret) (reconcile.Result, *ClientHolder, meta.RESTMapper, error) {
-				return reconcile.Result{}, nil, nil, fmt.Errorf("Not Implemented")
+				return reconcile.Result{}, nil, nil, fmt.Errorf("not Implemented")
 			},
 			expectedErr:             false,
 			expectedCurrentRetry:    0,
@@ -406,7 +406,7 @@ func TestImportHelper(t *testing.T) {
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			secrets := []runtime.Object{}
+			var secrets []runtime.Object
 			for _, s := range []*corev1.Secret{c.autoImportSecret, c.importSecret} {
 				if s != nil {
 					secrets = append(secrets, s)
