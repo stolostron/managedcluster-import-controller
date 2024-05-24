@@ -19,6 +19,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	certutil "k8s.io/client-go/util/cert"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 // getBootstrapKubeConfigDataFromImportSecret aims to reuse the bootstrap kubeconfig data if possible.
@@ -39,7 +40,7 @@ func getBootstrapKubeConfigDataFromImportSecret(ctx context.Context, clientHolde
 		return nil, nil, nil
 	}
 
-	kubeAPIServer, proxyURL, caData, token, err := parseKubeConfigData(kubeConfigData)
+	kubeAPIServer, proxyURL, caData, token, ctxClusterName, err := parseKubeConfigData(kubeConfigData)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to parse kubeconfig data: %v", err)
 	}
@@ -71,6 +72,16 @@ func getBootstrapKubeConfigDataFromImportSecret(ctx context.Context, clientHolde
 	}
 	if !validProxyConfig {
 		klog.Infof("Proxy config is invalid for the managed cluster %s", clusterName)
+		return nil, nil, nil
+	}
+
+	// check if the current context cluster name of the bootstrap kubeconfig is changed
+	validCtxClusterName, err := validateContextClusterName(ctx, clientHolder.RuntimeClient, ctxClusterName)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to validate context cluster name: %v", err)
+	}
+	if !validCtxClusterName {
+		klog.Infof("Context cluster name is invalid for the managed cluster %s", clusterName)
 		return nil, nil, nil
 	}
 
@@ -108,20 +119,21 @@ func extractBootstrapKubeConfigDataFromImportSecret(importSecret *corev1.Secret)
 }
 
 func parseKubeConfigData(kubeConfigData []byte) (
-	kubeAPIServer, proxyURL string, caData []byte, token string, err error) {
+	kubeAPIServer, proxyURL string, caData []byte, token string, ctxClusterName string, err error) {
 
 	config, err := clientcmd.Load(kubeConfigData)
 	if err != nil {
 		// kubeconfig data is invalid
-		return "", "", nil, "", err
+		return "", "", nil, "", "", err
 	}
 
 	context := config.Contexts[config.CurrentContext]
 	if context == nil {
-		return "", "", nil, "", fmt.Errorf("failed to get current context")
+		return "", "", nil, "", "", fmt.Errorf("failed to get current context")
 	}
 
 	if cluster, ok := config.Clusters[context.Cluster]; ok {
+		ctxClusterName = context.Cluster
 		kubeAPIServer = cluster.Server
 		caData = cluster.CertificateAuthorityData
 		proxyURL = cluster.ProxyURL
@@ -194,6 +206,15 @@ func validateProxyConfig(kubeconfigProxyURL string, kubeconfigCAData []byte, klu
 	}
 
 	return hasCertificates(kubeconfigCAData, proxyCAData)
+}
+
+func validateContextClusterName(ctx context.Context, client client.Client, clusterName string) (bool, error) {
+	ctxClusterName, err := bootstrap.GetKubeconfigClusterName(ctx, client)
+	if err != nil {
+		return false, err
+
+	}
+	return ctxClusterName == clusterName, nil
 }
 
 // hasCertificates returns true if the supersetCertData contains all the certs in subsetCertData

@@ -346,7 +346,7 @@ func TestUpdateManagedClusterImportCondition(t *testing.T) {
 
 			if c.validateAddonActions != nil {
 				// under the hood, the events are created asynchronously, so we need to wait a bit
-				time.Sleep(100 * time.Microsecond)
+				time.Sleep(1 * time.Second)
 				c.validateAddonActions(t, kubeClient.Actions())
 			}
 		})
