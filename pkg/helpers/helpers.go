@@ -44,6 +44,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	kevents "k8s.io/client-go/tools/events"
+	certutil "k8s.io/client-go/util/cert"
 	"k8s.io/klog/v2"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterscheme "open-cluster-management.io/api/client/cluster/clientset/versioned/scheme"
@@ -1030,4 +1031,37 @@ func ResourceIsNotFound(err error) bool {
 
 	return strings.Contains(err.Error(), "the server could not find the requested resource") ||
 		errors.IsNotFound(err)
+}
+
+// HasCertificates returns true if the supersetCertData contains all the certs in subsetCertData
+func HasCertificates(supersetCertData, subsetCertData []byte) (bool, error) {
+	if len(subsetCertData) == 0 {
+		return true, nil
+	}
+
+	if len(supersetCertData) == 0 {
+		return false, nil
+	}
+
+	superset, err := certutil.ParseCertsPEM(supersetCertData)
+	if err != nil {
+		return false, err
+	}
+	subset, err := certutil.ParseCertsPEM(subsetCertData)
+	if err != nil {
+		return false, err
+	}
+	for _, sub := range subset {
+		found := false
+		for _, super := range superset {
+			if reflect.DeepEqual(sub.Raw, super.Raw) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false, nil
+		}
+	}
+	return true, nil
 }

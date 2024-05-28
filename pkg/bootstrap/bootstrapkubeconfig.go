@@ -445,3 +445,103 @@ func mergeCertificateData(caBundles ...[]byte) ([]byte, error) {
 	}
 	return b.Bytes(), nil
 }
+
+// ValidateBootstrapKubeconfig validates the bootstrap kubeconfig data, it checks if:
+//   - the kube apiserver address is changed
+//   - the CA data is changed
+//   - the proxy url is changed
+//   - the current context cluster name of the bootstrap kubeconfig is changed
+func ValidateBootstrapKubeconfig(ctx context.Context,
+	clientHolder *helpers.ClientHolder,
+	klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig,
+	clusterName string,
+	kubeAPIServer string,
+	caData []byte, proxyURL string,
+	ctxClusterName string) (bool, error) {
+	validKubeAPIServer, err := validateKubeAPIServerAddress(ctx,
+		kubeAPIServer, klusterletConfig, clientHolder.RuntimeClient)
+	if err != nil {
+		return false, fmt.Errorf("failed to validate kube apiserver address: %v", err)
+	}
+	if !validKubeAPIServer {
+		klog.Infof("KubeAPIServer invalid for the managed cluster %s, kubeAPIServer: %v", clusterName, kubeAPIServer)
+		return false, nil
+	}
+
+	validCAData, err := validateCAData(ctx, caData, kubeAPIServer, klusterletConfig, clientHolder, clusterName)
+	if err != nil {
+		return false, fmt.Errorf("failed to validate CA data: %v", err)
+	}
+	if !validCAData {
+		klog.Infof("CAdata is invalid for the managed cluster %s", clusterName)
+		return false, nil
+	}
+
+	validProxyConfig, err := validateProxyConfig(proxyURL, caData, klusterletConfig)
+	if err != nil {
+		return false, fmt.Errorf("failed to validate proxy config: %v", err)
+	}
+	if !validProxyConfig {
+		klog.Infof("Proxy config is invalid for the managed cluster %s", clusterName)
+		return false, nil
+	}
+
+	validCtxClusterName, err := validateContextClusterName(ctx, clientHolder.RuntimeClient, ctxClusterName)
+	if err != nil {
+		return false, fmt.Errorf("failed to validate context cluster name: %v", err)
+	}
+	if !validCtxClusterName {
+		klog.Infof("Context cluster name is invalid for the managed cluster %s", clusterName)
+		return false, nil
+	}
+	return true, nil
+}
+
+func validateKubeAPIServerAddress(ctx context.Context, kubeAPIServer string,
+	klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig,
+	runtimeClient client.Client) (bool, error) {
+	if len(kubeAPIServer) == 0 {
+		return false, nil
+	}
+
+	currentKubeAPIServer, err := GetKubeAPIServerAddress(ctx, runtimeClient, klusterletConfig)
+	if err != nil {
+		return false, err
+	}
+
+	return kubeAPIServer == currentKubeAPIServer, nil
+}
+
+func validateCAData(ctx context.Context, caData []byte, kubeAPIServer string,
+	klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig,
+	clientHolder *helpers.ClientHolder, clusterName string) (bool, error) {
+	if len(caData) == 0 {
+		// CA data is empty
+		return false, nil
+	}
+
+	currentCAData, err := GetBootstrapCAData(ctx, clientHolder, kubeAPIServer, clusterName, klusterletConfig)
+	if err != nil {
+		return false, err
+	}
+
+	return reflect.DeepEqual(caData, currentCAData), nil
+}
+
+func validateProxyConfig(kubeconfigProxyURL string, kubeconfigCAData []byte, klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) (bool, error) {
+	proxyURL, proxyCAData := GetProxySettings(klusterletConfig)
+	if proxyURL != kubeconfigProxyURL {
+		return false, nil
+	}
+
+	return helpers.HasCertificates(kubeconfigCAData, proxyCAData)
+}
+
+func validateContextClusterName(ctx context.Context, runtimeClient client.Client, clusterName string) (bool, error) {
+	ctxClusterName, err := GetKubeconfigClusterName(ctx, runtimeClient)
+	if err != nil {
+		return false, err
+
+	}
+	return ctxClusterName == clusterName, nil
+}
