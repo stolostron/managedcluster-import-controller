@@ -913,7 +913,7 @@ func TestReconcile(t *testing.T) {
 					t.Errorf("invalid bootstrap hub kubeconfig")
 				}
 
-				_, proxyURL, caData, _, err := parseKubeConfigData(kubeConfigData)
+				_, proxyURL, caData, _, _, err := parseKubeConfigData(kubeConfigData)
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}

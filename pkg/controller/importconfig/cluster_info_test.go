@@ -39,6 +39,16 @@ func TestGetBootstrapKubeConfigDataFromImportSecret(t *testing.T) {
 	testInfraConfigDNS := &ocinfrav1.Infrastructure{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "cluster",
+			UID:  "default-cluster",
+		},
+		Spec: ocinfrav1.InfrastructureSpec{},
+		Status: ocinfrav1.InfrastructureStatus{
+			APIServerURL: "https://my-dns-name.com:6443",
+		},
+	}
+	testInfraConfigWithoutUID := &ocinfrav1.Infrastructure{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cluster",
 		},
 		Spec: ocinfrav1.InfrastructureSpec{},
 		Status: ocinfrav1.InfrastructureStatus{
@@ -135,6 +145,17 @@ func TestGetBootstrapKubeConfigDataFromImportSecret(t *testing.T) {
 			runtimeObjs: []runtime.Object{secretCorrect,
 				mockImportSecret(t, time.Now().Add(8640*time.Hour),
 					"https://wrong.com:6443",
+					certData2,
+					"mock-token"),
+			},
+			wantErr: false,
+		},
+		{
+			name:       "kubeconfig current context cluster name not match",
+			clientObjs: []client.Object{testInfraConfigWithoutUID, apiserverConfig},
+			runtimeObjs: []runtime.Object{secretCorrect,
+				mockImportSecret(t, time.Now().Add(8640*time.Hour),
+					"https://my-dns-name.com:6443",
 					certData2,
 					"mock-token"),
 			},

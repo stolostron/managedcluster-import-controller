@@ -38,7 +38,6 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/validation"
-	"k8s.io/apimachinery/pkg/util/version"
 	versionutil "k8s.io/apimachinery/pkg/util/version"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -73,7 +72,7 @@ const (
 // DeployOnOCP is set once at the beginning
 var DeployOnOCP bool = true
 
-var v1APIExtensionMinVersion = version.MustParseGeneric("v1.16.0")
+var v1APIExtensionMinVersion = versionutil.MustParseGeneric("v1.16.0")
 
 var crdGroupKind = schema.GroupKind{Group: "apiextensions.k8s.io", Kind: "CustomResourceDefinition"}
 
@@ -1029,5 +1028,6 @@ func ResourceIsNotFound(err error) bool {
 		return false
 	}
 
-	return strings.Contains(err.Error(), "the server could not find the requested resource")
+	return strings.Contains(err.Error(), "the server could not find the requested resource") ||
+		errors.IsNotFound(err)
 }

@@ -30,6 +30,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	clienttesting "k8s.io/client-go/testing"
 
@@ -327,7 +328,8 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 				KubeClient: fakeKubeClinet,
 			}
 
-			kubeconfigData, _, err := CreateBootstrapKubeConfig(context.Background(), clientHolder, GetBootstrapSAName(cluster.Name), cluster.Name, 8640*3600, tt.klusterletConfig)
+			kubeconfigData, _, err := CreateBootstrapKubeConfig(context.Background(), clientHolder,
+				GetBootstrapSAName(cluster.Name), cluster.Name, 8640*3600, tt.klusterletConfig)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("createKubeconfigData() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -342,9 +344,14 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 				t.Errorf("createKubeconfigData() failed to decode return data")
 				return
 			}
-			clusterConfig, ok := bootstrapConfig.Clusters["default-cluster"]
+			currentContext := bootstrapConfig.Contexts[bootstrapConfig.CurrentContext]
+			if currentContext == nil {
+				t.Errorf("createKubeconfigData() failed to get current context")
+				return
+			}
+			clusterConfig, ok := bootstrapConfig.Clusters[currentContext.Cluster]
 			if !ok {
-				t.Errorf("createKubeconfigData() failed to get default-cluster")
+				t.Errorf("createKubeconfigData() failed to get %s", currentContext.Cluster)
 				return
 			}
 			authInfo, ok := bootstrapConfig.AuthInfos["default-auth"]
@@ -455,6 +462,49 @@ func TestGetKubeAPIServerAddress(t *testing.T) {
 			}
 			if got != tt.want {
 				t.Errorf("getKubeAPIServerAddress() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGetKubeconfigClusterName(t *testing.T) {
+	infraConfigID := "ab3f5cbd-d2c8-4563-92d7-342b486a340f"
+	infraConfig := &ocinfrav1.Infrastructure{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cluster",
+			UID:  types.UID(infraConfigID),
+		},
+		Spec: ocinfrav1.InfrastructureSpec{},
+		Status: ocinfrav1.InfrastructureStatus{
+			APIServerURL: "http://127.0.0.1:6443",
+		},
+	}
+
+	tests := []struct {
+		name   string
+		client client.Client
+		want   string
+	}{
+		{
+			name:   "no infra config, get default cluster name",
+			client: fake.NewClientBuilder().WithScheme(testscheme).Build(),
+			want:   "default-cluster",
+		},
+		{
+			name:   "get cluster name from infra config",
+			client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(infraConfig).Build(),
+			want:   infraConfigID,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := GetKubeconfigClusterName(context.Background(), tt.client)
+			if err != nil {
+				t.Errorf("GetKubeconfigClusterName() error = %v", err)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("GetKubeconfigClusterName() = %v, want %v", got, tt.want)
 			}
 		})
 	}
