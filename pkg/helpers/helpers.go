@@ -323,23 +323,23 @@ func UpdateManagedClusterImportCondition(client client.Client, managedCluster *c
 	case constants.ConditionReasonManagedClusterImporting:
 		recorder.Eventf(mc, nil, corev1.EventTypeNormal,
 			constants.EventReasonManagedClusterImporting, constants.EventReasonManagedClusterImporting,
-			"The %s is being imported now: %s", mc.Name, cond.Message)
+			"The %s is currently being imported. %s", mc.Name, cond.Message)
 	case constants.ConditionReasonManagedClusterImported:
 		recorder.Eventf(mc, nil, corev1.EventTypeNormal,
 			constants.EventReasonManagedClusterImported, constants.EventReasonManagedClusterImported,
-			"The %s is imported successfully", mc.Name)
+			"The %s has successfully imported", mc.Name)
 	case constants.ConditionReasonManagedClusterImportFailed:
 		recorder.Eventf(mc, nil, corev1.EventTypeWarning,
 			constants.EventReasonManagedClusterImportFailed, constants.EventReasonManagedClusterImportFailed,
-			"Fail to import the %s as a managed cluster due to: %s", mc.Name, cond.Message)
+			"The %s failed to import as a managed cluster due to %s", mc.Name, cond.Message)
 	case constants.ConditionReasonManagedClusterDetaching:
 		recorder.Eventf(mc, nil, corev1.EventTypeNormal,
 			constants.EventReasonManagedClusterDetaching, constants.EventReasonManagedClusterDetaching,
-			"The managed cluster (%s) is being detached now", mc.Name)
+			"The %s is currently becoming detached", mc.Name)
 	case constants.ConditionReasonManagedClusterForceDetaching:
 		recorder.Eventf(mc, nil, corev1.EventTypeWarning,
 			constants.EventReasonManagedClusterForceDetaching, constants.EventReasonManagedClusterForceDetaching,
-			"The managed cluster (%s) is being detached forcely", mc.Name)
+			"The %s is forcefully becoming detached", mc.Name)
 	default:
 		return fmt.Errorf("the condition reason %s is not supported", cond.Reason)
 	}
