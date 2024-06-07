@@ -799,9 +799,13 @@ func assertBootstrapKubeconfigWithProxyConfig(proxyURL string, caDataIncluded, c
 			}
 
 			// check proxy url
-			cluster, ok := config.Clusters["default-cluster"]
+			context, ok := config.Contexts[config.CurrentContext]
 			if !ok {
-				return fmt.Errorf("default-cluster not found")
+				return fmt.Errorf("current context %s not found", config.CurrentContext)
+			}
+			cluster, ok := config.Clusters[context.Cluster]
+			if !ok {
+				return fmt.Errorf("cluster %s not found", context.Cluster)
 			}
 			if cluster.ProxyURL != proxyURL {
 				return fmt.Errorf("expected proxy url %q but got: %s", proxyURL, cluster.ProxyURL)
@@ -861,9 +865,13 @@ func assertBootstrapKubeconfigServerURLAndCABundle(serverURL string, caData []by
 			}
 
 			// check server url
-			cluster, ok := config.Clusters["default-cluster"]
+			context, ok := config.Contexts[config.CurrentContext]
 			if !ok {
-				return fmt.Errorf("default-cluster not found")
+				return fmt.Errorf("current context %s not found", config.CurrentContext)
+			}
+			cluster, ok := config.Clusters[context.Cluster]
+			if !ok {
+				return fmt.Errorf("cluster %s not found", context.Cluster)
 			}
 			if cluster.Server != serverURL {
 				return fmt.Errorf("expected server url %q but got: %s", serverURL, cluster.Server)
