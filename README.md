@@ -51,6 +51,3 @@ current functionality of `managedcluster-import-controller`
 [Updating Klusterlet on a managed cluster](docs/remote_klusterlet_update.md)
 
 [Selective initilization of controllers](docs/selective_controller_init.md)
-
-
-
