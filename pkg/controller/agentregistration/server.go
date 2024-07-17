@@ -57,13 +57,14 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 		}
 	})))
 
-	// example URl: https://<route address>/agent-registration/manifests/cluster1?klusterletconfig=default
+	// example URl: https://<route address>/agent-registration/manifests/cluster1?klusterletconfig=default&duration=4h
 	mux.Handle("/agent-registration/manifests/", authMiddleware(clientHolder, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var err error
 		urlparams := strings.Split(r.URL.Path, "/")
 		clusterID := urlparams[len(urlparams)-1]
 
 		klusterletconfigName := r.URL.Query().Get("klusterletconfig")
+		durationStr := r.URL.Query().Get("duration")
 
 		// Get the merged KlusterletConfig, it merges the user assigned KlusterletConfig with the global KlusterletConfig.
 		mergedKlusterletConfig, err := helpers.GetMergedKlusterletConfigWithGlobal(klusterletconfigName, klusterletconfigLister)
@@ -74,9 +75,31 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 
 		// In the agent-registration case, the bootstrap sa is not created in the managed cluster namespace, because managed cluster is not created yet.
 		// Instead, it's in the pod namespace with the name "agent-registration-bootstrap".
-		bootstrapkubeconfig, _, err := bootstrap.CreateBootstrapKubeConfig(ctx, clientHolder, AgentRegistrationDefaultBootstrapSAName,
-			os.Getenv(constants.PodNamespaceEnvVarName),
-			7*24*3600, mergedKlusterletConfig)
+		ns := os.Getenv(constants.PodNamespaceEnvVarName)
+
+		var token []byte
+		if durationStr == "" {
+			token, _, err = bootstrap.GetBootstrapToken(ctx, clientHolder.KubeClient, AgentRegistrationDefaultBootstrapSAName, ns,
+				constants.DefaultSecretTokenExpirationSecond)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		} else {
+			duration, err := time.ParseDuration(durationStr)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+
+			token, _, err = bootstrap.RequestSAToken(ctx, clientHolder.KubeClient, AgentRegistrationDefaultBootstrapSAName, ns, int64(duration.Seconds()))
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+
+		bootstrapkubeconfig, err := bootstrap.CreateBootstrapKubeConfig(ctx, clientHolder, ns, token, mergedKlusterletConfig)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

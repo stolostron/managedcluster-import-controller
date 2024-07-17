@@ -15,6 +15,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -129,6 +130,41 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 		Type: corev1.SecretTypeServiceAccountToken,
 	}
 
+	testTokenSecretWithWrongPrefix := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "testcluster-wrong-bootstrap-sa-token-xxxx",
+			Namespace: "testcluster",
+		},
+		Data: map[string][]byte{
+			"token":  []byte("wrong-prefix"),
+			"ca.crt": defaultServerCertData,
+		},
+		Type: corev1.SecretTypeServiceAccountToken,
+	}
+
+	testTokenSecretWithNoToken := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "testcluster-wrong-bootstrap-sa-token-xxxy",
+			Namespace: "testcluster",
+		},
+		Data: map[string][]byte{
+			"ca.crt": defaultServerCertData,
+		},
+		Type: corev1.SecretTypeServiceAccountToken,
+	}
+
+	testTokenSecretWithEmptyToken := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "testcluster-wrong-bootstrap-sa-token-xxxz",
+			Namespace: "testcluster",
+		},
+		Data: map[string][]byte{
+			"token":  []byte(""),
+			"ca.crt": defaultServerCertData,
+		},
+		Type: corev1.SecretTypeServiceAccountToken,
+	}
+
 	apiserverConfig := &ocinfrav1.APIServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "cluster",
@@ -201,9 +237,10 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 		wantErr          bool
 	}{
 		{
-			name:        "use default certificate",
-			clientObjs:  []client.Object{testInfraConfigIP},
-			runtimeObjs: []runtime.Object{testTokenSecret, cm},
+			name:       "use default certificate",
+			clientObjs: []client.Object{testInfraConfigIP},
+			runtimeObjs: []runtime.Object{testTokenSecretWithWrongPrefix, testTokenSecretWithNoToken,
+				testTokenSecretWithEmptyToken, testTokenSecret, cm},
 			want: wantData{
 				serverURL:   "http://127.0.0.1:6443",
 				useInsecure: false,
@@ -275,7 +312,7 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 		{
 			name:        "no token secrets",
 			clientObjs:  []client.Object{testInfraConfigIP},
-			runtimeObjs: []runtime.Object{sa, cm},
+			runtimeObjs: []runtime.Object{sa, secretWrong, cm},
 			want: wantData{
 				serverURL:   "http://127.0.0.1:6443",
 				useInsecure: false,
@@ -328,10 +365,23 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 				KubeClient: fakeKubeClinet,
 			}
 
-			kubeconfigData, _, err := CreateBootstrapKubeConfig(context.Background(), clientHolder,
-				GetBootstrapSAName(cluster.Name), cluster.Name, 8640*3600, tt.klusterletConfig)
+			var kubeconfigData []byte
+
+			err := func() error {
+				token, _, err := GetBootstrapToken(context.Background(), clientHolder.KubeClient,
+					GetBootstrapSAName(cluster.Name), cluster.Name, constants.DefaultSecretTokenExpirationSecond)
+				if err != nil {
+					return err
+				}
+
+				kubeconfigData, err = CreateBootstrapKubeConfig(context.Background(), clientHolder, cluster.Name, token, tt.klusterletConfig)
+				if err != nil {
+					return err
+				}
+				return nil
+			}()
 			if (err != nil) != tt.wantErr {
-				t.Errorf("createKubeconfigData() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("CreateBootstrapKubeConfig() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if err != nil {
