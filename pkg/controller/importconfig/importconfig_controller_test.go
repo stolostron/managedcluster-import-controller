@@ -922,7 +922,7 @@ func TestReconcile(t *testing.T) {
 					t.Errorf("expected proxy url https://127.0.0.1:3129, bug got %s", proxyURL)
 				}
 
-				ok, err := hasCertificates(caData, proxyServerCertData)
+				ok, err := helpers.HasCertificates(caData, proxyServerCertData)
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}

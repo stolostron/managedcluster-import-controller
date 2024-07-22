@@ -2064,3 +2064,74 @@ func TestResourceIsNotFound(t *testing.T) {
 		})
 	}
 }
+
+func TestHasCertificates(t *testing.T) {
+	rootCACertData, rootCAKeyData, err := testinghelpers.NewRootCA("test root ca")
+	if err != nil {
+		t.Errorf("failed to create root ca: %v", err)
+	}
+
+	proxyServerCertData, _, err := testinghelpers.NewServerCertificate("proxy server", rootCACertData, rootCAKeyData)
+	if err != nil {
+		t.Errorf("failed to create default server cert: %v", err)
+	}
+
+	cases := []struct {
+		name     string
+		superset []byte
+		subset   []byte
+		wantErr  bool
+		result   bool
+	}{
+		{
+			name:   "both is empty",
+			result: true,
+		},
+		{
+			name:     "subset is empty",
+			superset: rootCACertData,
+			result:   true,
+		},
+		{
+			name:   "superset is empty",
+			subset: rootCACertData,
+		},
+		{
+			name:     "invalid subset",
+			superset: rootCACertData,
+			subset:   []byte("invalid-ca-data"),
+			wantErr:  true,
+		},
+		{
+			name:     "invalid superset",
+			superset: []byte("invalid-ca-data"),
+			subset:   rootCACertData,
+			wantErr:  true,
+		},
+		{
+			name:     "superset include subset",
+			superset: rootCACertData,
+			subset:   rootCACertData,
+			result:   true,
+		},
+		{
+			name:     "superset does not include subset",
+			superset: rootCACertData,
+			subset:   proxyServerCertData,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			result, err := HasCertificates(c.superset, c.subset)
+			if (err != nil) != c.wantErr {
+				t.Errorf("hasCertificates() error = %v, wantErr %v", err, c.wantErr)
+			} else if err == nil {
+
+				if result != c.result {
+					t.Errorf("expected %v, but got %v", c.result, result)
+				}
+			}
+		})
+	}
+}
