@@ -91,8 +91,17 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 
 	// if bootstrapKubeconfig not exist or expired, create a new one
 	if bootstrapKubeconfigData == nil {
-		bootstrapKubeconfigData, expiration, err = bootstrap.CreateBootstrapKubeConfig(ctx, r.clientHolder,
-			bootstrap.GetBootstrapSAName(managedCluster.Name), managedCluster.Name, 8640*3600, mergedKlusterletConfig)
+		var token []byte
+
+		token, expiration, err = bootstrap.GetBootstrapToken(ctx, r.clientHolder.KubeClient,
+			bootstrap.GetBootstrapSAName(managedCluster.Name),
+			managedCluster.Name, constants.DefaultSecretTokenExpirationSecond)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+
+		bootstrapKubeconfigData, err = bootstrap.CreateBootstrapKubeConfig(ctx, r.clientHolder,
+			managedCluster.Name, token, mergedKlusterletConfig)
 		if err != nil {
 			return reconcile.Result{}, err
 		}

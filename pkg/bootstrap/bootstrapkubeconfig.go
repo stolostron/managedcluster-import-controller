@@ -39,26 +39,21 @@ import (
 )
 
 // create kubeconfig for bootstrap
-func CreateBootstrapKubeConfig(ctx context.Context, clientHolder *helpers.ClientHolder, saName string, ns string,
-	tokenExpirationSeconds int64, klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) ([]byte, []byte, error) {
-	token, expiration, err := getBootstrapToken(ctx, clientHolder.KubeClient, saName, ns, tokenExpirationSeconds)
-	if err != nil {
-		return nil, nil, err
-	}
-
+func CreateBootstrapKubeConfig(ctx context.Context, clientHolder *helpers.ClientHolder, ns string, token []byte,
+	klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) ([]byte, error) {
 	kubeAPIServer, err := GetKubeAPIServerAddress(ctx, clientHolder.RuntimeClient, klusterletConfig)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	certData, err := GetBootstrapCAData(ctx, clientHolder, kubeAPIServer, ns, klusterletConfig)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	currentCluster, err := GetKubeconfigClusterName(ctx, clientHolder.RuntimeClient)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	proxyURL, _ := GetProxySettings(klusterletConfig)
@@ -86,10 +81,10 @@ func CreateBootstrapKubeConfig(ctx context.Context, clientHolder *helpers.Client
 
 	boostrapConfigData, err := runtime.Encode(clientcmdlatest.Codec, &bootstrapConfig)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
-	return boostrapConfigData, expiration, err
+	return boostrapConfigData, err
 }
 
 const bootstrapSASuffix = "bootstrap-sa"
@@ -102,10 +97,34 @@ func GetBootstrapSAName(clusterName string) string {
 	return bootstrapSAName
 }
 
-// getBootstrapToken lists the secrets from the managed cluster namespace to look for the managed cluster
+func RequestSAToken(ctx context.Context, kubeClient kubernetes.Interface, saName, secretNamespace string,
+	tokenExpirationSeconds int64) ([]byte, []byte, error) {
+	tokenRequest, err := kubeClient.CoreV1().ServiceAccounts(secretNamespace).CreateToken(
+		ctx,
+		saName,
+		&authv1.TokenRequest{
+			Spec: authv1.TokenRequestSpec{
+				ExpirationSeconds: pointer.Int64(tokenExpirationSeconds),
+			},
+		},
+		metav1.CreateOptions{},
+	)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create token request failed: %v", err)
+	}
+
+	expiration, err := tokenRequest.Status.ExpirationTimestamp.MarshalText()
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return []byte(tokenRequest.Status.Token), expiration, nil
+}
+
+// GetBootstrapToken lists the secrets from the managed cluster namespace to look for the managed cluster
 // bootstrap token firstly (compatibility with the ocp that version is less than 4.11), if there is no
 // token found, uses tokenrequest to request token.
-func getBootstrapToken(ctx context.Context, kubeClient kubernetes.Interface,
+func GetBootstrapToken(ctx context.Context, kubeClient kubernetes.Interface,
 	saName, secretNamespace string, tokenExpirationSeconds int64) ([]byte, []byte, error) {
 	secrets, err := kubeClient.CoreV1().Secrets(secretNamespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
@@ -141,26 +160,7 @@ func getBootstrapToken(ctx context.Context, kubeClient kubernetes.Interface,
 		return token, nil, nil
 	}
 
-	tokenRequest, err := kubeClient.CoreV1().ServiceAccounts(secretNamespace).CreateToken(
-		ctx,
-		saName,
-		&authv1.TokenRequest{
-			Spec: authv1.TokenRequestSpec{
-				ExpirationSeconds: pointer.Int64(tokenExpirationSeconds),
-			},
-		},
-		metav1.CreateOptions{},
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("create token request failed: %v", err)
-	}
-
-	expiration, err := tokenRequest.Status.ExpirationTimestamp.MarshalText()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return []byte(tokenRequest.Status.Token), expiration, nil
+	return RequestSAToken(ctx, kubeClient, saName, secretNamespace, tokenExpirationSeconds)
 }
 
 func GetKubeAPIServerAddress(ctx context.Context, client client.Client,
