@@ -45,47 +45,72 @@ type InformerHolder struct {
 }
 
 // NewImportSecretSource return a source only for import secrets
-func NewImportSecretSource(secretInformer cache.SharedIndexInformer) *Source {
+func NewImportSecretSource(secretInformer cache.SharedIndexInformer,
+	handler handler.EventHandler,
+	predicates ...predicate.Predicate) *Source {
 	return &Source{
 		informer:     secretInformer,
 		expectedType: reflect.TypeOf(&corev1.Secret{}),
 		name:         "import-secret",
+
+		handler:    handler,
+		predicates: predicates,
 	}
 }
 
 // NewAutoImportSecretSource return a source only for auto import secrets
-func NewAutoImportSecretSource(secretInformer cache.SharedIndexInformer) *Source {
+func NewAutoImportSecretSource(secretInformer cache.SharedIndexInformer,
+	handler handler.EventHandler,
+	predicates ...predicate.Predicate) *Source {
 	return &Source{
 		informer:     secretInformer,
 		expectedType: reflect.TypeOf(&corev1.Secret{}),
 		name:         "auto-import-secret",
+
+		handler:    handler,
+		predicates: predicates,
 	}
 }
 
 // NewKlusterletWorkSource return a source only for klusterlet manifest works
-func NewKlusterletWorkSource(workInformer cache.SharedIndexInformer) *Source {
+func NewKlusterletWorkSource(workInformer cache.SharedIndexInformer,
+	handler handler.EventHandler,
+	predicates ...predicate.Predicate) *Source {
 	return &Source{
 		informer:     workInformer,
 		expectedType: reflect.TypeOf(&workv1.ManifestWork{}),
 		name:         "klusterlet-manifest-works",
+
+		handler:    handler,
+		predicates: predicates,
 	}
 }
 
 // NewHostedWorkSource return a source only for hosted manifest works
-func NewHostedWorkSource(workInformer cache.SharedIndexInformer) *Source {
+func NewHostedWorkSource(workInformer cache.SharedIndexInformer,
+	handler handler.EventHandler,
+	predicates ...predicate.Predicate) *Source {
 	return &Source{
 		informer:     workInformer,
 		expectedType: reflect.TypeOf(&workv1.ManifestWork{}),
 		name:         "hosted-manifest-works",
+
+		handler:    handler,
+		predicates: predicates,
 	}
 }
 
 // NewManagedClusterSource return a source for managed cluster
-func NewManagedClusterSource(mcInformer cache.SharedIndexInformer) *Source {
+func NewManagedClusterSource(mcInformer cache.SharedIndexInformer,
+	handler handler.EventHandler,
+	predicates ...predicate.Predicate) *Source {
 	return &Source{
 		informer:     mcInformer,
 		expectedType: reflect.TypeOf(&clusterv1.ManagedCluster{}),
 		name:         "managed-cluster",
+
+		handler:    handler,
+		predicates: predicates,
 	}
 }
 
@@ -94,12 +119,14 @@ type Source struct {
 	informer     cache.SharedIndexInformer
 	expectedType reflect.Type
 	name         string
+
+	handler    handler.EventHandler
+	predicates []predicate.Predicate
 }
 
 var _ source.SyncingSource = &Source{}
 
-func (s *Source) Start(ctx context.Context, handler handler.EventHandler,
-	queue workqueue.RateLimitingInterface, predicates ...predicate.Predicate) error {
+func (s *Source) Start(ctx context.Context, queue workqueue.RateLimitingInterface) error {
 	_, err := s.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			newObj, ok := obj.(client.Object)
@@ -115,13 +142,13 @@ func (s *Source) Start(ctx context.Context, handler handler.EventHandler,
 
 			createEvent := event.CreateEvent{Object: newObj}
 
-			for _, p := range predicates {
+			for _, p := range s.predicates {
 				if !p.Create(createEvent) {
 					return
 				}
 			}
 
-			handler.Create(ctx, createEvent, queue)
+			s.handler.Create(ctx, createEvent, queue)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			oldClientObj, ok := oldObj.(client.Object)
@@ -148,13 +175,13 @@ func (s *Source) Start(ctx context.Context, handler handler.EventHandler,
 
 			updateEvent := event.UpdateEvent{ObjectOld: oldClientObj, ObjectNew: newClientObj}
 
-			for _, p := range predicates {
+			for _, p := range s.predicates {
 				if !p.Update(updateEvent) {
 					return
 				}
 			}
 
-			handler.Update(ctx, updateEvent, queue)
+			s.handler.Update(ctx, updateEvent, queue)
 		},
 		DeleteFunc: func(obj interface{}) {
 			if _, ok := obj.(client.Object); !ok {
@@ -177,13 +204,13 @@ func (s *Source) Start(ctx context.Context, handler handler.EventHandler,
 
 			deleteEvent := event.DeleteEvent{Object: o}
 
-			for _, p := range predicates {
+			for _, p := range s.predicates {
 				if !p.Delete(deleteEvent) {
 					return
 				}
 			}
 
-			handler.Delete(ctx, deleteEvent, queue)
+			s.handler.Delete(ctx, deleteEvent, queue)
 		},
 	})
 

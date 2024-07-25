@@ -42,29 +42,29 @@ func Add(ctx context.Context,
 			MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
 		}).
 		WatchesRawSource(
-			source.NewKlusterletWorkSource(informerHolder.KlusterletWorkInformer),
-			&source.ManagedClusterResourceEventHandler{},
-			builder.WithPredicates(predicate.Funcs{
-				GenericFunc: func(e event.GenericEvent) bool { return false },
-				CreateFunc:  func(e event.CreateEvent) bool { return true },
-				DeleteFunc:  func(e event.DeleteEvent) bool { return true },
-				UpdateFunc: func(e event.UpdateEvent) bool {
-					workName := e.ObjectNew.GetName()
-					// for update event, only watch klusterlet manifest works
-					if !strings.HasSuffix(workName, constants.KlusterletCRDsSuffix) &&
-						!strings.HasSuffix(workName, constants.KlusterletSuffix) {
+			source.NewKlusterletWorkSource(informerHolder.KlusterletWorkInformer,
+				&source.ManagedClusterResourceEventHandler{},
+				predicate.Predicate(predicate.Funcs{
+					GenericFunc: func(e event.GenericEvent) bool { return false },
+					CreateFunc:  func(e event.CreateEvent) bool { return true },
+					DeleteFunc:  func(e event.DeleteEvent) bool { return true },
+					UpdateFunc: func(e event.UpdateEvent) bool {
+						workName := e.ObjectNew.GetName()
+						// for update event, only watch klusterlet manifest works
+						if !strings.HasSuffix(workName, constants.KlusterletCRDsSuffix) &&
+							!strings.HasSuffix(workName, constants.KlusterletSuffix) {
+							return false
+						}
+
+						new, okNew := e.ObjectNew.(*workv1.ManifestWork)
+						old, okOld := e.ObjectOld.(*workv1.ManifestWork)
+						if okNew && okOld {
+							return !equality.Semantic.DeepEqual(new.Status.Conditions, old.Status.Conditions)
+						}
+
 						return false
-					}
-
-					new, okNew := e.ObjectNew.(*workv1.ManifestWork)
-					old, okOld := e.ObjectOld.(*workv1.ManifestWork)
-					if okNew && okOld {
-						return !equality.Semantic.DeepEqual(new.Status.Conditions, old.Status.Conditions)
-					}
-
-					return false
-				},
-			}),
+					},
+				})),
 		).
 		Watches(
 			&clusterv1.ManagedCluster{},
