@@ -210,7 +210,7 @@ func TestGetBootstrapKubeConfigDataFromImportSecret(t *testing.T) {
 				KubeClient: fakeKubeClinet,
 			}
 
-			kubeconfigData, _, err := getBootstrapKubeConfigDataFromImportSecret(context.Background(), clientHolder, "testcluster", tt.klusterletConfig) // cluster.Name = testcluster
+			kubeconfigData, _, _, err := getBootstrapKubeConfigDataFromImportSecret(context.Background(), clientHolder, "testcluster", tt.klusterletConfig) // cluster.Name = testcluster
 			if (err != nil) != tt.wantErr {
 				t.Errorf("getBootstrapKubeConfigDataFromImportSecret() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -328,6 +328,12 @@ func mockImportSecret(t *testing.T, expirationTime time.Time, server string, caD
 		return nil
 	}
 
+	creation, err := time.Now().MarshalText()
+	if err != nil {
+		t.Fatal(err)
+		return nil
+	}
+
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "testcluster-import",
@@ -336,6 +342,7 @@ func mockImportSecret(t *testing.T, expirationTime time.Time, server string, caD
 		Data: map[string][]byte{
 			"import.yaml": importYAML.Bytes(),
 			"expiration":  expiration,
+			"creation":    creation,
 		},
 	}
 }
@@ -347,5 +354,90 @@ func mockImportSecretWithoutContent() *corev1.Secret {
 			Namespace: "testcluster",
 		},
 		Data: map[string][]byte{},
+	}
+}
+
+func timeToString(time time.Time) []byte {
+	timeStr, _ := time.MarshalText()
+	return timeStr
+}
+
+func TestValidateToken(t *testing.T) {
+	tests := []struct {
+		name                 string
+		token                string
+		creation, expiration []byte
+		expectedResult       bool
+	}{
+		{
+			name:           "token is empty",
+			token:          "",
+			expectedResult: false,
+		},
+		{
+			name:           "expiration is empty",
+			token:          "abc",
+			expectedResult: true,
+		},
+		{
+			name:           "creation is empty",
+			token:          "abc",
+			expiration:     timeToString(time.Now()),
+			expectedResult: false,
+		},
+		{
+			name:           "creation is empty",
+			token:          "abc",
+			expiration:     timeToString(time.Now()),
+			expectedResult: false,
+		},
+		{
+			name:           "not expired",
+			token:          "abc",
+			expiration:     timeToString(time.Now().Add(1 * time.Hour)),
+			creation:       timeToString(time.Now().Add(-239 * time.Minute)),
+			expectedResult: true,
+		},
+		{
+			name:           "expired",
+			token:          "abc",
+			expiration:     timeToString(time.Now().Add(1 * time.Hour)),
+			creation:       timeToString(time.Now().Add(-241 * time.Minute)),
+			expectedResult: false,
+		},
+		{
+			name:           "invalid creation",
+			token:          "abc",
+			expiration:     timeToString(time.Now().Add(1 * time.Hour)),
+			creation:       []byte("abc"),
+			expectedResult: false,
+		},
+		{
+			name:           "invalid expiration",
+			token:          "abc",
+			expiration:     []byte("abc"),
+			creation:       timeToString(time.Now().Add(-5 * time.Hour)),
+			expectedResult: false,
+		},
+		{
+			name:           "empty creation, not expired",
+			token:          "abc",
+			expiration:     timeToString(time.Now().Add(73 * time.Hour * 24)),
+			expectedResult: true,
+		},
+		{
+			name:           "empty creation, expired",
+			token:          "abc",
+			expiration:     timeToString(time.Now().Add(71 * time.Hour * 24)),
+			expectedResult: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.expectedResult != validateToken(tt.token, tt.creation, tt.expiration) {
+				t.Errorf("validateToken() expected %v, got %v", tt.expectedResult, tt.expectedResult)
+			}
+		})
 	}
 }

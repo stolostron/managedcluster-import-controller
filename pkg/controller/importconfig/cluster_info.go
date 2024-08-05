@@ -23,41 +23,43 @@ import (
 // The return values are: 1. kubeconfig data, 2. token expiration, 3. error
 // Note that the kubeconfig data could be `nil` if the import secret is not found or the kubeconfig data is invalid.
 func getBootstrapKubeConfigDataFromImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, clusterName string,
-	klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) ([]byte, []byte, error) {
+	klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) ([]byte, []byte, []byte, error) {
 	importSecret, err := getImportSecret(ctx, clientHolder, clusterName)
 	if apierrors.IsNotFound(err) {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	kubeConfigData := extractBootstrapKubeConfigDataFromImportSecret(importSecret)
 	if len(kubeConfigData) == 0 {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
 	kubeAPIServer, proxyURL, caData, token, ctxClusterName, err := parseKubeConfigData(kubeConfigData)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse kubeconfig data: %v", err)
+		return nil, nil, nil, fmt.Errorf("failed to parse kubeconfig data: %v", err)
 	}
 
 	valid, err := bootstrap.ValidateBootstrapKubeconfig(ctx, clientHolder, klusterletConfig, clusterName,
 		kubeAPIServer, caData, proxyURL, ctxClusterName)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if !valid {
-		return nil, nil, nil
+		return nil, nil, nil, nil
 	}
 
+	creation := importSecret.Data[constants.ImportSecretTokenCreation]
 	expiration := importSecret.Data[constants.ImportSecretTokenExpiration]
-	if !validateToken(token, expiration) {
-		klog.Infof("token is invalid for the managed cluster %s, expiration: %v", clusterName, string(expiration))
-		return nil, nil, nil
+	if !validateToken(token, creation, expiration) {
+		klog.Infof("token is invalid for the managed cluster %s, creation: %v, expiration: %v",
+			clusterName, string(creation), string(expiration))
+		return nil, nil, nil, nil
 	}
 
-	return kubeConfigData, expiration, nil
+	return kubeConfigData, creation, expiration, nil
 }
 
 func getImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, clusterName string) (*corev1.Secret, error) {
@@ -112,7 +114,7 @@ func parseKubeConfigData(kubeConfigData []byte) (
 	return
 }
 
-func validateToken(token string, expiration []byte) bool {
+func validateToken(token string, creation, expiration []byte) bool {
 	if len(token) == 0 {
 		// no token in the kubeconfig
 		return false
@@ -122,14 +124,23 @@ func validateToken(token string, expiration []byte) bool {
 		// token is from the service account token secret
 		return true
 	}
-
 	expirationTime, err := time.Parse(time.RFC3339, string(expiration))
 	if err != nil {
+		klog.Errorf("failed to parse expiration time: %v", err)
 		return false
 	}
 
-	now := metav1.Now()
-	refreshThreshold := 8640 * time.Hour / 5
-	lifetime := expirationTime.Sub(now.Time)
+	refreshThreshold := constants.DefaultSecretTokenRefreshThreshold
+	if len(creation) != 0 {
+		creationTime, err := time.Parse(time.RFC3339, string(creation))
+		if err != nil {
+			klog.Errorf("failed to parse creation time: %v", err)
+			return false
+		}
+
+		refreshThreshold = expirationTime.Sub(creationTime) / 5
+	}
+
+	lifetime := time.Until(expirationTime)
 	return lifetime > refreshThreshold
 }

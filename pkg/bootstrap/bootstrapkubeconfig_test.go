@@ -368,7 +368,7 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 			var kubeconfigData []byte
 
 			err := func() error {
-				token, _, err := GetBootstrapToken(context.Background(), clientHolder.KubeClient,
+				token, _, _, err := GetBootstrapToken(context.Background(), clientHolder.KubeClient,
 					GetBootstrapSAName(cluster.Name), cluster.Name, constants.DefaultSecretTokenExpirationSecond)
 				if err != nil {
 					return err

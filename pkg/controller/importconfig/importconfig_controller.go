@@ -84,7 +84,8 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// get the previous bootstrap kubeconfig and expiration
-	bootstrapKubeconfigData, expiration, err := getBootstrapKubeConfigDataFromImportSecret(ctx, r.clientHolder, managedCluster.Name, mergedKlusterletConfig)
+	bootstrapKubeconfigData, tokenCreation, expiration, err := getBootstrapKubeConfigDataFromImportSecret(ctx,
+		r.clientHolder, managedCluster.Name, mergedKlusterletConfig)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
@@ -93,7 +94,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 	if bootstrapKubeconfigData == nil {
 		var token []byte
 
-		token, expiration, err = bootstrap.GetBootstrapToken(ctx, r.clientHolder.KubeClient,
+		token, tokenCreation, expiration, err = bootstrap.GetBootstrapToken(ctx, r.clientHolder.KubeClient,
 			bootstrap.GetBootstrapSAName(managedCluster.Name),
 			managedCluster.Name, constants.DefaultSecretTokenExpirationSecond)
 		if err != nil {
@@ -180,6 +181,9 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 			constants.ImportSecretCRDSV1YamlKey:      crdsV1YAML,
 			constants.ImportSecretCRDSV1beta1YamlKey: crdsV1beta1YAML,
 		},
+	}
+	if len(tokenCreation) != 0 {
+		importSecret.Data[constants.ImportSecretTokenCreation] = tokenCreation
 	}
 	if len(expiration) != 0 {
 		importSecret.Data[constants.ImportSecretTokenExpiration] = expiration

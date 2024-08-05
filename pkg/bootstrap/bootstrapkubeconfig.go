@@ -98,7 +98,7 @@ func GetBootstrapSAName(clusterName string) string {
 }
 
 func RequestSAToken(ctx context.Context, kubeClient kubernetes.Interface, saName, secretNamespace string,
-	tokenExpirationSeconds int64) ([]byte, []byte, error) {
+	tokenExpirationSeconds int64) ([]byte, []byte, []byte, error) {
 	tokenRequest, err := kubeClient.CoreV1().ServiceAccounts(secretNamespace).CreateToken(
 		ctx,
 		saName,
@@ -110,25 +110,29 @@ func RequestSAToken(ctx context.Context, kubeClient kubernetes.Interface, saName
 		metav1.CreateOptions{},
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("create token request failed: %v", err)
+		return nil, nil, nil, fmt.Errorf("create token request failed: %v", err)
 	}
 
+	tokenCreation, err := tokenRequest.CreationTimestamp.MarshalText()
+	if err != nil {
+		return nil, nil, nil, err
+	}
 	expiration, err := tokenRequest.Status.ExpirationTimestamp.MarshalText()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
-	return []byte(tokenRequest.Status.Token), expiration, nil
+	return []byte(tokenRequest.Status.Token), tokenCreation, expiration, nil
 }
 
 // GetBootstrapToken lists the secrets from the managed cluster namespace to look for the managed cluster
 // bootstrap token firstly (compatibility with the ocp that version is less than 4.11), if there is no
 // token found, uses tokenrequest to request token.
 func GetBootstrapToken(ctx context.Context, kubeClient kubernetes.Interface,
-	saName, secretNamespace string, tokenExpirationSeconds int64) ([]byte, []byte, error) {
+	saName, secretNamespace string, tokenExpirationSeconds int64) ([]byte, []byte, []byte, error) {
 	secrets, err := kubeClient.CoreV1().Secrets(secretNamespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	for _, secret := range secrets.Items {
@@ -157,7 +161,7 @@ func GetBootstrapToken(ctx context.Context, kubeClient kubernetes.Interface,
 			continue
 		}
 
-		return token, nil, nil
+		return token, nil, nil, nil
 	}
 
 	return RequestSAToken(ctx, kubeClient, saName, secretNamespace, tokenExpirationSeconds)
