@@ -79,7 +79,7 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 
 		var token []byte
 		if durationStr == "" {
-			token, _, err = bootstrap.GetBootstrapToken(ctx, clientHolder.KubeClient, AgentRegistrationDefaultBootstrapSAName, ns,
+			token, _, _, err = bootstrap.GetBootstrapToken(ctx, clientHolder.KubeClient, AgentRegistrationDefaultBootstrapSAName, ns,
 				constants.DefaultSecretTokenExpirationSecond)
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -92,7 +92,7 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 				return
 			}
 
-			token, _, err = bootstrap.RequestSAToken(ctx, clientHolder.KubeClient, AgentRegistrationDefaultBootstrapSAName, ns, int64(duration.Seconds()))
+			token, _, _, err = bootstrap.RequestSAToken(ctx, clientHolder.KubeClient, AgentRegistrationDefaultBootstrapSAName, ns, int64(duration.Seconds()))
 			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return

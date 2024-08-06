@@ -72,6 +72,8 @@ const (
 	ImportSecretCRDSV1beta1YamlKey     = "crdsv1beta1.yaml" // #nosec G101
 	ImportSecretTokenExpiration        = "expiration"
 	DefaultSecretTokenExpirationSecond = 360 * 24 * 60 * 60 // 360 days
+	ImportSecretTokenCreation          = "creation"
+	DefaultSecretTokenRefreshThreshold = 360 * 24 * time.Hour / 5 // 72 days
 )
 
 const (
