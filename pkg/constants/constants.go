@@ -171,3 +171,7 @@ const (
 const (
 	ComponentName = "managedcluster-import-controller"
 )
+
+const (
+	DefaultBootstrapHubKubeConfigSecretName = "bootstrap-hub-kubeconfig" // #nosec G101
+)
