@@ -14,38 +14,18 @@ spec:
   clusterName: "{{ .ManagedClusterNamespace }}"
   imagePullSpec: "{{ .ImageName }}"
   namespace: "{{ .KlusterletNamespace }}"
-{{- if .ClusterAnnotations}}
+  {{- with .RegistrationConfiguration }}
   registrationConfiguration:
-    clusterAnnotations:
-    {{- range $key, $value := .ClusterAnnotations }}
-      "{{ $key }}": "{{ $value }}"
-    {{- end }}
-{{- end }}
-{{- if or .NodeSelector .Tolerations }}
-  nodePlacement:
-{{- end }}
-{{- if .NodeSelector }}
-    nodeSelector:
-    {{- range $key, $value := .NodeSelector }}
-      "{{ $key }}": "{{ $value }}"
-    {{- end }}
-{{- end }}
-{{- if .Tolerations }}
-    tolerations:
-    {{- range $toleration := .Tolerations }}
-    - key: "{{ $toleration.Key }}"
-      value: "{{ $toleration.Value }}"
-      effect: "{{ $toleration.Effect }}"
-      operator: "{{ $toleration.Operator }}"
-      {{- if $toleration.TolerationSeconds }}
-      tolerationSeconds: {{ $toleration.TolerationSeconds }}
-      {{- end }}
-    {{- end }}
-{{- end }}
-{{- if .PriorityClassName }}
-  priorityClassName: "{{ .PriorityClassName }}"
-{{- end }}
-{{- if .AppliedManifestWorkEvictionGracePeriod }}
+    {{ toYaml . | nindent 4 }}
+  {{- end}}
+  {{- with .WorkConfiguration }}
   workConfiguration:
-    appliedManifestWorkEvictionGracePeriod: "{{ .AppliedManifestWorkEvictionGracePeriod }}"
-{{- end }}
+    {{ toYaml . | nindent 4 }}
+  {{- end }}
+  {{- with .NodePlacement }}
+  nodePlacement:
+    {{ toYaml . | nindent 4 }}
+  {{- end}}
+  {{- if .PriorityClassName }}
+  priorityClassName: "{{ .PriorityClassName }}"
+  {{- end }}
