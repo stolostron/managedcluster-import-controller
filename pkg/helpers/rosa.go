@@ -147,13 +147,12 @@ func (g *RosaKubeConfigGetter) Cleanup() error {
 	errs := []error{}
 	clusterClient := connection.ClustersMgmt().V1().Clusters().Cluster(g.clusterID)
 	// the cluster token is requested, delete the id provider and remove the import user from cluster admin group
-	if err := deleteHTPasswdIDProvider(clusterClient.IdentityProviders(), g.clusterID); err != nil {
+	if err := deleteHTPasswdIDProvider(clusterClient.IdentityProviders()); err != nil {
 		errs = append(errs, err)
 	}
 
-	if err := removeImportUserFromClusterAdminGroup(clusterClient.Groups().Group(clusterAdminGroup).Users()); err != nil {
-		errs = append(errs, err)
-	}
+	// TODO removeImportUserFromClusterAdminGroup
+	// see https://issues.redhat.com/browse/OCM-9916
 
 	return utilerrors.NewAggregate(errs)
 }
@@ -180,15 +179,13 @@ func (g *RosaKubeConfigGetter) shouldRetry(clusterClient *clustersmgmtv1.Cluster
 		// request the cluster token timeout, delete its id provider and remove the import user from cluster admin group
 		klog.Warningf("stop to retry getting kube token for rosa cluster %s, reach the retry times limit (%d)",
 			g.clusterID, g.totalRetryTimes)
-		if err := deleteHTPasswdIDProvider(clusterClient.IdentityProviders(), g.clusterID); err != nil {
+		if err := deleteHTPasswdIDProvider(clusterClient.IdentityProviders()); err != nil {
 			klog.Warningf("failed to delete the htPasswd id provider %s for rosa cluster %s, %v",
 				importHTPasswdIDProvider, g.clusterID, err)
 		}
 
-		if err := removeImportUserFromClusterAdminGroup(clusterClient.Groups().Group(clusterAdminGroup).Users()); err != nil {
-			klog.Warningf("failed to remove the import user %s from cluster admin group for rosa cluster %s, %v",
-				importHTPasswdIDProvider, g.clusterID, err)
-		}
+		// TODO removeImportUserFromClusterAdminGroup
+		// see https://issues.redhat.com/browse/OCM-9916
 
 		return false
 	}
@@ -366,7 +363,7 @@ func updateHTPasswdUserPassword(client *clustersmgmtv1.IdentityProvidersClient, 
 	return pw, nil
 }
 
-func deleteHTPasswdIDProvider(client *clustersmgmtv1.IdentityProvidersClient, clusterID string) error {
+func deleteHTPasswdIDProvider(client *clustersmgmtv1.IdentityProvidersClient) error {
 	providerID, err := findHTPasswdIDProvider(client)
 	if err != nil {
 		return err
@@ -380,16 +377,16 @@ func deleteHTPasswdIDProvider(client *clustersmgmtv1.IdentityProvidersClient, cl
 	return err
 }
 
-func removeImportUserFromClusterAdminGroup(client *clustersmgmtv1.UsersClient) error {
-	found, err := findImportUserFromClusterAdminGroup(client)
-	if err != nil {
-		return err
-	}
+// func removeImportUserFromClusterAdminGroup(client *clustersmgmtv1.UsersClient) error {
+// 	found, err := findImportUserFromClusterAdminGroup(client)
+// 	if err != nil {
+// 		return err
+// 	}
 
-	if !found {
-		return nil
-	}
+// 	if !found {
+// 		return nil
+// 	}
 
-	_, err = client.User(importHTPasswdUser).Delete().Send()
-	return err
-}
+// 	_, err = client.User(importHTPasswdUser).Delete().Send()
+// 	return err
+// }

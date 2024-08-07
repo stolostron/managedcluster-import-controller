@@ -369,22 +369,22 @@ func TestStopRetry(t *testing.T) {
 					}),
 					clustersmgmttesting.RespondWithJSON(http.StatusOK, "{}"),
 				),
-				ghttp.CombineHandlers(
-					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-						if r.Method != http.MethodGet || r.URL.Path != "/api/clusters_mgmt/v1/clusters/test/groups/cluster-admins/users/acm-import" {
-							t.Fatalf("unexpected request %s - %s", r.Method, r.URL.Path)
-						}
-					}),
-					clustersmgmttesting.RespondWithJSON(http.StatusOK, "{}"),
-				),
-				ghttp.CombineHandlers(
-					http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-						if r.Method != http.MethodDelete || r.URL.Path != "/api/clusters_mgmt/v1/clusters/test/groups/cluster-admins/users/acm-import" {
-							t.Fatalf("unexpected request %s - %s", r.Method, r.URL.Path)
-						}
-					}),
-					clustersmgmttesting.RespondWithJSON(http.StatusOK, "{}"),
-				),
+				// ghttp.CombineHandlers(
+				// 	http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// 		if r.Method != http.MethodGet || r.URL.Path != "/api/clusters_mgmt/v1/clusters/test/groups/cluster-admins/users/acm-import" {
+				// 			t.Fatalf("unexpected request %s - %s", r.Method, r.URL.Path)
+				// 		}
+				// 	}),
+				// 	clustersmgmttesting.RespondWithJSON(http.StatusOK, "{}"),
+				// ),
+				// ghttp.CombineHandlers(
+				// 	http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				// 		if r.Method != http.MethodDelete || r.URL.Path != "/api/clusters_mgmt/v1/clusters/test/groups/cluster-admins/users/acm-import" {
+				// 			t.Fatalf("unexpected request %s - %s", r.Method, r.URL.Path)
+				// 		}
+				// 	}),
+				// 	clustersmgmttesting.RespondWithJSON(http.StatusOK, "{}"),
+				// ),
 			},
 		},
 	}
