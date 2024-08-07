@@ -10,12 +10,12 @@ require (
 	github.com/onsi/gomega v1.32.0
 	github.com/openshift/api v0.0.0-20240301093301-ce10821dc999 // https://github.com/openshift/api/tree/release-4.14
 	github.com/openshift/assisted-service/api v0.0.0-20230809093954-25856935f237 // https://github.com/openshift/assisted-service/tree/release-ocm-2.9/api
-	github.com/openshift/hive/apis v0.0.0-20240503201730-e11a23b88b31
+	github.com/openshift/hive/apis v0.0.0-20240719225702-cddd4f9551ea
 	github.com/openshift/library-go v0.0.0-20230809121909-d7e7beca5bae // https://github.com/openshift/library-go/tree/release-4.14
 	github.com/spf13/pflag v1.0.5
 	github.com/stolostron/cluster-lifecycle-api v0.0.0-20240724031619-b2eaab57c5bb
 	go.uber.org/zap v1.26.0
-	golang.org/x/text v0.14.0
+	golang.org/x/text v0.16.0
 	k8s.io/api v0.30.2
 	k8s.io/apiextensions-apiserver v0.30.1
 	k8s.io/apimachinery v0.30.2
@@ -102,14 +102,14 @@ require (
 	github.com/spf13/cobra v1.7.0 // indirect
 	go.mongodb.org/mongo-driver v1.7.5 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.21.0 // indirect
+	golang.org/x/crypto v0.24.0 // indirect
 	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e // indirect
-	golang.org/x/net v0.23.0 // indirect
+	golang.org/x/net v0.26.0 // indirect
 	golang.org/x/oauth2 v0.12.0 // indirect
-	golang.org/x/sys v0.18.0 // indirect
-	golang.org/x/term v0.18.0 // indirect
+	golang.org/x/sys v0.21.0 // indirect
+	golang.org/x/term v0.21.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
-	golang.org/x/tools v0.18.0 // indirect
+	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/protobuf v1.33.0 // indirect
