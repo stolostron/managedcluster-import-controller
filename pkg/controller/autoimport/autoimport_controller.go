@@ -72,6 +72,8 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	reqLogger := log.WithValues("Request.Namespace", request.Namespace)
 
 	managedClusterName := request.Namespace
+	reqLogger.Info("Reconciling managedcluster", "managedCluster", managedClusterName)
+
 	managedCluster := &clusterv1.ManagedCluster{}
 	err := r.client.Get(ctx, types.NamespacedName{Name: managedClusterName}, managedCluster)
 	if errors.IsNotFound(err) {
@@ -92,19 +94,21 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 
 	if _, autoImportDisabled := managedCluster.Annotations[apiconstants.DisableAutoImportAnnotation]; autoImportDisabled {
 		// skip if auto import is disabled
+		reqLogger.Info("Auto import is disabled", "managedCluster", managedCluster.Name)
 		return reconcile.Result{}, nil
+	} else {
+		reqLogger.Info("Auto import is enabled", "managedCluster", managedCluster.Name)
 	}
 
 	autoImportSecret, err := r.informerHolder.AutoImportSecretLister.Secrets(managedClusterName).Get(constants.AutoImportSecretName)
 	if errors.IsNotFound(err) {
 		// the auto import secret could have been deleted, do nothing
+		reqLogger.Info("Auto import secret not found", "managedCluster", managedCluster.Name)
 		return reconcile.Result{}, nil
 	}
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-
-	reqLogger.V(5).Info("Reconciling auto import secret")
 
 	lastRetry := 0
 	totalRetry := 1
@@ -132,6 +136,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 				return reconcile.Result{}, err
 			}
 			// auto import secret invalid, stop retrying
+			reqLogger.Info("Auto import secret invalid", "managedCluster", managedCluster.Name)
 			return reconcile.Result{}, nil
 		}
 	}
@@ -157,6 +162,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 		// auto import secret invalid, stop retrying
+		reqLogger.Info("Auto import secret invalid", "managedCluster", managedCluster.Name)
 		return reconcile.Result{}, nil
 	}
 
