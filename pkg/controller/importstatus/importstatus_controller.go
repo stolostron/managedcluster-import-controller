@@ -74,6 +74,8 @@ func (r *ReconcileImportStatus) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
+	reqLogger.V(5).Info("Reconciling managedcluster", "managedCluster", managedClusterName)
+
 	// This controller will only add/update the ImportSucceededCondition condition in following 2 cases:
 	// - Add the condition when it does not exist
 	// - Set the condition status to True when manifestworks are available
@@ -104,7 +106,6 @@ func (r *ReconcileImportStatus) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 	if !available {
-
 		reqLogger.V(5).Info("Klusterlet manifestworks are not available")
 		return reconcile.Result{}, nil
 	}

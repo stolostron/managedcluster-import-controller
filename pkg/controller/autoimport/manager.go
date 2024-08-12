@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 
 	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
@@ -16,14 +17,14 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
-	"k8s.io/apimachinery/pkg/types"
 	kevents "k8s.io/client-go/tools/events"
-	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/event"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 const controllerName = "autoimport-controller"
@@ -36,131 +37,105 @@ func Add(ctx context.Context,
 	informerHolder *source.InformerHolder,
 	mcRecorder kevents.EventRecorder) (string, error) {
 
-	c, err := controller.New(controllerName, mgr, controller.Options{
-		Reconciler: NewReconcileAutoImport(
+	err := ctrl.NewControllerManagedBy(mgr).Named(controllerName).
+		WithOptions(controller.Options{
+			MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
+		}).
+		WatchesRawSource( // watch the import secrets
+			source.NewImportSecretSource(informerHolder.ImportSecretInformer,
+				&source.ManagedClusterResourceEventHandler{},
+				predicate.Predicate(predicate.Funcs{
+					GenericFunc: func(e event.GenericEvent) bool { return false },
+					DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+					CreateFunc:  func(e event.CreateEvent) bool { return true },
+					UpdateFunc: func(e event.UpdateEvent) bool {
+						new, okNew := e.ObjectNew.(*corev1.Secret)
+						old, okOld := e.ObjectOld.(*corev1.Secret)
+						if okNew && okOld {
+							return !equality.Semantic.DeepEqual(old.Data, new.Data)
+						}
+						return false
+					},
+				}),
+			),
+		).
+		WatchesRawSource( // watch the auto-import secrets
+			source.NewAutoImportSecretSource(informerHolder.AutoImportSecretInformer,
+				&source.ManagedClusterResourceEventHandler{},
+				predicate.Predicate(predicate.Funcs{
+					GenericFunc: func(e event.GenericEvent) bool { return false },
+					DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+					CreateFunc:  func(e event.CreateEvent) bool { return true },
+					UpdateFunc: func(e event.UpdateEvent) bool {
+						new, okNew := e.ObjectNew.(*corev1.Secret)
+						old, okOld := e.ObjectOld.(*corev1.Secret)
+						if okNew && okOld {
+							return !equality.Semantic.DeepEqual(old.Data, new.Data)
+						}
+						return false
+					},
+				}),
+			),
+		).
+		Watches( // watch the managed clusters
+			&clusterv1.ManagedCluster{},
+			&handler.EnqueueRequestForObject{},
+			builder.WithPredicates(
+				predicate.Funcs{
+					GenericFunc: func(e event.GenericEvent) bool { return false },
+					DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+					CreateFunc:  func(e event.CreateEvent) bool { return false },
+					UpdateFunc: func(e event.UpdateEvent) bool {
+						// handle the removal of the disable-auto-import annotation
+						_, oldAutoImportDisabled := e.ObjectOld.GetAnnotations()[apiconstants.DisableAutoImportAnnotation]
+						_, newAutoImportDisabled := e.ObjectNew.GetAnnotations()[apiconstants.DisableAutoImportAnnotation]
+						return oldAutoImportDisabled && !newAutoImportDisabled
+					},
+				},
+			),
+		).
+		WatchesRawSource( // watch the klusterlet manifest works
+			source.NewKlusterletWorkSource(informerHolder.KlusterletWorkInformer,
+				&source.ManagedClusterResourceEventHandler{},
+				predicate.Predicate(predicate.Funcs{
+					GenericFunc: func(e event.GenericEvent) bool { return false },
+					DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+					CreateFunc: func(e event.CreateEvent) bool {
+						workName := e.Object.GetName()
+						// only watch klusterlet manifest works
+						if !strings.HasSuffix(workName, constants.KlusterletCRDsSuffix) &&
+							!strings.HasSuffix(workName, constants.KlusterletSuffix) {
+							return false
+						}
+
+						return true
+					},
+					UpdateFunc: func(e event.UpdateEvent) bool {
+						workName := e.ObjectNew.GetName()
+						// only watch klusterlet manifest works
+						if !strings.HasSuffix(workName, constants.KlusterletCRDsSuffix) &&
+							!strings.HasSuffix(workName, constants.KlusterletSuffix) {
+							return false
+						}
+
+						new, okNew := e.ObjectNew.(*workv1.ManifestWork)
+						old, okOld := e.ObjectOld.(*workv1.ManifestWork)
+						if okNew && okOld {
+							return !helpers.ManifestsEqual(new.Spec.Workload.Manifests, old.Spec.Workload.Manifests)
+						}
+
+						return false
+					},
+				}),
+			),
+		).
+		Complete(NewReconcileAutoImport(
 			clientHolder.RuntimeClient,
 			clientHolder.KubeClient,
 			informerHolder,
 			helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
 			mcRecorder,
-		),
-		MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
-	})
-	if err != nil {
-		return controllerName, err
-	}
+		))
 
-	// watch the import secrets
-	if err := c.Watch(
-		source.NewImportSecretSource(informerHolder.ImportSecretInformer,
-			&source.ManagedClusterResourceEventHandler{},
-			predicate.Predicate(predicate.Funcs{
-				GenericFunc: func(e event.GenericEvent) bool { return false },
-				DeleteFunc:  func(e event.DeleteEvent) bool { return false },
-				CreateFunc:  func(e event.CreateEvent) bool { return true },
-				UpdateFunc: func(e event.UpdateEvent) bool {
-					new, okNew := e.ObjectNew.(*corev1.Secret)
-					old, okOld := e.ObjectOld.(*corev1.Secret)
-					if okNew && okOld {
-						return !equality.Semantic.DeepEqual(old.Data, new.Data)
-					}
-					return false
-				},
-			}),
-		),
-	); err != nil {
-		return controllerName, err
-	}
-
-	// watch the auto-import secrets
-	if err := c.Watch(
-		source.NewAutoImportSecretSource(informerHolder.AutoImportSecretInformer,
-			&source.ManagedClusterResourceEventHandler{},
-			predicate.Predicate(predicate.Funcs{
-				GenericFunc: func(e event.GenericEvent) bool { return false },
-				DeleteFunc:  func(e event.DeleteEvent) bool { return false },
-				CreateFunc:  func(e event.CreateEvent) bool { return true },
-				UpdateFunc: func(e event.UpdateEvent) bool {
-					new, okNew := e.ObjectNew.(*corev1.Secret)
-					old, okOld := e.ObjectOld.(*corev1.Secret)
-					if okNew && okOld {
-						return !equality.Semantic.DeepEqual(old.Data, new.Data)
-					}
-					return false
-				},
-			}),
-		),
-	); err != nil {
-		return controllerName, err
-	}
-
-	// watch the managed clusters
-	if err := c.Watch(
-		source.NewManagedClusterSource(informerHolder.ManagedClusterInformer,
-			&source.ManagedClusterResourceEventHandler{
-				MapFunc: func(obj client.Object) reconcile.Request {
-					return reconcile.Request{
-						NamespacedName: types.NamespacedName{
-							Namespace: obj.GetName(),
-							Name:      obj.GetName(),
-						},
-					}
-				},
-			},
-			predicate.Predicate(predicate.Funcs{
-				GenericFunc: func(e event.GenericEvent) bool { return false },
-				DeleteFunc:  func(e event.DeleteEvent) bool { return false },
-				CreateFunc:  func(e event.CreateEvent) bool { return false },
-				UpdateFunc: func(e event.UpdateEvent) bool {
-					// handle the removal of the disable-auto-import annotation
-					_, oldAutoImportDisabled := e.ObjectOld.GetAnnotations()[apiconstants.DisableAutoImportAnnotation]
-					_, newAutoImportDisabled := e.ObjectNew.GetAnnotations()[apiconstants.DisableAutoImportAnnotation]
-					return oldAutoImportDisabled && !newAutoImportDisabled
-				},
-			}),
-		),
-	); err != nil {
-		return controllerName, err
-	}
-
-	// watch the klusterlet manifest works
-	if err := c.Watch(
-		source.NewKlusterletWorkSource(informerHolder.KlusterletWorkInformer,
-			&source.ManagedClusterResourceEventHandler{},
-			predicate.Predicate(predicate.Funcs{
-				GenericFunc: func(e event.GenericEvent) bool { return false },
-				DeleteFunc:  func(e event.DeleteEvent) bool { return false },
-				CreateFunc: func(e event.CreateEvent) bool {
-					workName := e.Object.GetName()
-					// only watch klusterlet manifest works
-					if !strings.HasSuffix(workName, constants.KlusterletCRDsSuffix) &&
-						!strings.HasSuffix(workName, constants.KlusterletSuffix) {
-						return false
-					}
-
-					return true
-				},
-				UpdateFunc: func(e event.UpdateEvent) bool {
-					workName := e.ObjectNew.GetName()
-					// only watch klusterlet manifest works
-					if !strings.HasSuffix(workName, constants.KlusterletCRDsSuffix) &&
-						!strings.HasSuffix(workName, constants.KlusterletSuffix) {
-						return false
-					}
-
-					new, okNew := e.ObjectNew.(*workv1.ManifestWork)
-					old, okOld := e.ObjectOld.(*workv1.ManifestWork)
-					if okNew && okOld {
-						return !helpers.ManifestsEqual(new.Spec.Workload.Manifests, old.Spec.Workload.Manifests)
-					}
-
-					return false
-				},
-			}),
-		),
-	); err != nil {
-		return controllerName, err
-	}
-
-	return controllerName, nil
+	return controllerName, err
 }

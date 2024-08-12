@@ -554,7 +554,7 @@ func assertManagedClusterImportSecretApplied(clusterName string, mode ...operato
 			}
 
 			return fmt.Errorf("assert managed cluster %s import secret applied failed", clusterName)
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		}, 5*time.Minute, 30*time.Second).Should(gomega.Succeed())
 	})
 }
 
