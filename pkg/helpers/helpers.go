@@ -58,9 +58,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/Masterminds/sprig/v3"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
+	"sigs.k8s.io/yaml"
 )
 
 const maxConcurrentReconcilesEnvVarName = "MAX_CONCURRENT_RECONCILES"
@@ -392,7 +394,7 @@ func UpdateManagedClusterBootstrapSecret(client *ClientHolder, importSecret *cor
 		if !ok {
 			continue
 		}
-		if secret.Name == "bootstrap-hub-kubeconfig" {
+		if secret.Name == constants.DefaultBootstrapHubKubeConfigSecretName {
 			break
 		}
 	}
@@ -434,7 +436,7 @@ func MustCreateObjectFromTemplate(file string, template []byte, config interface
 // MustCreateAssetFromTemplate render a template with its configuration
 // If it's failed, this function will panic
 func MustCreateAssetFromTemplate(name string, tb []byte, config interface{}) []byte {
-	tmpl, err := template.New(name).Parse(string(tb))
+	tmpl, err := template.New(name).Funcs(funcMap()).Parse(string(tb))
 	if err != nil {
 		panic(err)
 	}
@@ -443,6 +445,19 @@ func MustCreateAssetFromTemplate(name string, tb []byte, config interface{}) []b
 		panic(err)
 	}
 	return buf.Bytes()
+}
+
+func funcMap() template.FuncMap {
+	f := sprig.TxtFuncMap()
+	f["toYaml"] = func(v interface{}) string {
+		data, err := yaml.Marshal(v)
+		if err != nil {
+			// Swallow errors inside of a template.
+			return ""
+		}
+		return strings.TrimSuffix(string(data), "\n")
+	}
+	return f
 }
 
 // ManifestsEqual if two manifests are equal, return true
