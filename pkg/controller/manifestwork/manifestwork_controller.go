@@ -131,6 +131,7 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 	importSecretName := fmt.Sprintf("%s-%s", managedClusterName, constants.ImportSecretNameSuffix)
 	importSecret, err := r.informerHolder.ImportSecretLister.Secrets(managedClusterName).Get(importSecretName)
 	if errors.IsNotFound(err) {
+		reqLogger.V(5).Info("The import secret is not found", "importSecret", importSecretName)
 		return reconcile.Result{}, nil
 	}
 	if err != nil {

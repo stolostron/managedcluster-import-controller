@@ -646,7 +646,7 @@ func TestReconcile(t *testing.T) {
 				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
 			)
 
-			req := reconcile.Request{NamespacedName: types.NamespacedName{Namespace: managedClusterName}}
+			req := reconcile.Request{NamespacedName: types.NamespacedName{Name: managedClusterName}}
 			_, err := r.Reconcile(ctx, req)
 			if c.expectedErr && err == nil {
 				t.Errorf("name: %v, expected error, but failed", c.name)
