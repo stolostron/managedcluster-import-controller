@@ -10,7 +10,7 @@ WORKDIR $REMOTE_SOURCE_DIR/app
 RUN BUILD_OUTPUT_DIR=${REMOTE_SOURCE_DIR}/app make build
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
-RUN microdnf update
+RUN microdnf update -y
 ENV REMOTE_SOURCE_DIR='/remote-source'
 
 ENV OPERATOR=/usr/local/bin/managedcluster-import-controller \
