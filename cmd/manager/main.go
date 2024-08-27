@@ -204,6 +204,15 @@ func main() {
 	)
 
 	klusterletconfigInformerF := klusterletconfiginformer.NewSharedInformerFactory(klusterletconfigClient, 10*time.Minute)
+	klusterletconfigInformer := klusterletconfigInformerF.Config().V1alpha1().KlusterletConfigs().Informer()
+	if err := klusterletconfigInformer.AddIndexers(
+		cache.Indexers{
+			importconfig.KlusterletConfigBootstrapKubeConfigSecretsIndexKey: importconfig.IndexKlusterletConfigByBootstrapKubeConfigSecrets(),
+		},
+	); err != nil {
+		setupLog.Error(err, "failed to add indexers to klusterletconfig informer")
+		os.Exit(1)
+	}
 	klusterletconfigLister := klusterletconfigInformerF.Config().V1alpha1().KlusterletConfigs().Lister()
 
 	// managedclusterInformer has an index on the klusterletconfig annotation, so we can get all managed clusters
@@ -261,6 +270,7 @@ func main() {
 			KlusterletWorkLister:     klusterletWorksInformerF.Work().V1().ManifestWorks().Lister(),
 			HostedWorkInformer:       hostedWorksInformerF.Work().V1().ManifestWorks().Informer(),
 			HostedWorkLister:         hostedWorksInformerF.Work().V1().ManifestWorks().Lister(),
+			KlusterletConfigInformer: klusterletconfigInformer,
 			KlusterletConfigLister:   klusterletconfigLister,
 			ManagedClusterInformer:   managedclusterInformer,
 		},

@@ -74,6 +74,12 @@ build-coverage:
 build-image:
 	$(DOCKER_BUILDER) build -f $(DOCKER_FILE) . -t $(DOCKER_IMAGE)
 
+
+## Builds controller image using buildx for amd64
+.PHONY: build-image-amd64
+build-image-amd64:
+	$(DOCKER_BUILDER) buildx build --platform linux/amd64 -f $(DOCKER_FILE) . -t $(DOCKER_IMAGE)
+
 ## Clean build-harness and remove test files
 .PHONY: clean
 clean: clean-e2e-test

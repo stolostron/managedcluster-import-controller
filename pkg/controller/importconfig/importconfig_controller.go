@@ -124,7 +124,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 			mode,
 			managedCluster.Name,
 			bootstrapKubeconfigData).
-			WithManagedClusterAnnotations(managedCluster.GetAnnotations()).
+			WithManagedCluster(managedCluster).
 			WithKlusterletConfig(mergedKlusterletConfig).
 			WithPriorityClassName(priorityClassName)
 		yamlcontent, err = config.Generate(ctx, r.clientHolder)
@@ -146,7 +146,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 			mode,
 			managedCluster.Name,
 			bootstrapKubeconfigData).
-			WithManagedClusterAnnotations(managedCluster.GetAnnotations()).
+			WithManagedCluster(managedCluster).
 			WithImagePullSecretGenerate(false).
 			// the hosting cluster should support PriorityClass API and have
 			// already had the default PriorityClass

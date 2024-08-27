@@ -1,6 +1,6 @@
 // Copyright (c) Red Hat, Inc.
 // Copyright Contributors to the Open Cluster Management project
-
+// NOSONAR:S2068
 package constants
 
 import (
@@ -63,6 +63,7 @@ const (
 	CreatedViaHypershift = "hypershift"
 )
 
+// NOSONAR-START
 /* #nosec */
 const (
 	ImportSecretNameSuffix             = "import"
@@ -75,6 +76,8 @@ const (
 	ImportSecretTokenCreation          = "creation"
 	DefaultSecretTokenRefreshThreshold = 360 * 24 * time.Hour / 5 // 72 days
 )
+
+// NOSONAR-END
 
 const (
 	// KlusterletDeployModeAnnotation describe the klusterlet deploy mode when importing a managed cluster.

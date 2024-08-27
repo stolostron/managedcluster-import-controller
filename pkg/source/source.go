@@ -38,7 +38,8 @@ type InformerHolder struct {
 	HostedWorkInformer cache.SharedIndexInformer
 	HostedWorkLister   workv1lister.ManifestWorkLister
 
-	KlusterletConfigLister klusterletconfigv1alpha1lister.KlusterletConfigLister
+	KlusterletConfigInformer cache.SharedIndexInformer
+	KlusterletConfigLister   klusterletconfigv1alpha1lister.KlusterletConfigLister
 
 	ManagedClusterInformer cache.SharedIndexInformer
 }
