@@ -38,11 +38,11 @@ func TestEnqueueManagedClusterInKlusterletConfigAnnotation(t *testing.T) {
 	}
 
 	testcases := []struct {
-		addEvent func(handler handler.EventHandler, queue workqueue.RateLimitingInterface)
-		verify   func(t *testing.T, queue workqueue.RateLimitingInterface)
+		addEvent func(handler handler.EventHandler, queue workqueue.TypedRateLimitingInterface[reconcile.Request])
+		verify   func(t *testing.T, queue workqueue.TypedRateLimitingInterface[reconcile.Request])
 	}{
 		{
-			addEvent: func(h handler.EventHandler, queue workqueue.RateLimitingInterface) {
+			addEvent: func(h handler.EventHandler, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				// Create a new create event for the managed cluster
 				evt := event.CreateEvent{
 					Object: &klusterletconfigv1alpha1.KlusterletConfig{
@@ -53,7 +53,7 @@ func TestEnqueueManagedClusterInKlusterletConfigAnnotation(t *testing.T) {
 				}
 				h.Create(context.Background(), evt, queue)
 			},
-			verify: func(t *testing.T, queue workqueue.RateLimitingInterface) {
+			verify: func(t *testing.T, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				if queue.Len() != 1 {
 					t.Errorf("Expected queue length to be 1, but got %d", queue.Len())
 				}
@@ -71,7 +71,7 @@ func TestEnqueueManagedClusterInKlusterletConfigAnnotation(t *testing.T) {
 			},
 		},
 		{
-			addEvent: func(h handler.EventHandler, queue workqueue.RateLimitingInterface) {
+			addEvent: func(h handler.EventHandler, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				// Create a new create event for the managed cluster
 				evt := event.DeleteEvent{
 					Object: &klusterletconfigv1alpha1.KlusterletConfig{
@@ -82,14 +82,14 @@ func TestEnqueueManagedClusterInKlusterletConfigAnnotation(t *testing.T) {
 				}
 				h.Delete(context.Background(), evt, queue)
 			},
-			verify: func(t *testing.T, queue workqueue.RateLimitingInterface) {
+			verify: func(t *testing.T, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				if queue.Len() != 2 {
 					t.Errorf("Expected queue length to be 2, but got %d", queue.Len())
 				}
 			},
 		},
 		{
-			addEvent: func(h handler.EventHandler, queue workqueue.RateLimitingInterface) {
+			addEvent: func(h handler.EventHandler, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				// Create a new create event for the managed cluster
 				evt := event.CreateEvent{
 					Object: &klusterletconfigv1alpha1.KlusterletConfig{
@@ -100,7 +100,7 @@ func TestEnqueueManagedClusterInKlusterletConfigAnnotation(t *testing.T) {
 				}
 				h.Create(context.Background(), evt, queue)
 			},
-			verify: func(t *testing.T, queue workqueue.RateLimitingInterface) {
+			verify: func(t *testing.T, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 				if queue.Len() != 3 {
 					t.Errorf("Expected queue length to be 3, but got %d", queue.Len())
 				}
@@ -120,7 +120,7 @@ func TestEnqueueManagedClusterInKlusterletConfigAnnotation(t *testing.T) {
 		}
 
 		// Create a new queue
-		queue := workqueue.NewRateLimitingQueue(workqueue.DefaultControllerRateLimiter())
+		queue := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
 		// Add the managed clusters to the indexer
 		for _, mc := range mcs {
 			err := indexer.Add(mc)
