@@ -111,7 +111,7 @@ type Source struct {
 
 var _ source.SyncingSource = &Source{}
 
-func (s *Source) Start(ctx context.Context, queue workqueue.RateLimitingInterface) error {
+func (s *Source) Start(ctx context.Context, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) error {
 	_, err := s.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			newObj, ok := obj.(client.Object)
@@ -223,23 +223,27 @@ type ManagedClusterResourceEventHandler struct {
 
 var _ handler.EventHandler = &ManagedClusterResourceEventHandler{}
 
-func (e *ManagedClusterResourceEventHandler) Create(ctx context.Context, evt event.CreateEvent, q workqueue.RateLimitingInterface) {
+func (e *ManagedClusterResourceEventHandler) Create(ctx context.Context, evt event.TypedCreateEvent[client.Object],
+	q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	e.add(evt.Object, q)
 }
 
-func (e *ManagedClusterResourceEventHandler) Update(ctx context.Context, evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
+func (e *ManagedClusterResourceEventHandler) Update(ctx context.Context, evt event.TypedUpdateEvent[client.Object],
+	q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	e.add(evt.ObjectNew, q)
 }
 
-func (e *ManagedClusterResourceEventHandler) Delete(ctx context.Context, evt event.DeleteEvent, q workqueue.RateLimitingInterface) {
+func (e *ManagedClusterResourceEventHandler) Delete(ctx context.Context, evt event.TypedDeleteEvent[client.Object],
+	q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	e.add(evt.Object, q)
 }
 
-func (e *ManagedClusterResourceEventHandler) Generic(ctx context.Context, evt event.GenericEvent, q workqueue.RateLimitingInterface) {
+func (e *ManagedClusterResourceEventHandler) Generic(ctx context.Context, evt event.TypedGenericEvent[client.Object],
+	q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	// do nothing
 }
 
-func (e *ManagedClusterResourceEventHandler) add(obj client.Object, q workqueue.RateLimitingInterface) {
+func (e *ManagedClusterResourceEventHandler) add(obj client.Object, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	request := reconcile.Request{
 		NamespacedName: types.NamespacedName{
 			Namespace: obj.GetNamespace(),
