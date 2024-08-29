@@ -314,8 +314,11 @@ func mockImportSecret(t *testing.T, expirationTime time.Time, server string, caD
 	}
 	config := bootstrap.KlusterletRenderConfig{
 		KlusterletNamespace: "test",
-		BootstrapKubeconfig: base64.StdEncoding.EncodeToString(boostrapConfigData),
-		InstallMode:         string(operatorv1.InstallModeDefault),
+		DefaultBootstrapKubeConfigSecret: bootstrap.BootstrapKubeConfigSecret{
+			Name:       "bootstrap-hub-kubeconfig",
+			KubeConfig: base64.StdEncoding.EncodeToString(boostrapConfigData),
+		},
+		InstallMode: string(operatorv1.InstallModeDefault),
 	}
 	raw := helpers.MustCreateAssetFromTemplate("bootstrap_secret", template, config)
 

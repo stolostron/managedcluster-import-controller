@@ -5,6 +5,7 @@ package importconfig
 
 import (
 	"context"
+	"os"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -21,6 +22,7 @@ import (
 
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 )
@@ -34,6 +36,9 @@ func Add(ctx context.Context,
 	clientHolder *helpers.ClientHolder,
 	informerHolder *source.InformerHolder,
 	mcRecorder kevents.EventRecorder) (string, error) {
+
+	// All bootstrap kubeconfigs should created in the same pod namespace
+	podNS := os.Getenv(constants.PodNamespaceEnvVarName)
 
 	err := ctrl.NewControllerManagedBy(mgr).Named(controllerName).
 		WithOptions(controller.Options{
@@ -122,6 +127,27 @@ func Add(ctx context.Context,
 					DeleteFunc:  func(e event.DeleteEvent) bool { return true },
 					UpdateFunc:  func(e event.UpdateEvent) bool { return true },
 				})),
+		).
+		Watches(
+			&corev1.Secret{},
+			&enqueueManagedClusterByBootstrapKubeConfigSecrets{
+				managedclusterIndexer:   informerHolder.ManagedClusterInformer.GetIndexer(),
+				klusterletconfigIndexer: informerHolder.KlusterletConfigInformer.GetIndexer(),
+			},
+			builder.WithPredicates(predicate.Funcs{
+				GenericFunc: func(e event.GenericEvent) bool {
+					return e.Object.GetNamespace() == podNS
+				},
+				CreateFunc: func(e event.CreateEvent) bool {
+					return e.Object.GetNamespace() == podNS
+				},
+				DeleteFunc: func(e event.DeleteEvent) bool {
+					return e.Object.GetNamespace() == podNS
+				},
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					return e.ObjectNew.GetNamespace() == podNS || e.ObjectOld.GetNamespace() == podNS
+				},
+			}),
 		).
 		Complete(&ReconcileImportConfig{
 			clientHolder:           clientHolder,

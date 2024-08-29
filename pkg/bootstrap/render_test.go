@@ -16,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	kubefake "k8s.io/client-go/kubernetes/fake"
+	v1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -242,10 +243,16 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				[]byte("bootstrap kubeconfig"),
 			).WithKlusterletClusterAnnotations(map[string]string{
 				"agent.open-cluster-management.io/test": "test",
-			}).WithManagedClusterAnnotations(map[string]string{
-				"open-cluster-management/nodeSelector": "{\"kubernetes.io/os\":\"linux\"}",
-				"open-cluster-management/tolerations":  "[{\"key\":\"foo\",\"operator\":\"Exists\",\"effect\":\"NoExecute\",\"tolerationSeconds\":20}]",
-			}),
+			}).WithManagedCluster(
+				&v1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							"open-cluster-management/nodeSelector": "{\"kubernetes.io/os\":\"linux\"}",
+							"open-cluster-management/tolerations":  "[{\"key\":\"foo\",\"operator\":\"Exists\",\"effect\":\"NoExecute\",\"tolerationSeconds\":20}]",
+						},
+					},
+				},
+			),
 			validateFunc: func(t *testing.T, objects []runtime.Object) {
 				if len(objects) != 10 {
 					t.Fatalf("Expected 10 objects, but got %d", len(objects))
@@ -583,6 +590,214 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				if klusterlet.Spec.WorkConfiguration.AppliedManifestWorkEvictionGracePeriod.Duration != 100*365*24*time.Hour {
 					t.Fatalf("the expected AppliedManifestWorkEvictionGracePeriod of klusterlet is %v, but got %v",
 						100*365*24*time.Hour, klusterlet.Spec.WorkConfiguration.AppliedManifestWorkEvictionGracePeriod.Duration)
+				}
+			},
+		},
+		{
+			name: "with mutliplehubs enabled",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+			},
+			defaultImagePullSecret: "test-image-pull-secret",
+			runtimeObjs: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-image-pull-secret",
+					},
+					Data: map[string][]byte{
+						corev1.DockerConfigKey: []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeDockercfg,
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "bootstrapkubeconfig-hub1",
+					},
+					Data: map[string][]byte{
+						"kubeconfig": []byte("fake-kubeconfig"),
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "bootstrapkubeconfig-hub2",
+					},
+					Data: map[string][]byte{
+						"kubeconfig": []byte("fake-kubeconfig"),
+					},
+				},
+			},
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeDefault,
+				"test",
+				[]byte("bootstrap kubeconfig"),
+			).WithKlusterletConfig(&klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					BootstrapKubeConfigs: operatorv1.BootstrapKubeConfigs{
+						Type: operatorv1.LocalSecrets,
+						LocalSecrets: operatorv1.LocalSecretsConfig{
+							KubeConfigSecrets: []operatorv1.KubeConfigSecret{
+								{
+									Name: "bootstrapkubeconfig-hub1",
+								},
+								{
+									Name: "bootstrapkubeconfig-hub2",
+								},
+							},
+							HubConnectionTimeoutSeconds: 500,
+						},
+					},
+				},
+			}),
+			validateFunc: func(t *testing.T, objs []runtime.Object) {
+				// 11 objects for klusterlet manifests, 2 objects for bootstrap kubeconfig secrets
+				if len(objs) != 11 {
+					t.Fatalf("Expected 11 objects, but got %d", len(objs))
+				}
+
+				// validate bootstrapkubeconfig secrets
+				bootstrapkubeconfighub1, ok := objs[7].(*corev1.Secret)
+				if !ok {
+					t.Fatal("the bootstrapkubeconfig-hub1 is not secret")
+				}
+				if bootstrapkubeconfighub1.Name != "bootstrapkubeconfig-hub1" {
+					t.Fatalf("the bootstrapkubeconfig-hub1 name is not bootstrapkubeconfig-hub1")
+				}
+				if string(bootstrapkubeconfighub1.Data["kubeconfig"]) != "fake-kubeconfig" {
+					t.Fatalf("the bootstrapkubeconfig-hub1 kubeconfig is not fake-kubeconfig: %s", string(bootstrapkubeconfighub1.Data["kubeconfig"]))
+				}
+
+				bootstrapkubeconfighub2, ok := objs[8].(*corev1.Secret)
+				if !ok {
+					t.Fatal("the bootstrapkubeconfig-hub2 is not secret")
+				}
+				if bootstrapkubeconfighub2.Name != "bootstrapkubeconfig-hub2" {
+					t.Fatalf("the bootstrapkubeconfig-hub2 name is not bootstrapkubeconfig-hub2")
+				}
+				if string(bootstrapkubeconfighub2.Data["kubeconfig"]) != "fake-kubeconfig" {
+					t.Fatalf("the bootstrapkubeconfig-hub2 kubeconfig is not fake-kubeconfig")
+				}
+
+				// klusterlet should have MultipleHubs featuregate enabled, and also bootstrapkubeconfigs configured
+				klusterlet, ok := objs[9].(*operatorv1.Klusterlet)
+				if !ok {
+					t.Fatal("the klusterlet is not klusterlet")
+				}
+
+				if klusterlet.Spec.RegistrationConfiguration == nil {
+					t.Fatal("the klusterlet features is not specified")
+				}
+				multiplehubsEnabled := false
+				for _, fg := range klusterlet.Spec.RegistrationConfiguration.FeatureGates {
+					if fg.Feature == "MultipleHubs" && fg.Mode == operatorv1.FeatureGateModeTypeEnable {
+						multiplehubsEnabled = true
+						break
+					}
+				}
+				if !multiplehubsEnabled {
+					t.Fatal("the klusterlet MultipleHubs feature is not enabled")
+				}
+
+				if klusterlet.Spec.RegistrationConfiguration.BootstrapKubeConfigs.Type != operatorv1.LocalSecrets {
+					t.Fatalf("the klusterlet bootstrap kubeconfig type is not %s", operatorv1.LocalSecrets)
+				}
+				if len(klusterlet.Spec.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets) != 2 {
+					t.Fatalf("the klusterlet bootstrap kubeconfig secrets count is not 2")
+				}
+				for _, secret := range klusterlet.Spec.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets {
+					if secret.Name != "bootstrapkubeconfig-hub1" && secret.Name != "bootstrapkubeconfig-hub2" {
+						t.Fatalf("the klusterlet bootstrap kubeconfig secret name is not bootstrapkubeconfig-hub1 or bootstrapkubeconfig-hub2")
+					}
+				}
+				if klusterlet.Spec.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.HubConnectionTimeoutSeconds != 500 {
+					t.Fatalf("the klusterlet bootstrap kubeconfig hub connection timeout seconds is not 500")
+				}
+			},
+		},
+		{
+			name: "with mutliplehubs enabled but local-cluster",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+			},
+			defaultImagePullSecret: "test-image-pull-secret",
+			runtimeObjs: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-image-pull-secret",
+					},
+					Data: map[string][]byte{
+						corev1.DockerConfigKey: []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeDockercfg,
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "bootstrapkubeconfig-hub1",
+					},
+					Data: map[string][]byte{
+						"kubeconfig": []byte("fake-kubeconfig"),
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "bootstrapkubeconfig-hub2",
+					},
+					Data: map[string][]byte{
+						"kubeconfig": []byte("fake-kubeconfig"),
+					},
+				},
+			},
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeDefault,
+				"test",
+				[]byte("bootstrap kubeconfig"),
+			).WithKlusterletConfig(&klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					BootstrapKubeConfigs: operatorv1.BootstrapKubeConfigs{
+						Type: operatorv1.LocalSecrets,
+						LocalSecrets: operatorv1.LocalSecretsConfig{
+							KubeConfigSecrets: []operatorv1.KubeConfigSecret{
+								{
+									Name: "bootstrapkubeconfig-hub1",
+								},
+								{
+									Name: "bootstrapkubeconfig-hub2",
+								},
+							},
+							HubConnectionTimeoutSeconds: 500,
+						},
+					},
+				},
+			}).WithManagedCluster(
+				&v1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Labels: map[string]string{
+							"local-cluster": "true",
+						},
+					},
+				},
+			),
+			validateFunc: func(t *testing.T, objs []runtime.Object) {
+				// 10 objects for klusterlet manifests
+				if len(objs) != 10 {
+					t.Fatalf("Expected 10 objects, but got %d", len(objs))
+				}
+
+				// klusterlet should not have MultipleHubs featuregate enabled, and also bootstrapkubeconfigs configured
+				klusterlet, ok := objs[8].(*operatorv1.Klusterlet)
+				if !ok {
+					t.Fatal("the klusterlet is not klusterlet")
+				}
+
+				if klusterlet.Spec.RegistrationConfiguration.BootstrapKubeConfigs.Type == operatorv1.LocalSecrets {
+					t.Fatal("the klusterlet bootstrap kubeconfig type is not replaced")
 				}
 			},
 		},

@@ -9,12 +9,14 @@ import (
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog/v2"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
+	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 )
 
@@ -74,4 +76,82 @@ func IndexManagedClusterByKlusterletconfigAnnotation(obj interface{}) ([]string,
 		klusterletconfigs = append(klusterletconfigs, klusterletconfig)
 	}
 	return klusterletconfigs, nil
+}
+
+const (
+	KlusterletConfigBootstrapKubeConfigSecretsIndexKey = "klusterletconfig-bootstrapkubeconfig-secrets"
+)
+
+var _ handler.EventHandler = &enqueueManagedClusterByBootstrapKubeConfigSecrets{}
+
+// enqueueManagedClusterByBootstrapKubeConfigSecrets first finds the klusterletconfigs that using the secret, then
+// finds the managedclusters that using the klusterletconfigs.
+type enqueueManagedClusterByBootstrapKubeConfigSecrets struct {
+	// index klusterletconfig by the spec bootstrap kubeconfig secrets
+	klusterletconfigIndexer cache.Indexer
+
+	// index managedcluster by the annotation
+	managedclusterIndexer cache.Indexer
+}
+
+func (e *enqueueManagedClusterByBootstrapKubeConfigSecrets) Create(ctx context.Context,
+	evt event.CreateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+	e.enqueue(evt.Object.GetName(), q)
+}
+
+func (e *enqueueManagedClusterByBootstrapKubeConfigSecrets) Update(ctx context.Context,
+	evt event.UpdateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+	e.enqueue(evt.ObjectNew.GetName(), q)
+}
+
+func (e *enqueueManagedClusterByBootstrapKubeConfigSecrets) Delete(ctx context.Context,
+	evt event.DeleteEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+	e.enqueue(evt.Object.GetName(), q)
+}
+
+func (e *enqueueManagedClusterByBootstrapKubeConfigSecrets) Generic(ctx context.Context,
+	evt event.GenericEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+	e.enqueue(evt.Object.GetName(), q)
+}
+
+func (e *enqueueManagedClusterByBootstrapKubeConfigSecrets) enqueue(secretName string, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+	klusterletconfigObjs, err := e.klusterletconfigIndexer.ByIndex(KlusterletConfigBootstrapKubeConfigSecretsIndexKey, secretName)
+	if err != nil {
+		klog.Error(err, "Failed to get klusterletconfigs by bootstrap kubeconfig secrets by indexer", "secret", secretName)
+		return
+	}
+	for _, kcObj := range klusterletconfigObjs {
+		kc := kcObj.(*klusterletconfigv1alpha1.KlusterletConfig)
+		managedclusterObjs, err := e.managedclusterIndexer.ByIndex(
+			ManagedClusterKlusterletConfigAnnotationIndexKey, kc.GetName())
+		if err != nil {
+			klog.Error(err, "Failed to get managedclusters by klusterletconfig annotation by indexer",
+				"klusterletconfig", kc.GetName())
+			return
+		}
+		for _, mcObj := range managedclusterObjs {
+			mc := mcObj.(*clusterv1.ManagedCluster)
+			q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
+				Name: mc.GetName(),
+			}})
+		}
+	}
+}
+
+func IndexKlusterletConfigByBootstrapKubeConfigSecrets() func(obj interface{}) ([]string, error) {
+	return func(obj interface{}) ([]string, error) {
+		kc, ok := obj.(*klusterletconfigv1alpha1.KlusterletConfig)
+		if !ok {
+			return nil, fmt.Errorf("not a klustereltconfig object")
+		}
+
+		var bootstrapKubeConfigSecrets []string
+		if kc.Spec.BootstrapKubeConfigs.Type == operatorv1.LocalSecrets {
+			for _, secret := range kc.Spec.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets {
+				bootstrapKubeConfigSecrets = append(bootstrapKubeConfigSecrets, secret.Name)
+			}
+		}
+
+		return bootstrapKubeConfigSecrets, nil
+	}
 }
