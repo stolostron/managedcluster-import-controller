@@ -135,3 +135,5 @@ require (
 )
 
 replace github.com/openshift/assisted-service/models => github.com/openshift/assisted-service/models v0.0.0-20230809093954-25856935f237 // https://github.com/openshift/assisted-service/tree/release-ocm-2.9/models
+
+replace github.com/stolostron/cluster-lifecycle-api => github.com/zhujian7/cluster-lifecycle-api v0.0.0-20240903084254-df0ae7059bdf

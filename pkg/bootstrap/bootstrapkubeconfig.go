@@ -169,6 +169,12 @@ func GetBootstrapToken(ctx context.Context, kubeClient kubernetes.Interface,
 
 func GetKubeAPIServerAddress(ctx context.Context, client client.Client,
 	klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) (string, error) {
+
+	if klusterletConfig != nil && klusterletConfig.Spec.HubKubeAPIServerConfig != nil &&
+		len(klusterletConfig.Spec.HubKubeAPIServerConfig.URL) > 0 {
+		return klusterletConfig.Spec.HubKubeAPIServerConfig.URL, nil
+	}
+
 	// use the custom hub Kube APIServer URL if specified
 	if klusterletConfig != nil && len(klusterletConfig.Spec.HubKubeAPIServerURL) > 0 {
 		return klusterletConfig.Spec.HubKubeAPIServerURL, nil
@@ -230,14 +236,86 @@ func GetBootstrapCAData(ctx context.Context, clientHolder *helpers.ClientHolder,
 
 func getKubeAPIServerCAData(ctx context.Context, clientHolder *helpers.ClientHolder, kubeAPIServer string,
 	caNamespace string, klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) ([]byte, error) {
+
+	if klusterletConfig != nil && klusterletConfig.Spec.HubKubeAPIServerConfig != nil {
+		return getKubeAPIServerCADataFromConfig(ctx, clientHolder, kubeAPIServer, caNamespace,
+			klusterletConfig.Spec.HubKubeAPIServerConfig)
+	}
+
+	// TODO: DEPRECATE the following code and only use the HubKubeAPIServerConfig in the future
 	// use the custom hub Kube APIServer CA bundle if specified
 	if klusterletConfig != nil && len(klusterletConfig.Spec.HubKubeAPIServerCABundle) > 0 {
 		return klusterletConfig.Spec.HubKubeAPIServerCABundle, nil
 	}
 
+	return autoDetectCAData(ctx, clientHolder, kubeAPIServer, caNamespace)
+}
+
+func getKubeAPIServerCADataFromConfig(ctx context.Context, clientHolder *helpers.ClientHolder, kubeAPIServer string,
+	caNamespace string, config *klusterletconfigv1alpha1.KubeAPIServerConfig) ([]byte, error) {
+	if config != nil {
+		return nil, fmt.Errorf("failed to get ca data from the custom kubeAPIServerConfig, config is nil")
+	}
+
+	switch config.ServerVerificationStrategy {
+	case klusterletconfigv1alpha1.ServerVerificationStrategyUseSystemTruststore:
+		return nil, nil
+	case klusterletconfigv1alpha1.ServerVerificationStrategyUseAutoDetectedTruststore:
+		detectedCA, err := autoDetectCAData(ctx, clientHolder, kubeAPIServer, caNamespace)
+		if err != nil {
+			return nil, err
+		}
+		customCustomCA, err := getCustomCAData(ctx, clientHolder, config.TrustedCABundles)
+		if err != nil {
+			return nil, err
+		}
+		return mergeCertificateData(detectedCA, customCustomCA)
+	case klusterletconfigv1alpha1.ServerVerificationStrategyUseCustomCABundles:
+		return getCustomCAData(ctx, clientHolder, config.TrustedCABundles)
+	default:
+		return nil, fmt.Errorf("unknown server verification strategy: %s", config.ServerVerificationStrategy)
+	}
+
+}
+
+func getCustomCAData(ctx context.Context, clientHolder *helpers.ClientHolder,
+	caBundles []klusterletconfigv1alpha1.CABundle) ([]byte, error) {
+	if len(caBundles) == 0 {
+		return nil, nil
+	}
+
+	var all []byte
+	var err error
+	for _, caBundle := range caBundles {
+		if len(caBundle.CABundleData) == 0 {
+			continue
+		}
+		all, err = mergeCertificateData(all, caBundle.CABundleData)
+		if err != nil {
+			return nil, err
+		}
+
+		if caBundle.CABundle != nil {
+			data, err := getCABundleFromConfigmap(ctx, clientHolder,
+				caBundle.CABundle.Namespace, caBundle.CABundle.Name, "ca-bundle.crt")
+			if err != nil {
+				return nil, err
+			}
+			all, err = mergeCertificateData(all, data)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return all, nil
+}
+
+func autoDetectCAData(ctx context.Context, clientHolder *helpers.ClientHolder, kubeAPIServer string,
+	caNamespace string) ([]byte, error) {
 	// get caBundle from the kube-root-ca.crt configmap in the pod namespace for non-ocp case.
 	if !helpers.DeployOnOCP {
-		return getCABundleFromConfigmap(ctx, clientHolder, caNamespace)
+		return getKubeRootCABundle(ctx, clientHolder, caNamespace)
 	}
 
 	// and then get the ca cert from ocp apiserver firstly
@@ -281,15 +359,21 @@ func getKubeAPIServerCAData(ctx context.Context, clientHolder *helpers.ClientHol
 
 	// failed to get the ca from ocp, fallback to the kube-root-ca.crt configmap from the pod namespace.
 	klog.Info(fmt.Sprintf("No ca.crt was found, fallback to the %s/kube-root-ca.crt", caNamespace))
-	return getCABundleFromConfigmap(ctx, clientHolder, caNamespace)
+	return getKubeRootCABundle(ctx, clientHolder, caNamespace)
 }
 
-func getCABundleFromConfigmap(ctx context.Context, clientHolder *helpers.ClientHolder, caNamespace string) ([]byte, error) {
-	rootCA, err := clientHolder.KubeClient.CoreV1().ConfigMaps(caNamespace).Get(ctx, "kube-root-ca.crt", metav1.GetOptions{})
+func getKubeRootCABundle(ctx context.Context, clientHolder *helpers.ClientHolder,
+	caNamespace string) ([]byte, error) {
+	return getCABundleFromConfigmap(ctx, clientHolder, caNamespace, "kube-root-ca.crt", "ca.crt")
+}
+
+func getCABundleFromConfigmap(ctx context.Context, clientHolder *helpers.ClientHolder,
+	caNamespace, caName, caKey string) ([]byte, error) {
+	rootCA, err := clientHolder.KubeClient.CoreV1().ConfigMaps(caNamespace).Get(ctx, caName, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
-	return []byte(rootCA.Data["ca.crt"]), nil
+	return []byte(rootCA.Data[caKey]), nil
 }
 
 // getKubeAPIServerSecretName iterate through all named certificates from apiserver
@@ -402,6 +486,14 @@ func GetProxySettings(klusterletConfig *klusterletconfigv1alpha1.KlusterletConfi
 	if klusterletConfig == nil {
 		return "", nil
 	}
+
+	if klusterletConfig.Spec.HubKubeAPIServerConfig != nil &&
+		len(klusterletConfig.Spec.HubKubeAPIServerConfig.ProxyURL) > 0 {
+		// the TrustedCABundles configured in the HubKubeAPIServerConfig is already added by the getKubeAPIServerCAData
+		return klusterletConfig.Spec.HubKubeAPIServerConfig.ProxyURL, nil
+	}
+
+	// TODO: DEPRECATE the following code and only return the proxyURL
 	proxyConfig := klusterletConfig.Spec.HubKubeAPIServerProxyConfig
 
 	// use https proxy if both http and https proxy are specified
