@@ -67,10 +67,20 @@ func Add(ctx context.Context,
 					DeleteFunc:  func(e event.DeleteEvent) bool { return false },
 					CreateFunc:  func(e event.CreateEvent) bool { return false },
 					UpdateFunc: func(e event.UpdateEvent) bool {
+						oldAnnotations := e.ObjectOld.GetAnnotations()
+						newAnnotations := e.ObjectNew.GetAnnotations()
+
 						// handle the removal of the disable-auto-import annotation
-						_, oldAutoImportDisabled := e.ObjectOld.GetAnnotations()[apiconstants.DisableAutoImportAnnotation]
-						_, newAutoImportDisabled := e.ObjectNew.GetAnnotations()[apiconstants.DisableAutoImportAnnotation]
-						return oldAutoImportDisabled && !newAutoImportDisabled
+						_, oldAutoImportDisabled := oldAnnotations[apiconstants.DisableAutoImportAnnotation]
+						_, newAutoImportDisabled := newAnnotations[apiconstants.DisableAutoImportAnnotation]
+						if oldAutoImportDisabled && !newAutoImportDisabled {
+							return true
+						}
+
+						// handle create-via annotation change
+						oldCreateVia := oldAnnotations[constants.CreatedViaAnnotation]
+						newCreateVia := newAnnotations[constants.CreatedViaAnnotation]
+						return oldCreateVia != newCreateVia
 					},
 				},
 			),
