@@ -253,14 +253,15 @@ func getKubeAPIServerCAData(ctx context.Context, clientHolder *helpers.ClientHol
 
 func getKubeAPIServerCADataFromConfig(ctx context.Context, clientHolder *helpers.ClientHolder, kubeAPIServer string,
 	caNamespace string, config *klusterletconfigv1alpha1.KubeAPIServerConfig) ([]byte, error) {
-	if config != nil {
+	if config == nil {
 		return nil, fmt.Errorf("failed to get ca data from the custom kubeAPIServerConfig, config is nil")
 	}
 
 	switch config.ServerVerificationStrategy {
 	case klusterletconfigv1alpha1.ServerVerificationStrategyUseSystemTruststore:
 		return nil, nil
-	case klusterletconfigv1alpha1.ServerVerificationStrategyUseAutoDetectedTruststore:
+	case klusterletconfigv1alpha1.ServerVerificationStrategyUseAutoDetectedCABundle,
+		klusterletconfigv1alpha1.ServerVerificationStrategyDefault:
 		detectedCA, err := autoDetectCAData(ctx, clientHolder, kubeAPIServer, caNamespace)
 		if err != nil {
 			return nil, err
@@ -287,17 +288,17 @@ func getCustomCAData(ctx context.Context, clientHolder *helpers.ClientHolder,
 	var all []byte
 	var err error
 	for _, caBundle := range caBundles {
-		if len(caBundle.CABundleData) == 0 {
-			continue
-		}
-		all, err = mergeCertificateData(all, caBundle.CABundleData)
-		if err != nil {
-			return nil, err
+		if len(caBundle.CABundleData) > 0 {
+			all, err = mergeCertificateData(all, caBundle.CABundleData)
+			if err != nil {
+				return nil, err
+			}
+			continue // ignore the configmap if the data is set
 		}
 
 		if caBundle.CABundle != nil {
 			data, err := getCABundleFromConfigmap(ctx, clientHolder,
-				caBundle.CABundle.Namespace, caBundle.CABundle.Name, "ca-bundle.crt")
+				caBundle.CABundle.Namespace, caBundle.CABundle.Name)
 			if err != nil {
 				return nil, err
 			}
@@ -368,12 +369,23 @@ func getKubeRootCABundle(ctx context.Context, clientHolder *helpers.ClientHolder
 }
 
 func getCABundleFromConfigmap(ctx context.Context, clientHolder *helpers.ClientHolder,
-	caNamespace, caName, caKey string) ([]byte, error) {
+	caNamespace, caName string, caKeys ...string) ([]byte, error) {
 	rootCA, err := clientHolder.KubeClient.CoreV1().ConfigMaps(caNamespace).Get(ctx, caName, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
-	return []byte(rootCA.Data[caKey]), nil
+
+	if len(caKeys) == 0 {
+		caKeys = []string{"ca-bundle.crt", "ca.crt", "tls.crt"}
+	}
+
+	for _, key := range caKeys {
+		if data, ok := rootCA.Data[key]; ok {
+			return []byte(data), nil
+		}
+	}
+
+	return nil, fmt.Errorf("failed to find ca data in configmap %s/%s", caNamespace, caName)
 }
 
 // getKubeAPIServerSecretName iterate through all named certificates from apiserver

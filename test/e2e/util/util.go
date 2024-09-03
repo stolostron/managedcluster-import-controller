@@ -222,6 +222,11 @@ func CreateClusterDeployment(dynamicClient dynamic.Interface, clusterName string
 	return err
 }
 
+func GetClusterDeployment(dynamicClient dynamic.Interface, clusterName string) (*unstructured.Unstructured, error) {
+	clusterdeployments := dynamicClient.Resource(clusterdeploymentGVR).Namespace(clusterName)
+	return clusterdeployments.Get(context.TODO(), clusterName, metav1.GetOptions{})
+}
+
 func InstallClusterDeployment(kubeClient kubernetes.Interface, dynamicClient dynamic.Interface, clusterName string) error {
 	clusterdeployments := dynamicClient.Resource(clusterdeploymentGVR).Namespace(clusterName)
 	clusterDeployment, err := clusterdeployments.Get(context.TODO(), clusterName, metav1.GetOptions{})

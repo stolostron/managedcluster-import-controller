@@ -62,12 +62,12 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 
 	customServerCertData, customServerKeyData, err := testinghelpers.NewServerCertificate("custom kube-apiserver", rootCACertData, rootCAKeyData)
 	if err != nil {
-		t.Errorf("failed to create default server cert: %v", err)
+		t.Errorf("failed to create custom server cert: %v", err)
 	}
 
 	proxyServerCertData, _, err := testinghelpers.NewServerCertificate("proxy server", rootCACertData, rootCAKeyData)
 	if err != nil {
-		t.Errorf("failed to create default server cert: %v", err)
+		t.Errorf("failed to create proxy server cert: %v", err)
 	}
 
 	mergedCAData, err := mergeCertificateData(rootCACertData, proxyServerCertData)
@@ -95,6 +95,16 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 		},
 		Data: map[string]string{
 			"ca.crt": string(rootCACertData),
+		},
+	}
+
+	proxyCAcm := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "proxy-ca.crt",
+			Namespace: "testcluster",
+		},
+		Data: map[string]string{
+			"ca.crt": string(proxyServerCertData),
 		},
 	}
 
@@ -338,6 +348,121 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name:        "with proxy config by klusterletconfig HubKubeAPIServerConfig",
+			clientObjs:  []client.Object{testInfraConfigIP},
+			runtimeObjs: []runtime.Object{testTokenSecret, cm},
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
+						ServerVerificationStrategy: klusterletconfigv1alpha1.ServerVerificationStrategyDefault,
+						ProxyURL:                   "https://127.0.0.1:3129",
+						TrustedCABundles: []klusterletconfigv1alpha1.CABundle{
+							{
+								Name:         "proxy-server-cert",
+								CABundleData: proxyServerCertData,
+							},
+						},
+					},
+				},
+			},
+			want: wantData{
+				serverURL:   "http://127.0.0.1:6443",
+				useInsecure: false,
+				certData:    mergedCAData,
+				token:       "fake-token",
+				proxyURL:    "https://127.0.0.1:3129",
+			},
+			wantErr: false,
+		},
+		{
+			name:        "with proxy config by klusterletconfig HubKubeAPIServerConfig from configmap",
+			clientObjs:  []client.Object{testInfraConfigIP},
+			runtimeObjs: []runtime.Object{testTokenSecret, cm, proxyCAcm},
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
+						ServerVerificationStrategy: klusterletconfigv1alpha1.ServerVerificationStrategyUseAutoDetectedCABundle,
+						ProxyURL:                   "https://127.0.0.1:3129",
+						TrustedCABundles: []klusterletconfigv1alpha1.CABundle{
+							{
+								Name: "proxy-server-cert",
+								CABundle: &klusterletconfigv1alpha1.ConfigMapReference{
+									Namespace: "testcluster",
+									Name:      "proxy-ca.crt",
+								},
+							},
+						},
+					},
+				},
+			},
+			want: wantData{
+				serverURL:   "http://127.0.0.1:6443",
+				useInsecure: false,
+				certData:    mergedCAData,
+				token:       "fake-token",
+				proxyURL:    "https://127.0.0.1:3129",
+			},
+			wantErr: false,
+		},
+		{
+			name:        "with custom ca",
+			clientObjs:  []client.Object{testInfraConfigIP},
+			runtimeObjs: []runtime.Object{testTokenSecret, cm, proxyCAcm},
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
+						ServerVerificationStrategy: klusterletconfigv1alpha1.ServerVerificationStrategyUseCustomCABundles,
+						URL:                        "http://internal.com",
+						TrustedCABundles: []klusterletconfigv1alpha1.CABundle{
+							{
+								Name: "proxy-server-cert",
+								CABundle: &klusterletconfigv1alpha1.ConfigMapReference{
+									Namespace: "testcluster",
+									Name:      "proxy-ca.crt",
+								},
+							},
+						},
+					},
+				},
+			},
+			want: wantData{
+				serverURL:   "http://internal.com",
+				useInsecure: false,
+				certData:    proxyServerCertData,
+				token:       "fake-token",
+			},
+			wantErr: false,
+		},
+		{
+			name:        "with system trust stroe",
+			clientObjs:  []client.Object{testInfraConfigIP},
+			runtimeObjs: []runtime.Object{testTokenSecret, cm, proxyCAcm},
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
+						ServerVerificationStrategy: klusterletconfigv1alpha1.ServerVerificationStrategyUseSystemTruststore,
+						URL:                        "http://internal.com",
+						TrustedCABundles: []klusterletconfigv1alpha1.CABundle{
+							{
+								Name: "proxy-server-cert",
+								CABundle: &klusterletconfigv1alpha1.ConfigMapReference{
+									Namespace: "testcluster",
+									Name:      "proxy-ca.crt",
+								},
+							},
+						},
+					},
+				},
+			},
+			want: wantData{
+				serverURL:   "http://internal.com",
+				useInsecure: false,
+				certData:    nil,
+				token:       "fake-token",
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range testcases {
@@ -500,6 +625,22 @@ func TestGetKubeAPIServerAddress(t *testing.T) {
 				},
 			},
 			want:    "https://api.acm.example.com:6443",
+			wantErr: false,
+		},
+		{
+			name: "use custom address from HubKubeAPIServerConfig",
+			args: args{
+				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(infraConfig).Build(),
+				klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+					Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+						HubKubeAPIServerURL: "https://api.acm.example.com:6443",
+						HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
+							URL: "https://api.acm-new.example.com:6443",
+						},
+					},
+				},
+			},
+			want:    "https://api.acm-new.example.com:6443",
 			wantErr: false,
 		},
 	}
