@@ -47,6 +47,25 @@ var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", fu
 		})
 
 		assertManagedClusterImportSecretCreated(managedClusterName, "hive")
+
+		ginkgo.By(fmt.Sprintf("removed create-via hive annotation from %s, and the annotation will be added back",
+			managedClusterName), func() {
+			gomega.Eventually(func() error {
+				cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(),
+					managedClusterName, metav1.GetOptions{})
+				if err != nil {
+					return err
+				}
+
+				delete(cluster.Annotations, "open-cluster-management/created-via")
+				_, err = hubClusterClient.ClusterV1().ManagedClusters().Update(context.TODO(),
+					cluster, metav1.UpdateOptions{})
+				return err
+			}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+
+			assertManagedClusterCreatedViaAnnotation(managedClusterName, "hive")
+		})
+
 		assertManagedClusterManifestWorks(managedClusterName)
 		assertManagedClusterImportSecretApplied(managedClusterName)
 		assertManagedClusterAvailable(managedClusterName)
