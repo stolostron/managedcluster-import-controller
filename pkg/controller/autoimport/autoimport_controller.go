@@ -197,6 +197,14 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 			delete(r.rosaKubeConfigGetters, managedClusterName)
 		}
 
+		// update the cluster URL before the auto secret is deleted if the importing resources are applied
+		if helpers.ImportingResourcesApplied(&condition) {
+			if err := updateClusterURL(ctx, r.client, managedCluster, autoImportSecret); err != nil {
+				reqLogger.Error(err, "Failed to update clusterURL")
+				return reconcile.Result{}, err
+			}
+		}
+
 		// delete secret
 		if err := helpers.DeleteAutoImportSecret(ctx, r.kubeClient, autoImportSecret, r.recorder); err != nil {
 			return reconcile.Result{}, err
