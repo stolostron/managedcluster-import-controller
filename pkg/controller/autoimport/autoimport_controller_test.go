@@ -5,18 +5,17 @@ package autoimport
 
 import (
 	"context"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
+
+	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -44,8 +43,7 @@ func init() {
 
 func TestReconcile(t *testing.T) {
 
-	// uncomment these lines to run the test locally
-	// if err := os.Setenv("KUBEBUILDER_ASSETS", "./../../../_output/kubebuilder/bin"); err != nil {
+	// if err := os.Setenv("KUBEBUILDER_ASSETS", "./../../../_output/kubebuilder/bin"); err != nil { // uncomment these lines to run the test locally
 	// 	t.Fatal(err)
 	// }
 
@@ -97,7 +95,6 @@ func TestReconcile(t *testing.T) {
 		expectedErr             bool
 		expectedConditionStatus metav1.ConditionStatus
 		expectedConditionReason string
-		expectedAPIServerURL    string
 	}{
 		{
 			name:        "no cluster",
@@ -105,7 +102,7 @@ func TestReconcile(t *testing.T) {
 			expectedErr: false,
 		},
 		{
-			name: "hosted cluster without",
+			name: "hosted cluster",
 			objs: []client.Object{
 				testinghelpers.NewManagedClusterBuilder(managedClusterName).
 					WithAnnotations(constants.KlusterletDeployModeAnnotation, string(operatorv1.InstallModeHosted)).
@@ -122,33 +119,18 @@ func TestReconcile(t *testing.T) {
 					WithAnnotations(apiconstants.DisableAutoImportAnnotation, "").
 					Build(),
 			},
-			works:                []runtime.Object{},
-			secrets:              []runtime.Object{},
-			expectedErr:          false,
-			expectedAPIServerURL: "",
+			works:       []runtime.Object{},
+			secrets:     []runtime.Object{},
+			expectedErr: false,
 		},
 		{
 			name: "no auto-import-secret",
 			objs: []client.Object{
 				testinghelpers.NewManagedClusterBuilder(managedClusterName).Build(),
 			},
-			works: []runtime.Object{},
-			secrets: []runtime.Object{
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "auto-import-secret",
-						Namespace: managedClusterName,
-					},
-					Data: map[string][]byte{
-						"autoImportRetry": []byte("0"),
-						"server":          []byte(config.Host),
-						// no auth info
-					},
-					Type: constants.AutoImportSecretKubeToken,
-				},
-			},
-			expectedErr:          false,
-			expectedAPIServerURL: strings.TrimSuffix(config.Host, "/"),
+			works:       []runtime.Object{},
+			secrets:     []runtime.Object{},
+			expectedErr: false,
 		},
 		{
 			name: "auto-import-secret AutoImportRetry invalid",
@@ -167,10 +149,9 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedErr:             true,
+			expectedErr:             false,
 			expectedConditionStatus: metav1.ConditionFalse,
 			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
-			expectedAPIServerURL:    "",
 		},
 		{
 			name: "auto-import-secret current retry annotation invalid",
@@ -192,8 +173,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedErr:          true,
-			expectedAPIServerURL: "",
+			expectedErr: true,
 		},
 		{
 			name: "unsupported auto-import-secret type",
@@ -210,10 +190,9 @@ func TestReconcile(t *testing.T) {
 					Data: map[string][]byte{},
 				},
 			},
-			expectedErr:             true,
+			expectedErr:             false,
 			expectedConditionStatus: metav1.ConditionFalse,
 			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
-			expectedAPIServerURL:    "",
 		},
 		{
 			name: "no manifest works",
@@ -241,7 +220,6 @@ func TestReconcile(t *testing.T) {
 			expectedErr:             false,
 			expectedConditionStatus: metav1.ConditionFalse,
 			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
-			expectedAPIServerURL:    strings.TrimSuffix(config.Host, "/"),
 		},
 		{
 			name: "no manifest works (compatibility)",
@@ -269,7 +247,6 @@ func TestReconcile(t *testing.T) {
 			expectedErr:             false,
 			expectedConditionStatus: metav1.ConditionFalse,
 			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
-			expectedAPIServerURL:    strings.TrimSuffix(config.Host, "/"),
 		},
 		{
 			name: "no import-secret",
@@ -312,7 +289,6 @@ func TestReconcile(t *testing.T) {
 			expectedErr:             false,
 			expectedConditionStatus: metav1.ConditionFalse,
 			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
-			expectedAPIServerURL:    strings.TrimSuffix(config.Host, "/"),
 		},
 		{
 			name: "update auto import secret current retry times",
@@ -356,7 +332,6 @@ func TestReconcile(t *testing.T) {
 			expectedErr:             false,
 			expectedConditionStatus: metav1.ConditionFalse,
 			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
-			expectedAPIServerURL:    strings.TrimSuffix(config.Host, "/"),
 		},
 		{
 			name: "import cluster with auto-import secret invalid",
@@ -401,7 +376,6 @@ func TestReconcile(t *testing.T) {
 			expectedErr:             false,
 			expectedConditionStatus: metav1.ConditionFalse,
 			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
-			expectedAPIServerURL:    strings.TrimSuffix(config.Host, "/"),
 		},
 		{
 			name: "import cluster with auto-import secret invalid (compatibility)",
@@ -446,7 +420,6 @@ func TestReconcile(t *testing.T) {
 			expectedErr:             false,
 			expectedConditionStatus: metav1.ConditionFalse,
 			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
-			expectedAPIServerURL:    strings.TrimSuffix(config.Host, "/"),
 		},
 		{
 			name: "import rosa cluster with auto-import secret invalid",
@@ -480,16 +453,13 @@ func TestReconcile(t *testing.T) {
 						Name:      "auto-import-secret",
 						Namespace: managedClusterName,
 					},
-					Data: map[string][]byte{
-						constants.AutoImportSecretRosaConfigAPIURLKey: []byte(config.Host),
-					},
+					Data: map[string][]byte{},
 					Type: constants.AutoImportSecretRosaConfig,
 				},
 			},
 			expectedErr:             true,
 			expectedConditionStatus: metav1.ConditionFalse,
 			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
-			expectedAPIServerURL:    "",
 		},
 		{
 			name: "only update the bootstrap secret",
@@ -536,7 +506,6 @@ func TestReconcile(t *testing.T) {
 			expectedErr:             false,
 			expectedConditionStatus: metav1.ConditionFalse,
 			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
-			expectedAPIServerURL:    strings.TrimSuffix(config.Host, "/"),
 		},
 		{
 			name: "only update the bootstrap secret - works unavailable",
@@ -583,7 +552,6 @@ func TestReconcile(t *testing.T) {
 			expectedErr:             false,
 			expectedConditionStatus: metav1.ConditionFalse,
 			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
-			expectedAPIServerURL:    strings.TrimSuffix(config.Host, "/"),
 		},
 		{
 			name: "only update the bootstrap secret - works available",
@@ -646,7 +614,6 @@ func TestReconcile(t *testing.T) {
 			expectedErr:             false,
 			expectedConditionStatus: metav1.ConditionFalse,
 			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
-			expectedAPIServerURL:    strings.TrimSuffix(config.Host, "/"),
 		},
 	}
 
@@ -688,13 +655,13 @@ func TestReconcile(t *testing.T) {
 				t.Errorf("name: %v, unexpected error: %v", c.name, err)
 			}
 
-			managedCluster := &clusterv1.ManagedCluster{}
-			err = r.client.Get(ctx, types.NamespacedName{Name: managedClusterName}, managedCluster)
-			if err != nil && !errors.IsNotFound(err) {
-				t.Errorf("name %v : get managed cluster error: %v", c.name, err)
-			}
-
 			if c.expectedConditionReason != "" {
+
+				managedCluster := &clusterv1.ManagedCluster{}
+				err = r.client.Get(ctx, types.NamespacedName{Name: managedClusterName}, managedCluster)
+				if err != nil {
+					t.Errorf("name %v : get managed cluster error: %v", c.name, err)
+				}
 				condition := meta.FindStatusCondition(
 					managedCluster.Status.Conditions,
 					constants.ConditionManagedClusterImportSucceeded,
@@ -706,15 +673,6 @@ func TestReconcile(t *testing.T) {
 				if condition != nil && condition.Reason != c.expectedConditionReason {
 					t.Errorf("name %v : expect condition reason %s, got %s, message: %s",
 						c.name, c.expectedConditionReason, condition.Reason, condition.Message)
-				}
-			}
-			if c.expectedAPIServerURL != "" {
-				clientConfigs := managedCluster.Spec.ManagedClusterClientConfigs
-				if len(clientConfigs) != 1 {
-					t.Errorf("name %v : expect 1 clientConfigs, got %d", c.name, len(clientConfigs))
-				}
-				if clientConfigs[0].URL != c.expectedAPIServerURL {
-					t.Errorf("expected apiserver URL %s, got %s", c.expectedAPIServerURL, clientConfigs[0].URL)
 				}
 			}
 

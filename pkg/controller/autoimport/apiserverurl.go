@@ -5,43 +5,32 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/tools/clientcmd"
-	kevents "k8s.io/client-go/tools/events"
 	"k8s.io/klog/v2"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-type apiServerSyncer struct {
-	client       client.Client
-	recorder     events.Recorder
-	mcRecorder   kevents.EventRecorder
-	importHelper *helpers.ImportHelper
-}
-
-func (s *apiServerSyncer) sync(ctx context.Context,
-	managedCluster *clusterv1.ManagedCluster, autoImportSecret *corev1.Secret) (reconcile.Result, error) {
-
-	apiServerURL, err := s.getAPIServerURL(autoImportSecret)
+func updateClusterURL(ctx context.Context, client client.Client,
+	managedCluster *clusterv1.ManagedCluster, autoImportSecret *corev1.Secret) error {
+	apiServerURL, err := getAPIServerURL(autoImportSecret)
 	if err != nil {
-		return reconcile.Result{}, err
+		return err
 	}
 
 	if apiServerURL == "" {
-		return reconcile.Result{}, nil
+		return nil
 	}
 
 	apiServerURL = strings.TrimSuffix(apiServerURL, "/")
 
 	clusterCopy := managedCluster.DeepCopy()
 	for _, config := range clusterCopy.Spec.ManagedClusterClientConfigs {
-		if config.URL == apiServerURL {
-			return reconcile.Result{}, nil
+		configURL := strings.TrimSuffix(config.URL, "/")
+		if configURL == apiServerURL {
+			return nil
 		}
 	}
 
@@ -51,10 +40,10 @@ func (s *apiServerSyncer) sync(ctx context.Context,
 		})
 
 	klog.Infof("update the apiServerURL %v to the spec of managedCluster %v.", apiServerURL, clusterCopy.Name)
-	return reconcile.Result{}, s.client.Update(ctx, clusterCopy)
+	return client.Update(ctx, clusterCopy)
 }
 
-func (s *apiServerSyncer) getAPIServerURL(secret *corev1.Secret) (string, error) {
+func getAPIServerURL(secret *corev1.Secret) (string, error) {
 	switch secret.Type {
 	case corev1.SecretTypeOpaque:
 		// for compatibility, we parse the secret fields to determine which generator should be used
