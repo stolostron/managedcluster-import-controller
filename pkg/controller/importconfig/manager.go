@@ -159,20 +159,20 @@ func Add(ctx context.Context,
 			},
 			builder.WithPredicates(predicate.Funcs{
 				GenericFunc: func(e event.GenericEvent) bool {
-					return len(e.Object.GetLabels()[apiconstants.HubKubeAPIServerCABunbleLabelKey]) > 0
+					return len(e.Object.GetLabels()[apiconstants.HubCABundleLabelKey]) > 0
 				},
 				CreateFunc: func(e event.CreateEvent) bool {
-					return len(e.Object.GetLabels()[apiconstants.HubKubeAPIServerCABunbleLabelKey]) > 0
+					return len(e.Object.GetLabels()[apiconstants.HubCABundleLabelKey]) > 0
 				},
 				DeleteFunc: func(e event.DeleteEvent) bool {
-					return len(e.Object.GetLabels()[apiconstants.HubKubeAPIServerCABunbleLabelKey]) > 0
+					return len(e.Object.GetLabels()[apiconstants.HubCABundleLabelKey]) > 0
 				},
 				UpdateFunc: func(e event.UpdateEvent) bool {
 					new, okNew := e.ObjectNew.(*corev1.ConfigMap)
 					old, okOld := e.ObjectOld.(*corev1.ConfigMap)
 					if okNew && okOld {
-						return (len(e.ObjectNew.GetLabels()[apiconstants.HubKubeAPIServerCABunbleLabelKey]) > 0 ||
-							len(e.ObjectOld.GetLabels()[apiconstants.HubKubeAPIServerCABunbleLabelKey]) > 0) &&
+						return (len(e.ObjectNew.GetLabels()[apiconstants.HubCABundleLabelKey]) > 0 ||
+							len(e.ObjectOld.GetLabels()[apiconstants.HubCABundleLabelKey]) > 0) &&
 							!reflect.DeepEqual(new.Data, old.Data)
 					}
 

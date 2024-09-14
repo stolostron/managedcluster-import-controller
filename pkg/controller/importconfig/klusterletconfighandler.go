@@ -229,9 +229,7 @@ func IndexKlusterletConfigByCustomizedCAConfigmaps() func(obj interface{}) ([]st
 		var configmaps []string
 		if kc.Spec.HubKubeAPIServerConfig != nil && len(kc.Spec.HubKubeAPIServerConfig.TrustedCABundles) > 0 {
 			for _, bundle := range kc.Spec.HubKubeAPIServerConfig.TrustedCABundles {
-				if bundle.CABundle != nil {
-					configmaps = append(configmaps, configmapKey(bundle.CABundle.Namespace, bundle.CABundle.Name))
-				}
+				configmaps = append(configmaps, configmapKey(bundle.CABundle.Namespace, bundle.CABundle.Name))
 			}
 		}
 

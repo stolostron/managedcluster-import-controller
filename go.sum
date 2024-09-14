@@ -432,8 +432,8 @@ github.com/yuin/goldmark v1.4.0/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1
 github.com/yuin/goldmark v1.4.1/go.mod h1:mwnBkeHKe2W/ZEtQ+71ViKU8L12m81fl3OWwC1Zlc8k=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
 github.com/zenazn/goji v0.9.0/go.mod h1:7S9M489iMyHBNxwZnk9/EHS098H4/F6TATF2mIxtB1Q=
-github.com/zhujian7/cluster-lifecycle-api v0.0.0-20240913070402-b4a6cbeb8c7a h1:EBjaNH/nASp1VJaUZ2pAZOOhEOHSSbWgRVQZqdFZ5zg=
-github.com/zhujian7/cluster-lifecycle-api v0.0.0-20240913070402-b4a6cbeb8c7a/go.mod h1:Sflr4YW8MRsymgNLJDcOAv4oyfeiTRyEDR7PRBkg788=
+github.com/zhujian7/cluster-lifecycle-api v0.0.0-20240914075154-26b3adbd4972 h1:zyQnBU/Cs3llYyrGNrHX20S2x3PfeKVDlBQSNMS4p94=
+github.com/zhujian7/cluster-lifecycle-api v0.0.0-20240914075154-26b3adbd4972/go.mod h1:Sflr4YW8MRsymgNLJDcOAv4oyfeiTRyEDR7PRBkg788=
 go.mongodb.org/mongo-driver v1.7.3/go.mod h1:NqaYOwnXWr5Pm7AOpO5QFxKJ503nbMse/R79oO62zWg=
 go.mongodb.org/mongo-driver v1.7.5 h1:ny3p0reEpgsR2cfA5cjgwFZg3Cv/ofFh/8jbhGtz9VI=
 go.mongodb.org/mongo-driver v1.7.5/go.mod h1:VXEWRZ6URJIkUq2SCAyapmhH0ZLRBP+FT4xhp5Zvxng=

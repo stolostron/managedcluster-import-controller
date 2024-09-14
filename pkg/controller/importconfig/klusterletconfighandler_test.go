@@ -407,18 +407,18 @@ func TestEnqueueManagedClusterByCustomizedCAConfigmaps(t *testing.T) {
 			},
 			Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
 				HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
-					ServerVerificationStrategy: klusterletconfigv1alpha1.ServerVerificationStrategyDefault,
+					ServerVerificationStrategy: "",
 					TrustedCABundles: []klusterletconfigv1alpha1.CABundle{
 						{
 							Name: "test-cm1",
-							CABundle: &klusterletconfigv1alpha1.ConfigMapReference{
+							CABundle: klusterletconfigv1alpha1.ConfigMapReference{
 								Namespace: "ns1",
 								Name:      "cm1",
 							},
 						},
 						{
 							Name: "test-cm2",
-							CABundle: &klusterletconfigv1alpha1.ConfigMapReference{
+							CABundle: klusterletconfigv1alpha1.ConfigMapReference{
 								Namespace: "ns2",
 								Name:      "cm2",
 							},
@@ -433,18 +433,18 @@ func TestEnqueueManagedClusterByCustomizedCAConfigmaps(t *testing.T) {
 			},
 			Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
 				HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
-					ServerVerificationStrategy: klusterletconfigv1alpha1.ServerVerificationStrategyDefault,
+					// ServerVerificationStrategy: "",
 					TrustedCABundles: []klusterletconfigv1alpha1.CABundle{
 						{
 							Name: "test-cm3",
-							CABundle: &klusterletconfigv1alpha1.ConfigMapReference{
+							CABundle: klusterletconfigv1alpha1.ConfigMapReference{
 								Namespace: "ns3",
 								Name:      "cm3",
 							},
 						},
 						{
 							Name: "test-cm4",
-							CABundle: &klusterletconfigv1alpha1.ConfigMapReference{
+							CABundle: klusterletconfigv1alpha1.ConfigMapReference{
 								Namespace: "ns2",
 								Name:      "cm2",
 							},

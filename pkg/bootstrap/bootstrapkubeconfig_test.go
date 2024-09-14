@@ -349,18 +349,21 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:        "with proxy config by klusterletconfig HubKubeAPIServerConfig",
+			name:        "with proxy config by klusterletconfig HubKubeAPIServerConfig, empty strategy",
 			clientObjs:  []client.Object{testInfraConfigIP},
-			runtimeObjs: []runtime.Object{testTokenSecret, cm},
+			runtimeObjs: []runtime.Object{testTokenSecret, cm, proxyCAcm},
 			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
 				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
 					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
-						ServerVerificationStrategy: klusterletconfigv1alpha1.ServerVerificationStrategyDefault,
+						ServerVerificationStrategy: "",
 						ProxyURL:                   "https://127.0.0.1:3129",
 						TrustedCABundles: []klusterletconfigv1alpha1.CABundle{
 							{
-								Name:         "proxy-server-cert",
-								CABundleData: proxyServerCertData,
+								Name: "proxy-server-cert",
+								CABundle: klusterletconfigv1alpha1.ConfigMapReference{
+									Namespace: "testcluster",
+									Name:      "proxy-ca.crt",
+								},
 							},
 						},
 					},
@@ -387,7 +390,7 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 						TrustedCABundles: []klusterletconfigv1alpha1.CABundle{
 							{
 								Name: "proxy-server-cert",
-								CABundle: &klusterletconfigv1alpha1.ConfigMapReference{
+								CABundle: klusterletconfigv1alpha1.ConfigMapReference{
 									Namespace: "testcluster",
 									Name:      "proxy-ca.crt",
 								},
@@ -417,7 +420,7 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 						TrustedCABundles: []klusterletconfigv1alpha1.CABundle{
 							{
 								Name: "proxy-server-cert",
-								CABundle: &klusterletconfigv1alpha1.ConfigMapReference{
+								CABundle: klusterletconfigv1alpha1.ConfigMapReference{
 									Namespace: "testcluster",
 									Name:      "proxy-ca.crt",
 								},
@@ -446,7 +449,7 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 						TrustedCABundles: []klusterletconfigv1alpha1.CABundle{
 							{
 								Name: "proxy-server-cert",
-								CABundle: &klusterletconfigv1alpha1.ConfigMapReference{
+								CABundle: klusterletconfigv1alpha1.ConfigMapReference{
 									Namespace: "testcluster",
 									Name:      "proxy-ca.crt",
 								},

@@ -260,8 +260,7 @@ func getKubeAPIServerCADataFromConfig(ctx context.Context, clientHolder *helpers
 	switch config.ServerVerificationStrategy {
 	case klusterletconfigv1alpha1.ServerVerificationStrategyUseSystemTruststore:
 		return nil, nil
-	case klusterletconfigv1alpha1.ServerVerificationStrategyUseAutoDetectedCABundle,
-		klusterletconfigv1alpha1.ServerVerificationStrategyDefault:
+	case klusterletconfigv1alpha1.ServerVerificationStrategyUseAutoDetectedCABundle, "":
 		detectedCA, err := autoDetectCAData(ctx, clientHolder, kubeAPIServer, caNamespace)
 		if err != nil {
 			return nil, err
@@ -286,26 +285,15 @@ func getCustomCAData(ctx context.Context, clientHolder *helpers.ClientHolder,
 	}
 
 	var all []byte
-	var err error
 	for _, caBundle := range caBundles {
-		if len(caBundle.CABundleData) > 0 {
-			all, err = mergeCertificateData(all, caBundle.CABundleData)
-			if err != nil {
-				return nil, err
-			}
-			continue // ignore the configmap if the data is set
+		data, err := getCABundleFromConfigmap(ctx, clientHolder,
+			caBundle.CABundle.Namespace, caBundle.CABundle.Name)
+		if err != nil {
+			return nil, err
 		}
-
-		if caBundle.CABundle != nil {
-			data, err := getCABundleFromConfigmap(ctx, clientHolder,
-				caBundle.CABundle.Namespace, caBundle.CABundle.Name)
-			if err != nil {
-				return nil, err
-			}
-			all, err = mergeCertificateData(all, data)
-			if err != nil {
-				return nil, err
-			}
+		all, err = mergeCertificateData(all, data)
+		if err != nil {
+			return nil, err
 		}
 	}
 
