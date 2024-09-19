@@ -1250,9 +1250,18 @@ func TestValidateBootstrapKubeconfig(t *testing.T) {
 			name:               "kubeAPIserver valid, CA data is empty",
 			kubeAPIServer:      "https://api.my-cluster.example.com:6443",
 			infraKubeAPIServer: "https://api.my-cluster.example.com:6443",
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
+						ServerVerificationStrategy: klusterletconfigv1alpha1.ServerVerificationStrategyUseSystemTruststore,
+					},
+				},
+			},
+			ctxClusterName: "my-cluster",
+			valid:          true,
 		},
 		{
-			name:               "kubeAPIserver valid,cert changes",
+			name:               "kubeAPIserver valid, cert changes",
 			kubeAPIServer:      "https://api.my-cluster.example.com:6443",
 			infraKubeAPIServer: "https://api.my-cluster.example.com:6443",
 			bootstrapCAData:    certData1,
@@ -1422,7 +1431,8 @@ func TestValidateCAData(t *testing.T) {
 		valid            bool
 	}{
 		{
-			name: "CA data is empty",
+			name:  "CA data is empty",
+			valid: false,
 		},
 		{
 			name:            "cert changes",
@@ -1454,15 +1464,26 @@ func TestValidateCAData(t *testing.T) {
 			kubeAPIServer := fmt.Sprintf("https://%s:6443", fqdn)
 			secretName := "my-secret-name"
 
-			fakeKubeClient := kubefake.NewSimpleClientset(&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      secretName,
-					Namespace: "openshift-config",
+			fakeKubeClient := kubefake.NewSimpleClientset(
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      secretName,
+						Namespace: "openshift-config",
+					},
+					Data: map[string][]byte{
+						"tls.crt": c.currentCAData,
+					},
 				},
-				Data: map[string][]byte{
-					"tls.crt": c.currentCAData,
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "kube-root-ca.crt",
+						Namespace: "cluster",
+					},
+					Data: map[string]string{
+						"ca.crt": string(certData1),
+					},
 				},
-			})
+			)
 
 			clientHolder := &helpers.ClientHolder{
 				RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(&ocinfrav1.APIServer{

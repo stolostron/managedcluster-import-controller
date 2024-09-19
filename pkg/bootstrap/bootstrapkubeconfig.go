@@ -611,10 +611,6 @@ func validateKubeAPIServerAddress(ctx context.Context, kubeAPIServer string,
 func validateCAData(ctx context.Context, caData []byte, kubeAPIServer string,
 	klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig,
 	clientHolder *helpers.ClientHolder, clusterName string) (bool, error) {
-	if len(caData) == 0 {
-		// CA data is empty
-		return false, nil
-	}
 
 	currentCAData, err := GetBootstrapCAData(ctx, clientHolder, kubeAPIServer, clusterName, klusterletConfig)
 	if err != nil {
