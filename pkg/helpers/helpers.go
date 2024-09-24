@@ -146,14 +146,39 @@ func GenerateImportClientFromKubeTokenSecret(secret *corev1.Secret) (reconcile.R
 
 // GenerateImportClientFromRosaCluster generate a client from a given secret that contains rosa cluster info
 func GenerateImportClientFromRosaCluster(getter *RosaKubeConfigGetter, secret *corev1.Secret) (reconcile.Result, *ClientHolder, meta.RESTMapper, error) {
-	token, hasOCMAPIToken := secret.Data[constants.AutoImportSecretRosaConfigAPITokenKey]
-	clusterID, hasRosaClusterID := secret.Data[constants.AutoImportSecretRosaConfigClusterIDKey]
-	if !hasOCMAPIToken || !hasRosaClusterID {
-		return reconcile.Result{}, nil, nil, fmt.Errorf("api_token or cluster_id is missing")
-	}
+	authMethod := secret.Data[constants.AutoImportSecretRosaConfigAuthMethodKey]
+	switch string(authMethod) {
+	case constants.AutoImportSecretRosaConfigAuthMethodServiceAccount:
+		getter.SetAuthMethod(constants.AutoImportSecretRosaConfigAuthMethodServiceAccount)
 
-	getter.SetToken(string(token))
-	getter.SetClusterID(string(clusterID))
+		clientID, hasClientID := secret.Data[constants.AutoImportSecretRosaConfigClientIDKey]
+		if !hasClientID {
+			return reconcile.Result{}, nil, nil, fmt.Errorf("client_id is missing")
+		}
+		clientSecret, hasClientSecret := secret.Data[constants.AutoImportSecretRosaConfigClientSecretKey]
+		if !hasClientSecret {
+			return reconcile.Result{}, nil, nil, fmt.Errorf("client_secret is missing")
+		}
+
+		getter.SetClientID(string(clientID))
+		getter.SetClientSecret(string(clientSecret))
+	case constants.AutoImportSecretRosaConfigAuthMethodOfflineToken, "":
+		getter.SetAuthMethod(constants.AutoImportSecretRosaConfigAuthMethodOfflineToken)
+
+		token, hasOCMAPIToken := secret.Data[constants.AutoImportSecretRosaConfigAPITokenKey]
+		if !hasOCMAPIToken {
+			return reconcile.Result{}, nil, nil, fmt.Errorf("api_token is missing")
+		}
+		clusterID, hasRosaClusterID := secret.Data[constants.AutoImportSecretRosaConfigClusterIDKey]
+		if !hasRosaClusterID {
+			return reconcile.Result{}, nil, nil, fmt.Errorf("cluster_id is missing")
+		}
+
+		getter.SetToken(string(token))
+		getter.SetClusterID(string(clusterID))
+	default:
+		return reconcile.Result{}, nil, nil, fmt.Errorf("unsupported auth method %s", authMethod)
+	}
 
 	if apiServer, ok := secret.Data[constants.AutoImportSecretRosaConfigAPIURLKey]; ok {
 		getter.SetAPIServerURL(string(apiServer))
