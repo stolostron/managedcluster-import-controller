@@ -208,6 +208,7 @@ func main() {
 	if err := klusterletconfigInformer.AddIndexers(
 		cache.Indexers{
 			importconfig.KlusterletConfigBootstrapKubeConfigSecretsIndexKey: importconfig.IndexKlusterletConfigByBootstrapKubeConfigSecrets(),
+			importconfig.KlusterletConfigCustomizedCAConfigmapsIndexKey:     importconfig.IndexKlusterletConfigByCustomizedCAConfigmaps(),
 		},
 	); err != nil {
 		setupLog.Error(err, "failed to add indexers to klusterletconfig informer")

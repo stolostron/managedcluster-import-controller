@@ -177,6 +177,12 @@ var _ = ginkgo.Describe("cluster namespace deletion controller", func() {
 			err := util.CreateClusterDeployment(hubDynamicClient, cluster.Name)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
+			// Wait for clusterDeployment to exist, otherwise this may fail occasionally in the local environment
+			gomega.Eventually(func() error {
+				_, err := util.GetClusterDeployment(hubDynamicClient, cluster.Name)
+				return err
+			}, timeout, interval).ShouldNot(gomega.HaveOccurred())
+
 			ginkgo.By("delete cluster")
 			err = runtimeClient.Delete(context.TODO(), cluster)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())

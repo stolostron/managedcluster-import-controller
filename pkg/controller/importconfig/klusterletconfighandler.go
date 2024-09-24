@@ -155,3 +155,88 @@ func IndexKlusterletConfigByBootstrapKubeConfigSecrets() func(obj interface{}) (
 		return bootstrapKubeConfigSecrets, nil
 	}
 }
+
+const (
+	KlusterletConfigCustomizedCAConfigmapsIndexKey = "klusterletconfig-customized-ca-configmaps"
+)
+
+var _ handler.EventHandler = &enqueueManagedClusterByCustomizedCAConfigmaps{}
+
+// enqueueManagedClusterByCustomizedCAConfigmaps first finds the klusterletconfigs that using the configmap, then
+// finds the managedclusters that using the klusterletconfigs.
+type enqueueManagedClusterByCustomizedCAConfigmaps struct {
+	// index klusterletconfig by the customized ca configmaps
+	klusterletconfigIndexer cache.Indexer
+
+	// index managedcluster by the annotation
+	managedclusterIndexer cache.Indexer
+}
+
+func (e *enqueueManagedClusterByCustomizedCAConfigmaps) Create(ctx context.Context,
+	evt event.CreateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+	e.enqueue(configmapKey(evt.Object.GetNamespace(), evt.Object.GetName()), q)
+}
+
+func (e *enqueueManagedClusterByCustomizedCAConfigmaps) Update(ctx context.Context,
+	evt event.UpdateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+	e.enqueue(configmapKey(evt.ObjectNew.GetNamespace(), evt.ObjectNew.GetName()), q)
+}
+
+func (e *enqueueManagedClusterByCustomizedCAConfigmaps) Delete(ctx context.Context,
+	evt event.DeleteEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+	e.enqueue(configmapKey(evt.Object.GetNamespace(), evt.Object.GetName()), q)
+}
+
+func (e *enqueueManagedClusterByCustomizedCAConfigmaps) Generic(ctx context.Context,
+	evt event.GenericEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+	e.enqueue(configmapKey(evt.Object.GetNamespace(), evt.Object.GetName()), q)
+}
+
+func (e *enqueueManagedClusterByCustomizedCAConfigmaps) enqueue(
+	configmapKey string, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+	klusterletconfigObjs, err := e.klusterletconfigIndexer.ByIndex(
+		KlusterletConfigCustomizedCAConfigmapsIndexKey, configmapKey)
+	if err != nil {
+		klog.Error(err, "Failed to get klusterletconfigs by customized ca configmap by indexer",
+			"configmaps", configmapKey)
+		return
+	}
+	for _, kcObj := range klusterletconfigObjs {
+		kc := kcObj.(*klusterletconfigv1alpha1.KlusterletConfig)
+		managedclusterObjs, err := e.managedclusterIndexer.ByIndex(
+			ManagedClusterKlusterletConfigAnnotationIndexKey, kc.GetName())
+		if err != nil {
+			klog.Error(err, "Failed to get managedclusters by klusterletconfig annotation by indexer",
+				"klusterletconfig", kc.GetName())
+			return
+		}
+		for _, mcObj := range managedclusterObjs {
+			mc := mcObj.(*clusterv1.ManagedCluster)
+			q.Add(reconcile.Request{NamespacedName: types.NamespacedName{
+				Name: mc.GetName(),
+			}})
+		}
+	}
+}
+
+func IndexKlusterletConfigByCustomizedCAConfigmaps() func(obj interface{}) ([]string, error) {
+	return func(obj interface{}) ([]string, error) {
+		kc, ok := obj.(*klusterletconfigv1alpha1.KlusterletConfig)
+		if !ok {
+			return nil, fmt.Errorf("not a klustereltconfig object")
+		}
+
+		var configmaps []string
+		if kc.Spec.HubKubeAPIServerConfig != nil && len(kc.Spec.HubKubeAPIServerConfig.TrustedCABundles) > 0 {
+			for _, bundle := range kc.Spec.HubKubeAPIServerConfig.TrustedCABundles {
+				configmaps = append(configmaps, configmapKey(bundle.CABundle.Namespace, bundle.CABundle.Name))
+			}
+		}
+
+		return configmaps, nil
+	}
+}
+
+func configmapKey(namespace, name string) string {
+	return namespace + "/" + name
+}

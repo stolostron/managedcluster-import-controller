@@ -377,3 +377,190 @@ func TestIndexKlusterletConfigByBootstrapKubeConfigSecrets(t *testing.T) {
 		t.Errorf("Expected result to be [], but got %v", result)
 	}
 }
+
+func TestEnqueueManagedClusterByCustomizedCAConfigmaps(t *testing.T) {
+	mcs := []*clusterv1.ManagedCluster{
+		{
+			ObjectMeta: v1.ObjectMeta{
+				Name:        "test1",
+				Annotations: map[string]string{"agent.open-cluster-management.io/klusterlet-config": "test-kc1"},
+			},
+		},
+		{
+			ObjectMeta: v1.ObjectMeta{
+				Name:        "test2",
+				Annotations: map[string]string{"agent.open-cluster-management.io/klusterlet-config": "test-kc2"},
+			},
+		},
+		{
+			ObjectMeta: v1.ObjectMeta{
+				Name:        "test3",
+				Annotations: map[string]string{"agent.open-cluster-management.io/klusterlet-config": "test-kc2"},
+			},
+		},
+	}
+
+	klusterletconfigs := []*klusterletconfigv1alpha1.KlusterletConfig{
+		{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "test-kc1",
+			},
+			Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+				HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
+					ServerVerificationStrategy: "",
+					TrustedCABundles: []klusterletconfigv1alpha1.CABundle{
+						{
+							Name: "test-cm1",
+							CABundle: klusterletconfigv1alpha1.ConfigMapReference{
+								Namespace: "ns1",
+								Name:      "cm1",
+							},
+						},
+						{
+							Name: "test-cm2",
+							CABundle: klusterletconfigv1alpha1.ConfigMapReference{
+								Namespace: "ns2",
+								Name:      "cm2",
+							},
+						},
+					},
+				},
+			},
+		},
+		{
+			ObjectMeta: v1.ObjectMeta{
+				Name: "test-kc2",
+			},
+			Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+				HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
+					// ServerVerificationStrategy: "",
+					TrustedCABundles: []klusterletconfigv1alpha1.CABundle{
+						{
+							Name: "test-cm3",
+							CABundle: klusterletconfigv1alpha1.ConfigMapReference{
+								Namespace: "ns3",
+								Name:      "cm3",
+							},
+						},
+						{
+							Name: "test-cm4",
+							CABundle: klusterletconfigv1alpha1.ConfigMapReference{
+								Namespace: "ns2",
+								Name:      "cm2",
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	testcases := []struct {
+		addEvent func(handler handler.EventHandler, queue workqueue.TypedRateLimitingInterface[reconcile.Request])
+		verify   func(t *testing.T, queue workqueue.TypedRateLimitingInterface[reconcile.Request])
+	}{
+		{
+			// create a klusterletconfig with configmaps, expect the managed cluster to be enqueued
+			addEvent: func(h handler.EventHandler, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+				// Create a new configmap event for the klusterletconfig
+				evt := event.CreateEvent{
+					Object: &corev1.ConfigMap{
+						ObjectMeta: v1.ObjectMeta{
+							Name:      "cm1",
+							Namespace: "ns1",
+						},
+					},
+				}
+				h.Create(context.Background(), evt, queue)
+			},
+			verify: func(t *testing.T, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+				if queue.Len() != 1 {
+					t.Errorf("Expected queue length to be 1, but got %d", queue.Len())
+				}
+				expectedRequest := reconcile.Request{
+					NamespacedName: types.NamespacedName{
+						Name: "test1",
+					},
+				}
+				// Get the item from the queue
+				item, _ := queue.Get()
+				// Check that the item is the expected reconcile request
+				if item != expectedRequest {
+					t.Errorf("Expected item to be %v, but got %v", expectedRequest, item)
+				}
+			},
+		},
+		{
+			// create a klusterletconfig with configmaps, expect the managed cluster to be enqueued
+			addEvent: func(h handler.EventHandler, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+				// Create a new configmap event for the klusterletconfig
+				evt := event.CreateEvent{
+					Object: &corev1.ConfigMap{
+						ObjectMeta: v1.ObjectMeta{
+							Name:      "cm2",
+							Namespace: "ns2",
+						},
+					},
+				}
+				h.Create(context.Background(), evt, queue)
+			},
+			verify: func(t *testing.T, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) {
+				if queue.Len() != 3 {
+					t.Errorf("Expected queue length to be 3, but got %d", queue.Len())
+				}
+
+				item, _ := queue.Get()
+				if item.Name != "test1" && item.Name != "test2" && item.Name != "test3" {
+					t.Errorf("Expected item to be test1, test2 or test3, but got %v", item.Name)
+				}
+				item, _ = queue.Get()
+				if item.Name != "test1" && item.Name != "test2" && item.Name != "test3" {
+					t.Errorf("Expected item to be test1, test2 or test3, but got %v", item.Name)
+				}
+				item, _ = queue.Get()
+				if item.Name != "test1" && item.Name != "test2" && item.Name != "test3" {
+					t.Errorf("Expected item to be test1, test2 or test3, but got %v", item.Name)
+				}
+			},
+		},
+	}
+
+	for _, tc := range testcases {
+		// Create fake clientet and indexer
+		managedClusterIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
+			ManagedClusterKlusterletConfigAnnotationIndexKey: IndexManagedClusterByKlusterletconfigAnnotation,
+		})
+
+		klusterletconfigIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{
+			KlusterletConfigCustomizedCAConfigmapsIndexKey: IndexKlusterletConfigByCustomizedCAConfigmaps(),
+		})
+
+		// Create a new handler
+		handler := &enqueueManagedClusterByCustomizedCAConfigmaps{
+			managedclusterIndexer:   managedClusterIndexer,
+			klusterletconfigIndexer: klusterletconfigIndexer,
+		}
+
+		// Create a new queue
+		queue := workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[reconcile.Request]())
+
+		// Add the managed clusters to the indexer
+		for _, mc := range mcs {
+			err := managedClusterIndexer.Add(mc)
+			if err != nil {
+				t.Fatalf("Failed to add managed cluster to indexer: %v", err)
+			}
+		}
+
+		for _, kc := range klusterletconfigs {
+			err := klusterletconfigIndexer.Add(kc)
+			if err != nil {
+				t.Fatalf("Failed to add klusterletconfig to indexer: %v", err)
+			}
+		}
+
+		// Add the event to the handler
+		tc.addEvent(handler, queue)
+		tc.verify(t, queue)
+	}
+}

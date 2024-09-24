@@ -6,6 +6,7 @@ package importconfig
 import (
 	"context"
 	"os"
+	"reflect"
 
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -20,6 +21,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
@@ -146,6 +148,35 @@ func Add(ctx context.Context,
 				},
 				UpdateFunc: func(e event.UpdateEvent) bool {
 					return e.ObjectNew.GetNamespace() == podNS || e.ObjectOld.GetNamespace() == podNS
+				},
+			}),
+		).
+		Watches(
+			&corev1.ConfigMap{},
+			&enqueueManagedClusterByCustomizedCAConfigmaps{
+				managedclusterIndexer:   informerHolder.ManagedClusterInformer.GetIndexer(),
+				klusterletconfigIndexer: informerHolder.KlusterletConfigInformer.GetIndexer(),
+			},
+			builder.WithPredicates(predicate.Funcs{
+				GenericFunc: func(e event.GenericEvent) bool {
+					return len(e.Object.GetLabels()[apiconstants.HubCABundleLabelKey]) > 0
+				},
+				CreateFunc: func(e event.CreateEvent) bool {
+					return len(e.Object.GetLabels()[apiconstants.HubCABundleLabelKey]) > 0
+				},
+				DeleteFunc: func(e event.DeleteEvent) bool {
+					return len(e.Object.GetLabels()[apiconstants.HubCABundleLabelKey]) > 0
+				},
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					new, okNew := e.ObjectNew.(*corev1.ConfigMap)
+					old, okOld := e.ObjectOld.(*corev1.ConfigMap)
+					if okNew && okOld {
+						return (len(e.ObjectNew.GetLabels()[apiconstants.HubCABundleLabelKey]) > 0 ||
+							len(e.ObjectOld.GetLabels()[apiconstants.HubCABundleLabelKey]) > 0) &&
+							!reflect.DeepEqual(new.Data, old.Data)
+					}
+
+					return false
 				},
 			}),
 		).
