@@ -13,6 +13,7 @@ import (
 	clustersmgmtv1 "github.com/openshift-online/ocm-sdk-go/clustersmgmt/v1"
 	"github.com/openshift/library-go/pkg/oauth/tokenrequest"
 	"github.com/sethvargo/go-password/password"
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	"k8s.io/client-go/rest"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -37,14 +38,18 @@ type RosaKubeConfigGetter struct {
 	apiServerURL      string
 	tokenURL          string
 	token             string
+	clientID          string
+	clientSecret      string
 	clusterID         string
 	importUserPasswd  string
 	totalRetryTimes   int
 	currentRetryTimes int
+	authMethod        string
 }
 
 func NewRosaKubeConfigGetter() *RosaKubeConfigGetter {
 	return &RosaKubeConfigGetter{
+		authMethod:        constants.AutoImportSecretRosaConfigAuthMethodOfflineToken,
 		apiServerURL:      defaultAPIServerURL,
 		tokenURL:          defaultTokenURL,
 		totalRetryTimes:   defaultRetryTimes,
@@ -81,6 +86,18 @@ func (g *RosaKubeConfigGetter) SetRetryTimes(retryTimes string) {
 	}
 
 	g.totalRetryTimes = retryTimesInt
+}
+
+func (g *RosaKubeConfigGetter) SetAuthMethod(authMethod string) {
+	g.authMethod = authMethod
+}
+
+func (g *RosaKubeConfigGetter) SetClientID(clientID string) {
+	g.clientID = clientID
+}
+
+func (g *RosaKubeConfigGetter) SetClientSecret(clientSecret string) {
+	g.clientSecret = clientSecret
 }
 
 func (g *RosaKubeConfigGetter) KubeConfig() (bool, *clientcmdapi.Config, error) {
@@ -166,13 +183,25 @@ func (g *RosaKubeConfigGetter) newConnection() (*sdk.Connection, error) {
 		return nil, err
 	}
 
-	// Create the connection, and remember to close it:
-	return sdk.NewConnectionBuilder().
-		Logger(logger).
-		URL(g.apiServerURL).
-		TokenURL(g.tokenURL).
-		Tokens(g.token).
-		Build()
+	// Create the connection, and remember to close it
+	switch g.authMethod {
+	case constants.AutoImportSecretRosaConfigAuthMethodOfflineToken:
+		return sdk.NewConnectionBuilder().
+			Logger(logger).
+			URL(g.apiServerURL).
+			TokenURL(g.tokenURL).
+			Tokens(g.token).
+			Build()
+	case constants.AutoImportSecretRosaConfigAuthMethodServiceAccount:
+		// following the example in:
+		// https://github.com/openshift-online/ocm-sdk-go/blob/e523a3317a2e9da40b63acf1b20a985041b7ea99/examples/client_credentials_grant.go#L48
+		return sdk.NewConnectionBuilder().
+			Logger(logger).
+			Client(g.clientID, g.clientSecret).
+			Build()
+	default:
+		return nil, fmt.Errorf("invalid auth method %s", g.authMethod)
+	}
 }
 
 func (g *RosaKubeConfigGetter) shouldRetry(clusterClient *clustersmgmtv1.ClusterClient) bool {
