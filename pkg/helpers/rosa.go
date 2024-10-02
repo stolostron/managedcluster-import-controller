@@ -116,7 +116,7 @@ func (g *RosaKubeConfigGetter) KubeConfig() (bool, *clientcmdapi.Config, error) 
 
 	api, ok := resp.Body().GetAPI()
 	if !ok {
-		return false, nil, fmt.Errorf("rosa cluster %s api url is not found", g.clusterID)
+		return false, nil, fmt.Errorf("rosa cluster api url is not found, clusterID: %s", g.clusterID)
 	}
 
 	if len(g.importUserPasswd) == 0 {

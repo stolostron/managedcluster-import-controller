@@ -68,7 +68,7 @@ func TestKubeConfig(t *testing.T) {
 					clustersmgmttesting.RespondWithJSON(http.StatusOK, `{}`),
 				),
 			},
-			expectedErrMsg: "rosa cluster 0001 api url is not found",
+			expectedErrMsg: "rosa cluster api url is not found, clusterID: 0001",
 		},
 		{
 			name:      "request a token",

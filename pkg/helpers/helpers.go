@@ -169,16 +169,17 @@ func GenerateImportClientFromRosaCluster(getter *RosaKubeConfigGetter, secret *c
 		if !hasOCMAPIToken {
 			return reconcile.Result{}, nil, nil, fmt.Errorf("api_token is missing")
 		}
-		clusterID, hasRosaClusterID := secret.Data[constants.AutoImportSecretRosaConfigClusterIDKey]
-		if !hasRosaClusterID {
-			return reconcile.Result{}, nil, nil, fmt.Errorf("cluster_id is missing")
-		}
 
 		getter.SetToken(string(token))
-		getter.SetClusterID(string(clusterID))
 	default:
 		return reconcile.Result{}, nil, nil, fmt.Errorf("unsupported auth method %s", authMethod)
 	}
+
+	clusterID, hasRosaClusterID := secret.Data[constants.AutoImportSecretRosaConfigClusterIDKey]
+	if !hasRosaClusterID {
+		return reconcile.Result{}, nil, nil, fmt.Errorf("cluster_id is missing")
+	}
+	getter.SetClusterID(string(clusterID))
 
 	if apiServer, ok := secret.Data[constants.AutoImportSecretRosaConfigAPIURLKey]; ok {
 		getter.SetAPIServerURL(string(apiServer))
