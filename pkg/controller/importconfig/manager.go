@@ -130,7 +130,7 @@ func Add(ctx context.Context,
 					UpdateFunc:  func(e event.UpdateEvent) bool { return true },
 				})),
 		).
-		Watches(
+		WatchesMetadata(
 			&corev1.Secret{},
 			&enqueueManagedClusterByBootstrapKubeConfigSecrets{
 				managedclusterIndexer:   informerHolder.ManagedClusterInformer.GetIndexer(),
@@ -151,7 +151,7 @@ func Add(ctx context.Context,
 				},
 			}),
 		).
-		Watches(
+		WatchesMetadata(
 			&corev1.ConfigMap{},
 			&enqueueManagedClusterByCustomizedCAConfigmaps{
 				managedclusterIndexer:   informerHolder.ManagedClusterInformer.GetIndexer(),
