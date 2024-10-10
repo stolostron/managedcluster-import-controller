@@ -12,6 +12,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"go.uber.org/zap/zapcore"
@@ -57,6 +58,10 @@ import (
 	utilflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/logs"
 
+	"net/http"
+	// #nosec G108
+	_ "net/http/pprof"
+
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -83,6 +88,16 @@ func init() {
 
 func main() {
 	var leaderElectionNamespace string = ""
+	var enablePprof bool = false
+	if enablePprofEnv, exists := os.LookupEnv("ENABLE_PPROF"); exists {
+		var err error
+		enablePprof, err = strconv.ParseBool(enablePprofEnv)
+		if err != nil {
+			setupLog.Error(err, "failed to parse ENABLE_PPROF environment variable")
+			os.Exit(1)
+		}
+	}
+
 	pflag.StringVar(&leaderElectionNamespace, "leader-election-namespace", "", "required when the process is not running in cluster")
 	pflag.BoolVar(&helpers.DeployOnOCP, "deploy-on-ocp", true, "used to deploy the controller on OCP or not")
 
@@ -301,6 +316,23 @@ func main() {
 			if err := agentregistration.RunAgentRegistrationServer(ctx, 9091, clientHolder,
 				klusterletconfigLister); err != nil {
 				setupLog.Error(err, "failed to start agent registration server")
+			}
+		}()
+	}
+
+	if enablePprof {
+		go func() {
+			server := &http.Server{
+				Addr:           "localhost:6060",
+				Handler:        nil,
+				ReadTimeout:    5 * time.Second,
+				WriteTimeout:   10 * time.Second,
+				IdleTimeout:    15 * time.Second,
+				MaxHeaderBytes: 1 << 20, // 1MB
+			}
+			setupLog.Info("Starting pprof server on localhost:6060")
+			if err := server.ListenAndServe(); err != nil {
+				setupLog.Error(err, "failed to start pprof server")
 			}
 		}()
 	}
