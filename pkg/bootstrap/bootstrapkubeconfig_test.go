@@ -349,6 +349,30 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name:        "with proxy config but HubKubeAPIServerConfig exists",
+			clientObjs:  []client.Object{testInfraConfigIP},
+			runtimeObjs: []runtime.Object{testTokenSecret, cm},
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
+						ServerVerificationStrategy: klusterletconfigv1alpha1.ServerVerificationStrategyUseSystemTruststore,
+					},
+					HubKubeAPIServerProxyConfig: klusterletconfigv1alpha1.KubeAPIServerProxyConfig{
+						HTTPSProxy: "https://127.0.0.1:3129",
+						CABundle:   proxyServerCertData,
+					},
+				},
+			},
+			want: wantData{
+				serverURL:   "http://127.0.0.1:6443",
+				useInsecure: false,
+				certData:    nil,
+				token:       "fake-token",
+				proxyURL:    "",
+			},
+			wantErr: false,
+		},
+		{
 			name:        "with proxy config by klusterletconfig HubKubeAPIServerConfig, empty strategy",
 			clientObjs:  []client.Object{testInfraConfigIP},
 			runtimeObjs: []runtime.Object{testTokenSecret, cm, proxyCAcm},
@@ -628,6 +652,22 @@ func TestGetKubeAPIServerAddress(t *testing.T) {
 				},
 			},
 			want:    "https://api.acm.example.com:6443",
+			wantErr: false,
+		},
+		{
+			name: "use custom address but HubKubeAPIServerConfig exists",
+			args: args{
+				client: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(infraConfig).Build(),
+				klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+					Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+						HubKubeAPIServerURL: "https://api.acm.example.com:6443",
+						HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
+							ServerVerificationStrategy: klusterletconfigv1alpha1.ServerVerificationStrategyUseSystemTruststore,
+						},
+					},
+				},
+			},
+			want:    "http://127.0.0.1:6443",
 			wantErr: false,
 		},
 		{
@@ -1090,6 +1130,29 @@ func TestGetBootstrapCAData(t *testing.T) {
 			expectedCAData:  mergedCAData,
 		},
 		{
+			name:            "with custom ca",
+			apiServerCAData: certData1,
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerCABundle: certData2,
+				},
+			},
+			expectedCAData: certData2,
+		},
+		{
+			name:            "with custom ca but HubKubeAPIServerConfig exists",
+			apiServerCAData: certData1,
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerCABundle: certData2,
+					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
+						ServerVerificationStrategy: klusterletconfigv1alpha1.ServerVerificationStrategyUseSystemTruststore,
+					},
+				},
+			},
+			expectedCAData: nil,
+		},
+		{
 			name:            "with proxy ca",
 			apiServerCAData: certData1,
 			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
@@ -1146,7 +1209,7 @@ func TestGetBootstrapCAData(t *testing.T) {
 				t.Errorf("unexpected error: %v", err)
 			}
 			if !reflect.DeepEqual(caData, c.expectedCAData) {
-				t.Errorf("expected %v, but got %v", c.expectedCAData, caData)
+				t.Errorf("expected %s, but got %s", c.expectedCAData, caData)
 			}
 		})
 	}
