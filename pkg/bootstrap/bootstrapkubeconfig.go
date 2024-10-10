@@ -175,8 +175,10 @@ func GetKubeAPIServerAddress(ctx context.Context, client client.Client,
 		return klusterletConfig.Spec.HubKubeAPIServerConfig.URL, nil
 	}
 
+	// TODO: DEPRECATE the following code and only use the HubKubeAPIServerConfig in the future
 	// use the custom hub Kube APIServer URL if specified
-	if klusterletConfig != nil && len(klusterletConfig.Spec.HubKubeAPIServerURL) > 0 {
+	if klusterletConfig != nil && klusterletConfig.Spec.HubKubeAPIServerConfig == nil &&
+		len(klusterletConfig.Spec.HubKubeAPIServerURL) > 0 {
 		return klusterletConfig.Spec.HubKubeAPIServerURL, nil
 	}
 
@@ -244,7 +246,8 @@ func getKubeAPIServerCAData(ctx context.Context, clientHolder *helpers.ClientHol
 
 	// TODO: DEPRECATE the following code and only use the HubKubeAPIServerConfig in the future
 	// use the custom hub Kube APIServer CA bundle if specified
-	if klusterletConfig != nil && len(klusterletConfig.Spec.HubKubeAPIServerCABundle) > 0 {
+	if klusterletConfig != nil && klusterletConfig.Spec.HubKubeAPIServerConfig == nil &&
+		len(klusterletConfig.Spec.HubKubeAPIServerCABundle) > 0 {
 		return klusterletConfig.Spec.HubKubeAPIServerCABundle, nil
 	}
 
@@ -494,14 +497,18 @@ func GetProxySettings(klusterletConfig *klusterletconfigv1alpha1.KlusterletConfi
 	}
 
 	// TODO: DEPRECATE the following code and only return the proxyURL
-	proxyConfig := klusterletConfig.Spec.HubKubeAPIServerProxyConfig
+	if klusterletConfig.Spec.HubKubeAPIServerConfig == nil {
+		proxyConfig := klusterletConfig.Spec.HubKubeAPIServerProxyConfig
 
-	// use https proxy if both http and https proxy are specified
-	if len(proxyConfig.HTTPSProxy) > 0 {
-		return proxyConfig.HTTPSProxy, proxyConfig.CABundle
+		// use https proxy if both http and https proxy are specified
+		if len(proxyConfig.HTTPSProxy) > 0 {
+			return proxyConfig.HTTPSProxy, proxyConfig.CABundle
+		}
+
+		return proxyConfig.HTTPProxy, nil
 	}
 
-	return proxyConfig.HTTPProxy, nil
+	return "", nil
 }
 
 func mergeCertificateData(caBundles ...[]byte) ([]byte, error) {
