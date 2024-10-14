@@ -1,8 +1,21 @@
-[comment]: # ( Copyright Contributors to the Open Cluster Management project )
+# Import a OCM ROSA cluster from OCM
 
-# Auto import a ROSA cluster
+To import a ROSA/ROSA-HCP cluster from OCM platform into ACM Hub, there are 2 ways:
+1. [Import it from the console](https://docs.redhat.com/en/documentation/red_hat_advanced_cluster_management_for_kubernetes/2.11/html-single/clusters/index#import-discovered), the Console is responsible for creating the auto-import-secret.
+2. Discovery creates auto-import-secret when the flag of auto import is set to `true`.
 
-We can import a ROSA/ROSA-HCP cluster into ACM Hub with `auto-import-secret`
+## Related information
+
+- Related Repos:
+  - [Discovery](https://github.com/stolostron/discovery)
+    - Key Code: [Create AutoImportSecret in Discovery](https://github.com/stolostron/discovery/blob/67b10a3f98a648a91c4638c42e9529e521b8fbea/controllers/discoveredcluster_controller.go#L148-L168)
+    - Key Person: @dislbenn
+  - [Console](https://github.com/stolostron/console)
+    - Key Person: @KevinFCormier
+- Slack Chat:
+  - [Discussion of OCM Token Migration](https://redhat-internal.slack.com/archives/C06TNDPUZKM/p1727126722361369): A great example of how 3 components work together to make this feature possible.
+- Docs:
+  - [OCM Token Migration Guide](https://docs.google.com/document/d/1tf6BRSJXxxnrbOJ81O9Xajgc3yVDRKdwen1W88ks84Y/edit#heading=h.jnmdcvmm87m6): After this migration, ACM provide 2 ways to import ROSA/ROSA-HCP cluster from OCM platform -- token and service account.
 
 ## Preparation
 
@@ -34,10 +47,26 @@ metadata:
   name: auto-import-secret
   namespace: <your_cluster_name>
 stringData:
+  auth_method: "offline-token"
   api_token: <your_openshift_cluster_manager_api_token>
   cluster_id: <your_rosa_cluster_id>
 type: auto-import/rosa
 EOF
+```
+
+If you are using service account, the auto-import-secret should look like this:
+
+```sh
+apiVersion: v1
+kind: Secret
+metadata:
+  name: auto-import-secret
+  namespace: <your_cluster_name>
+stringData:
+  auth_method: "service-account"
+  client_id: <your_service_account_client_id>
+  client_secret: <your_service_account_client_secret>
+  cluster_id: <your_rosa_cluster_id>
 ```
 
 There are three optional options that can be added to secret for development purposes
