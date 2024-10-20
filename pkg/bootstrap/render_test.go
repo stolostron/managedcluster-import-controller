@@ -801,6 +801,46 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "skip bootstrap kubeconfig in klusterlet manifests",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+			},
+			defaultImagePullSecret: "test-image-pull-secret",
+			runtimeObjs: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-image-pull-secret",
+					},
+					Data: map[string][]byte{
+						corev1.DockerConfigJsonKey: []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeDockerConfigJson,
+				},
+			},
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeDefault,
+				"test", // cluster name
+				[]byte("bootstrap kubeconfig"),
+			).WithManagedCluster(
+				&v1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							"import.open-cluster-management.io/skip-bootstrap-kubeconfig": "true",
+						},
+					},
+				},
+			),
+			validateFunc: func(t *testing.T, objs []runtime.Object) {
+				if len(objs) != 9 {
+					t.Fatalf("Expected 9 objects(no bootstrap kubeconfig secret), but got %d", len(objs))
+				}
+			},
+		},
 	}
 
 	for _, testcase := range testcases {

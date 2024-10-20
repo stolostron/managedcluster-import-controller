@@ -54,10 +54,11 @@ var klusterletOperatorFiles = []string{
 	"manifests/klusterlet/operator.yaml",
 }
 
-var klusterletFiles = []string{
-	"manifests/klusterlet/bootstrap_secret.yaml",
-	"manifests/klusterlet/klusterlet.yaml",
-}
+var (
+	klusterletFileBootstrapSecret = "manifests/klusterlet/bootstrap_secret.yaml"
+	klusterletFileKlusterlet      = "manifests/klusterlet/klusterlet.yaml"
+	klusterletFileImagePullSecret = "manifests/klusterlet/image_pull_secret.yaml"
+)
 
 // TODO: The clusterrole_priority_class.yaml is only for upgrade case and should be removed
 // after two or three releases.
@@ -167,24 +168,6 @@ func (c *KlusterletManifestsConfig) WithPriorityClassName(priorityClassName stri
 
 // Generate returns the rendered klusterlet manifests in bytes.
 func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *helpers.ClientHolder) ([]byte, error) {
-	// Files depends on the install mode
-	var files []string
-	switch b.InstallMode {
-	case operatorv1.InstallModeHosted, operatorv1.InstallModeSingletonHosted:
-		files = append(files, klusterletFiles...)
-	case operatorv1.InstallModeDefault, operatorv1.InstallModeSingleton:
-		if b.PriorityClassName == constants.DefaultKlusterletPriorityClassName {
-			files = append(files, priorityClassFiles...)
-		}
-		files = append(files, klusterletNamespaceFile)
-		if !installNoOperator(b.InstallMode, b.klusterletconfig) {
-			files = append(files, klusterletOperatorFiles...)
-		}
-		files = append(files, klusterletFiles...)
-	default:
-		return nil, fmt.Errorf("invalid install mode: %s", b.InstallMode)
-	}
-
 	// For image, image pull secret, nodeplacement, we use configurations in klusterletconfg over configurations in managed cluster annotations.
 	var kcRegistries []klusterletconfigv1alpha1.Registries
 	var kcNodePlacement *operatorv1.NodePlacement
@@ -280,6 +263,13 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 		ClusterAnnotations: b.KlusterletClusterAnnotations,
 	}
 
+	// SkipBootstrapKubeConfig
+	skipBootstrapKubeConfig := false
+	if b.ManagedCluster != nil {
+		_, ok := b.ManagedCluster.GetAnnotations()["import.open-cluster-management.io/skip-bootstrap-kubeconfig"]
+		skipBootstrapKubeConfig = ok
+	}
+
 	renderConfig := RenderConfig{
 		KlusterletRenderConfig: KlusterletRenderConfig{
 			ManagedClusterNamespace: b.ClusterName,
@@ -330,7 +320,6 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 		if imagePullSecret == nil {
 			return nil, fmt.Errorf("imagePullSecret is nil")
 		}
-		files = append(files, "manifests/klusterlet/image_pull_secret.yaml")
 
 		imagePullSecretConfig, err := getImagePullSecretConfig(imagePullSecret)
 		if err != nil {
@@ -361,6 +350,28 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 		}
 		renderConfig.MultipleHubsEnabled = true
 		renderConfig.BootstrapKubeConfigSecrets = bootstrapKubeConfigSecrets
+	}
+
+	// Files depends on the install mode
+	var files []string
+	if b.InstallMode == operatorv1.InstallModeDefault || b.InstallMode == operatorv1.InstallModeSingleton {
+		if b.PriorityClassName == constants.DefaultKlusterletPriorityClassName {
+			files = append(files, priorityClassFiles...)
+		}
+		files = append(files, klusterletNamespaceFile)
+		if !installNoOperator(b.InstallMode, b.klusterletconfig) {
+			files = append(files, klusterletOperatorFiles...)
+		}
+	}
+
+	if !skipBootstrapKubeConfig {
+		files = append(files, klusterletFileBootstrapSecret)
+	}
+
+	files = append(files, klusterletFileKlusterlet)
+
+	if b.generateImagePullSecret {
+		files = append(files, klusterletFileImagePullSecret)
 	}
 
 	// Render the klusterlet manifests
