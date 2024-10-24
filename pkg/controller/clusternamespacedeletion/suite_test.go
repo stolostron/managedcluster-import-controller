@@ -14,6 +14,7 @@ import (
 	"github.com/onsi/gomega"
 	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
+	hyperv1beta1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -53,6 +54,7 @@ var _ = ginkgo.BeforeSuite(func() {
 		CRDDirectoryPaths: []string{
 			filepath.Join("../../../", "test", "e2e", "resources", "hive"),
 			filepath.Join("../../../", "test", "e2e", "resources", "assisted-service"),
+			filepath.Join("../../../", "test", "e2e", "resources", "hypershift"),
 			filepath.Join("../../../", "test", "e2e", "resources", "ocm"),
 		},
 	}
@@ -65,6 +67,8 @@ var _ = ginkgo.BeforeSuite(func() {
 	err = asv1beta1.AddToScheme(scheme.Scheme)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	err = hivev1.AddToScheme(scheme.Scheme)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	err = hyperv1beta1.AddToScheme(scheme.Scheme)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	err = corev1.AddToScheme(scheme.Scheme)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
