@@ -9,20 +9,21 @@ import (
 	"strings"
 	"time"
 
-	"github.com/openshift/library-go/pkg/operator/events"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-
 	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
-	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
-	clustercontroller "github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
+	hyperv1beta1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
+	"github.com/openshift/library-go/pkg/operator/events"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	clustercontroller "github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
 )
 
 var log = logf.Log.WithName(controllerName)
@@ -99,6 +100,16 @@ func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, reque
 	}
 	if len(addons.Items) > 0 {
 		reqLogger.Info(fmt.Sprintf("Waiting for addons, there are %d addon in namespace %s", len(addons.Items), ns.Name))
+		return reconcile.Result{}, nil
+	}
+
+	hostedclusters := &hyperv1beta1.HostedClusterList{}
+	if err := r.client.List(ctx, hostedclusters, client.InNamespace(ns.Name)); err != nil {
+		return reconcile.Result{}, client.IgnoreNotFound(err)
+	}
+	if len(hostedclusters.Items) > 0 {
+		reqLogger.Info(fmt.Sprintf("Waiting for hostedclusters, there are %d hostedclusters in namespace %s",
+			len(hostedclusters.Items), ns.Name))
 		return reconcile.Result{}, nil
 	}
 
