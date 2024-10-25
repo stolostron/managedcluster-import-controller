@@ -174,6 +174,8 @@ var _ = ginkgo.Describe("cluster namespace deletion controller", func() {
 		})
 
 		ginkgo.It("Should not delete ns when cluster has hosted clusters", func() {
+			ginkgo.By("set the  hostedClusterRequeuePeriod to 1 second")
+			hostedClusterRequeuePeriod = 1 * time.Second
 			ginkgo.By("create hostedcluster")
 			err := util.CreateHostedCluster(hubDynamicClient, cluster.Name, cluster.Name)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())

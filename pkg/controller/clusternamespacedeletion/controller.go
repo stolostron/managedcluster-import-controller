@@ -26,14 +26,16 @@ import (
 	clustercontroller "github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
 )
 
-var log = logf.Log.WithName(controllerName)
+var (
+	log                        = logf.Log.WithName(controllerName)
+	podDeletionGracePeriod     = 10 * time.Second
+	hostedClusterRequeuePeriod = 1 * time.Minute
+)
 
 const (
 	curatorJobPrefix  string = "curator-job"
 	postHookJobPrefix string = "posthookjob"
 	preHookJobPrefix  string = "prehookjob"
-
-	deletionGracePeriod = 10 * time.Second
 )
 
 // ReconcileClusterNamespaceDeletion delete cluster namespace when
@@ -104,13 +106,14 @@ func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, reque
 	}
 
 	hostedclusters := &hyperv1beta1.HostedClusterList{}
-	if err := r.client.List(ctx, hostedclusters, client.InNamespace(ns.Name)); err != nil {
-		return reconcile.Result{}, client.IgnoreNotFound(err)
+	if err = r.client.List(ctx, hostedclusters, client.InNamespace(ns.Name)); err != nil &&
+		!errors.IsNotFound(err) && !strings.Contains(err.Error(), "no matches for kind") {
+		return reconcile.Result{}, err
 	}
 	if len(hostedclusters.Items) > 0 {
 		reqLogger.Info(fmt.Sprintf("Waiting for hostedclusters, there are %d hostedclusters in namespace %s",
 			len(hostedclusters.Items), ns.Name))
-		return reconcile.Result{}, nil
+		return reconcile.Result{RequeueAfter: hostedClusterRequeuePeriod}, nil
 	}
 
 	clusterDeploymentList := &hivev1.ClusterDeploymentList{}
@@ -144,7 +147,7 @@ func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, reque
 	validPods := filterPods(pods.Items, ns.Name)
 	if len(validPods) > 0 {
 		reqLogger.Info(fmt.Sprintf("Waiting for pods, there are some pods remaining in namespace %s", ns.Name))
-		return reconcile.Result{RequeueAfter: deletionGracePeriod}, nil
+		return reconcile.Result{RequeueAfter: podDeletionGracePeriod}, nil
 	}
 
 	err = r.client.Delete(ctx, ns)
