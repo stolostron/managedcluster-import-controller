@@ -44,8 +44,9 @@ const (
 // 3. no infraenv in the ns
 // 4. no active jobs in the ns
 type ReconcileClusterNamespaceDeletion struct {
-	client   client.Client
-	recorder events.Recorder
+	client    client.Client
+	apiReader client.Reader
+	recorder  events.Recorder
 }
 
 // blank assignment to verify that ReconcileManagedCluster implements reconcile.Reconciler
@@ -106,7 +107,8 @@ func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, reque
 	}
 
 	hostedclusters := &hyperv1beta1.HostedClusterList{}
-	if err = r.client.List(ctx, hostedclusters, client.InNamespace(ns.Name)); err != nil &&
+	// use apiReader to list so we do not need the watch permission
+	if err = r.apiReader.List(ctx, hostedclusters, client.InNamespace(ns.Name)); err != nil &&
 		!errors.IsNotFound(err) && !strings.Contains(err.Error(), "no matches for kind") {
 		return reconcile.Result{}, err
 	}
