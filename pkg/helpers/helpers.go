@@ -101,6 +101,7 @@ type ClientHolder struct {
 	APIExtensionsClient apiextensionsclient.Interface
 	OperatorClient      operatorclient.Interface
 	RuntimeClient       client.Client
+	RuntimeAPIReader    client.Reader
 	ImageRegistryClient imageregistry.Interface
 	WorkClient          workclient.Interface
 }

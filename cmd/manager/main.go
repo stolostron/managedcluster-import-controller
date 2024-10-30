@@ -265,6 +265,7 @@ func main() {
 		APIExtensionsClient: apiExtensionsClient,
 		OperatorClient:      operatorClient,
 		RuntimeClient:       mgr.GetClient(),
+		RuntimeAPIReader:    mgr.GetAPIReader(),
 		ImageRegistryClient: imageregistry.NewClient(kubeClient),
 		WorkClient:          workClient,
 	}

@@ -92,8 +92,9 @@ var _ = ginkgo.BeforeSuite(func() {
 	runtimeClient = mgr.GetClient()
 
 	clientHolder := &helpers.ClientHolder{
-		RuntimeClient: runtimeClient,
-		KubeClient:    k8sClient,
+		RuntimeClient:    runtimeClient,
+		RuntimeAPIReader: mgr.GetAPIReader(),
+		KubeClient:       k8sClient,
 	}
 
 	_, err = Add(context.TODO(), mgr, clientHolder, nil,
