@@ -180,6 +180,13 @@ EOF
 # get serviceaccount token
 export token=$(${KUBECTL} get secret -n open-cluster-management managed-cluster-import-e2e-agent-registration-sa-token -o=jsonpath='{.data.token}' | base64 -d)
 
+echo "###### check agent-registration server is healthy"
+response=$(curl -s -o /dev/null -w "%{http_code}" --cacert ca.crt -H "Authorization: Bearer $token" https://$agent_registration_host/agent-registration)
+if [ "$response" != "200" ]; then
+  echo "Error: Agent registration server health check failed with status code $response"
+  exit 1
+fi
+
 echo "###### apply crds from the endpoint"
 curl --cacert ca.crt -H "Authorization: Bearer $token" https://$agent_registration_host/agent-registration/crds/v1 | kubectl apply -f -
 

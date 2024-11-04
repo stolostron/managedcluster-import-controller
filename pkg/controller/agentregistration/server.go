@@ -3,6 +3,7 @@ package agentregistration
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -26,6 +27,24 @@ import (
 func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *helpers.ClientHolder,
 	klusterletconfigLister listerklusterletconfigv1alpha1.KlusterletConfigLister) error {
 	mux := http.NewServeMux()
+
+	mux.Handle("/agent-registration", authMiddleware(clientHolder, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		response := map[string]interface{}{
+			"paths": []string{
+				"/crds/v1",
+				"/crds/v1beta1",
+				"/manifests",
+			},
+			"serverInfo": map[string]string{
+				"serverTime": time.Now().UTC().Format(time.RFC3339),
+			},
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			http.Error(w, "Failed to encode API list", http.StatusInternalServerError)
+		}
+	})))
 
 	mux.Handle("/agent-registration/crds/v1", authMiddleware(clientHolder, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		config := bootstrap.NewKlusterletManifestsConfig(
