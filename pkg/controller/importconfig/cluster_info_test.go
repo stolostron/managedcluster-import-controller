@@ -355,8 +355,33 @@ func TestValidateCAData(t *testing.T) {
 		klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig
 		valid            bool
 	}{
+		// validateCAData calls GetBootstrapCAData to get current CA, GetBootstrapCAData could return nil but never return empty.
+		// set currentCAData to nil or []byte{} are the same to simulate the GetBootstrapCAData return nil case.
 		{
-			name: "CA data is empty",
+			name:            "bootstrap CA data is empty",
+			bootstrapCAData: []byte{},
+			currentCAData:   certData1,
+		},
+		{
+			name:            "bootstrap CA data is nil",
+			bootstrapCAData: nil,
+			currentCAData:   certData1,
+		},
+		{
+			name:            "current CA data is nil",
+			bootstrapCAData: certData1,
+			currentCAData:   nil,
+		},
+		{
+			name:            "bootstrap and current CA data is nil",
+			bootstrapCAData: nil,
+			currentCAData:   nil,
+			valid:           true,
+		},
+		{
+			name:            "bootstrap is empty and current CA data is nil",
+			bootstrapCAData: []byte{},
+			currentCAData:   nil,
 		},
 		{
 			name:            "cert changes",
@@ -396,7 +421,17 @@ func TestValidateCAData(t *testing.T) {
 				Data: map[string][]byte{
 					"tls.crt": c.currentCAData,
 				},
-			})
+			},
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "kube-root-ca.crt",
+						Namespace: "cluster",
+					},
+					Data: map[string]string{
+						"ca.crt": string(c.currentCAData),
+					},
+				},
+			)
 
 			clientHolder := &helpers.ClientHolder{
 				RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(&ocinfrav1.APIServer{
