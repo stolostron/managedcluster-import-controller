@@ -118,7 +118,7 @@ var _ = ginkgo.BeforeSuite(func() {
 	hubRecorder = helpers.NewEventRecorder(hubKubeClient, "e2e-test")
 	httpclient, err := rest.HTTPClientFor(clusterCfg)
 	gomega.Expect(err).Should(gomega.BeNil())
-	hubMapper, err = apiutil.NewDiscoveryRESTMapper(clusterCfg, httpclient)
+	hubMapper, err = apiutil.NewDynamicRESTMapper(clusterCfg, httpclient)
 	gomega.Expect(err).Should(gomega.BeNil())
 })
 
