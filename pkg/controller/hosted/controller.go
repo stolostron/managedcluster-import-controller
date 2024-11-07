@@ -40,7 +40,7 @@ var manifestFiles embed.FS
 
 var klusterletHostedExternalKubeconfig = "manifests/external_managed_secret.yaml"
 
-var log = logf.Log.WithName(controllerName)
+var log = logf.Log.WithName(ControllerName)
 
 // ReconcileHosted reconciles the Hosted mode ManagedClusters of the ManifestWorks object
 type ReconcileHosted struct {

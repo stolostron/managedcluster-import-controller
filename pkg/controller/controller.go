@@ -27,28 +27,8 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
 	kevents "k8s.io/client-go/tools/events"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
-
-var log = logf.Log.WithName("controllers")
-
-type AddToManagerFunc func(
-	context.Context, manager.Manager, *helpers.ClientHolder, *source.InformerHolder, kevents.EventRecorder,
-) (string, error)
-
-// AddToManagerFuncs is a list of functions to add all controllers to the manager
-var AddToManagerFuncs = []AddToManagerFunc{
-	csr.Add,
-	managedcluster.Add,
-	importconfig.Add,
-	manifestwork.Add,
-	selfmanagedcluster.Add,
-	autoimport.Add,
-	clusterdeployment.Add,
-	clusternamespacedeletion.Add,
-	importstatus.Add,
-}
 
 // AddToManager adds all controllers to the manager
 func AddToManager(ctx context.Context,
@@ -56,22 +36,63 @@ func AddToManager(ctx context.Context,
 	clientHolder *helpers.ClientHolder,
 	informerHolder *source.InformerHolder,
 	mcRecorder kevents.EventRecorder) error {
-	for _, addFunc := range AddToManagerFuncs {
-		name, err := addFunc(ctx, manager, clientHolder, informerHolder, mcRecorder)
-		if err != nil {
-			return err
-		}
 
-		log.Info(fmt.Sprintf("Add controller %s to manager", name))
+	AddToManagerFuncs := []struct {
+		ControllerName string
+		Add            func() error
+	}{
+		{
+			csr.ControllerName,
+			func() error { return csr.Add(ctx, manager, clientHolder) },
+		},
+		{
+			managedcluster.ControllerName,
+			func() error { return managedcluster.Add(ctx, manager, clientHolder, mcRecorder) },
+		},
+		{
+			importconfig.ControllerName,
+			func() error { return importconfig.Add(ctx, manager, clientHolder, informerHolder) },
+		},
+		{
+			manifestwork.ControllerName,
+			func() error { return manifestwork.Add(ctx, manager, clientHolder, informerHolder, mcRecorder) },
+		},
+		{
+			selfmanagedcluster.ControllerName,
+			func() error { return selfmanagedcluster.Add(ctx, manager, clientHolder, informerHolder, mcRecorder) },
+		},
+		{
+			autoimport.ControllerName,
+			func() error { return autoimport.Add(ctx, manager, clientHolder, informerHolder, mcRecorder) },
+		},
+		{
+			clusterdeployment.ControllerName,
+			func() error { return clusterdeployment.Add(ctx, manager, clientHolder, informerHolder, mcRecorder) },
+		},
+		{
+			clusternamespacedeletion.ControllerName,
+			func() error { return clusternamespacedeletion.Add(ctx, manager, clientHolder) },
+		},
+		{
+			importstatus.ControllerName,
+			func() error { return importstatus.Add(ctx, manager, clientHolder, informerHolder, mcRecorder) },
+		},
+		{
+			hosted.ControllerName,
+			func() error {
+				if features.DefaultMutableFeatureGate.Enabled(features.KlusterletHostedMode) {
+					return hosted.Add(ctx, manager, clientHolder, informerHolder, mcRecorder)
+				}
+				return nil
+			},
+		},
 	}
 
-	if features.DefaultMutableFeatureGate.Enabled(features.KlusterletHostedMode) {
-		name, err := hosted.Add(ctx, manager, clientHolder, informerHolder, mcRecorder)
-		if err != nil {
-			return err
+	for _, f := range AddToManagerFuncs {
+		if err := f.Add(); err != nil {
+			return fmt.Errorf("failed to add %s controller: %w", f.ControllerName, err)
 		}
-
-		log.Info(fmt.Sprintf("Add controller %s to manager", name))
 	}
+
 	return nil
 }

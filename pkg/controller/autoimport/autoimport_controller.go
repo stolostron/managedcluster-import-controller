@@ -29,7 +29,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 )
 
-var log = logf.Log.WithName(controllerName)
+var log = logf.Log.WithName(ControllerName)
 
 // ReconcileAutoImport reconciles the managed cluster auto import secret to import the managed cluster
 type ReconcileAutoImport struct {

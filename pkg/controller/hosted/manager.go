@@ -30,7 +30,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 )
 
-const controllerName = "hosted-manifestwork-controller"
+const ControllerName = "hosted-manifestwork-controller"
 
 // Add creates a new manifestwork controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
@@ -38,9 +38,9 @@ func Add(ctx context.Context,
 	mgr manager.Manager,
 	clientHolder *helpers.ClientHolder,
 	informerHolder *source.InformerHolder,
-	mcRecorder kevents.EventRecorder) (string, error) {
+	mcRecorder kevents.EventRecorder) error {
 
-	err := ctrl.NewControllerManagedBy(mgr).Named(controllerName).
+	err := ctrl.NewControllerManagedBy(mgr).Named(ControllerName).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
 		}).
@@ -139,10 +139,10 @@ func Add(ctx context.Context,
 			clientHolder,
 			informerHolder,
 			mgr.GetScheme(),
-			helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
+			helpers.NewEventRecorder(clientHolder.KubeClient, ControllerName),
 			mcRecorder,
 		))
-	return controllerName, err
+	return err
 }
 
 func isHostedModeObject(object client.Object) bool {

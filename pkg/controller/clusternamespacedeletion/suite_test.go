@@ -97,8 +97,7 @@ var _ = ginkgo.BeforeSuite(func() {
 		KubeClient:       k8sClient,
 	}
 
-	_, err = Add(context.TODO(), mgr, clientHolder, nil,
-		helpers.NewManagedClusterEventRecorder(context.TODO(), clientHolder.KubeClient))
+	err = Add(context.TODO(), mgr, clientHolder)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 	go func() {

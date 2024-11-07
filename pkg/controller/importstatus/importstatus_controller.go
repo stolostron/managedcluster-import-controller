@@ -24,7 +24,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 )
 
-var log = logf.Log.WithName(controllerName)
+var log = logf.Log.WithName(ControllerName)
 
 // ReconcileImportStatus reconciles the klusterlet manifestworks to judge whether the cluster is imported successfully
 type ReconcileImportStatus struct {

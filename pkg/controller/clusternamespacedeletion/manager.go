@@ -10,7 +10,6 @@ import (
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
-	kevents "k8s.io/client-go/tools/events"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -26,20 +25,17 @@ import (
 
 	clustercontroller "github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 )
 
-const controllerName = "clusternamespacedeletion-controller"
+const ControllerName = "clusternamespacedeletion-controller"
 
 // Add creates a new managedcluster controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(ctx context.Context,
 	mgr manager.Manager,
-	clientHolder *helpers.ClientHolder,
-	_ *source.InformerHolder,
-	mcRecorder kevents.EventRecorder) (string, error) {
+	clientHolder *helpers.ClientHolder) error {
 
-	err := ctrl.NewControllerManagedBy(mgr).Named(controllerName).
+	err := ctrl.NewControllerManagedBy(mgr).Named(ControllerName).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
 		}).
@@ -177,8 +173,8 @@ func Add(ctx context.Context,
 		Complete(&ReconcileClusterNamespaceDeletion{
 			client:    clientHolder.RuntimeClient,
 			apiReader: clientHolder.RuntimeAPIReader,
-			recorder:  helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
+			recorder:  helpers.NewEventRecorder(clientHolder.KubeClient, ControllerName),
 		})
 
-	return controllerName, err
+	return err
 }
