@@ -170,7 +170,7 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: managedcluster-import-controller-agent-regitration-client
+  name: managedcluster-import-controller-agent-registration-client
 subjects:
   - kind: ServiceAccount
     name: managed-cluster-import-e2e-agent-registration-sa
