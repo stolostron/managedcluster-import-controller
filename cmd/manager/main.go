@@ -15,9 +15,8 @@ import (
 	"strconv"
 	"time"
 
-	"go.uber.org/zap/zapcore"
-
 	"github.com/spf13/pflag"
+	"go.uber.org/zap/zapcore"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
@@ -47,6 +46,7 @@ import (
 	ocinfrav1 "github.com/openshift/api/config/v1"
 	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
+	hyperv1beta1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
 
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -84,6 +84,7 @@ func init() {
 	utilruntime.Must(asv1beta1.AddToScheme(scheme))
 	utilruntime.Must(addonv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(klusterletconfigv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(hyperv1beta1.AddToScheme(scheme))
 }
 
 func main() {
@@ -264,6 +265,7 @@ func main() {
 		APIExtensionsClient: apiExtensionsClient,
 		OperatorClient:      operatorClient,
 		RuntimeClient:       mgr.GetClient(),
+		RuntimeAPIReader:    mgr.GetAPIReader(),
 		ImageRegistryClient: imageregistry.NewClient(kubeClient),
 		WorkClient:          workClient,
 	}
