@@ -53,6 +53,11 @@ var (
 		Version:  "v1",
 		Resource: "clusterdeployments",
 	}
+	hostedClusterGVR = schema.GroupVersionResource{
+		Group:    "hypershift.openshift.io",
+		Version:  "v1beta1",
+		Resource: "hostedclusters",
+	}
 )
 
 func Logf(format string, args ...interface{}) {
@@ -207,6 +212,28 @@ func CreateManagedClusterWithShortLeaseDuration(clusterClient clusterclient.Inte
 	}
 
 	return cluster, err
+}
+
+func CreateHostedCluster(dynamicClient dynamic.Interface, namespace, name string) error {
+	hostedclusters := dynamicClient.Resource(hostedClusterGVR).Namespace(namespace)
+	hostedcluster := newHostedCluster(namespace, name)
+
+	_, err := hostedclusters.Get(context.TODO(), name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		_, err := hostedclusters.Create(context.TODO(), hostedcluster, metav1.CreateOptions{})
+		return err
+	}
+	return err
+}
+
+func GetHostedCluster(dynamicClient dynamic.Interface, namespace, name string) (*unstructured.Unstructured, error) {
+	hostedclusters := dynamicClient.Resource(hostedClusterGVR).Namespace(namespace)
+	return hostedclusters.Get(context.TODO(), name, metav1.GetOptions{})
+}
+
+func DeleteHostedCluster(dynamicClient dynamic.Interface, namespace, name string) error {
+	hostedclusters := dynamicClient.Resource(hostedClusterGVR).Namespace(namespace)
+	return hostedclusters.Delete(context.TODO(), name, metav1.DeleteOptions{})
 }
 
 func CreateClusterDeployment(dynamicClient dynamic.Interface, clusterName string) error {
@@ -479,6 +506,87 @@ func getServerAndToken(kubeClient kubernetes.Interface, dynamicClient dynamic.In
 	}
 
 	return []byte(apiServer), tokenSecret.Data["token"], nil
+}
+
+func newHostedCluster(namespace, name string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "hypershift.openshift.io/v1beta1",
+			"kind":       "HostedCluster",
+			"metadata": map[string]interface{}{
+				"name":      name,
+				"namespace": namespace,
+			},
+			"spec": map[string]interface{}{
+				// 05622387-d157-4e41-8ac4-7c9708030ac0
+				// 01234567-abcd-efgh-ijkl-098765432100
+				"clusterID":                    "05622387-d157-4e41-8ac4-7c9708030ac0",
+				"controllerAvailabilityPolicy": "HighlyAvailable",
+				"dns": map[string]interface{}{
+					"baseDomain": "fake-domain.red-chesterfield.com",
+				},
+				"fips":    false,
+				"infraID": "hcp-" + namespace + "-" + name,
+				"platform": map[string]interface{}{
+					"type": "AWS",
+					"aws": map[string]interface{}{
+						"cloudProviderConfig": map[string]interface{}{
+							"subnet": map[string]interface{}{
+								"id": "fake-subnet-id",
+							},
+							"vpc":  "fake-vpc-id",
+							"zone": "us-east-1a",
+						},
+						"region": "us-east-1",
+						"rolesRef": map[string]interface{}{
+							"controlPlaneOperatorARN": "arn:aws:iam::012345678900:role/test-control-plane-operator",
+							"imageRegistryARN":        "arn:aws:iam::012345678900:role/test-openshift-image-registry",
+							"ingressARN":              "arn:aws:iam::012345678900:role/test-openshift-ingress",
+							"kubeCloudControllerARN":  "arn:aws:iam::012345678900:role/test-cloud-controller",
+							"networkARN":              "arn:aws:iam::012345678900:role/test-cloud-network-config-controller",
+							"nodePoolManagementARN":   "arn:aws:iam::012345678900:role/test-node-pool",
+							"storageARN":              "arn:aws:iam::012345678900:role/test-aws-ebs-csi-driver-controller",
+						},
+					},
+				},
+				"release": map[string]interface{}{
+					"image": "quay.io/openshift-release-dev/ocp-release:4.17.2-multi",
+				},
+				"sshKey": map[string]interface{}{
+					"name": "test-ssh-key",
+				},
+				"pullSecret": map[string]interface{}{
+					"name": "hcp-zj1-pull-secret",
+				},
+				"services": []map[string]interface{}{
+					{
+						"service": "APIServer",
+						"servicePublishingStrategy": map[string]interface{}{
+							"type": "LoadBalancer",
+						},
+					},
+					{
+						"service": "Ignition",
+						"servicePublishingStrategy": map[string]interface{}{
+							"type": "Route",
+						},
+					},
+					{
+						"service": "Konnectivity",
+						"servicePublishingStrategy": map[string]interface{}{
+							"type": "Route",
+						},
+					},
+					{
+						"service": "OAuthServer",
+						"servicePublishingStrategy": map[string]interface{}{
+							"type": "Route",
+						},
+					},
+				},
+			},
+		},
+	}
 }
 
 func newClusterdeployment(clusterName string) *unstructured.Unstructured {

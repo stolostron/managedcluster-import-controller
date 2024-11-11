@@ -11,6 +11,7 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
+	hyperv1beta1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 	corev1 "k8s.io/api/core/v1"
@@ -156,6 +157,52 @@ var _ = ginkgo.Describe("cluster namespace deletion controller", func() {
 			gomega.Expect(ns.DeletionTimestamp.IsZero()).Should(gomega.BeTrue())
 
 			err = runtimeClient.Delete(context.TODO(), addon)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			gomega.Eventually(func() error {
+				ns, err := k8sClient.CoreV1().Namespaces().Get(context.TODO(), cluster.Name, metav1.GetOptions{})
+
+				if err == nil && !ns.DeletionTimestamp.IsZero() {
+					return nil
+				}
+
+				if errors.IsNotFound(err) {
+					return nil
+				}
+				return fmt.Errorf("namespace still exist with err: %v", err)
+			}, timeout, interval).ShouldNot(gomega.HaveOccurred())
+		})
+
+		ginkgo.It("Should not delete ns when cluster has hosted clusters", func() {
+			ginkgo.By("set the  hostedClusterRequeuePeriod to 1 second")
+			hostedClusterRequeuePeriod = 1 * time.Second
+			ginkgo.By("create hostedcluster")
+			err := util.CreateHostedCluster(hubDynamicClient, cluster.Name, cluster.Name)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			// Use the runtime client, the same client the controller uses, to Wait for hostedcluster to exist,
+			// otherwise this may fail occasionally
+			gomega.Eventually(func() error {
+				// _, err := util.GetHostedCluster(hubDynamicClient, cluster.Name, cluster.Name)
+				// if err != nil {
+				// 	return err
+				// }
+				hostedCluster := hyperv1beta1.HostedCluster{}
+				return runtimeClient.Get(context.TODO(),
+					types.NamespacedName{Name: cluster.Name, Namespace: cluster.Name}, &hostedCluster)
+			}, timeout, interval).ShouldNot(gomega.HaveOccurred())
+
+			ginkgo.By("delete cluster")
+			err = runtimeClient.Delete(context.TODO(), cluster)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			ginkgo.By("wait for 5 seconds and ns should not be deleted")
+			time.Sleep(5 * time.Second)
+			ns, err := k8sClient.CoreV1().Namespaces().Get(context.TODO(), cluster.Name, metav1.GetOptions{})
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			gomega.Expect(ns.DeletionTimestamp.IsZero()).Should(gomega.BeTrue())
+
+			err = util.DeleteHostedCluster(hubDynamicClient, cluster.Name, cluster.Name)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
 			gomega.Eventually(func() error {

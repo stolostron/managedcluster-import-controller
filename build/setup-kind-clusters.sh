@@ -16,7 +16,10 @@ KUBECTL=${KUBECTL:-kubectl}
 CLUSTER_NAME="e2e-test-cluster"
 CLUSTER_NAME_MANAGED="e2e-test-cluster-managed"
 
-BUILD_DIR="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
+BUILD_DIR="$(
+  cd "$(dirname "$0")" >/dev/null 2>&1
+  pwd -P
+)"
 REPO_DIR="$(dirname "$BUILD_DIR")"
 WORK_DIR="${REPO_DIR}/_output"
 
@@ -33,9 +36,9 @@ sleep 100 # test only
 
 CLEAN_ARG=${1:-unclean}
 if [ "$CLEAN_ARG"x = "clean"x ]; then
-    ${KIND} delete cluster --name ${CLUSTER_NAME}
-    ${KIND} delete cluster --name ${CLUSTER_NAME_MANAGED}
-    exit 0
+  ${KIND} delete cluster --name ${CLUSTER_NAME}
+  ${KIND} delete cluster --name ${CLUSTER_NAME_MANAGED}
+  exit 0
 fi
 
 echo "###### installing kind"
@@ -58,7 +61,8 @@ echo "###### prepare required crds"
 ${KUBECTL} apply -f "$REPO_DIR/test/e2e/resources/hive"
 ${KUBECTL} apply -f "$REPO_DIR/test/e2e/resources/ocp"
 ${KUBECTL} apply -f "$REPO_DIR/test/e2e/resources/assisted-service"
-cat << EOF | ${KUBECTL} apply -f -
+
+cat <<EOF | ${KUBECTL} apply -f -
 apiVersion: config.openshift.io/v1
 kind: Infrastructure
 metadata:
@@ -81,8 +85,8 @@ echo "managed cluster context is: ${cluster_context_managed}"
 ${KUBECTL} --context="${cluster_context_managed}" -n kube-system scale --replicas=1 deployment/coredns
 
 # store kubeconfigs
-${KIND} get kubeconfig --name=${CLUSTER_NAME} --internal > $E2E_KUBECONFIG
-${KIND} get kubeconfig --name=${CLUSTER_NAME_MANAGED} --internal > $E2E_MANAGED_KUBECONFIG
+${KIND} get kubeconfig --name=${CLUSTER_NAME} --internal >$E2E_KUBECONFIG
+${KIND} get kubeconfig --name=${CLUSTER_NAME_MANAGED} --internal >$E2E_MANAGED_KUBECONFIG
 
 # check back to the test cluster
 ${KUBECTL} config use-context "${cluster_context}"
