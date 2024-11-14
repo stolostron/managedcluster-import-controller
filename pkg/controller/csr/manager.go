@@ -5,7 +5,11 @@ package csr
 import (
 	"context"
 
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	certificatesv1 "k8s.io/api/certificates/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -13,8 +17,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 )
 
 const ControllerName = "csr-controller"
@@ -45,6 +47,21 @@ func Add(ctx context.Context,
 		Complete(&ReconcileCSR{
 			clientHolder: clientHolder,
 			recorder:     helpers.NewEventRecorder(clientHolder.KubeClient, ControllerName),
+			checks: []func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error){
+				// Case 1: if a CSR comes from a managed cluster that already exists, approve it
+				func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error) {
+					clusterName := getClusterName(csr)
+					cluster := clusterv1.ManagedCluster{}
+					err := clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: clusterName}, &cluster)
+					if errors.IsNotFound(err) {
+						return false, nil
+					}
+					if err != nil {
+						return false, err
+					}
+					return true, nil
+				},
+			},
 		})
 
 	return err

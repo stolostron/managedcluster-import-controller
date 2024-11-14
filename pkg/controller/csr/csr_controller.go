@@ -9,13 +9,11 @@ import (
 
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -64,6 +62,7 @@ func csrPredicate(csr *certificatesv1.CertificateSigningRequest) bool {
 type ReconcileCSR struct {
 	clientHolder *helpers.ClientHolder
 	recorder     events.Recorder
+	checks       []func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error)
 }
 
 // blank assignment to verify that ReconcileCSR implements reconcile.Reconciler
@@ -90,15 +89,21 @@ func (r *ReconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 		return reconcile.Result{}, nil
 	}
 
-	clusterName := getClusterName(csr)
-	cluster := clusterv1.ManagedCluster{}
-	err = r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: clusterName}, &cluster)
-	if errors.IsNotFound(err) {
-		// no managed cluster, do nothing.
-		return reconcile.Result{}, nil
+	// Run checks one by one, if any check returns true, approve the CSR
+	// If all checks return false, do nothing
+	pass := false
+	for _, check := range r.checks {
+		ok, err := check(ctx, csr)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		if ok {
+			pass = true
+			break
+		}
 	}
-	if err != nil {
-		return reconcile.Result{}, err
+	if !pass {
+		return reconcile.Result{}, nil
 	}
 
 	reqLogger.Info("Reconciling CSR")
