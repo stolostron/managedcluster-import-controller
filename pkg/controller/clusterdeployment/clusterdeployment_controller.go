@@ -25,7 +25,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
-var log = logf.Log.WithName(controllerName)
+var log = logf.Log.WithName(ControllerName)
 
 // ReconcileClusterDeployment reconciles the clusterdeployment that is in the managed cluster namespace
 // to import the managed cluster

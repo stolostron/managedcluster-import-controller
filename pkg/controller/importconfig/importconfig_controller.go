@@ -28,7 +28,7 @@ import (
 	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 )
 
-var log = logf.Log.WithName(controllerName)
+var log = logf.Log.WithName(ControllerName)
 
 // ReconcileImportConfig reconciles a managed cluster to prepare its import secret
 type ReconcileImportConfig struct {

@@ -11,7 +11,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
-	kevents "k8s.io/client-go/tools/events"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -29,20 +28,19 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 )
 
-const controllerName = "importconfig-controller"
+const ControllerName = "importconfig-controller"
 
 // Add creates a new importconfig controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(ctx context.Context,
 	mgr manager.Manager,
 	clientHolder *helpers.ClientHolder,
-	informerHolder *source.InformerHolder,
-	mcRecorder kevents.EventRecorder) (string, error) {
+	informerHolder *source.InformerHolder) error {
 
 	// All bootstrap kubeconfigs should created in the same pod namespace
 	podNS := os.Getenv(constants.PodNamespaceEnvVarName)
 
-	err := ctrl.NewControllerManagedBy(mgr).Named(controllerName).
+	err := ctrl.NewControllerManagedBy(mgr).Named(ControllerName).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
 		}).
@@ -184,7 +182,7 @@ func Add(ctx context.Context,
 			clientHolder:           clientHolder,
 			klusterletconfigLister: informerHolder.KlusterletConfigLister,
 			scheme:                 mgr.GetScheme(),
-			recorder:               helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
+			recorder:               helpers.NewEventRecorder(clientHolder.KubeClient, ControllerName),
 		})
-	return controllerName, err
+	return err
 }

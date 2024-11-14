@@ -31,7 +31,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 )
 
-var log = logf.Log.WithName(controllerName)
+var log = logf.Log.WithName(ControllerName)
 
 // ReconcileManifestWork reconciles the ManagedClusters of the ManifestWorks object
 type ReconcileManifestWork struct {

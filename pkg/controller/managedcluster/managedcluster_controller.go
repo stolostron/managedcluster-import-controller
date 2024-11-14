@@ -32,7 +32,7 @@ const (
 	createdViaOther = "other"
 )
 
-var log = logf.Log.WithName(controllerName)
+var log = logf.Log.WithName(ControllerName)
 
 // ReconcileManagedCluster reconciles a ManagedCluster object
 type ReconcileManagedCluster struct {

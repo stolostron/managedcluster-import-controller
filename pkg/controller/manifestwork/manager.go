@@ -27,7 +27,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 )
 
-const controllerName = "manifestwork-controller"
+const ControllerName = "manifestwork-controller"
 
 // Add creates a new manifestwork controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
@@ -35,9 +35,9 @@ func Add(ctx context.Context,
 	mgr manager.Manager,
 	clientHolder *helpers.ClientHolder,
 	informerHolder *source.InformerHolder,
-	mcRecorder kevents.EventRecorder) (string, error) {
+	mcRecorder kevents.EventRecorder) error {
 
-	err := ctrl.NewControllerManagedBy(mgr).Named(controllerName).
+	err := ctrl.NewControllerManagedBy(mgr).Named(ControllerName).
 		WithOptions(controller.Options{
 			MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
 		}).
@@ -98,10 +98,10 @@ func Add(ctx context.Context,
 			clientHolder,
 			informerHolder,
 			mgr.GetScheme(),
-			helpers.NewEventRecorder(clientHolder.KubeClient, controllerName),
+			helpers.NewEventRecorder(clientHolder.KubeClient, ControllerName),
 			mcRecorder,
 		))
-	return controllerName, err
+	return err
 }
 
 func isDefaultModeObject(object client.Object) bool {

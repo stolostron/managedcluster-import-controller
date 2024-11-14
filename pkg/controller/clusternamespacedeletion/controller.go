@@ -27,7 +27,7 @@ import (
 )
 
 var (
-	log                        = logf.Log.WithName(controllerName)
+	log                        = logf.Log.WithName(ControllerName)
 	podDeletionGracePeriod     = 10 * time.Second
 	hostedClusterRequeuePeriod = 1 * time.Minute
 )
