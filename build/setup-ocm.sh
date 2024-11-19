@@ -10,7 +10,7 @@ set -o nounset
 # Input: KUBECTL(kubectl or oc), OCM_VERSION)
 
 KUBECTL=${KUBECTL:-kubectl}
-OCM_VERSION=${OCM_VERSION:-main}
+OCM_VERSION=${OCM_VERSION:-test1118}
 
 function wait_deployment() {
   set +e
@@ -35,13 +35,13 @@ mkdir -p "${WORK_DIR}"
 echo "###### deploy ocm"
 rm -rf "$WORK_DIR/_repo_ocm"
 
-export OCM_BRANCH=$OCM_VERSION
-export IMAGE_NAME=quay.io/stolostron/registration-operator:$OCM_VERSION
-export REGISTRATION_OPERATOR_IMAGE=quay.io/stolostron/registration-operator:$OCM_VERSION
-export REGISTRATION_IMAGE=quay.io/stolostron/registration:$OCM_VERSION
-export WORK_IMAGE=quay.io/stolostron/work:$OCM_VERSION
-export PLACEMENT_IMAGE=quay.io/stolostron/placement:$OCM_VERSION
-export ADDON_MANAGER_IMAGE=quay.io/stolostron/addon-manager:$OCM_VERSION
+export OCM_BRANCH=main
+export IMAGE_NAME=quay.io/zhaoxue/registration-operator:$OCM_VERSION
+export REGISTRATION_OPERATOR_IMAGE=quay.io/zhaoxue/registration-operator:$OCM_VERSION
+export REGISTRATION_IMAGE=quay.io/zhaoxue/registration:$OCM_VERSION
+export WORK_IMAGE=quay.io/zhaoxue/work:$OCM_VERSION
+export PLACEMENT_IMAGE=quay.io/zhaoxue/placement:$OCM_VERSION
+export ADDON_MANAGER_IMAGE=quay.io/zhaoxue/addon-manager:$OCM_VERSION
 
 git clone --depth 1 --branch $OCM_BRANCH https://github.com/stolostron/ocm.git "$WORK_DIR/_repo_ocm"
 make deploy-hub-operator apply-hub-cr -C "$WORK_DIR/_repo_ocm"

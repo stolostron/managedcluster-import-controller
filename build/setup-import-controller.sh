@@ -10,7 +10,7 @@ set -o nounset
 # Input: KUBECTL(kubectl or oc), OCM_VERSION, E2E_KUBECONFIG, E2E_MANAGED_KUBECONFIG, cluster_ip, cluster_context
 
 KUBECTL=${KUBECTL:-kubectl}
-OCM_VERSION=${OCM_VERSION:-main}
+OCM_VERSION=${OCM_VERSION:-test1118}
 IMPORT_CONTROLLER_IMAGE_NAME=${IMPORT_CONTROLLER_IMAGE_NAME:-managedcluster-import-controller:latest}
 
 BUILD_DIR="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
@@ -23,10 +23,9 @@ E2E_KUBECONFIG="${WORK_DIR}/e2e-kubeconfig"
 E2E_MANAGED_KUBECONFIG="${WORK_DIR}/e2e-managed-kubeconfig"
 E2E_EXTERNAL_MANAGED_KUBECONFIG="${WORK_DIR}/e2e-external-managed-kubeconfig"
 
-export OCM_BRANCH=$OCM_VERSION
-export REGISTRATION_OPERATOR_IMAGE=quay.io/stolostron/registration-operator:$OCM_VERSION
-export REGISTRATION_IMAGE=quay.io/stolostron/registration:$OCM_VERSION
-export WORK_IMAGE=quay.io/stolostron/work:$OCM_VERSION
+export REGISTRATION_OPERATOR_IMAGE=quay.io/zhaoxue/registration-operator:$OCM_VERSION
+export REGISTRATION_IMAGE=quay.io/zhaoxue/registration:$OCM_VERSION
+export WORK_IMAGE=quay.io/zhaoxue/work:$OCM_VERSION
 
 echo "###### deploy managedcluster-import-controller by image $IMPORT_CONTROLLER_IMAGE_NAME"
 
