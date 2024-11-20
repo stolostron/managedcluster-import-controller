@@ -712,12 +712,12 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				if klusterlet.Spec.RegistrationConfiguration.BootstrapKubeConfigs.Type != operatorv1.LocalSecrets {
 					t.Fatalf("the klusterlet bootstrap kubeconfig type is not %s", operatorv1.LocalSecrets)
 				}
-				if len(klusterlet.Spec.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets) != 2 {
-					t.Fatalf("the klusterlet bootstrap kubeconfig secrets count is not 2")
+				if len(klusterlet.Spec.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets) != 3 {
+					t.Fatalf("the klusterlet bootstrap kubeconfig secrets count is not 3")
 				}
 				for _, secret := range klusterlet.Spec.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets {
-					if secret.Name != "bootstrapkubeconfig-hub1" && secret.Name != "bootstrapkubeconfig-hub2" {
-						t.Fatalf("the klusterlet bootstrap kubeconfig secret name is not bootstrapkubeconfig-hub1 or bootstrapkubeconfig-hub2")
+					if secret.Name != "bootstrapkubeconfig-hub1" && secret.Name != "bootstrapkubeconfig-hub2" && secret.Name != "bootstrap-hub-kubeconfig-current-hub" {
+						t.Fatalf("the klusterlet bootstrap kubeconfig secret name is not bootstrapkubeconfig-hub1 or bootstrapkubeconfig-hub2 or bootstrap-hub-kubeconfig-current-hub")
 					}
 				}
 				if klusterlet.Spec.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.HubConnectionTimeoutSeconds != 500 {

@@ -353,6 +353,10 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 				Mode:    operatorv1.FeatureGateModeTypeEnable,
 			})
 		registrationConfiguration.BootstrapKubeConfigs = b.klusterletconfig.Spec.BootstrapKubeConfigs
+		registrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets = append(
+			registrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets, operatorv1.KubeConfigSecret{
+				Name: constants.DefaultBootstrapHubKubeConfigSecretName + "-current-hub",
+			})
 
 		bootstrapKubeConfigSecrets, err := convertKubeConfigSecrets(ctx,
 			b.klusterletconfig.Spec.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets, clientHolder.KubeClient)
