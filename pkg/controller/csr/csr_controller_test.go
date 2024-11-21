@@ -14,6 +14,7 @@ import (
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	certificatesv1 "k8s.io/api/certificates/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -41,6 +42,18 @@ func TestReconcileCSR_Reconcile(t *testing.T) {
 		},
 		Spec: certificatesv1.CertificateSigningRequestSpec{
 			Username: fmt.Sprintf(userNameSignature, clusterName, clusterName),
+		},
+	}
+
+	testSpecialClusterCSR := &certificatesv1.CertificateSigningRequest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: csrNameReconcile,
+			Labels: map[string]string{
+				clusterLabel: "specialCluster",
+			},
+		},
+		Spec: certificatesv1.CertificateSigningRequestSpec{
+			Username: fmt.Sprintf(userNameSignature, "specialCluster", "specialCluster"),
 		},
 	}
 
@@ -106,16 +119,53 @@ func TestReconcileCSR_Reconcile(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "testCSRSpecialCluster",
+			fields: fields{
+				client:     fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testSpecialClusterCSR).Build(),
+				kubeClient: fakeclientset.NewSimpleClientset(testSpecialClusterCSR),
+				scheme:     testscheme,
+			},
+			args: args{
+				request: req,
+			},
+			want: reconcile.Result{
+				Requeue: false,
+			},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Test name: %s", tt.name)
+			clientHolder := &helpers.ClientHolder{
+				KubeClient:    tt.fields.kubeClient,
+				RuntimeClient: tt.fields.client,
+			}
 			r := &ReconcileCSR{
-				clientHolder: &helpers.ClientHolder{
-					KubeClient:    tt.fields.kubeClient,
-					RuntimeClient: tt.fields.client,
+				clientHolder: clientHolder,
+				recorder:     eventstesting.NewTestingEventRecorder(t),
+				approvalConditions: []func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error){
+					func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error) {
+						clusterName := getClusterName(csr)
+						cluster := clusterv1.ManagedCluster{}
+						err := clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: clusterName}, &cluster)
+						if errors.IsNotFound(err) {
+							return false, nil
+						}
+						if err != nil {
+							return false, err
+						}
+						return true, nil
+					},
+					func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error) {
+						clusterName := getClusterName(csr)
+						if clusterName == "specialCluster" {
+							return true, nil
+						}
+						return false, nil
+					},
 				},
-				recorder: eventstesting.NewTestingEventRecorder(t),
 			}
 			got, err := r.Reconcile(context.TODO(), tt.args.request)
 			if (err != nil) != tt.wantErr {
@@ -132,7 +182,7 @@ func TestReconcileCSR_Reconcile(t *testing.T) {
 					t.Error("CSR not found")
 				}
 				switch tt.name {
-				case "testCSR":
+				case "testCSR", "testCSRSpecialCluster":
 					if csr.Status.Conditions[0].Type != certificatesv1.CertificateApproved {
 						t.Error("CSR not approved")
 					}
@@ -368,7 +418,7 @@ func Test_validUsername(t *testing.T) {
 	}
 }
 
-func Test_csrPredicate(t *testing.T) {
+func Test_isValidUnapprovedBootstrapCSR(t *testing.T) {
 	testCSR := &certificatesv1.CertificateSigningRequest{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: csrNameReconcile,
@@ -418,7 +468,7 @@ func Test_csrPredicate(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := csrPredicate(tt.args.csr); got != tt.want {
+			if got := isValidUnapprovedBootstrapCSR(tt.args.csr); got != tt.want {
 				t.Errorf("csrPredicate() = %v, want %v", got, tt.want)
 			}
 		})
