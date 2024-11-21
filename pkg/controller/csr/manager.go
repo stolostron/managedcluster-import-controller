@@ -5,6 +5,7 @@ package csr
 import (
 	"context"
 
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	certificatesv1 "k8s.io/api/certificates/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
@@ -13,11 +14,12 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
-
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 )
 
-const ControllerName = "csr-controller"
+const (
+	ControllerName                 = "csr-controller"
+	AgentRegistrationBootstrapUser = "system:serviceaccount:multicluster-engine:agent-registration-bootstrap"
+)
 
 // Add creates a new CSR Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
@@ -36,15 +38,22 @@ func Add(ctx context.Context,
 				GenericFunc: func(e event.GenericEvent) bool { return false },
 				DeleteFunc:  func(e event.DeleteEvent) bool { return false },
 				UpdateFunc: func(e event.UpdateEvent) bool {
-					return csrPredicate(e.ObjectNew.(*certificatesv1.CertificateSigningRequest))
+					return isValidUnapprovedBootstrapCSR(e.ObjectNew.(*certificatesv1.CertificateSigningRequest))
 				},
 				CreateFunc: func(e event.CreateEvent) bool {
-					return csrPredicate(e.Object.(*certificatesv1.CertificateSigningRequest))
+					return isValidUnapprovedBootstrapCSR(e.Object.(*certificatesv1.CertificateSigningRequest))
 				},
 			})).
 		Complete(&ReconcileCSR{
 			clientHolder: clientHolder,
 			recorder:     helpers.NewEventRecorder(clientHolder.KubeClient, ControllerName),
+			approvalConditions: []func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error){
+				// Case 1(the default case): if a CSR comes from a managed cluster, and the managed cluster already exists, approve it
+				func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error) {
+					return approveExistingManagedClusterCSR(ctx, csr, clientHolder)
+				},
+				// TODO: @xuezhaojun Case 2: if a CSR comes from agent-registration
+			},
 		})
 
 	return err

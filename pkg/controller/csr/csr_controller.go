@@ -9,13 +9,13 @@ import (
 
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	certificatesv1 "k8s.io/api/certificates/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -53,17 +53,38 @@ func validUsername(csr *certificatesv1.CertificateSigningRequest, clusterName st
 	return csr.Spec.Username == fmt.Sprintf(userNameSignature, clusterName, clusterName)
 }
 
-func csrPredicate(csr *certificatesv1.CertificateSigningRequest) bool {
+// isValidUnapprovedBootstrapCSR checks if the CSR:
+// 1. Has a non-empty cluster name label
+// 2. Has not been approved or denied
+func isValidUnapprovedBootstrapCSR(csr *certificatesv1.CertificateSigningRequest) bool {
 	clusterName := getClusterName(csr)
 	return clusterName != "" &&
-		getApprovalType(csr) == "" &&
-		validUsername(csr, clusterName)
+		getApprovalType(csr) == ""
+}
+
+// approveExistingManagedClusterCSR checks if the CSR is from an existing managed cluster
+func approveExistingManagedClusterCSR(ctx context.Context, csr *certificatesv1.CertificateSigningRequest,
+	clientHolder *helpers.ClientHolder) (bool, error) {
+	if !validUsername(csr, getClusterName(csr)) {
+		return false, nil
+	}
+
+	cluster := clusterv1.ManagedCluster{}
+	err := clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: getClusterName(csr)}, &cluster)
+	if errors.IsNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // ReconcileCSR reconciles the managed cluster CSR object
 type ReconcileCSR struct {
-	clientHolder *helpers.ClientHolder
-	recorder     events.Recorder
+	clientHolder       *helpers.ClientHolder
+	recorder           events.Recorder
+	approvalConditions []func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error)
 }
 
 // blank assignment to verify that ReconcileCSR implements reconcile.Reconciler
@@ -90,15 +111,21 @@ func (r *ReconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 		return reconcile.Result{}, nil
 	}
 
-	clusterName := getClusterName(csr)
-	cluster := clusterv1.ManagedCluster{}
-	err = r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: clusterName}, &cluster)
-	if errors.IsNotFound(err) {
-		// no managed cluster, do nothing.
-		return reconcile.Result{}, nil
+	// Check if any approval condition matches
+	shouldApprove := false
+	for _, condition := range r.approvalConditions {
+		matched, err := condition(ctx, csr)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		if matched {
+			shouldApprove = true
+			break
+		}
 	}
-	if err != nil {
-		return reconcile.Result{}, err
+
+	if !shouldApprove {
+		return reconcile.Result{}, nil
 	}
 
 	reqLogger.Info("Reconciling CSR")
