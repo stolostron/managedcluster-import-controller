@@ -72,6 +72,11 @@ import (
 var metricsPort = 8383
 
 var (
+	Burst int     = 100
+	QPS   float32 = 50
+)
+
+var (
 	scheme   = k8sruntime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
 )
@@ -101,7 +106,8 @@ func main() {
 
 	pflag.StringVar(&leaderElectionNamespace, "leader-election-namespace", "", "required when the process is not running in cluster")
 	pflag.BoolVar(&helpers.DeployOnOCP, "deploy-on-ocp", true, "used to deploy the controller on OCP or not")
-
+	pflag.Float32Var(&QPS, "kube-api-qps", 50, "QPS indicates the maximum QPS to the master from this client")
+	pflag.IntVar(&Burst, "kube-api-burst", 100, "Burst indicates the maximum burst for throttle")
 	pflag.CommandLine.SetNormalizeFunc(utilflag.WordSepNormalizeFunc)
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	features.DefaultMutableFeatureGate.AddFlag(pflag.CommandLine)
@@ -127,6 +133,9 @@ func main() {
 		setupLog.Error(err, "failed to get kube config")
 		os.Exit(1)
 	}
+
+	cfg.QPS = QPS
+	cfg.Burst = Burst
 
 	kubeClient, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
