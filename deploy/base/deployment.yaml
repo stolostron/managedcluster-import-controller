@@ -39,7 +39,7 @@ spec:
             - name: DEFAULT_IMAGE_REGISTRY
               value: quay.io/open-cluster-management
             - name: REGISTRATION_OPERATOR_IMAGE
-              value: quay.io/open-cluster-management/registration-operator:latest
+              value: quay.io/haoqing/registration-operator:15483-137s
             - name: REGISTRATION_IMAGE
               value: quay.io/open-cluster-management/registration:latest
             - name: WORK_IMAGE
