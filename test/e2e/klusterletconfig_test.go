@@ -13,6 +13,7 @@ import (
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
+	"github.com/onsi/gomega"
 	. "github.com/onsi/gomega"
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/bootstrap"
@@ -128,6 +129,7 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 		)
 
 		assertManagedClusterAvailable(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
 	})
 
 	It("Should deploy the klusterlet with proxy config", func() {
@@ -155,6 +157,7 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 		// klusterletconfig is missing and it will be ignored
 		assertBootstrapKubeconfigWithProxyConfig("", nil, nil)
 		assertManagedClusterAvailable(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
 
 		By("Create KlusterletConfig with http proxy", func() {
 			_, err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Create(context.TODO(), &klusterletconfigv1alpha1.KlusterletConfig{
@@ -216,6 +219,7 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 
 		// cluster should become available because no proxy is used
 		assertManagedClusterAvailable(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
 	})
 
 	It("Should ignore the proxy config for self managed cluster", func() {
@@ -284,6 +288,7 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 		Expect(err).ToNot(HaveOccurred())
 		assertBootstrapKubeconfig(defaultServerUrl, "", "", defaultCABundle, false)
 		assertManagedClusterAvailable(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
 
 		customServerURL := "https://invalid.server.url:6443"
 		customCAData, _, err := newCert("custom CA for hub Kube API server")
@@ -338,6 +343,7 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 		assertBootstrapKubeconfig("https://kubernetes.default.svc:443", "",
 			"/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", nil, false)
 		assertManagedClusterAvailable(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
 
 		defaultServerUrl, err := bootstrap.GetKubeAPIServerAddress(context.TODO(), hubRuntimeClient, nil)
 		Expect(err).ToNot(HaveOccurred())
@@ -359,10 +365,8 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 			RuntimeClient: hubRuntimeClient,
 		}, defaultServerUrl, managedClusterName, nil)
 		Expect(err).ToNot(HaveOccurred())
-		assertBootstrapKubeconfig(defaultServerUrl, "", "", defaultCABundle, false)
 
-		// here to restart agent pods to trigger bootstrap secret update to save time.
-		restartAgentPods()
+		assertBootstrapKubeconfig(defaultServerUrl, "", "", defaultCABundle, false)
 		assertManagedClusterAvailable(managedClusterName)
 
 		By("Delete Klusterletconfig", func() {
@@ -372,11 +376,23 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 
 		assertBootstrapKubeconfig("https://kubernetes.default.svc:443", "",
 			"/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", nil, false)
-
-		// here to restart agent pods to trigger bootstrap secret update to save time.
-		restartAgentPods()
 		// cluster should become available because custom server URL and CA bundle is removed
 		assertManagedClusterAvailable(managedClusterName)
+
+		// The hubhash changes in this case, update EvictionGracePeriod to 10s to cleanup the unmanaged AppliedWork
+		By("Setup KlusterletConfig EvictionGracePeriod to clean up resource", func() {
+			_, err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Create(context.TODO(), &klusterletconfigv1alpha1.KlusterletConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: klusterletConfigName,
+				},
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					AppliedManifestWorkEvictionGracePeriod: "10s",
+				},
+			}, metav1.CreateOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+		// here to restart agent pods to trigger update to save time.
+		restartAgentPods()
 	})
 
 	It("Should deploy the klusterlet with customized namespace", func() {
@@ -393,6 +409,7 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 
 		// klusterletconfig is missing and it will be ignored
 		assertManagedClusterAvailable(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
 
 		By("Create KlusterletConfig with customized namespace", func() {
 			_, err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Create(context.TODO(), &klusterletconfigv1alpha1.KlusterletConfig{
@@ -414,6 +431,7 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 		AssertKlusterletNamespace(managedClusterName, "klusterlet-local", "open-cluster-management-local")
 
 		assertManagedClusterAvailable(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
 
 		By("Delete Klusterletconfig", func() {
 			err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Delete(context.TODO(), klusterletConfigName, metav1.DeleteOptions{})
@@ -423,6 +441,7 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 		AssertKlusterletNamespace(managedClusterName, "klusterlet", "open-cluster-management-agent")
 
 		assertManagedClusterAvailable(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
 	})
 
 	It("Should deploy the klusterlet with custom AppliedManifestWork eviction grace period", func() {
@@ -440,6 +459,7 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 		// klusterletconfig is missing and it will be ignored
 		assertAppliedManifestWorkEvictionGracePeriod(nil)
 		assertManagedClusterAvailable(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
 
 		By("Create KlusterletConfig with custom AppliedManifestWork eviction grace period", func() {
 			_, err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Create(context.TODO(), &klusterletconfigv1alpha1.KlusterletConfig{
@@ -457,6 +477,7 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 			Duration: 120 * time.Minute,
 		})
 		assertManagedClusterAvailable(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
 
 		By("Delete Klusterletconfig", func() {
 			err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Delete(context.TODO(), klusterletConfigName, metav1.DeleteOptions{})
@@ -465,6 +486,7 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 
 		assertAppliedManifestWorkEvictionGracePeriod(nil)
 		assertManagedClusterAvailable(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
 	})
 })
 
@@ -519,13 +541,30 @@ func restartAgentPods(namespaces ...string) {
 	if len(namespaces) == 0 {
 		namespaces = []string{"open-cluster-management-agent"}
 	}
+	nspodsnum := map[string]int{}
 	for _, ns := range namespaces {
 		pods, err := hubKubeClient.CoreV1().Pods(ns).List(context.TODO(), metav1.ListOptions{LabelSelector: "app=klusterlet-agent"})
 		Expect(err).ToNot(HaveOccurred())
 
+		nspodsnum[ns] = len(pods.Items)
 		for _, pod := range pods.Items {
 			err = hubKubeClient.CoreV1().Pods(ns).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
 			Expect(err).ToNot(HaveOccurred())
 		}
 	}
+	gomega.Eventually(func() error {
+		for _, ns := range namespaces {
+			pods, err := hubKubeClient.CoreV1().Pods(ns).List(context.TODO(), metav1.ListOptions{LabelSelector: "app=klusterlet-agent"})
+			if err != nil {
+				return err
+			}
+			if len(pods.Items) != nspodsnum[ns] {
+				return fmt.Errorf("waiting for pods restart in namespace %s", ns)
+			}
+		}
+
+		return nil
+	}, 120*time.Second, 1*time.Second).Should(gomega.Succeed())
+
+	assertAgentLeaderElection()
 }
