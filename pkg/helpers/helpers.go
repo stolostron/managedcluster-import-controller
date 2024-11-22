@@ -6,6 +6,7 @@ package helpers
 import (
 	"bytes"
 	"context"
+	"embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -1106,4 +1107,17 @@ func HasCertificates(supersetCertData, subsetCertData []byte) (bool, error) {
 		}
 	}
 	return true, nil
+}
+
+func FilesToObjects(files []string, config interface{}, manifestFiles *embed.FS) ([]runtime.Object, error) {
+	objects := []runtime.Object{}
+	for _, file := range files {
+		template, err := manifestFiles.ReadFile(file)
+		if err != nil {
+			return nil, err
+		}
+
+		objects = append(objects, MustCreateObjectFromTemplate(file, template, config))
+	}
+	return objects, nil
 }

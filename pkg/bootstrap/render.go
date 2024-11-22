@@ -422,7 +422,7 @@ func (b *KlusterletManifestsConfig) GenerateKlusterletCRDsV1Beta1() ([]byte, err
 }
 
 func GenerateHubBootstrapRBACObjects(managedClusterName string) ([]runtime.Object, error) {
-	return filesToObjects(hubFiles, struct {
+	return helpers.FilesToObjects(hubFiles, struct {
 		ManagedClusterName          string
 		ManagedClusterNamespace     string
 		BootstrapServiceAccountName string
@@ -430,7 +430,7 @@ func GenerateHubBootstrapRBACObjects(managedClusterName string) ([]runtime.Objec
 		ManagedClusterName:          managedClusterName,
 		ManagedClusterNamespace:     managedClusterName,
 		BootstrapServiceAccountName: GetBootstrapSAName(managedClusterName),
-	})
+	}, &ManifestFiles)
 }
 
 func filesToTemplateBytes(files []string, config interface{}) ([]byte, error) {
@@ -447,19 +447,6 @@ func filesToTemplateBytes(files []string, config interface{}) ([]byte, error) {
 		manifests.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, string(b)))
 	}
 	return manifests.Bytes(), nil
-}
-
-func filesToObjects(files []string, config interface{}) ([]runtime.Object, error) {
-	objects := []runtime.Object{}
-	for _, file := range files {
-		template, err := ManifestFiles.ReadFile(file)
-		if err != nil {
-			return nil, err
-		}
-
-		objects = append(objects, helpers.MustCreateObjectFromTemplate(file, template, config))
-	}
-	return objects, nil
 }
 
 // installNoOperator return true if operator is not to be installed.
