@@ -17,50 +17,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 )
-
-// getBootstrapKubeConfigDataFromImportSecret aims to reuse the bootstrap kubeconfig data if possible.
-// The return values are: 1. kubeconfig data, 2. token expiration, 3. error
-// Note that the kubeconfig data could be `nil` if the import secret is not found or the kubeconfig data is invalid.
-func getBootstrapKubeConfigDataFromImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, clusterName string,
-	klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) ([]byte, []byte, []byte, error) {
-	importSecret, err := getImportSecret(ctx, clientHolder, clusterName)
-	if apierrors.IsNotFound(err) {
-		return nil, nil, nil, nil
-	}
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	kubeConfigData := extractBootstrapKubeConfigDataFromImportSecret(importSecret)
-	if len(kubeConfigData) == 0 {
-		return nil, nil, nil, nil
-	}
-
-	kubeAPIServer, proxyURL, caData, token, ctxClusterName, err := parseKubeConfigData(kubeConfigData)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("failed to parse kubeconfig data: %v", err)
-	}
-
-	valid, err := bootstrap.ValidateBootstrapKubeconfig(ctx, clientHolder, klusterletConfig, clusterName,
-		kubeAPIServer, caData, proxyURL, ctxClusterName)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	if !valid {
-		return nil, nil, nil, nil
-	}
-
-	creation := importSecret.Data[constants.ImportSecretTokenCreation]
-	expiration := importSecret.Data[constants.ImportSecretTokenExpiration]
-	if !validateToken(token, creation, expiration) {
-		klog.Infof("token is invalid for the managed cluster %s, creation: %v, expiration: %v",
-			clusterName, string(creation), string(expiration))
-		return nil, nil, nil, nil
-	}
-
-	return kubeConfigData, creation, expiration, nil
-}
 
 func getImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, clusterName string) (*corev1.Secret, error) {
 	importSecretName := fmt.Sprintf("%s-%s", clusterName, constants.ImportSecretNameSuffix)
@@ -68,6 +27,10 @@ func getImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, cl
 }
 
 func extractBootstrapKubeConfigDataFromImportSecret(importSecret *corev1.Secret) []byte {
+	if importSecret == nil {
+		return nil
+	}
+
 	importYaml, ok := importSecret.Data[constants.ImportSecretImportYamlKey]
 	if !ok {
 		return nil
@@ -143,4 +106,174 @@ func validateToken(token string, creation, expiration []byte) bool {
 
 	lifetime := time.Until(expirationTime)
 	return lifetime > refreshThreshold
+}
+
+func buildBootstrapKubeconfigData(ctx context.Context, clientHolder *helpers.ClientHolder,
+	managedCluster *clusterv1.ManagedCluster,
+	klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) ([]byte, []byte, []byte, error) {
+	var bootstrapKubeconfigData, tokenData, tokenCreation, tokenExpiration []byte
+
+	// get the import secret
+	importSecret, err := getImportSecret(ctx, clientHolder, managedCluster.Name)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return nil, nil, nil, err
+	}
+
+	// get the latest kube apiserver configuration
+	requiredKubeAPIServer, requiredProxyURL, requiredCAData, err := bootstrap.GetKubeAPIServerConfig(
+		ctx, clientHolder, managedCluster.Name, klusterletConfig)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// get the cluster name in the kubeconfig
+	requiredCtxClusterName, err := bootstrap.GetKubeconfigClusterName(ctx, clientHolder.RuntimeClient)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	if importSecret == nil {
+		klog.Infof("the import secret is missing for the managed cluster %s", managedCluster.Name)
+	}
+
+	// check if the bootstrap kubeconfig and token in the import secret are still valid
+	if kubeconfigData := extractBootstrapKubeConfigDataFromImportSecret(importSecret); len(kubeconfigData) > 0 {
+		kubeAPIServer, proxyURL, caData, tokenString, ctxClusterName, err := parseKubeConfigData(kubeconfigData)
+		if err != nil {
+			klog.Infof("failed to parse the bootstrap hub kubeconfig in the import.yaml. Recreation is required: %v", err)
+		} else {
+			// use the existing token if it is still valid
+			creation := importSecret.Data[constants.ImportSecretTokenCreation]
+			expiration := importSecret.Data[constants.ImportSecretTokenExpiration]
+			if valid := validateToken(tokenString, creation, expiration); valid {
+				tokenData = []byte(tokenString)
+				tokenCreation = creation
+				tokenExpiration = expiration
+			} else {
+				klog.Infof("token should be refreshed for the managed cluster %s, creation: %v, expiration: %v",
+					managedCluster.Name, string(creation), string(expiration))
+			}
+
+			// use the kubeconfig if it is still valid
+			if valid := bootstrap.ValidateBootstrapKubeconfig(managedCluster.Name,
+				kubeAPIServer, proxyURL, caData, ctxClusterName,
+				requiredKubeAPIServer, requiredProxyURL, requiredCAData, requiredCtxClusterName); valid {
+				bootstrapKubeconfigData = kubeconfigData
+			}
+		}
+	}
+
+	// retrieve the non-expiring token if available or generate a new one.
+	if len(tokenData) == 0 {
+		klog.Infof("create a new token for the managed cluster %s", managedCluster.Name)
+		tokenData, tokenCreation, tokenExpiration, err = bootstrap.GetBootstrapToken(ctx, clientHolder.KubeClient,
+			bootstrap.GetBootstrapSAName(managedCluster.Name),
+			managedCluster.Name, constants.DefaultSecretTokenExpirationSecond)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+
+		// reset the bootstrap kubeconfig to trigger the re since the token is updated
+		bootstrapKubeconfigData = nil
+	}
+
+	// create a new bootstrap kubeconfig if it is invalid or missing
+	if len(bootstrapKubeconfigData) == 0 {
+		klog.Infof("create a new bootstrap kubeconfig for the managed cluster %s", managedCluster.Name)
+		bootstrapKubeconfigData, err = bootstrap.CreateBootstrapKubeConfig(requiredCtxClusterName,
+			requiredKubeAPIServer, requiredProxyURL, requiredCAData, tokenData)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
+	return bootstrapKubeconfigData, tokenCreation, tokenExpiration, nil
+}
+
+func buildImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, managedCluster *clusterv1.ManagedCluster,
+	mode operatorv1.InstallMode, klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig,
+	bootstrapKubeconfigData, tokenCreation, tokenExpiration []byte) (*corev1.Secret, error) {
+	var yamlcontent, crdsV1YAML, crdsV1beta1YAML []byte
+	var secretAnnotations map[string]string
+	var err error
+	switch mode {
+	case operatorv1.InstallModeDefault, operatorv1.InstallModeSingleton:
+		supportPriorityClass, err := helpers.SupportPriorityClass(managedCluster)
+		if err != nil {
+			return nil, err
+		}
+		var priorityClassName string
+		if supportPriorityClass {
+			priorityClassName = constants.DefaultKlusterletPriorityClassName
+		}
+		config := bootstrap.NewKlusterletManifestsConfig(
+			mode,
+			managedCluster.Name,
+			bootstrapKubeconfigData).
+			WithManagedCluster(managedCluster).
+			WithKlusterletConfig(klusterletConfig).
+			WithPriorityClassName(priorityClassName)
+		yamlcontent, err = config.Generate(ctx, clientHolder)
+		if err != nil {
+			return nil, err
+		}
+
+		crdsV1beta1YAML, err = config.GenerateKlusterletCRDsV1Beta1()
+		if err != nil {
+			return nil, err
+		}
+
+		crdsV1YAML, err = config.GenerateKlusterletCRDsV1()
+		if err != nil {
+			return nil, err
+		}
+	case operatorv1.InstallModeHosted, operatorv1.InstallModeSingletonHosted:
+		yamlcontent, err = bootstrap.NewKlusterletManifestsConfig(
+			mode,
+			managedCluster.Name,
+			bootstrapKubeconfigData).
+			WithManagedCluster(managedCluster).
+			WithImagePullSecretGenerate(false).
+			// the hosting cluster should support PriorityClass API and have
+			// already had the default PriorityClass
+			WithPriorityClassName(constants.DefaultKlusterletPriorityClassName).
+			WithKlusterletConfig(klusterletConfig).
+			Generate(ctx, clientHolder)
+		if err != nil {
+			return nil, err
+		}
+
+		secretAnnotations = map[string]string{
+			constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
+		}
+	default:
+		return nil, fmt.Errorf("klusterlet deploy mode %s not supported", mode)
+	}
+
+	// generate import secret
+	importSecret := &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-%s", managedCluster.Name, constants.ImportSecretNameSuffix),
+			Namespace: managedCluster.Name,
+			Labels: map[string]string{
+				constants.ClusterImportSecretLabel: "",
+			},
+			Annotations: secretAnnotations,
+		},
+		Data: map[string][]byte{
+			constants.ImportSecretImportYamlKey:      yamlcontent,
+			constants.ImportSecretCRDSYamlKey:        crdsV1YAML,
+			constants.ImportSecretCRDSV1YamlKey:      crdsV1YAML,
+			constants.ImportSecretCRDSV1beta1YamlKey: crdsV1beta1YAML,
+		},
+	}
+
+	if len(tokenCreation) != 0 {
+		importSecret.Data[constants.ImportSecretTokenCreation] = tokenCreation
+	}
+	if len(tokenExpiration) != 0 {
+		importSecret.Data[constants.ImportSecretTokenExpiration] = tokenExpiration
+	}
+	return importSecret, nil
 }

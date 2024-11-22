@@ -15,7 +15,6 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
-	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -27,13 +26,11 @@ import (
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
 
-	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kubefake "k8s.io/client-go/kubernetes/fake"
-	clienttesting "k8s.io/client-go/testing"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -48,16 +45,11 @@ func init() {
 	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &configv1.APIServer{})
 }
 
-func TestCreateBootstrapKubeConfig(t *testing.T) {
+func TestGetKubeAPIServerConfig(t *testing.T) {
 
 	rootCACertData, rootCAKeyData, err := testinghelpers.NewRootCA("test root ca")
 	if err != nil {
 		t.Errorf("failed to create root ca: %v", err)
-	}
-
-	defaultServerCertData, _, err := testinghelpers.NewServerCertificate("default kube-apiserver", rootCACertData, rootCAKeyData)
-	if err != nil {
-		t.Errorf("failed to create default server cert: %v", err)
 	}
 
 	customServerCertData, customServerKeyData, err := testinghelpers.NewServerCertificate("custom kube-apiserver", rootCACertData, rootCAKeyData)
@@ -78,13 +70,6 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 	cluster := &clusterv1.ManagedCluster{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "testcluster",
-		},
-	}
-
-	sa := &corev1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testcluster-bootstrap-sa",
-			Namespace: "testcluster",
 		},
 	}
 
@@ -126,53 +111,6 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 		Status: ocinfrav1.InfrastructureStatus{
 			APIServerURL: "https://my-dns-name.com:6443",
 		},
-	}
-
-	testTokenSecret := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testcluster-bootstrap-sa-token-xxxx",
-			Namespace: "testcluster",
-		},
-		Data: map[string][]byte{
-			"token":  []byte("fake-token"),
-			"ca.crt": defaultServerCertData,
-		},
-		Type: corev1.SecretTypeServiceAccountToken,
-	}
-
-	testTokenSecretWithWrongPrefix := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testcluster-wrong-bootstrap-sa-token-xxxx",
-			Namespace: "testcluster",
-		},
-		Data: map[string][]byte{
-			"token":  []byte("wrong-prefix"),
-			"ca.crt": defaultServerCertData,
-		},
-		Type: corev1.SecretTypeServiceAccountToken,
-	}
-
-	testTokenSecretWithNoToken := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testcluster-wrong-bootstrap-sa-token-xxxy",
-			Namespace: "testcluster",
-		},
-		Data: map[string][]byte{
-			"ca.crt": defaultServerCertData,
-		},
-		Type: corev1.SecretTypeServiceAccountToken,
-	}
-
-	testTokenSecretWithEmptyToken := &corev1.Secret{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "testcluster-wrong-bootstrap-sa-token-xxxz",
-			Namespace: "testcluster",
-		},
-		Data: map[string][]byte{
-			"token":  []byte(""),
-			"ca.crt": defaultServerCertData,
-		},
-		Type: corev1.SecretTypeServiceAccountToken,
 	}
 
 	apiserverConfig := &ocinfrav1.APIServer{
@@ -232,11 +170,10 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 	testInfraServerStopped.Status.APIServerURL = serverStopped.URL
 
 	type wantData struct {
-		serverURL   string
-		useInsecure bool
-		certData    []byte
-		token       string
-		proxyURL    string
+		serverURL string
+		ca        string
+		certData  []byte
+		proxyURL  string
 	}
 	testcases := []struct {
 		name             string
@@ -247,111 +184,85 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 		wantErr          bool
 	}{
 		{
-			name:       "use default certificate",
-			clientObjs: []client.Object{testInfraConfigIP},
-			runtimeObjs: []runtime.Object{testTokenSecretWithWrongPrefix, testTokenSecretWithNoToken,
-				testTokenSecretWithEmptyToken, testTokenSecret, cm},
+			name:        "use default certificate",
+			clientObjs:  []client.Object{testInfraConfigIP},
+			runtimeObjs: []runtime.Object{cm},
 			want: wantData{
-				serverURL:   "http://127.0.0.1:6443",
-				useInsecure: false,
-				certData:    rootCACertData,
-				token:       "fake-token",
+				serverURL: "http://127.0.0.1:6443",
+				certData:  rootCACertData,
 			},
 			wantErr: false,
 		},
 		{
 			name:        "use named certificate",
 			clientObjs:  []client.Object{testInfraConfigDNS, apiserverConfig},
-			runtimeObjs: []runtime.Object{testTokenSecret, secretCorrect},
+			runtimeObjs: []runtime.Object{secretCorrect},
 			want: wantData{
-				serverURL:   "https://my-dns-name.com:6443",
-				useInsecure: false,
-				certData:    customServerCertData,
-				token:       "fake-token",
+				serverURL: "https://my-dns-name.com:6443",
+				certData:  customServerCertData,
 			},
 			wantErr: false,
 		},
 		{
 			name:        "use default when cert not found",
 			clientObjs:  []client.Object{testInfraConfigDNS, apiserverConfig},
-			runtimeObjs: []runtime.Object{testTokenSecret, cm},
+			runtimeObjs: []runtime.Object{cm},
 			want: wantData{
-				serverURL:   "https://my-dns-name.com:6443",
-				useInsecure: false,
-				certData:    rootCACertData,
-				token:       "fake-token",
+				serverURL: "https://my-dns-name.com:6443",
+				certData:  rootCACertData,
 			},
 			wantErr: false,
 		},
 		{
 			name:        "return error cert malformat",
 			clientObjs:  []client.Object{testInfraConfigDNS, apiserverConfig},
-			runtimeObjs: []runtime.Object{testTokenSecret, secretWrong},
-			want: wantData{
-				serverURL:   "",
-				useInsecure: false,
-				certData:    nil,
-				token:       "",
-			},
-			wantErr: true,
+			runtimeObjs: []runtime.Object{secretWrong},
+			wantErr:     true,
 		},
 		{
-			name:        "roks failed to connect return error",
-			clientObjs:  []client.Object{testInfraServerStopped, apiserverConfig, node},
-			runtimeObjs: []runtime.Object{testTokenSecret},
-			want: wantData{
-				serverURL:   serverStopped.URL,
-				useInsecure: false,
-				certData:    defaultServerCertData,
-				token:       "fake-token",
-			},
-			wantErr: true,
+			name:       "roks failed to connect return error",
+			clientObjs: []client.Object{testInfraServerStopped, apiserverConfig, node},
+			wantErr:    true,
 		},
 		{
 			name:        "roks with no valid cert use default",
 			clientObjs:  []client.Object{testInfraServerTLS, apiserverConfig, node},
-			runtimeObjs: []runtime.Object{testTokenSecret, cm},
+			runtimeObjs: []runtime.Object{cm},
 			want: wantData{
-				serverURL:   serverTLS.URL,
-				useInsecure: false,
-				certData:    rootCACertData,
-				token:       "fake-token",
+				serverURL: serverTLS.URL,
+				certData:  rootCACertData,
 			},
 			wantErr: false,
 		},
 		{
 			name:        "no token secrets",
 			clientObjs:  []client.Object{testInfraConfigIP},
-			runtimeObjs: []runtime.Object{sa, secretWrong, cm},
+			runtimeObjs: []runtime.Object{secretWrong, cm},
 			want: wantData{
-				serverURL:   "http://127.0.0.1:6443",
-				useInsecure: false,
-				certData:    rootCACertData,
-				token:       "fake-token",
+				serverURL: "http://127.0.0.1:6443",
+				certData:  rootCACertData,
 			},
 			wantErr: false,
 		},
 		{
 			name:        "with proxy config",
 			clientObjs:  []client.Object{testInfraConfigIP},
-			runtimeObjs: []runtime.Object{testTokenSecret, cm},
+			runtimeObjs: []runtime.Object{cm},
 			klusterletConfig: newKlusterletConfig(&klusterletconfigv1alpha1.KubeAPIServerProxyConfig{
 				HTTPSProxy: "https://127.0.0.1:3129",
 				CABundle:   proxyServerCertData,
 			}),
 			want: wantData{
-				serverURL:   "http://127.0.0.1:6443",
-				useInsecure: false,
-				certData:    mergedCAData,
-				token:       "fake-token",
-				proxyURL:    "https://127.0.0.1:3129",
+				serverURL: "http://127.0.0.1:6443",
+				certData:  mergedCAData,
+				proxyURL:  "https://127.0.0.1:3129",
 			},
 			wantErr: false,
 		},
 		{
 			name:        "with proxy config but HubKubeAPIServerConfig exists",
 			clientObjs:  []client.Object{testInfraConfigIP},
-			runtimeObjs: []runtime.Object{testTokenSecret, cm},
+			runtimeObjs: []runtime.Object{cm},
 			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
 				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
 					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
@@ -364,23 +275,18 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 				},
 			},
 			want: wantData{
-				serverURL:   "http://127.0.0.1:6443",
-				useInsecure: false,
-				certData:    nil,
-				token:       "fake-token",
-				proxyURL:    "",
+				serverURL: "http://127.0.0.1:6443",
 			},
 			wantErr: false,
 		},
 		{
 			name:        "with proxy config by klusterletconfig HubKubeAPIServerConfig, empty strategy",
 			clientObjs:  []client.Object{testInfraConfigIP},
-			runtimeObjs: []runtime.Object{testTokenSecret, cm, proxyCAcm},
+			runtimeObjs: []runtime.Object{cm, proxyCAcm},
 			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
 				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
 					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
-						ServerVerificationStrategy: "",
-						ProxyURL:                   "https://127.0.0.1:3129",
+						ProxyURL: "https://127.0.0.1:3129",
 						TrustedCABundles: []klusterletconfigv1alpha1.CABundle{
 							{
 								Name: "proxy-server-cert",
@@ -394,18 +300,16 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 				},
 			},
 			want: wantData{
-				serverURL:   "http://127.0.0.1:6443",
-				useInsecure: false,
-				certData:    mergedCAData,
-				token:       "fake-token",
-				proxyURL:    "https://127.0.0.1:3129",
+				serverURL: "http://127.0.0.1:6443",
+				certData:  mergedCAData,
+				proxyURL:  "https://127.0.0.1:3129",
 			},
 			wantErr: false,
 		},
 		{
 			name:        "with proxy config by klusterletconfig HubKubeAPIServerConfig from configmap",
 			clientObjs:  []client.Object{testInfraConfigIP},
-			runtimeObjs: []runtime.Object{testTokenSecret, cm, proxyCAcm},
+			runtimeObjs: []runtime.Object{cm, proxyCAcm},
 			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
 				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
 					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
@@ -424,18 +328,16 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 				},
 			},
 			want: wantData{
-				serverURL:   "http://127.0.0.1:6443",
-				useInsecure: false,
-				certData:    mergedCAData,
-				token:       "fake-token",
-				proxyURL:    "https://127.0.0.1:3129",
+				serverURL: "http://127.0.0.1:6443",
+				certData:  mergedCAData,
+				proxyURL:  "https://127.0.0.1:3129",
 			},
 			wantErr: false,
 		},
 		{
 			name:        "with custom ca",
 			clientObjs:  []client.Object{testInfraConfigIP},
-			runtimeObjs: []runtime.Object{testTokenSecret, cm, proxyCAcm},
+			runtimeObjs: []runtime.Object{cm, proxyCAcm},
 			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
 				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
 					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
@@ -454,17 +356,15 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 				},
 			},
 			want: wantData{
-				serverURL:   "http://internal.com",
-				useInsecure: false,
-				certData:    proxyServerCertData,
-				token:       "fake-token",
+				serverURL: "http://internal.com",
+				certData:  proxyServerCertData,
 			},
 			wantErr: false,
 		},
 		{
 			name:        "with system trust stroe",
 			clientObjs:  []client.Object{testInfraConfigIP},
-			runtimeObjs: []runtime.Object{testTokenSecret, cm, proxyCAcm},
+			runtimeObjs: []runtime.Object{cm, proxyCAcm},
 			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
 				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
 					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
@@ -483,10 +383,7 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 				},
 			},
 			want: wantData{
-				serverURL:   "http://internal.com",
-				useInsecure: false,
-				certData:    nil,
-				token:       "fake-token",
+				serverURL: "http://internal.com",
 			},
 			wantErr: false,
 		},
@@ -498,17 +395,6 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 
 			fakeKubeClinet := kubefake.NewSimpleClientset(tt.runtimeObjs...)
 
-			fakeKubeClinet.PrependReactor(
-				"create",
-				"serviceaccounts/token",
-				func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
-					return true,
-						&authv1.TokenRequest{
-							Status: authv1.TokenRequestStatus{Token: "fake-token", ExpirationTimestamp: metav1.Now()},
-						}, nil
-				},
-			)
-
 			clientHolder := &helpers.ClientHolder{
 				RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).
 					WithObjects(tt.clientObjs...).
@@ -517,27 +403,115 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 				KubeClient: fakeKubeClinet,
 			}
 
-			var kubeconfigData []byte
+			kubeAPIServer, proxyURL, caData, err := GetKubeAPIServerConfig(
+				context.Background(), clientHolder, cluster.Name, tt.klusterletConfig)
 
-			err := func() error {
-				token, _, _, err := GetBootstrapToken(context.Background(), clientHolder.KubeClient,
-					GetBootstrapSAName(cluster.Name), cluster.Name, constants.DefaultSecretTokenExpirationSecond)
-				if err != nil {
-					return err
-				}
-
-				kubeconfigData, err = CreateBootstrapKubeConfig(context.Background(), clientHolder, cluster.Name, token, tt.klusterletConfig)
-				if err != nil {
-					return err
-				}
-				return nil
-			}()
 			if (err != nil) != tt.wantErr {
-				t.Errorf("CreateBootstrapKubeConfig() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("GetKubeAPIServerConfig() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if err != nil {
 				// it's safe to return here, because the last step, if err is not nil, and we don't expect err, it will fail the test
+				return
+			}
+
+			if kubeAPIServer != tt.want.serverURL {
+				t.Errorf(
+					"GetKubeAPIServerConfig() returns wrong server. want %v, got %v",
+					tt.want.serverURL,
+					kubeAPIServer,
+				)
+			}
+
+			if !reflect.DeepEqual(caData, tt.want.certData) {
+				t.Errorf(
+					"GetKubeAPIServerConfig() returns wrong cert. want %v, got %v",
+					string(tt.want.certData),
+					string(caData),
+				)
+			}
+
+			if proxyURL != tt.want.proxyURL {
+				t.Errorf(
+					"GetKubeAPIServerConfig() returns wrong proxyRUL. want %v, got %v",
+					tt.want.proxyURL,
+					proxyURL,
+				)
+			}
+		})
+	}
+}
+
+func TestCreateBootstrapKubeConfig(t *testing.T) {
+
+	rootCACertData, _, err := testinghelpers.NewRootCA("test root ca")
+	if err != nil {
+		t.Errorf("failed to create root ca: %v", err)
+	}
+
+	type wantData struct {
+		serverURL      string
+		certData       []byte
+		token          string
+		proxyURL       string
+		ctxClusterName string
+	}
+	testcases := []struct {
+		name string
+
+		serverURL      string
+		certData       []byte
+		token          string
+		proxyURL       string
+		ctxClusterName string
+
+		want wantData
+	}{
+		{
+			name:           "with CA data",
+			serverURL:      "http://127.0.0.1:6443",
+			certData:       rootCACertData,
+			ctxClusterName: "cluster1",
+			token:          "fake-token",
+			want: wantData{
+				serverURL:      "http://127.0.0.1:6443",
+				certData:       rootCACertData,
+				ctxClusterName: "cluster1",
+				token:          "fake-token",
+			},
+		},
+		{
+			name:           "with CA file",
+			serverURL:      "http://127.0.0.1:6443",
+			ctxClusterName: "cluster1",
+			token:          "fake-token",
+			want: wantData{
+				serverURL:      "http://127.0.0.1:6443",
+				ctxClusterName: "cluster1",
+				token:          "fake-token",
+			},
+		},
+		{
+			name:           "with both CA file and CA data",
+			serverURL:      "http://127.0.0.1:6443",
+			certData:       rootCACertData,
+			ctxClusterName: "cluster1",
+			token:          "fake-token",
+			want: wantData{
+				serverURL:      "http://127.0.0.1:6443",
+				certData:       rootCACertData,
+				ctxClusterName: "cluster1",
+				token:          "fake-token",
+			},
+		},
+	}
+	for _, tt := range testcases {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Logf("Test name: %s", tt.name)
+
+			kubeconfigData, err := CreateBootstrapKubeConfig(tt.ctxClusterName, tt.serverURL, tt.proxyURL, tt.certData, []byte(tt.token))
+			if err != nil {
+				t.Errorf("CreateBootstrapKubeConfig() error = %v", err)
 				return
 			}
 
@@ -567,13 +541,6 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 					"createKubeconfigData() returns wrong server. want %v, got %v",
 					tt.want.serverURL,
 					clusterConfig.Server,
-				)
-			}
-			if clusterConfig.InsecureSkipTLSVerify != tt.want.useInsecure {
-				t.Errorf(
-					"createKubeconfigData() returns wrong insecure. want %v, got %v",
-					tt.want.useInsecure,
-					clusterConfig.InsecureSkipTLSVerify,
 				)
 			}
 
@@ -1280,364 +1247,65 @@ func TestValidateBootstrapKubeconfig(t *testing.T) {
 	certData2, _, _ := testinghelpers.NewRootCA("test ca2")
 
 	cases := []struct {
-		name               string
-		kubeAPIServer      string
-		infraKubeAPIServer string
-		klusterletConfig   *klusterletconfigv1alpha1.KlusterletConfig
-
-		bootstrapCAData []byte
-		currentCAData   []byte
-
+		name           string
+		kubeAPIServer  string
+		proxyURL       string
+		caData         []byte
 		ctxClusterName string
+
+		requiredKubeAPIServer  string
+		requiredProxyURL       string
+		requiredCAData         []byte
+		requiredCtxClusterName string
 
 		valid bool
 	}{
 		{
-			name: "kube apiserver address is empty",
+			name:                  "kube apiserver address is empty",
+			requiredKubeAPIServer: "https://api-int.my-cluster.example.com:6443",
 		},
 		{
-			name:               "address changed",
-			kubeAPIServer:      "https://api.my-cluster.example.com:6443",
-			infraKubeAPIServer: "https://api-int.my-cluster.example.com:6443",
+			name:                  "address changed",
+			kubeAPIServer:         "https://api.my-cluster.example.com:6443",
+			requiredKubeAPIServer: "https://api-int.my-cluster.example.com:6443",
 		},
 		{
-			name:          "address overridden",
-			kubeAPIServer: "https://api.my-cluster.example.com:6443",
-			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
-				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
-					HubKubeAPIServerURL: "https://api.acm.example.com:6443",
-				},
-			},
+			name:             "proxy is empty",
+			requiredProxyURL: "https://127.0.0.1:3128",
 		},
 		{
-			name:               "kubeAPIserver valid, CA data is empty",
-			kubeAPIServer:      "https://api.my-cluster.example.com:6443",
-			infraKubeAPIServer: "https://api.my-cluster.example.com:6443",
-			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
-				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
-					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
-						ServerVerificationStrategy: klusterletconfigv1alpha1.ServerVerificationStrategyUseSystemTruststore,
-					},
-				},
-			},
-			ctxClusterName: "my-cluster",
-			valid:          true,
+			name:             "proxy changed",
+			proxyURL:         "http://127.0.0.1:3128",
+			requiredProxyURL: "https://127.0.0.1:3128",
 		},
 		{
-			name:               "kubeAPIserver valid, cert changes",
-			kubeAPIServer:      "https://api.my-cluster.example.com:6443",
-			infraKubeAPIServer: "https://api.my-cluster.example.com:6443",
-			bootstrapCAData:    certData1,
-			currentCAData:      certData2,
+			name:           "CA data is empty",
+			requiredCAData: certData1,
 		},
 		{
-			name:               "kubeAPIserver valid, cert overridden",
-			kubeAPIServer:      "https://api.my-cluster.example.com:6443",
-			infraKubeAPIServer: "https://api.my-cluster.example.com:6443",
-			bootstrapCAData:    certData1,
-			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
-				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
-					HubKubeAPIServerCABundle: certData2,
-				},
-			},
+			name:           "ca data changed",
+			caData:         certData1,
+			requiredCAData: certData2,
 		},
 		{
-			name:               "kubeAPIserver valid, no cert change",
-			kubeAPIServer:      "https://api.my-cluster.example.com:6443",
-			infraKubeAPIServer: "https://api.my-cluster.example.com:6443",
-			bootstrapCAData:    certData1,
-			currentCAData:      certData1,
-		},
-		{
-			name:               "kubeAPIserver valid, no cert change, ctxClusterName is matched",
-			kubeAPIServer:      "https://api.my-cluster.example.com:6443",
-			infraKubeAPIServer: "https://api.my-cluster.example.com:6443",
-			bootstrapCAData:    certData1,
-			currentCAData:      certData1,
-			ctxClusterName:     "my-cluster",
-			valid:              true,
+			name:                   "all valid",
+			kubeAPIServer:          "https://api.my-cluster.example.com:6443",
+			requiredKubeAPIServer:  "https://api.my-cluster.example.com:6443",
+			caData:                 certData1,
+			requiredCAData:         certData1,
+			ctxClusterName:         "my-cluster",
+			requiredCtxClusterName: "my-cluster",
+			valid:                  true,
 		},
 	}
 
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Logf("Test name: %s", c.name)
-
-			fqdn := "api.my-cluster.example.com"
-			secretName := "my-secret-name"
-
-			fakeRuntimeClient := fake.NewClientBuilder().WithScheme(testscheme).WithObjects(&ocinfrav1.Infrastructure{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "cluster",
-					UID:  "my-cluster",
-				},
-				Spec: ocinfrav1.InfrastructureSpec{},
-				Status: ocinfrav1.InfrastructureStatus{
-					APIServerURL: c.infraKubeAPIServer,
-				},
-			},
-				&ocinfrav1.APIServer{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "cluster",
-					},
-					Spec: ocinfrav1.APIServerSpec{
-						ServingCerts: ocinfrav1.APIServerServingCerts{
-							NamedCertificates: []ocinfrav1.APIServerNamedServingCert{
-								{
-									Names:              []string{fqdn},
-									ServingCertificate: ocinfrav1.SecretNameReference{Name: secretName},
-								},
-							},
-						},
-					},
-				},
-			).Build()
-
-			fakeKubeClient := kubefake.NewSimpleClientset(&corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      secretName,
-					Namespace: "openshift-config",
-				},
-				Data: map[string][]byte{
-					"tls.crt": c.currentCAData,
-				},
-			})
-
-			clientHolder := &helpers.ClientHolder{
-				RuntimeClient: fakeRuntimeClient,
-				KubeClient:    fakeKubeClient,
-			}
-
-			valid, err := ValidateBootstrapKubeconfig(context.TODO(), clientHolder, c.klusterletConfig, "c1",
-				c.kubeAPIServer, c.bootstrapCAData, "", c.ctxClusterName)
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
+			valid := ValidateBootstrapKubeconfig("cluster1", c.kubeAPIServer, c.proxyURL, c.caData, c.ctxClusterName,
+				c.requiredKubeAPIServer, c.requiredProxyURL, c.requiredCAData, c.requiredCtxClusterName)
 			if valid != c.valid {
 				t.Errorf("expected %v, but got %v", c.valid, valid)
-			}
-		})
-	}
-}
-
-func TestValidateKubeAPIServerAddress(t *testing.T) {
-	cases := []struct {
-		name               string
-		kubeAPIServer      string
-		infraKubeAPIServer string
-		klusterletConfig   *klusterletconfigv1alpha1.KlusterletConfig
-		valid              bool
-	}{
-		{
-			name: "kube apiserver address is empty",
-		},
-		{
-			name:               "address changed",
-			kubeAPIServer:      "https://api.my-cluster.example.com:6443",
-			infraKubeAPIServer: "https://api-int.my-cluster.example.com:6443",
-		},
-		{
-			name:          "address overridden",
-			kubeAPIServer: "https://api.my-cluster.example.com:6443",
-			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
-				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
-					HubKubeAPIServerURL: "https://api.acm.example.com:6443",
-				},
-			},
-		},
-		{
-			name:               "no change",
-			kubeAPIServer:      "https://api.my-cluster.example.com:6443",
-			infraKubeAPIServer: "https://api.my-cluster.example.com:6443",
-			valid:              true,
-		},
-	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			t.Logf("Test name: %s", c.name)
-
-			clientHolder := &helpers.ClientHolder{
-				RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(&ocinfrav1.Infrastructure{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "cluster",
-					},
-					Spec: ocinfrav1.InfrastructureSpec{},
-					Status: ocinfrav1.InfrastructureStatus{
-						APIServerURL: c.infraKubeAPIServer,
-					},
-				}).Build(),
-			}
-
-			valid, err := validateKubeAPIServerAddress(context.TODO(), c.kubeAPIServer, c.klusterletConfig,
-				clientHolder.RuntimeClient)
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-			if valid != c.valid {
-				t.Errorf("expected %v, but got %v", c.valid, valid)
-			}
-		})
-	}
-}
-
-func TestValidateCAData(t *testing.T) {
-	certData1, _, _ := testinghelpers.NewRootCA("test ca1")
-	certData2, _, _ := testinghelpers.NewRootCA("test ca2")
-
-	cases := []struct {
-		name             string
-		clusterName      string
-		bootstrapCAData  []byte
-		currentCAData    []byte
-		klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig
-		valid            bool
-	}{
-		{
-			name:  "CA data is empty",
-			valid: false,
-		},
-		{
-			name:            "cert changes",
-			bootstrapCAData: certData1,
-			currentCAData:   certData2,
-		},
-		{
-			name:            "cert overridden",
-			bootstrapCAData: certData1,
-			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
-				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
-					HubKubeAPIServerCABundle: certData2,
-				},
-			},
-		},
-		{
-			name:            "no cert change",
-			bootstrapCAData: certData1,
-			currentCAData:   certData1,
-			valid:           true,
-		},
-	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			t.Logf("Test name: %s", c.name)
-
-			fqdn := "api.my-cluster.example.com"
-			kubeAPIServer := fmt.Sprintf("https://%s:6443", fqdn)
-			secretName := "my-secret-name"
-
-			fakeKubeClient := kubefake.NewSimpleClientset(
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      secretName,
-						Namespace: "openshift-config",
-					},
-					Data: map[string][]byte{
-						"tls.crt": c.currentCAData,
-					},
-				},
-				&corev1.ConfigMap{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "kube-root-ca.crt",
-						Namespace: "cluster",
-					},
-					Data: map[string]string{
-						"ca.crt": string(certData1),
-					},
-				},
-			)
-
-			clientHolder := &helpers.ClientHolder{
-				RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(&ocinfrav1.APIServer{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "cluster",
-					},
-					Spec: ocinfrav1.APIServerSpec{
-						ServingCerts: ocinfrav1.APIServerServingCerts{
-							NamedCertificates: []ocinfrav1.APIServerNamedServingCert{
-								{
-									Names:              []string{fqdn},
-									ServingCertificate: ocinfrav1.SecretNameReference{Name: secretName},
-								},
-							},
-						},
-					},
-				}).Build(),
-				KubeClient: fakeKubeClient,
-			}
-
-			valid, err := validateCAData(context.TODO(), c.bootstrapCAData, kubeAPIServer, c.klusterletConfig,
-				clientHolder, "cluster")
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-			if valid != c.valid {
-				t.Errorf("expected %v, but got %v", c.valid, valid)
-			}
-		})
-	}
-}
-
-func TestValidateProxyConfig(t *testing.T) {
-	rootCACertData, _, err := testinghelpers.NewRootCA("test root ca")
-	if err != nil {
-		t.Errorf("failed to create root ca: %v", err)
-	}
-
-	cases := []struct {
-		name             string
-		proxyURL         string
-		caData           []byte
-		klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig
-		result           bool
-	}{
-		{
-			name:   "without proxy",
-			result: true,
-		},
-		{
-			name:     "with unexpected proxy",
-			proxyURL: "https://127.0.0.1:3129",
-		},
-		{
-			name:     "with proxy",
-			proxyURL: "https://127.0.0.1:3129",
-			caData:   rootCACertData,
-			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
-				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
-					HubKubeAPIServerProxyConfig: klusterletconfigv1alpha1.KubeAPIServerProxyConfig{
-						HTTPSProxy: "https://127.0.0.1:3129",
-						CABundle:   rootCACertData,
-					},
-				},
-			},
-			result: true,
-		},
-		{
-			name:     "with wrong proxy",
-			proxyURL: "http://127.0.0.1:3128",
-			caData:   rootCACertData,
-			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
-				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
-					HubKubeAPIServerProxyConfig: klusterletconfigv1alpha1.KubeAPIServerProxyConfig{
-						HTTPProxy:  "http://127.0.0.1:3128",
-						HTTPSProxy: "https://127.0.0.1:3129",
-						CABundle:   rootCACertData,
-					},
-				},
-			},
-		},
-	}
-
-	for _, c := range cases {
-		t.Run(c.name, func(t *testing.T) {
-			result, err := validateProxyConfig(c.proxyURL, c.caData, c.klusterletConfig)
-			if err != nil {
-				t.Errorf("unexpected error: %v", err)
-			}
-			if result != c.result {
-				t.Errorf("expected %v, but got %v", c.result, result)
 			}
 		})
 	}
