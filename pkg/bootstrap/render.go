@@ -66,6 +66,13 @@ var priorityClassFiles = []string{
 	"manifests/klusterlet/priority_class.yaml",
 }
 
+// Constants for E2E leader election timings
+var (
+	E2ELeaderElectionLeaseDuration = &metav1.Duration{Duration: 10 * time.Second}
+	E2ELeaderElectionRenewDeadline = &metav1.Duration{Duration: 8 * time.Second}
+	E2ELeaderElectionRetryPeriod   = &metav1.Duration{Duration: 5 * time.Second}
+)
+
 type RenderConfig struct {
 	KlusterletRenderConfig
 	ImagePullSecretConfig
@@ -279,6 +286,9 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 	registrationConfiguration := &operatorv1.RegistrationConfiguration{
 		ClusterAnnotations: b.KlusterletClusterAnnotations,
 	}
+
+	// Apply E2E leader election settings if required
+	configureLeaderElectionForE2E(workAgentConfiguration, registrationConfiguration)
 
 	renderConfig := RenderConfig{
 		KlusterletRenderConfig: KlusterletRenderConfig{
@@ -547,4 +557,17 @@ func imageOverride(source, mirror, imageName string) string {
 
 	trimSegment := strings.TrimPrefix(imageName, source)
 	return fmt.Sprintf("%s%s", mirror, trimSegment)
+}
+
+// Configure leader election settings for E2E environments
+func configureLeaderElectionForE2E(workAgentConfiguration *operatorv1.WorkAgentConfiguration, registrationConfig *operatorv1.RegistrationConfiguration) {
+	if os.Getenv(constants.EnvTypeVarName) == "e2e" {
+		workAgentConfiguration.LeaderElectionLeaseDuration = E2ELeaderElectionLeaseDuration
+		workAgentConfiguration.LeaderElectionRenewDeadline = E2ELeaderElectionRenewDeadline
+		workAgentConfiguration.LeaderElectionRetryPeriod = E2ELeaderElectionRetryPeriod
+
+		registrationConfig.LeaderElectionLeaseDuration = E2ELeaderElectionLeaseDuration
+		registrationConfig.LeaderElectionRenewDeadline = E2ELeaderElectionRenewDeadline
+		registrationConfig.LeaderElectionRetryPeriod = E2ELeaderElectionRetryPeriod
+	}
 }

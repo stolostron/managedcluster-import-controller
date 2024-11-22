@@ -40,6 +40,8 @@ const (
 
 const PodNamespaceEnvVarName = "POD_NAMESPACE"
 
+const EnvTypeVarName = "ENV_TYPE"
+
 const ImportFinalizer string = "managedcluster-import-controller.open-cluster-management.io/cleanup"
 
 const SelfManagedLabel string = "local-cluster"

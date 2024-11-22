@@ -39,10 +39,12 @@ spec:
             - name: DEFAULT_IMAGE_REGISTRY
               value: quay.io/open-cluster-management
             - name: REGISTRATION_OPERATOR_IMAGE
-              value: quay.io/open-cluster-management/registration-operator:latest
+              value: quay.io/haoqing/registration-operator:15483
             - name: REGISTRATION_IMAGE
-              value: quay.io/open-cluster-management/registration:latest
+              value: quay.io/haoqing/registration:15483
             - name: WORK_IMAGE
               value: quay.io/open-cluster-management/work:latest
             - name: GOMEMLIMIT
               value: "1750MiB"
+            - name: ENV_TYPE
+              value: "ENV_TYPE_VALUE"

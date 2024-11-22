@@ -79,6 +79,7 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 			assertManagedClusterImportSecretCreated(managedClusterName, "other", operatorv1.InstallModeHosted)
 			assertManagedClusterImportSecretApplied(managedClusterName, operatorv1.InstallModeHosted)
 			assertManagedClusterAvailable(managedClusterName)
+			assertHostedManagedClusterManifestWorksAvailable(managedClusterName, hostingClusterName)
 			assertManagedClusterPriorityClassHosted(managedClusterName)
 		})
 	})
@@ -133,6 +134,7 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 
 			assertManagedClusterImportSecretApplied(managedClusterName, operatorv1.InstallModeHosted)
 			assertManagedClusterAvailable(managedClusterName)
+			assertHostedManagedClusterManifestWorksAvailable(managedClusterName, hostingClusterName)
 			assertManagedClusterPriorityClassHosted(managedClusterName)
 		})
 
@@ -173,6 +175,7 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 
 			assertManagedClusterImportSecretApplied(managedClusterName, operatorv1.InstallModeHosted)
 			assertManagedClusterAvailable(managedClusterName)
+			assertHostedManagedClusterManifestWorksAvailable(managedClusterName, hostingClusterName)
 			assertManagedClusterPriorityClassHosted(managedClusterName)
 		})
 	})
@@ -249,6 +252,7 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 			assertManagedClusterImportSecretCreated(managedClusterName, "other", operatorv1.InstallModeHosted)
 			assertManagedClusterImportSecretApplied(managedClusterName, operatorv1.InstallModeHosted)
 			assertManagedClusterAvailable(managedClusterName)
+			assertHostedManagedClusterManifestWorksAvailable(managedClusterName, hostingClusterName)
 		})
 
 		ginkgo.JustAfterEach(func() {

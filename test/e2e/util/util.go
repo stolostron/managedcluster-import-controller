@@ -104,7 +104,7 @@ func CreateHostedManagedClusterWithShortLeaseDuration(clusterClient clusterclien
 				},
 				Spec: clusterv1.ManagedClusterSpec{
 					HubAcceptsClient:     true,
-					LeaseDurationSeconds: 5,
+					LeaseDurationSeconds: 15,
 				},
 			},
 			metav1.CreateOptions{},
@@ -205,7 +205,7 @@ func CreateManagedClusterWithShortLeaseDuration(clusterClient clusterclient.Inte
 				},
 				Spec: clusterv1.ManagedClusterSpec{
 					HubAcceptsClient:     true,
-					LeaseDurationSeconds: 5,
+					LeaseDurationSeconds: 15,
 				},
 			},
 			metav1.CreateOptions{},

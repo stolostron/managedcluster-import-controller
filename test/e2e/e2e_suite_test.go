@@ -653,11 +653,15 @@ func assertManagedClusterManifestWorks(clusterName string) {
 func assertManagedClusterManifestWorksAvailable(clusterName string) {
 	assertManagedClusterFinalizer(clusterName, "managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup")
 
+	klusterletCRDsName := fmt.Sprintf("%s-klusterlet-crds", clusterName)
+	klusterletName := fmt.Sprintf("%s-klusterlet", clusterName)
+
+	assertManifestworkFinalizer(clusterName, klusterletCRDsName, "cluster.open-cluster-management.io/manifest-work-cleanup")
+	assertManifestworkFinalizer(clusterName, klusterletName, "cluster.open-cluster-management.io/manifest-work-cleanup")
+
 	ginkgo.By(fmt.Sprintf("Managed cluster %s manifest works should be available", clusterName), func() {
 		start := time.Now()
 		gomega.Eventually(func() error {
-			klusterletCRDsName := fmt.Sprintf("%s-klusterlet-crds", clusterName)
-			klusterletName := fmt.Sprintf("%s-klusterlet", clusterName)
 			manifestWorks := hubWorkClient.WorkV1().ManifestWorks(clusterName)
 
 			klusterletCRDs, err := manifestWorks.Get(context.TODO(), klusterletCRDsName, metav1.GetOptions{})
@@ -689,10 +693,12 @@ func assertHostedManagedClusterManifestWorksAvailable(clusterName, hostingCluste
 	assertManagedClusterFinalizer(clusterName,
 		"managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup")
 
+	klusterletName := fmt.Sprintf("%s-hosted-klusterlet", clusterName)
+	assertManifestworkFinalizer(hostingClusterName, klusterletName, "cluster.open-cluster-management.io/manifest-work-cleanup")
+
 	ginkgo.By(fmt.Sprintf("Hosted managed cluster %s manifest works should be available", clusterName), func() {
 		start := time.Now()
 		gomega.Eventually(func() error {
-			klusterletName := fmt.Sprintf("%s-hosted-klusterlet", clusterName)
 			manifestWorks := hubWorkClient.WorkV1().ManifestWorks(hostingClusterName)
 
 			klusterlet, err := manifestWorks.Get(context.TODO(), klusterletName, metav1.GetOptions{})
@@ -1010,4 +1016,21 @@ func getKubeConfigFile() (string, error) {
 	}
 
 	return kubeConfigFile, nil
+}
+
+func assertManifestworkFinalizer(namespace, workName, expected string) {
+	ginkgo.By(fmt.Sprintf("Manifestwork %s/%s should have expected finalizer: %s", namespace, workName, expected), func() {
+		gomega.Eventually(func() error {
+			work, err := hubWorkClient.WorkV1().ManifestWorks(namespace).Get(context.TODO(), workName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			for _, finalizer := range work.Finalizers {
+				if finalizer == expected {
+					return nil
+				}
+			}
+			return fmt.Errorf("Manifestwork %s/%s does not have expected finalizer %s", namespace, workName, expected)
+		}, 3*time.Minute, 10*time.Second).Should(gomega.Succeed())
+	})
 }

@@ -37,6 +37,7 @@ if [ "$AGENT_REGISTRATION_ARG"x = "enable-agent-registration"x ]; then
     DEPLOY_MANIFESTS="${REPO_DIR}/deploy/agentregistration"
 fi
 
+#  -e "s,ENV_TYPE_VALUE,e2e," \
 kubectl kustomize $DEPLOY_MANIFESTS \
   | sed -e "s,quay.io/open-cluster-management/registration:latest,$REGISTRATION_IMAGE," \
   -e "s,quay.io/open-cluster-management/work:latest,$WORK_IMAGE," \
