@@ -17,14 +17,17 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
 
+	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	kubefake "k8s.io/client-go/kubernetes/fake"
+	clienttesting "k8s.io/client-go/testing"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	clientcmdlatest "k8s.io/client-go/tools/clientcmd/api/latest"
 
@@ -32,7 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 )
 
-func TestGetBootstrapKubeConfigDataFromImportSecret(t *testing.T) {
+func TestBuildBootstrapKubeconfigData(t *testing.T) {
 	certData1, _, _ := testinghelpers.NewRootCA("test ca1")
 	certData2, keyData2, _ := testinghelpers.NewRootCA("test ca2")
 
@@ -57,6 +60,12 @@ func TestGetBootstrapKubeConfigDataFromImportSecret(t *testing.T) {
 	}
 
 	apiserverConfig := &ocinfrav1.APIServer{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "cluster",
+		},
+	}
+
+	apiserverConfigWithCustomCA := &ocinfrav1.APIServer{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "cluster",
 		},
@@ -94,76 +103,134 @@ func TestGetBootstrapKubeConfigDataFromImportSecret(t *testing.T) {
 		Type: corev1.SecretTypeTLS,
 	}
 
+	sa := &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "testcluster-bootstrap-sa",
+			Namespace: "testcluster",
+		},
+		Secrets: []corev1.ObjectReference{
+			{
+				Name:      "testcluster-bootstrap-sa-token-5pw5c",
+				Namespace: "testcluster",
+			},
+		},
+	}
+
+	saSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "testcluster-bootstrap-sa-token-5pw5c",
+			Namespace: "testcluster",
+		},
+		Data: map[string][]byte{
+			"token": []byte("sa-token"),
+		},
+		Type: corev1.SecretTypeServiceAccountToken,
+	}
+
 	type wantData struct {
-		serverURL   string
-		useInsecure bool
-		certData    []byte
-		token       string
+		serverURL string
+		ca        string
+		certData  []byte
+		token     string
 	}
 	tests := []struct {
 		name             string
 		clientObjs       []client.Object
 		runtimeObjs      []runtime.Object
+		selfManaged      bool
 		klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig
 		want             *wantData
 		wantErr          bool
 	}{
 		{
-			name:    "import secret not exist",
-			wantErr: false,
+			name:        "import secret not exist",
+			clientObjs:  []client.Object{testInfraConfigDNS, apiserverConfig},
+			runtimeObjs: []runtime.Object{cm, sa, saSecret},
+			wantErr:     false,
+			want: &wantData{
+				serverURL: "https://my-dns-name.com:6443",
+				certData:  certData1,
+				token:     "sa-token",
+			},
 		},
 		{
 			name:        "import secret don't have the desired content",
-			runtimeObjs: []runtime.Object{mockImportSecretWithoutContent()},
-			wantErr:     false,
+			clientObjs:  []client.Object{testInfraConfigDNS, apiserverConfig},
+			runtimeObjs: []runtime.Object{cm, mockImportSecretWithoutContent()},
+			want: &wantData{
+				serverURL: "https://my-dns-name.com:6443",
+				certData:  certData1,
+				token:     "fake-token",
+			},
+			wantErr: false,
 		},
 		{
 			name:       "token is expired",
-			clientObjs: []client.Object{testInfraConfigDNS, apiserverConfig},
-			runtimeObjs: []runtime.Object{secretCorrect,
+			clientObjs: []client.Object{testInfraConfigDNS, apiserverConfigWithCustomCA},
+			runtimeObjs: []runtime.Object{cm, secretCorrect,
 				mockImportSecret(t, time.Now().Add(-1*time.Hour),
 					"https://my-dns-name.com:6443",
 					certData2,
 					"mock-token"),
 			},
+			want: &wantData{
+				serverURL: "https://my-dns-name.com:6443",
+				certData:  certData2,
+				token:     "fake-token",
+			},
 			wantErr: false,
 		},
 		{
 			name:       "caData not validate",
-			clientObjs: []client.Object{testInfraConfigDNS, apiserverConfig},
+			clientObjs: []client.Object{testInfraConfigDNS, apiserverConfigWithCustomCA},
 			runtimeObjs: []runtime.Object{secretCorrect,
 				mockImportSecret(t, time.Now().Add(8640*time.Hour),
 					"https://my-dns-name.com:6443",
 					[]byte("wrong"),
 					"mock-token"),
 			},
+			want: &wantData{
+				serverURL: "https://my-dns-name.com:6443",
+				certData:  certData2,
+				token:     "mock-token",
+			},
 			wantErr: false,
 		},
 		{
 			name:       "kubeAPIServer not validate",
-			clientObjs: []client.Object{testInfraConfigDNS, apiserverConfig},
+			clientObjs: []client.Object{testInfraConfigDNS, apiserverConfigWithCustomCA},
 			runtimeObjs: []runtime.Object{secretCorrect,
 				mockImportSecret(t, time.Now().Add(8640*time.Hour),
 					"https://wrong.com:6443",
 					certData2,
 					"mock-token"),
 			},
+			want: &wantData{
+				serverURL: "https://my-dns-name.com:6443",
+				certData:  certData2,
+				token:     "mock-token",
+			},
 			wantErr: false,
 		},
 		{
 			name:       "kubeconfig current context cluster name not match",
-			clientObjs: []client.Object{testInfraConfigWithoutUID, apiserverConfig},
+			clientObjs: []client.Object{testInfraConfigWithoutUID, apiserverConfigWithCustomCA},
 			runtimeObjs: []runtime.Object{secretCorrect,
 				mockImportSecret(t, time.Now().Add(8640*time.Hour),
 					"https://my-dns-name.com:6443",
 					certData2,
 					"mock-token"),
 			},
+			want: &wantData{
+				serverURL: "https://my-dns-name.com:6443",
+				certData:  certData2,
+				token:     "mock-token",
+			},
 			wantErr: false,
 		},
 		{
 			name:       "all fileds are valid",
-			clientObjs: []client.Object{testInfraConfigDNS, apiserverConfig},
+			clientObjs: []client.Object{testInfraConfigDNS, apiserverConfigWithCustomCA},
 			runtimeObjs: []runtime.Object{secretCorrect,
 				mockImportSecret(t, time.Now().Add(8640*time.Hour),
 					"https://my-dns-name.com:6443",
@@ -172,15 +239,14 @@ func TestGetBootstrapKubeConfigDataFromImportSecret(t *testing.T) {
 			},
 			wantErr: false,
 			want: &wantData{
-				serverURL:   "https://my-dns-name.com:6443",
-				useInsecure: false,
-				certData:    certData2,
-				token:       "mock-token",
+				serverURL: "https://my-dns-name.com:6443",
+				certData:  certData2,
+				token:     "mock-token",
 			},
 		},
 		{
 			name:       "all fileds are valid, failed to get the ca from ocp, fallback to the kube-root-ca.crt configmap from the pod namespace.",
-			clientObjs: []client.Object{testInfraConfigDNS, apiserverConfig},
+			clientObjs: []client.Object{testInfraConfigDNS, apiserverConfigWithCustomCA},
 			runtimeObjs: []runtime.Object{cm,
 				mockImportSecret(t, time.Now().Add(8640*time.Hour),
 					"https://my-dns-name.com:6443",
@@ -189,34 +255,53 @@ func TestGetBootstrapKubeConfigDataFromImportSecret(t *testing.T) {
 			},
 			wantErr: false,
 			want: &wantData{
-				serverURL:   "https://my-dns-name.com:6443",
-				useInsecure: false,
-				certData:    certData1,
-				token:       "mock-token",
+				serverURL: "https://my-dns-name.com:6443",
+				certData:  certData1,
+				token:     "mock-token",
 			},
 		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Test name: %s", tt.name)
 
-			fakeKubeClinet := kubefake.NewSimpleClientset(tt.runtimeObjs...)
+			fakeKubeClient := kubefake.NewSimpleClientset(tt.runtimeObjs...)
+
+			fakeKubeClient.PrependReactor(
+				"create",
+				"serviceaccounts/token",
+				func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
+					return true,
+						&authv1.TokenRequest{
+							Status: authv1.TokenRequestStatus{Token: "fake-token", ExpirationTimestamp: metav1.Now()},
+						}, nil
+				},
+			)
 
 			clientHolder := &helpers.ClientHolder{
 				RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).
 					WithObjects(tt.clientObjs...).
 					WithStatusSubresource(tt.clientObjs...).
 					Build(),
-				KubeClient: fakeKubeClinet,
+				KubeClient: fakeKubeClient,
 			}
 
-			kubeconfigData, _, _, err := getBootstrapKubeConfigDataFromImportSecret(context.Background(), clientHolder, "testcluster", tt.klusterletConfig) // cluster.Name = testcluster
-			if (err != nil) != tt.wantErr {
-				t.Errorf("getBootstrapKubeConfigDataFromImportSecret() error = %v, wantErr %v", err, tt.wantErr)
-				return
+			cluster := &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "testcluster",
+				},
 			}
+
+			if tt.selfManaged {
+				cluster.Labels = map[string]string{
+					constants.SelfManagedLabel: "true",
+				}
+			}
+
+			kubeconfigData, _, _, err := buildBootstrapKubeconfigData(context.Background(), clientHolder, cluster, tt.klusterletConfig) // cluster.Name = testcluster
 			if err != nil {
-				// it's safe to return here, because the last step, if err is not nil, and we don't expect err, it will fail the test
+				t.Errorf("buildBootstrapKubeconfigData() error = %v", err)
 				return
 			}
 
@@ -224,49 +309,44 @@ func TestGetBootstrapKubeConfigDataFromImportSecret(t *testing.T) {
 				if kubeconfigData == nil {
 					return
 				} else {
-					t.Errorf("getBootstrapKubeConfigDataFromImportSecret() returns wrong data. want nil, got %v", kubeconfigData)
+					t.Errorf("buildBootstrapKubeconfigData() returns wrong data. want nil, got %v", kubeconfigData)
 					return
 				}
 			}
 			if tt.want != nil && kubeconfigData == nil {
-				t.Errorf("getBootstrapKubeConfigDataFromImportSecret() returns wrong data. want %v, got nil", tt.want)
+				t.Errorf("buildBootstrapKubeconfigData() returns wrong data. want %v, got nil", tt.want)
 				return
 			}
 
 			bootstrapConfig := &clientcmdapi.Config{}
 			if err := runtime.DecodeInto(clientcmdlatest.Codec, kubeconfigData, bootstrapConfig); err != nil {
-				t.Errorf("createKubeconfigData() failed to decode return data")
+				t.Errorf("buildBootstrapKubeconfigData() failed to decode return data")
 				return
 			}
-			clusterConfig, ok := bootstrapConfig.Clusters["default-cluster"]
+
+			configContext := bootstrapConfig.Contexts[bootstrapConfig.CurrentContext]
+			clusterConfig, ok := bootstrapConfig.Clusters[configContext.Cluster]
 			if !ok {
-				t.Errorf("createKubeconfigData() failed to get default-cluster")
+				t.Errorf("buildBootstrapKubeconfigData() failed to get %s", configContext.Cluster)
 				return
 			}
 			authInfo, ok := bootstrapConfig.AuthInfos["default-auth"]
 			if !ok {
-				t.Errorf("createKubeconfigData() failed to get default-auth")
+				t.Errorf("buildBootstrapKubeconfigData() failed to get default-auth")
 				return
 			}
 
 			if clusterConfig.Server != tt.want.serverURL {
 				t.Errorf(
-					"createKubeconfigData() returns wrong server. want %v, got %v",
+					"buildBootstrapKubeconfigData() returns wrong server. want %v, got %v",
 					tt.want.serverURL,
 					clusterConfig.Server,
-				)
-			}
-			if clusterConfig.InsecureSkipTLSVerify != tt.want.useInsecure {
-				t.Errorf(
-					"createKubeconfigData() returns wrong insecure. want %v, got %v",
-					tt.want.useInsecure,
-					clusterConfig.InsecureSkipTLSVerify,
 				)
 			}
 
 			if !reflect.DeepEqual(clusterConfig.CertificateAuthorityData, tt.want.certData) {
 				t.Errorf(
-					"createKubeconfigData() returns wrong cert. want %v, got %v",
+					"buildBootstrapKubeconfigData() returns wrong cert. want %v, got %v",
 					string(tt.want.certData),
 					string(clusterConfig.CertificateAuthorityData),
 				)
@@ -274,7 +354,7 @@ func TestGetBootstrapKubeConfigDataFromImportSecret(t *testing.T) {
 
 			if authInfo.Token != tt.want.token {
 				t.Errorf(
-					"createKubeconfigData() returns wrong token. want %v, got %v",
+					"buildBootstrapKubeconfigData() returns wrong token. want %v, got %v",
 					tt.want.token,
 					authInfo.Token,
 				)

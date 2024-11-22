@@ -118,7 +118,20 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 			}
 		}
 
-		bootstrapkubeconfig, err := bootstrap.CreateBootstrapKubeConfig(ctx, clientHolder, ns, token, mergedKlusterletConfig)
+		// get the latest kube apiserver configuration
+		kubeAPIServer, proxyURL, caData, err := bootstrap.GetKubeAPIServerConfig(
+			ctx, clientHolder, ns, mergedKlusterletConfig)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		ctxClusterName, err := bootstrap.GetKubeconfigClusterName(ctx, clientHolder.RuntimeClient)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		bootstrapkubeconfig, err := bootstrap.CreateBootstrapKubeConfig(ctxClusterName, kubeAPIServer, proxyURL, caData, token)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
