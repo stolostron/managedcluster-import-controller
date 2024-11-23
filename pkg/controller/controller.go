@@ -26,6 +26,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
+	certificatesv1 "k8s.io/api/certificates/v1"
 	kevents "k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
@@ -43,7 +44,10 @@ func AddToManager(ctx context.Context,
 	}{
 		{
 			csr.ControllerName,
-			func() error { return csr.Add(ctx, manager, clientHolder) },
+			func() error {
+				return csr.Add(ctx, manager, clientHolder,
+					[]func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error){})
+			},
 		},
 		{
 			managedcluster.ControllerName,

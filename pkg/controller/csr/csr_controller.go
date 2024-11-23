@@ -23,19 +23,9 @@ import (
 
 const (
 	userNameSignature = "system:serviceaccount:%s:%s-bootstrap-sa"
-	clusterLabel      = "open-cluster-management.io/cluster-name"
 )
 
 var log = logf.Log.WithName("controller_csr")
-
-func getClusterName(csr *certificatesv1.CertificateSigningRequest) (clusterName string) {
-	for label, v := range csr.GetObjectMeta().GetLabels() {
-		if label == clusterLabel {
-			clusterName = v
-		}
-	}
-	return clusterName
-}
 
 func getApprovalType(csr *certificatesv1.CertificateSigningRequest) string {
 	if csr.Status.Conditions == nil {
@@ -57,7 +47,7 @@ func validUsername(csr *certificatesv1.CertificateSigningRequest, clusterName st
 // 1. Has a non-empty cluster name label
 // 2. Has not been approved or denied
 func isValidUnapprovedBootstrapCSR(csr *certificatesv1.CertificateSigningRequest) bool {
-	clusterName := getClusterName(csr)
+	clusterName := helpers.GetClusterName(csr)
 	return clusterName != "" &&
 		getApprovalType(csr) == ""
 }
@@ -65,12 +55,12 @@ func isValidUnapprovedBootstrapCSR(csr *certificatesv1.CertificateSigningRequest
 // approveExistingManagedClusterCSR checks if the CSR is from an existing managed cluster
 func approveExistingManagedClusterCSR(ctx context.Context, csr *certificatesv1.CertificateSigningRequest,
 	clientHolder *helpers.ClientHolder) (bool, error) {
-	if !validUsername(csr, getClusterName(csr)) {
+	if !validUsername(csr, helpers.GetClusterName(csr)) {
 		return false, nil
 	}
 
 	cluster := clusterv1.ManagedCluster{}
-	err := clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: getClusterName(csr)}, &cluster)
+	err := clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: helpers.GetClusterName(csr)}, &cluster)
 	if errors.IsNotFound(err) {
 		return false, nil
 	}

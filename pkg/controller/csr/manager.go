@@ -17,15 +17,15 @@ import (
 )
 
 const (
-	ControllerName                 = "csr-controller"
-	AgentRegistrationBootstrapUser = "system:serviceaccount:multicluster-engine:agent-registration-bootstrap"
+	ControllerName = "csr-controller"
 )
 
 // Add creates a new CSR Controller and adds it to the Manager. The Manager will set fields on the Controller
 // and Start it when the Manager is Started.
 func Add(ctx context.Context,
 	mgr manager.Manager,
-	clientHolder *helpers.ClientHolder) error {
+	clientHolder *helpers.ClientHolder,
+	extraApprovalConditions []func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error)) error {
 
 	err := ctrl.NewControllerManagedBy(mgr).Named(ControllerName).
 		WithOptions(controller.Options{
@@ -47,13 +47,12 @@ func Add(ctx context.Context,
 		Complete(&ReconcileCSR{
 			clientHolder: clientHolder,
 			recorder:     helpers.NewEventRecorder(clientHolder.KubeClient, ControllerName),
-			approvalConditions: []func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error){
-				// Case 1(the default case): if a CSR comes from a managed cluster, and the managed cluster already exists, approve it
+			approvalConditions: append([]func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error){
+				// The DEFAULT approval condition: if a CSR comes from a managed cluster, and the managed cluster already exists, approve it
 				func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error) {
 					return approveExistingManagedClusterCSR(ctx, csr, clientHolder)
 				},
-				// TODO: @xuezhaojun Case 2: if a CSR comes from agent-registration
-			},
+			}, extraApprovalConditions...),
 		})
 
 	return err

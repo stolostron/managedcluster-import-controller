@@ -186,3 +186,11 @@ const (
 const (
 	DefaultBootstrapHubKubeConfigSecretName = "bootstrap-hub-kubeconfig" // #nosec G101
 )
+
+const (
+	// CSRClusterNameLabel is the label key of the managed cluster name in the CSR
+	CSRClusterNameLabel = "open-cluster-management.io/cluster-name"
+
+	// If a managed cluster is from the agent-registration, the username of the CSR will be this
+	AgentRegistrationBootstrapUser = "system:serviceaccount:multicluster-engine:agent-registration-bootstrap"
+)
