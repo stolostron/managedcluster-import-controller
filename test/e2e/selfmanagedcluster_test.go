@@ -38,6 +38,8 @@ var _ = ginkgo.Describe("Importing a self managed cluster", func() {
 			assertManagedClusterAvailable(localClusterName)
 			assertManagedClusterManifestWorksAvailable(localClusterName)
 			assertManagedClusterPriorityClass(localClusterName)
+			assertBootstrapKubeconfig("https://kubernetes.default.svc:443", "",
+				"/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", nil, true)
 		})
 	})
 
@@ -83,6 +85,8 @@ var _ = ginkgo.Describe("Importing a self managed cluster", func() {
 			assertManagedClusterAvailable(managedClusterName)
 			assertManagedClusterManifestWorksAvailable(managedClusterName)
 			assertManagedClusterPriorityClass(managedClusterName)
+			assertBootstrapKubeconfig("https://kubernetes.default.svc:443", "",
+				"/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", nil, true)
 		})
 	})
 })

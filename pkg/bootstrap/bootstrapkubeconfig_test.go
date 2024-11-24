@@ -12,7 +12,6 @@ import (
 	"reflect"
 	"testing"
 
-	configv1 "github.com/openshift/api/config/v1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
@@ -41,8 +40,8 @@ var testscheme = scheme.Scheme
 func init() {
 	testscheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
 	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &hivev1.ClusterDeployment{})
-	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &configv1.Infrastructure{})
-	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &configv1.APIServer{})
+	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &ocinfrav1.Infrastructure{})
+	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &ocinfrav1.APIServer{})
 }
 
 func TestGetKubeAPIServerConfig(t *testing.T) {
@@ -180,6 +179,7 @@ func TestGetKubeAPIServerConfig(t *testing.T) {
 		clientObjs       []client.Object
 		runtimeObjs      []runtime.Object
 		klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig
+		selfManaged      bool
 		want             wantData
 		wantErr          bool
 	}{
@@ -387,6 +387,70 @@ func TestGetKubeAPIServerConfig(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name:        "self managed cluster",
+			clientObjs:  []client.Object{testInfraConfigIP},
+			runtimeObjs: []runtime.Object{cm, proxyCAcm},
+			selfManaged: true,
+			want: wantData{
+				serverURL: apiServerInternalEndpoint,
+				ca:        apiServerInternalEndpointCA,
+			},
+			wantErr: false,
+		},
+		{
+			name:        "self managed cluster with proxy settings",
+			clientObjs:  []client.Object{testInfraConfigIP},
+			runtimeObjs: []runtime.Object{cm, proxyCAcm},
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
+						ProxyURL: "https://127.0.0.1:3129",
+					},
+				},
+			},
+			selfManaged: true,
+			want: wantData{
+				serverURL: apiServerInternalEndpoint,
+				ca:        apiServerInternalEndpointCA,
+			},
+			wantErr: false,
+		},
+		{
+			name:        "self managed cluster with custom server address",
+			clientObjs:  []client.Object{testInfraConfigIP},
+			runtimeObjs: []runtime.Object{cm, proxyCAcm},
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
+						URL: "http://internal.com",
+					},
+				},
+			},
+			selfManaged: true,
+			want: wantData{
+				serverURL: "http://internal.com",
+				certData:  rootCACertData,
+			},
+			wantErr: false,
+		},
+		{
+			name:        "self managed cluster with custom strategy",
+			clientObjs:  []client.Object{testInfraConfigIP},
+			runtimeObjs: []runtime.Object{cm, proxyCAcm},
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
+						ServerVerificationStrategy: klusterletconfigv1alpha1.ServerVerificationStrategyUseSystemTruststore,
+					},
+				},
+			},
+			selfManaged: true,
+			want: wantData{
+				serverURL: "http://127.0.0.1:6443",
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range testcases {
@@ -403,8 +467,8 @@ func TestGetKubeAPIServerConfig(t *testing.T) {
 				KubeClient: fakeKubeClinet,
 			}
 
-			kubeAPIServer, proxyURL, caData, err := GetKubeAPIServerConfig(
-				context.Background(), clientHolder, cluster.Name, tt.klusterletConfig)
+			kubeAPIServer, proxyURL, ca, caData, err := GetKubeAPIServerConfig(
+				context.Background(), clientHolder, cluster.Name, tt.klusterletConfig, tt.selfManaged)
 
 			if (err != nil) != tt.wantErr {
 				t.Errorf("GetKubeAPIServerConfig() error = %v, wantErr %v", err, tt.wantErr)
@@ -420,6 +484,14 @@ func TestGetKubeAPIServerConfig(t *testing.T) {
 					"GetKubeAPIServerConfig() returns wrong server. want %v, got %v",
 					tt.want.serverURL,
 					kubeAPIServer,
+				)
+			}
+
+			if ca != tt.want.ca {
+				t.Errorf(
+					"GetKubeAPIServerConfig() returns wrong ca. want %v, got %v",
+					tt.want.ca,
+					ca,
 				)
 			}
 
@@ -451,6 +523,7 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 
 	type wantData struct {
 		serverURL      string
+		ca             string
 		certData       []byte
 		token          string
 		proxyURL       string
@@ -460,6 +533,7 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 		name string
 
 		serverURL      string
+		ca             string
 		certData       []byte
 		token          string
 		proxyURL       string
@@ -483,10 +557,12 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 		{
 			name:           "with CA file",
 			serverURL:      "http://127.0.0.1:6443",
+			ca:             "/etc/ca.crt",
 			ctxClusterName: "cluster1",
 			token:          "fake-token",
 			want: wantData{
 				serverURL:      "http://127.0.0.1:6443",
+				ca:             "/etc/ca.crt",
 				ctxClusterName: "cluster1",
 				token:          "fake-token",
 			},
@@ -494,6 +570,7 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 		{
 			name:           "with both CA file and CA data",
 			serverURL:      "http://127.0.0.1:6443",
+			ca:             "/etc/ca.crt",
 			certData:       rootCACertData,
 			ctxClusterName: "cluster1",
 			token:          "fake-token",
@@ -509,7 +586,7 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Logf("Test name: %s", tt.name)
 
-			kubeconfigData, err := CreateBootstrapKubeConfig(tt.ctxClusterName, tt.serverURL, tt.proxyURL, tt.certData, []byte(tt.token))
+			kubeconfigData, err := CreateBootstrapKubeConfig(tt.ctxClusterName, tt.serverURL, tt.proxyURL, tt.ca, tt.certData, []byte(tt.token))
 			if err != nil {
 				t.Errorf("CreateBootstrapKubeConfig() error = %v", err)
 				return
@@ -541,6 +618,14 @@ func TestCreateBootstrapKubeConfig(t *testing.T) {
 					"createKubeconfigData() returns wrong server. want %v, got %v",
 					tt.want.serverURL,
 					clusterConfig.Server,
+				)
+			}
+
+			if clusterConfig.CertificateAuthority != tt.want.ca {
+				t.Errorf(
+					"createKubeconfigData() returns wrong ca. want %v, got %v",
+					tt.want.ca,
+					clusterConfig.CertificateAuthority,
 				)
 			}
 
@@ -1250,11 +1335,13 @@ func TestValidateBootstrapKubeconfig(t *testing.T) {
 		name           string
 		kubeAPIServer  string
 		proxyURL       string
+		ca             string
 		caData         []byte
 		ctxClusterName string
 
 		requiredKubeAPIServer  string
 		requiredProxyURL       string
+		requiredCA             string
 		requiredCAData         []byte
 		requiredCtxClusterName string
 
@@ -1288,6 +1375,25 @@ func TestValidateBootstrapKubeconfig(t *testing.T) {
 			requiredCAData: certData2,
 		},
 		{
+			name:       "replace ca data with ca file",
+			caData:     certData1,
+			requiredCA: "/etc/ca.crt",
+		},
+		{
+			name:           "replace ca file with ca data",
+			requiredCA:     "/etc/ca.crt",
+			requiredCAData: certData1,
+		},
+		{
+			name:       "ca file is empty",
+			requiredCA: "/etc/ca.crt",
+		},
+		{
+			name:       "ca file changed",
+			ca:         "/etc/ca.crt",
+			requiredCA: "/etc/new-ca.crt",
+		},
+		{
 			name:                   "all valid",
 			kubeAPIServer:          "https://api.my-cluster.example.com:6443",
 			requiredKubeAPIServer:  "https://api.my-cluster.example.com:6443",
@@ -1302,8 +1408,8 @@ func TestValidateBootstrapKubeconfig(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			t.Logf("Test name: %s", c.name)
-			valid := ValidateBootstrapKubeconfig("cluster1", c.kubeAPIServer, c.proxyURL, c.caData, c.ctxClusterName,
-				c.requiredKubeAPIServer, c.requiredProxyURL, c.requiredCAData, c.requiredCtxClusterName)
+			valid := ValidateBootstrapKubeconfig("cluster1", c.kubeAPIServer, c.proxyURL, c.ca, c.caData, c.ctxClusterName,
+				c.requiredKubeAPIServer, c.requiredProxyURL, c.requiredCA, c.requiredCAData, c.requiredCtxClusterName)
 			if valid != c.valid {
 				t.Errorf("expected %v, but got %v", c.valid, valid)
 			}

@@ -260,6 +260,16 @@ func TestBuildBootstrapKubeconfigData(t *testing.T) {
 				token:     "mock-token",
 			},
 		},
+		{
+			name:        "self managed cluster without import secret",
+			selfManaged: true,
+			wantErr:     false,
+			want: &wantData{
+				serverURL: "https://kubernetes.default.svc:443",
+				ca:        "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+				token:     "fake-token",
+			},
+		},
 	}
 
 	for _, tt := range tests {

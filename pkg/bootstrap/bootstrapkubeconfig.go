@@ -39,12 +39,19 @@ import (
 )
 
 const (
-	bootstrapSASuffix = "bootstrap-sa"
+	bootstrapSASuffix           = "bootstrap-sa"
+	apiServerInternalEndpoint   = "https://kubernetes.default.svc:443"
+	apiServerInternalEndpointCA = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 )
 
 // create kubeconfig for bootstrap
 func CreateBootstrapKubeConfig(ctxClusterName string,
-	kubeAPIServer, proxyURL string, caData, token []byte) ([]byte, error) {
+	kubeAPIServer, proxyURL, ca string, caData, token []byte) ([]byte, error) {
+
+	// CA file and CA data cannot be set simultaneously
+	if len(caData) > 0 {
+		ca = ""
+	}
 
 	bootstrapConfig := clientcmdapi.Config{
 		// Define a cluster stanza based on the bootstrap kubeconfig.
@@ -52,6 +59,7 @@ func CreateBootstrapKubeConfig(ctxClusterName string,
 			ctxClusterName: {
 				Server:                   kubeAPIServer,
 				InsecureSkipTLSVerify:    false,
+				CertificateAuthority:     ca,
 				CertificateAuthorityData: caData,
 				ProxyURL:                 proxyURL,
 			}},
@@ -76,21 +84,61 @@ func CreateBootstrapKubeConfig(ctxClusterName string,
 	return boostrapConfigData, err
 }
 
+// GetKubeAPIServerConfig returns the expected apiserver url, proxy url, ca file and ca data
+// for cluster registration.
 func GetKubeAPIServerConfig(ctx context.Context, clientHolder *helpers.ClientHolder, ns string,
-	klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) (string, string, []byte, error) {
+	klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig, selfManaged bool) (string, string,
+	string, []byte, error) {
+	// the proxy settings in the klusterletConfig will be ignored when the internal endpoint
+	// is used for the self managed cluster
+	if selfManaged && !hasCustomServerURLOrStrategy(klusterletConfig) {
+		return apiServerInternalEndpoint, "", apiServerInternalEndpointCA, nil, nil
+	}
+
+	// get the proxy settings
 	proxy, _ := GetProxySettings(klusterletConfig)
 
+	// get the apiserver address
 	url, err := GetKubeAPIServerAddress(ctx, clientHolder.RuntimeClient, klusterletConfig)
 	if err != nil {
-		return "", "", nil, err
+		return "", "", "", nil, err
 	}
 
+	// get the ca data
 	caData, err := GetBootstrapCAData(ctx, clientHolder, url, ns, klusterletConfig)
 	if err != nil {
-		return "", "", nil, err
+		return "", "", "", nil, err
 	}
 
-	return url, proxy, caData, err
+	return url, proxy, "", caData, err
+}
+
+// Return true if the managed cluster has a custom URL or its server verification strategy
+// is not `UseAutoDetectedCABundle`.
+func hasCustomServerURLOrStrategy(klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) bool {
+	if klusterletConfig == nil {
+		return false
+	}
+
+	if klusterletConfig.Spec.HubKubeAPIServerConfig != nil {
+		if len(klusterletConfig.Spec.HubKubeAPIServerConfig.URL) > 0 {
+			return true
+		}
+		if len(klusterletConfig.Spec.HubKubeAPIServerConfig.ServerVerificationStrategy) > 0 &&
+			klusterletConfig.Spec.HubKubeAPIServerConfig.ServerVerificationStrategy !=
+				klusterletconfigv1alpha1.ServerVerificationStrategyUseAutoDetectedCABundle {
+			return true
+		}
+	} else {
+		if len(klusterletConfig.Spec.HubKubeAPIServerURL) > 0 {
+			return true
+		}
+		if len(klusterletConfig.Spec.HubKubeAPIServerCABundle) > 0 {
+			return true
+		}
+	}
+
+	return false
 }
 
 func GetBootstrapSAName(clusterName string) string {
@@ -561,12 +609,18 @@ func mergeCertificateData(caBundles ...[]byte) ([]byte, error) {
 //   - the proxy url
 //   - the context cluster name
 func ValidateBootstrapKubeconfig(clusterName string,
-	kubeAPIServer, proxyURL string, caData []byte, ctxClusterName string,
-	requiredKubeAPIServer, requiredProxyURL string, requiredCAData []byte,
+	kubeAPIServer, proxyURL, ca string, caData []byte, ctxClusterName string,
+	requiredKubeAPIServer, requiredProxyURL, requiredCA string, requiredCAData []byte,
 	requiredCtxClusterName string) bool {
 	// validate kube api server endpoint
 	if kubeAPIServer != requiredKubeAPIServer {
 		klog.Infof("KubeAPIServer invalid for the managed cluster %s: %s", clusterName, kubeAPIServer)
+		return false
+	}
+
+	// validate kube api server CA file path
+	if ca != requiredCA {
+		klog.Infof("CA is invalid for the managed cluster %s: %s", clusterName, ca)
 		return false
 	}
 
