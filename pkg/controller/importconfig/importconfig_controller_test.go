@@ -913,7 +913,7 @@ func TestReconcile(t *testing.T) {
 					t.Errorf("invalid bootstrap hub kubeconfig")
 				}
 
-				_, proxyURL, caData, _, _, err := parseKubeConfigData(kubeConfigData)
+				_, proxyURL, _, caData, _, _, err := parseKubeConfigData(kubeConfigData)
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
@@ -928,6 +928,105 @@ func TestReconcile(t *testing.T) {
 				}
 				if !ok {
 					t.Errorf("the kubeconfig ca data does not include the proxy ca data")
+				}
+			},
+		},
+		{
+			name: "self managed cluster",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Labels: map[string]string{
+							constants.SelfManagedLabel: "true",
+						},
+					},
+				},
+				&configv1.Infrastructure{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "cluster",
+					},
+				},
+			},
+			runtimeObjs: []runtime.Object{
+				&corev1.ServiceAccount{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa",
+						Namespace: "test",
+					},
+					Secrets: []corev1.ObjectReference{
+						{
+							Name:      "test-bootstrap-sa-token-5pw5c",
+							Namespace: "test",
+						},
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa-token-5pw5c",
+						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"token": []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeServiceAccountToken,
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
+						Namespace: os.Getenv("POD_NAMESPACE"),
+					},
+					Data: map[string][]byte{
+						corev1.DockerConfigJsonKey: []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeDockerConfigJson,
+				},
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "kube-root-ca.crt",
+						Namespace: "test",
+					},
+					Data: map[string]string{
+						"ca.crt": string(rootCACertData),
+					},
+				},
+			},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, client runtimeclient.Client, kubeClient kubernetes.Interface) {
+				importSecret, err := kubeClient.CoreV1().Secrets("test").Get(context.TODO(), "test-import", metav1.GetOptions{})
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+
+				kubeConfigData := extractBootstrapKubeConfigDataFromImportSecret(importSecret)
+				if len(kubeConfigData) == 0 {
+					t.Errorf("invalid bootstrap hub kubeconfig")
+				}
+
+				kubeAPIServer, _, ca, caData, _, _, err := parseKubeConfigData(kubeConfigData)
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+
+				if kubeAPIServer != "https://kubernetes.default.svc:443" {
+					t.Errorf("expected apiserver address https://kubernetes.default.svc:443, bug got %s", kubeAPIServer)
+				}
+
+				if ca != "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt" {
+					t.Errorf("expected ca file /var/run/secrets/kubernetes.io/serviceaccount/ca.crt, bug got %s", ca)
+				}
+
+				if len(caData) > 0 {
+					t.Errorf("expected empty ca data, bug got %s", string(caData))
 				}
 			},
 		},

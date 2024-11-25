@@ -341,6 +341,91 @@ func assertManagedClusterPriorityClass(managedClusterName string) {
 	})
 }
 
+func assertBootstrapKubeconfig(serverURL, proxyURL, ca string, caData []byte, verifyHubKubeconfig bool) {
+	start := time.Now()
+	defer func() {
+		util.Logf("assert kubeconfig spending time: %.2f seconds", time.Since(start).Seconds())
+	}()
+	ginkgo.By("Should have the expected bootstrap kubeconfig", func() {
+		gomega.Eventually(func() error {
+			err := assertKubeconfig("bootstrap-hub-kubeconfig", serverURL, proxyURL, ca, caData)
+			if err != nil {
+				return err
+			}
+
+			if verifyHubKubeconfig {
+				return assertKubeconfig("hub-kubeconfig-secret", serverURL, proxyURL, ca, caData)
+			}
+			return nil
+		}, 120*time.Second, 1*time.Second).Should(gomega.Succeed())
+	})
+}
+
+func assertBootstrapKubeconfigConsistently(serverURL, proxyURL, ca string, caData []byte, verifyHubKubeconfig bool, duration time.Duration) {
+	start := time.Now()
+	defer func() {
+		util.Logf("assert kubeconfig with internal endpoint consistently spending time: %.2f seconds", time.Since(start).Seconds())
+	}()
+	ginkgo.By("Should use the internal endpoint", func() {
+		gomega.Consistently(func() error {
+			err := assertKubeconfig("bootstrap-hub-kubeconfig", serverURL, proxyURL, ca, caData)
+			if err != nil {
+				return err
+			}
+
+			if verifyHubKubeconfig {
+				return assertKubeconfig("hub-kubeconfig-secret", serverURL, proxyURL, ca, caData)
+			}
+			return nil
+		}, duration, 1*time.Second).Should(gomega.Succeed())
+	})
+}
+
+func assertKubeconfig(secretName, serverURL, proxyURL, ca string, caData []byte) error {
+	namespace := "open-cluster-management-agent"
+	secret, err := hubKubeClient.CoreV1().Secrets(namespace).Get(context.TODO(), secretName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	kubeconfigData, ok := secret.Data["kubeconfig"]
+	if !ok {
+		return fmt.Errorf("secret %s/%s has no kubeconfig", namespace, secretName)
+	}
+
+	config, err := clientcmd.Load(kubeconfigData)
+	if err != nil {
+		return err
+	}
+
+	context, ok := config.Contexts[config.CurrentContext]
+	if !ok {
+		return fmt.Errorf("kubeconfig in secret %s/%s has no context %q", namespace, secretName, config.CurrentContext)
+	}
+
+	cluster, ok := config.Clusters[context.Cluster]
+	if !ok {
+		return fmt.Errorf("kubeconfig in secret %s/%s has no cluster %q", namespace, secretName, context.Cluster)
+	}
+
+	if cluster.Server != serverURL {
+		return fmt.Errorf("kubeconfig in secret %s/%s expects server %q but got: %s", namespace, secretName, serverURL, cluster.Server)
+	}
+
+	if cluster.CertificateAuthority != ca {
+		return fmt.Errorf("kubeconfig in secret %s/%s expects ca %q but got: %s", namespace, secretName, ca, cluster.CertificateAuthority)
+	}
+
+	if cluster.ProxyURL != proxyURL {
+		return fmt.Errorf("kubeconfig in secret %s/%s expects proxy %q but got: %s", namespace, secretName, proxyURL, cluster.ProxyURL)
+	}
+
+	if !reflect.DeepEqual(cluster.CertificateAuthorityData, caData) {
+		return fmt.Errorf("kubeconfig in secret %s/%s expects ca data %q but got: %s", namespace, secretName, string(caData), string(cluster.CertificateAuthorityData))
+	}
+
+	return nil
+}
+
 func assertManagedClusterPriorityClassHosted(managedClusterName string) {
 	start := time.Now()
 	defer func() {
@@ -812,6 +897,13 @@ func assertBootstrapKubeconfigWithProxyConfig(proxyURL string, caDataIncluded, c
 				return fmt.Errorf("expected proxy url %q but got: %s", proxyURL, cluster.ProxyURL)
 			}
 
+			if len(cluster.CertificateAuthorityData) == 0 {
+				if len(caDataIncluded) == 0 {
+					return nil
+				}
+				return fmt.Errorf("kubeconfig has no ca bundle specified")
+			}
+
 			caCerts, err := certutil.ParseCertsPEM(cluster.CertificateAuthorityData)
 			if err != nil {
 				return err
@@ -843,44 +935,6 @@ func assertBootstrapKubeconfigWithProxyConfig(proxyURL string, caDataIncluded, c
 						return fmt.Errorf("kubeconfig ca bundle should not include proxy cert: %s", cert.Subject.CommonName)
 					}
 				}
-			}
-
-			return nil
-		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
-	})
-}
-
-func assertBootstrapKubeconfigServerURLAndCABundle(serverURL string, caData []byte) {
-	ginkgo.By("Klusterlet should have bootstrap kubeconfig with expected serverURL & CA bundle", func() {
-		var bootstrapKubeconfigSecret *corev1.Secret
-		gomega.Eventually(func() error {
-			var err error
-			bootstrapKubeconfigSecret, err = hubKubeClient.CoreV1().Secrets("open-cluster-management-agent").Get(context.TODO(), "bootstrap-hub-kubeconfig", metav1.GetOptions{})
-			if err != nil {
-				return err
-			}
-
-			config, err := clientcmd.Load(bootstrapKubeconfigSecret.Data["kubeconfig"])
-			if err != nil {
-				return err
-			}
-
-			// check server url
-			context, ok := config.Contexts[config.CurrentContext]
-			if !ok {
-				return fmt.Errorf("current context %s not found", config.CurrentContext)
-			}
-			cluster, ok := config.Clusters[context.Cluster]
-			if !ok {
-				return fmt.Errorf("cluster %s not found", context.Cluster)
-			}
-			if cluster.Server != serverURL {
-				return fmt.Errorf("expected server url %q but got: %s", serverURL, cluster.Server)
-			}
-
-			// check ca data
-			if !reflect.DeepEqual(cluster.CertificateAuthorityData, caData) {
-				return fmt.Errorf("unexpected CA bundle is included in the bootstrap kubeconfig: open-cluster-management-agent/bootstrap-hub-kubeconfig")
 			}
 
 			return nil

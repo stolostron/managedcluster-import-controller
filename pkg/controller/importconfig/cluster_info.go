@@ -6,6 +6,7 @@ package importconfig
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
@@ -50,22 +51,23 @@ func extractBootstrapKubeConfigDataFromImportSecret(importSecret *corev1.Secret)
 }
 
 func parseKubeConfigData(kubeConfigData []byte) (
-	kubeAPIServer, proxyURL string, caData []byte, token string, ctxClusterName string, err error) {
+	kubeAPIServer, proxyURL, ca string, caData []byte, token string, ctxClusterName string, err error) {
 
 	config, err := clientcmd.Load(kubeConfigData)
 	if err != nil {
 		// kubeconfig data is invalid
-		return "", "", nil, "", "", err
+		return "", "", "", nil, "", "", err
 	}
 
 	context := config.Contexts[config.CurrentContext]
 	if context == nil {
-		return "", "", nil, "", "", fmt.Errorf("failed to get current context")
+		return "", "", "", nil, "", "", fmt.Errorf("failed to get current context")
 	}
 
 	if cluster, ok := config.Clusters[context.Cluster]; ok {
 		ctxClusterName = context.Cluster
 		kubeAPIServer = cluster.Server
+		ca = cluster.CertificateAuthority
 		caData = cluster.CertificateAuthorityData
 		proxyURL = cluster.ProxyURL
 	}
@@ -120,8 +122,8 @@ func buildBootstrapKubeconfigData(ctx context.Context, clientHolder *helpers.Cli
 	}
 
 	// get the latest kube apiserver configuration
-	requiredKubeAPIServer, requiredProxyURL, requiredCAData, err := bootstrap.GetKubeAPIServerConfig(
-		ctx, clientHolder, managedCluster.Name, klusterletConfig)
+	requiredKubeAPIServer, requiredProxyURL, requiredCA, requiredCAData, err := bootstrap.GetKubeAPIServerConfig(
+		ctx, clientHolder, managedCluster.Name, klusterletConfig, isSelfManaged(managedCluster))
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -138,7 +140,7 @@ func buildBootstrapKubeconfigData(ctx context.Context, clientHolder *helpers.Cli
 
 	// check if the bootstrap kubeconfig and token in the import secret are still valid
 	if kubeconfigData := extractBootstrapKubeConfigDataFromImportSecret(importSecret); len(kubeconfigData) > 0 {
-		kubeAPIServer, proxyURL, caData, tokenString, ctxClusterName, err := parseKubeConfigData(kubeconfigData)
+		kubeAPIServer, proxyURL, ca, caData, tokenString, ctxClusterName, err := parseKubeConfigData(kubeconfigData)
 		if err != nil {
 			klog.Infof("failed to parse the bootstrap hub kubeconfig in the import.yaml. Recreation is required: %v", err)
 		} else {
@@ -156,8 +158,8 @@ func buildBootstrapKubeconfigData(ctx context.Context, clientHolder *helpers.Cli
 
 			// use the kubeconfig if it is still valid
 			if valid := bootstrap.ValidateBootstrapKubeconfig(managedCluster.Name,
-				kubeAPIServer, proxyURL, caData, ctxClusterName,
-				requiredKubeAPIServer, requiredProxyURL, requiredCAData, requiredCtxClusterName); valid {
+				kubeAPIServer, proxyURL, ca, caData, ctxClusterName,
+				requiredKubeAPIServer, requiredProxyURL, requiredCA, requiredCAData, requiredCtxClusterName); valid {
 				bootstrapKubeconfigData = kubeconfigData
 			}
 		}
@@ -181,13 +183,23 @@ func buildBootstrapKubeconfigData(ctx context.Context, clientHolder *helpers.Cli
 	if len(bootstrapKubeconfigData) == 0 {
 		klog.Infof("create a new bootstrap kubeconfig for the managed cluster %s", managedCluster.Name)
 		bootstrapKubeconfigData, err = bootstrap.CreateBootstrapKubeConfig(requiredCtxClusterName,
-			requiredKubeAPIServer, requiredProxyURL, requiredCAData, tokenData)
+			requiredKubeAPIServer, requiredProxyURL, requiredCA, requiredCAData, tokenData)
 		if err != nil {
 			return nil, nil, nil, err
 		}
 	}
 
 	return bootstrapKubeconfigData, tokenCreation, tokenExpiration, nil
+}
+
+func isSelfManaged(managedCluster *clusterv1.ManagedCluster) bool {
+	if managedCluster == nil {
+		return false
+	}
+	if value := managedCluster.Labels[constants.SelfManagedLabel]; strings.EqualFold(value, "true") {
+		return true
+	}
+	return false
 }
 
 func buildImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, managedCluster *clusterv1.ManagedCluster,

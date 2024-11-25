@@ -16,6 +16,7 @@ import (
 	. "github.com/onsi/gomega"
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/bootstrap"
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 	corev1 "k8s.io/api/core/v1"
@@ -136,8 +137,18 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 				managedClusterName,
 				map[string]string{
 					"agent.open-cluster-management.io/klusterlet-config": klusterletConfigName,
-				},
-				util.NewLable("local-cluster", "true"))
+				})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		By(fmt.Sprintf("Create auto-import-secret for managed cluster %s with kubeconfig", managedClusterName), func() {
+			secret, err := util.NewAutoImportSecret(hubKubeClient, managedClusterName)
+			Expect(err).ToNot(HaveOccurred())
+			secret.Annotations = map[string]string{
+				constants.AnnotationKeepingAutoImportSecret: "true",
+			}
+
+			_, err = hubKubeClient.CoreV1().Secrets(managedClusterName).Create(context.TODO(), secret, metav1.CreateOptions{})
 			Expect(err).ToNot(HaveOccurred())
 		})
 
@@ -207,7 +218,7 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 		assertManagedClusterAvailable(managedClusterName)
 	})
 
-	It("Should deploy the klusterlet with custom server URL and CA bundle", func() {
+	It("Should ignore the proxy config for self managed cluster", func() {
 		By("Create managed cluster", func() {
 			_, err := util.CreateManagedClusterWithShortLeaseDuration(
 				hubClusterClient,
@@ -220,6 +231,50 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 		})
 
 		// klusterletconfig is missing and it will be ignored
+		assertBootstrapKubeconfigWithProxyConfig("", nil, nil)
+		assertManagedClusterAvailable(managedClusterName)
+
+		By("Create KlusterletConfig with http proxy", func() {
+			_, err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Create(context.TODO(), &klusterletconfigv1alpha1.KlusterletConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: klusterletConfigName,
+				},
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerProxyConfig: klusterletconfigv1alpha1.KubeAPIServerProxyConfig{
+						HTTPSProxy: "http://127.0.0.1:3128",
+					},
+				},
+			}, metav1.CreateOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		assertBootstrapKubeconfigConsistently("https://kubernetes.default.svc:443", "",
+			"/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", nil, true, 30*time.Second)
+	})
+
+	It("Should deploy the klusterlet with custom server URL and CA bundle", func() {
+		By("Create managed cluster", func() {
+			_, err := util.CreateManagedClusterWithShortLeaseDuration(
+				hubClusterClient,
+				managedClusterName,
+				map[string]string{
+					"agent.open-cluster-management.io/klusterlet-config": klusterletConfigName,
+				})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		By(fmt.Sprintf("Create auto-import-secret for managed cluster %s with kubeconfig", managedClusterName), func() {
+			secret, err := util.NewAutoImportSecret(hubKubeClient, managedClusterName)
+			Expect(err).ToNot(HaveOccurred())
+			secret.Annotations = map[string]string{
+				constants.AnnotationKeepingAutoImportSecret: "true",
+			}
+
+			_, err = hubKubeClient.CoreV1().Secrets(managedClusterName).Create(context.TODO(), secret, metav1.CreateOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		// klusterletconfig is missing and it will be ignored
 		defaultServerUrl, err := bootstrap.GetKubeAPIServerAddress(context.TODO(), hubRuntimeClient, nil)
 		Expect(err).ToNot(HaveOccurred())
 		defaultCABundle, err := bootstrap.GetBootstrapCAData(context.TODO(), &helpers.ClientHolder{
@@ -227,7 +282,7 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 			RuntimeClient: hubRuntimeClient,
 		}, defaultServerUrl, managedClusterName, nil)
 		Expect(err).ToNot(HaveOccurred())
-		assertBootstrapKubeconfigServerURLAndCABundle(defaultServerUrl, defaultCABundle)
+		assertBootstrapKubeconfig(defaultServerUrl, "", "", defaultCABundle, false)
 		assertManagedClusterAvailable(managedClusterName)
 
 		customServerURL := "https://invalid.server.url:6443"
@@ -247,7 +302,7 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		assertBootstrapKubeconfigServerURLAndCABundle(customServerURL, customCAData)
+		assertBootstrapKubeconfig(customServerURL, "", "", customCAData, false)
 
 		// here to restart agent pods to trigger bootstrap secret update to save time.
 		restartAgentPods()
@@ -259,7 +314,64 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		assertBootstrapKubeconfigServerURLAndCABundle(defaultServerUrl, defaultCABundle)
+		assertBootstrapKubeconfig(defaultServerUrl, "", "", defaultCABundle, false)
+
+		// here to restart agent pods to trigger bootstrap secret update to save time.
+		restartAgentPods()
+		// cluster should become available because custom server URL and CA bundle is removed
+		assertManagedClusterAvailable(managedClusterName)
+	})
+
+	It("Should deploy the klusterlet with custom server URL for self managed cluster", func() {
+		By("Create managed cluster", func() {
+			_, err := util.CreateManagedClusterWithShortLeaseDuration(
+				hubClusterClient,
+				managedClusterName,
+				map[string]string{
+					"agent.open-cluster-management.io/klusterlet-config": klusterletConfigName,
+				},
+				util.NewLable("local-cluster", "true"))
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		// klusterletconfig is missing and it will be ignored
+		assertBootstrapKubeconfig("https://kubernetes.default.svc:443", "",
+			"/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", nil, false)
+		assertManagedClusterAvailable(managedClusterName)
+
+		defaultServerUrl, err := bootstrap.GetKubeAPIServerAddress(context.TODO(), hubRuntimeClient, nil)
+		Expect(err).ToNot(HaveOccurred())
+
+		By("Create KlusterletConfig with custom server URL", func() {
+			_, err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Create(context.TODO(), &klusterletconfigv1alpha1.KlusterletConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: klusterletConfigName,
+				},
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerURL: defaultServerUrl,
+				},
+			}, metav1.CreateOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		defaultCABundle, err := bootstrap.GetBootstrapCAData(context.TODO(), &helpers.ClientHolder{
+			KubeClient:    hubKubeClient,
+			RuntimeClient: hubRuntimeClient,
+		}, defaultServerUrl, managedClusterName, nil)
+		Expect(err).ToNot(HaveOccurred())
+		assertBootstrapKubeconfig(defaultServerUrl, "", "", defaultCABundle, false)
+
+		// here to restart agent pods to trigger bootstrap secret update to save time.
+		restartAgentPods()
+		assertManagedClusterAvailable(managedClusterName)
+
+		By("Delete Klusterletconfig", func() {
+			err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Delete(context.TODO(), klusterletConfigName, metav1.DeleteOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		assertBootstrapKubeconfig("https://kubernetes.default.svc:443", "",
+			"/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", nil, false)
 
 		// here to restart agent pods to trigger bootstrap secret update to save time.
 		restartAgentPods()
