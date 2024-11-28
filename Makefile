@@ -78,7 +78,7 @@ build-image:
 ## Builds controller image using buildx for amd64
 .PHONY: build-image-amd64
 build-image-amd64:
-	$(DOCKER_BUILDER) buildx build --platform linux/amd64 -f $(DOCKER_FILE) . -t $(DOCKER_IMAGE)
+	$(DOCKER_BUILDER) buildx build --platform linux/amd64 --load -f $(DOCKER_FILE) . -t $(DOCKER_IMAGE)
 
 ## Clean build-harness and remove test files
 .PHONY: clean
