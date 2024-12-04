@@ -16,6 +16,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/clusterdeployment"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/clusternamespacedeletion"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/csr"
+	"github.com/stolostron/managedcluster-import-controller/pkg/controller/flightctl"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/hosted"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/importconfig"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/importstatus"
@@ -36,7 +37,17 @@ func AddToManager(ctx context.Context,
 	manager manager.Manager,
 	clientHolder *helpers.ClientHolder,
 	informerHolder *source.InformerHolder,
+	enableFlightCtl bool,
+	flightctlManager *flightctl.FlightCtlManager,
 	mcRecorder kevents.EventRecorder) error {
+
+	extraCSRApprovalConditions := []func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error){}
+	if enableFlightCtl {
+		// Case 1: If flightctl is enabled, and a csr is from a flightctl device, approve it.
+		extraCSRApprovalConditions = append(extraCSRApprovalConditions, func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error) {
+			return flightctlManager.IsManagedClusterAFlightctlDevice(ctx, helpers.GetClusterName(csr))
+		})
+	}
 
 	AddToManagerFuncs := []struct {
 		ControllerName string
@@ -45,8 +56,7 @@ func AddToManager(ctx context.Context,
 		{
 			csr.ControllerName,
 			func() error {
-				return csr.Add(ctx, manager, clientHolder,
-					[]func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error){})
+				return csr.Add(ctx, manager, clientHolder, extraCSRApprovalConditions)
 			},
 		},
 		{
@@ -90,6 +100,19 @@ func AddToManager(ctx context.Context,
 				return nil
 			},
 		},
+	}
+
+	if enableFlightCtl {
+		// If flightctl is enabled, add a managedcluster controller to set hubAcceptsClient to true if the managed cluster is a flightctl device.
+		AddToManagerFuncs = append(AddToManagerFuncs, struct {
+			ControllerName string
+			Add            func() error
+		}{
+			flightctl.ManagedClusterControllerName,
+			func() error {
+				return flightctl.AddManagedClusterController(ctx, manager, flightctlManager, clientHolder)
+			},
+		})
 	}
 
 	for _, f := range AddToManagerFuncs {
