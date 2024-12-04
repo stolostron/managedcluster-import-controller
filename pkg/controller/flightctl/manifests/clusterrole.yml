@@ -1,0 +1,19 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: flightctl-client
+rules:
+  - verbs:
+      - get
+    apiGroups:
+      - flightctl.io
+    resources:
+      - devices
+  - verbs:
+      - create
+      - update
+      - get
+    apiGroups:
+      - flightctl.io
+    resources:
+      - repositories
