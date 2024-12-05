@@ -258,6 +258,7 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 		})
 		assertManagedClusterImportSecretApplied(managedClusterName)
 		assertManagedClusterAvailable(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
 
 		configName := "autoimport-config"
 		testcluster := fmt.Sprintf("custom-%s", managedClusterName)
@@ -292,6 +293,8 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 		assertManagedClusterImportSecretCreated(testcluster, "other")
 		assertManagedClusterImportSecretApplied(testcluster)
 		assertManagedClusterAvailable(testcluster)
+		klusterletName := fmt.Sprintf("%s-klusterlet", testcluster)
+		assertManifestworkFinalizer(testcluster, klusterletName, "cluster.open-cluster-management.io/manifest-work-cleanup")
 
 		AssertKlusterletNamespace(testcluster, "klusterlet-local", "open-cluster-management-local")
 

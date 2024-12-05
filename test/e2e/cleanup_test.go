@@ -72,6 +72,9 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", fun
 			_, err := hubWorkClient.WorkV1().ManifestWorks(localClusterName).Create(context.TODO(), manifestwork, metav1.CreateOptions{})
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
+			// check the work has added finalizer before detaching the cluster
+			assertManifestworkFinalizer(localClusterName, manifestwork.Name, "cluster.open-cluster-management.io/manifest-work-cleanup")
+
 			// detach the cluster
 			err = hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), localClusterName, metav1.DeleteOptions{})
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())

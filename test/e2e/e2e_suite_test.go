@@ -476,6 +476,7 @@ func assertHostedManagedClusterImportSecret(managedClusterName string) {
 }
 
 func assertManagedClusterDeleted(clusterName string) {
+
 	ginkgo.By(fmt.Sprintf("Delete the managed cluster %s", clusterName), func() {
 		err := hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), clusterName, metav1.DeleteOptions{})
 		if err != nil && !errors.IsNotFound(err) {
@@ -738,11 +739,15 @@ func assertManagedClusterManifestWorks(clusterName string) {
 func assertManagedClusterManifestWorksAvailable(clusterName string) {
 	assertManagedClusterFinalizer(clusterName, "managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup")
 
+	klusterletCRDsName := fmt.Sprintf("%s-klusterlet-crds", clusterName)
+	klusterletName := fmt.Sprintf("%s-klusterlet", clusterName)
+
+	assertManifestworkFinalizer(clusterName, klusterletCRDsName, "cluster.open-cluster-management.io/manifest-work-cleanup")
+	assertManifestworkFinalizer(clusterName, klusterletName, "cluster.open-cluster-management.io/manifest-work-cleanup")
+
 	ginkgo.By(fmt.Sprintf("Managed cluster %s manifest works should be available", clusterName), func() {
 		start := time.Now()
 		gomega.Eventually(func() error {
-			klusterletCRDsName := fmt.Sprintf("%s-klusterlet-crds", clusterName)
-			klusterletName := fmt.Sprintf("%s-klusterlet", clusterName)
 			manifestWorks := hubWorkClient.WorkV1().ManifestWorks(clusterName)
 
 			klusterletCRDs, err := manifestWorks.Get(context.TODO(), klusterletCRDsName, metav1.GetOptions{})
@@ -774,10 +779,12 @@ func assertHostedManagedClusterManifestWorksAvailable(clusterName, hostingCluste
 	assertManagedClusterFinalizer(clusterName,
 		"managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup")
 
+	klusterletName := fmt.Sprintf("%s-hosted-klusterlet", clusterName)
+	assertManifestworkFinalizer(hostingClusterName, klusterletName, "cluster.open-cluster-management.io/manifest-work-cleanup")
+
 	ginkgo.By(fmt.Sprintf("Hosted managed cluster %s manifest works should be available", clusterName), func() {
 		start := time.Now()
 		gomega.Eventually(func() error {
-			klusterletName := fmt.Sprintf("%s-hosted-klusterlet", clusterName)
 			manifestWorks := hubWorkClient.WorkV1().ManifestWorks(hostingClusterName)
 
 			klusterlet, err := manifestWorks.Get(context.TODO(), klusterletName, metav1.GetOptions{})
@@ -1064,4 +1071,56 @@ func getKubeConfigFile() (string, error) {
 	}
 
 	return kubeConfigFile, nil
+}
+
+func assertManifestworkFinalizer(namespace, workName, expected string) {
+	ginkgo.By(fmt.Sprintf("Manifestwork %s/%s should have expected finalizer: %s", namespace, workName, expected), func() {
+		gomega.Eventually(func() error {
+			work, err := hubWorkClient.WorkV1().ManifestWorks(namespace).Get(context.TODO(), workName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			for _, finalizer := range work.Finalizers {
+				if finalizer == expected {
+					return nil
+				}
+			}
+			return fmt.Errorf("Manifestwork %s/%s does not have expected finalizer %s", namespace, workName, expected)
+		}, 3*time.Minute, 10*time.Second).Should(gomega.Succeed())
+	})
+}
+
+func assertAgentLeaderElection() {
+	start := time.Now()
+	ginkgo.By("Check if klusterlet agent is leader", func() {
+		gomega.Eventually(func() error {
+			namespace := "open-cluster-management-agent"
+			agentSelector := "app=klusterlet-agent"
+			leaseName := "klusterlet-lock"
+			// agent pod
+			pods, err := hubKubeClient.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
+				LabelSelector: agentSelector,
+			})
+			if err != nil {
+				return fmt.Errorf("could not get agent pod: %v", err)
+			}
+			if len(pods.Items) != 1 {
+				return fmt.Errorf("should be only one agent pod but get %d", len(pods.Items))
+			}
+
+			// agent lease
+			lease, err := hubKubeClient.CoordinationV1().Leases(namespace).Get(context.TODO(), leaseName, metav1.GetOptions{})
+			if err != nil {
+				return fmt.Errorf("could not get Lease: %v", err)
+			}
+
+			// Check if the HolderIdentity field is present and if it has the prefix of the podName
+			if lease.Spec.HolderIdentity != nil && strings.HasPrefix(*lease.Spec.HolderIdentity, pods.Items[0].Name) {
+				return nil
+			}
+
+			return fmt.Errorf("klusterlet agent leader is still %s not %s", *lease.Spec.HolderIdentity, pods.Items[0].Name)
+		}, 180*time.Second, 1*time.Second).Should(gomega.Succeed())
+	})
+	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
 }
