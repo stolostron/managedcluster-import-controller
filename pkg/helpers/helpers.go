@@ -22,6 +22,7 @@ import (
 	"golang.org/x/text/language"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -95,6 +96,7 @@ func init() {
 	utilruntime.Must(operatorv1.Install(genericScheme))
 	utilruntime.Must(addonv1alpha1.Install(genericScheme))
 	utilruntime.Must(schedulingv1.AddToScheme(genericScheme))
+	utilruntime.Must(networkingv1.AddToScheme(genericScheme))
 }
 
 type ClientHolder struct {
@@ -581,6 +583,10 @@ func ApplyResources(clientHolder *ClientHolder, recorder events.Recorder,
 			modified, err := applyPriorityClass(clientHolder.KubeClient, recorder, required)
 			errs = append(errs, err)
 			changed = changed || modified
+		case *networkingv1.NetworkPolicy:
+			modified, err := applyNetworkPolicy(clientHolder.KubeClient, recorder, required)
+			errs = append(errs, err)
+			changed = changed || modified
 		default:
 			errs = append(errs, fmt.Errorf("unknown type %T", required))
 		}
@@ -708,6 +714,38 @@ func applyPriorityClass(client kubernetes.Interface, recorder events.Recorder,
 		return false, err
 	}
 	reportEvent(recorder, required, "PriorityClass", "updated")
+	return true, nil
+}
+
+func applyNetworkPolicy(client kubernetes.Interface, recorder events.Recorder,
+	required *networkingv1.NetworkPolicy) (bool, error) {
+	existing, err := client.NetworkingV1().NetworkPolicies(required.Namespace).Get(
+		context.TODO(), required.Name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		if _, err := client.NetworkingV1().NetworkPolicies(required.Namespace).Create(
+			context.TODO(), required, metav1.CreateOptions{}); err != nil {
+			return false, err
+		}
+
+		reportEvent(recorder, required, "NetworkPolicy", "created")
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+
+	if equality.Semantic.DeepEqual(existing.Spec, required.Spec) {
+		return false, nil
+	}
+
+	existing = existing.DeepCopy()
+	existing.Spec = required.Spec
+
+	if _, err := client.NetworkingV1().NetworkPolicies(required.Namespace).Update(
+		context.TODO(), existing, metav1.UpdateOptions{}); err != nil {
+		return false, err
+	}
+	reportEvent(recorder, required, "NetworkPolicy", "updated")
 	return true, nil
 }
 

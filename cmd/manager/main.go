@@ -23,6 +23,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/agentregistration"
+	"github.com/stolostron/managedcluster-import-controller/pkg/controller/flightctl"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/importconfig"
 	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
@@ -32,6 +33,10 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 	"k8s.io/client-go/tools/cache"
 
+	ocinfrav1 "github.com/openshift/api/config/v1"
+	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
+	hyperv1beta1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
 	klusterletconfigclient "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned"
 	klusterletconfiginformer "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/informers/externalversions"
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
@@ -42,11 +47,6 @@ import (
 	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
 	informerswork "open-cluster-management.io/api/client/work/informers/externalversions"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
-
-	ocinfrav1 "github.com/openshift/api/config/v1"
-	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
-	hivev1 "github.com/openshift/hive/apis/hive/v1"
-	hyperv1beta1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
 
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -103,6 +103,12 @@ func main() {
 			os.Exit(1)
 		}
 	}
+
+	var clusterIngressDomain string
+	var enableFlightCtl bool = false
+
+	pflag.StringVar(&clusterIngressDomain, "cluster-ingress-domain", "", "the ingress domain of the cluster")
+	pflag.BoolVar(&enableFlightCtl, "enable-flightctl", false, "enable flightctl")
 
 	pflag.StringVar(&leaderElectionNamespace, "leader-election-namespace", "", "required when the process is not running in cluster")
 	pflag.BoolVar(&helpers.DeployOnOCP, "deploy-on-ocp", true, "used to deploy the controller on OCP or not")
@@ -283,6 +289,9 @@ func main() {
 	// with involvedObject set to the ManagedCluster.
 	mcRecorder := helpers.NewManagedClusterEventRecorder(ctx, clientHolder.KubeClient)
 
+	// Init flightctlManager
+	flightctlManager := flightctl.NewFlightCtlManager(clientHolder, clusterIngressDomain)
+
 	setupLog.Info("Registering Controllers")
 	if err := controller.AddToManager(
 		ctx,
@@ -301,6 +310,8 @@ func main() {
 			KlusterletConfigLister:   klusterletconfigLister,
 			ManagedClusterInformer:   managedclusterInformer,
 		},
+		enableFlightCtl,
+		flightctlManager,
 		mcRecorder,
 	); err != nil {
 		setupLog.Error(err, "failed to register controller")
@@ -329,6 +340,14 @@ func main() {
 				setupLog.Error(err, "failed to start agent registration server")
 			}
 		}()
+	}
+
+	if enableFlightCtl {
+		err = flightctlManager.ApplyResources(ctx)
+		if err != nil {
+			setupLog.Error(err, "failed to install FlightCtl resources")
+			os.Exit(1)
+		}
 	}
 
 	if enablePprof {
