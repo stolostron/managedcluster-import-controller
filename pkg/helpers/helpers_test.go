@@ -23,6 +23,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -675,6 +676,12 @@ func TestApplyResources(t *testing.T) {
 						Name: "test_priority_class",
 					},
 				},
+				&networkingv1.NetworkPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test_network_policy",
+						Namespace: "test_network_policy",
+					},
+				},
 			},
 			owner: &clusterv1.ManagedCluster{
 				ObjectMeta: metav1.ObjectMeta{
@@ -725,6 +732,12 @@ func TestApplyResources(t *testing.T) {
 				&schedulingv1.PriorityClass{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test_priority_class",
+					},
+				},
+				&networkingv1.NetworkPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test_network_policy",
+						Namespace: "test_network_policy",
 					},
 				},
 			},
@@ -863,6 +876,19 @@ func TestApplyResources(t *testing.T) {
 					},
 					GlobalDefault: true,
 				},
+				&networkingv1.NetworkPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test_network_policy",
+						Namespace: "test_network_policy",
+					},
+					Spec: networkingv1.NetworkPolicySpec{
+						PodSelector: metav1.LabelSelector{
+							MatchLabels: map[string]string{
+								"test": "test",
+							},
+						},
+					},
+				},
 			},
 			owner: &clusterv1.ManagedCluster{
 				ObjectMeta: metav1.ObjectMeta{
@@ -912,6 +938,12 @@ func TestApplyResources(t *testing.T) {
 				&schedulingv1.PriorityClass{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test_priority_class",
+					},
+				},
+				&networkingv1.NetworkPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test_network_policy",
+						Namespace: "test_network_policy",
 					},
 				},
 			},
@@ -1024,6 +1056,12 @@ func TestApplyResources(t *testing.T) {
 				&schedulingv1.PriorityClass{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test_priority_class",
+					},
+				},
+				&networkingv1.NetworkPolicy{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test_network_policy",
+						Namespace: "test_network_policy",
 					},
 				},
 			},
