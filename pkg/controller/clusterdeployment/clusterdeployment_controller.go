@@ -14,7 +14,9 @@ import (
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
+	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -158,6 +160,11 @@ func (r *ReconcileClusterDeployment) Reconcile(
 		}
 	}
 
+	// sync the Unreachable condition to ManagedCluster
+	if err := r.syncClusterReacableCondition(ctx, managedCluster, clusterDeployment); err != nil {
+		return reconcile.Result{}, err
+	}
+
 	return result, iErr
 }
 
@@ -232,3 +239,49 @@ func (r *ReconcileClusterDeployment) removeImportFinalizer(
 		"The clusterdeployment %s finalizer %s is removed", clusterDeployment.Name, constants.ImportFinalizer)
 	return nil
 }
+
+// Sync the condition when the UnreachableCondition is changed.
+// If condition is True, sync the Unreachable condition to ManagedCluster.
+// If condition is False, remove the Unreachable condition from ManagedCluster.
+// Based on this hive condition:
+// * https://github.com/openshift/hive/blob/a428d219e9fb59937d9b7e847f8d921ffb7b59a8/apis/hive/v1/clusterdeployment_types.go#L426
+// The controller of hive that maintain the condition is:
+// * https://github.com/openshift/hive/blob/a428d219e9fb59937d9b7e847f8d921ffb7b59a8/pkg/controller/unreachable/unreachable_controller.go#L277
+func (r *ReconcileClusterDeployment) syncClusterReacableCondition(
+	ctx context.Context, managedCluster *clusterv1.ManagedCluster, clusterDeployment *hivev1.ClusterDeployment) error {
+	// Find ClusterReachable condition in ClusterDeployment
+	var cdReachableCond *hivev1.ClusterDeploymentCondition
+	for i := range clusterDeployment.Status.Conditions {
+		if clusterDeployment.Status.Conditions[i].Type == hivev1.UnreachableCondition {
+			cdReachableCond = &clusterDeployment.Status.Conditions[i]
+			break
+		}
+	}
+
+	// If no condition found, nothing to sync
+	if cdReachableCond == nil {
+		return nil
+	}
+
+	// Convert condition status from ClusterDeployment to ManagedCluster format
+	var status metav1.ConditionStatus
+	if cdReachableCond.Status == v1.ConditionTrue {
+		meta.SetStatusCondition(&managedCluster.Status.Conditions, metav1.Condition{
+			Type:    ClusterDeploymentAdminKubeConfigUnreachableConditon,
+			Status:  status,
+			Reason:  cdReachableCond.Reason,
+			Message: cdReachableCond.Message,
+		})
+		log.Info("Sync the Unreachable condition to ManagedCluster", "managedcluster", managedCluster.Name)
+	} else {
+		meta.RemoveStatusCondition(&managedCluster.Status.Conditions, ClusterDeploymentAdminKubeConfigUnreachableConditon)
+		log.Info("Remove the Unreachable condition from ManagedCluster", "managedcluster", managedCluster.Name)
+	}
+
+	// Update the managed cluster status
+	return r.client.Status().Update(ctx, managedCluster)
+}
+
+const (
+	ClusterDeploymentAdminKubeConfigUnreachableConditon = "AdminKubeConfigUnreachable"
+)
