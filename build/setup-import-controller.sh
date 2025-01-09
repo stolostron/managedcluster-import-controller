@@ -10,7 +10,7 @@ set -o nounset
 # Input: KUBECTL(kubectl or oc), OCM_VERSION, E2E_KUBECONFIG, E2E_MANAGED_KUBECONFIG, cluster_ip, cluster_context
 
 KUBECTL=${KUBECTL:-kubectl}
-OCM_VERSION=${OCM_VERSION:-main}
+OCM_VERSION=backplane-2.6
 IMPORT_CONTROLLER_IMAGE_NAME=${IMPORT_CONTROLLER_IMAGE_NAME:-managedcluster-import-controller:latest}
 
 BUILD_DIR="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
