@@ -80,7 +80,7 @@ func (r *ReconcileClusterDeployment) Reconcile(
 		return reconcile.Result{}, err
 	}
 
-	reqLogger.Info("Reconciling clusterdeployment")
+	reqLogger.V(5).Info("Reconciling clusterdeployment")
 
 	if !clusterDeployment.DeletionTimestamp.IsZero() {
 		// We do not set this finalizer anymore, but we still need to remove it for backward compatible
@@ -135,6 +135,11 @@ func (r *ReconcileClusterDeployment) Reconcile(
 	}
 	if !errors.IsNotFound(err) {
 		return reconcile.Result{}, err
+	}
+
+	if clusterDeployment.Spec.ClusterMetadata == nil {
+		reqLogger.Info("the clusterMetaData is not updated, skipped", "managedcluster", clusterName)
+		return reconcile.Result{}, nil
 	}
 
 	secretRefName := clusterDeployment.Spec.ClusterMetadata.AdminKubeconfigSecretRef.Name

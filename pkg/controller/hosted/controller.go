@@ -95,7 +95,7 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 		return reconcile.Result{}, nil
 	}
 
-	reqLogger.Info("Reconciling the manifest works of the hosted mode managed cluster")
+	reqLogger.V(5).Info("Reconciling the manifest works of the hosted mode managed cluster")
 
 	if !managedCluster.DeletionTimestamp.IsZero() {
 		return r.cleanup(ctx, managedCluster)

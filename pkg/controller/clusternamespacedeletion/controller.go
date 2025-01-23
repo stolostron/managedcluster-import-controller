@@ -70,7 +70,7 @@ func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, reque
 		return reconcile.Result{}, nil
 	}
 
-	reqLogger.Info("Reconciling the managed cluster namespace deletion")
+	reqLogger.V(5).Info("Reconciling the managed cluster namespace deletion")
 
 	managedCluster := &clusterv1.ManagedCluster{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: request.Name}, managedCluster)

@@ -77,7 +77,7 @@ func (r *ReconcileManagedCluster) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	reqLogger.Info("Reconciling the managed cluster meta object")
+	reqLogger.V(5).Info("Reconciling the managed cluster meta object")
 
 	if managedCluster.DeletionTimestamp.IsZero() {
 		if err := r.ensureManagedClusterMetaObj(ctx, managedCluster); err != nil {

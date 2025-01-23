@@ -118,7 +118,7 @@ func (r *ReconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 		return reconcile.Result{}, nil
 	}
 
-	reqLogger.Info("Reconciling CSR")
+	reqLogger.V(5).Info("Reconciling CSR")
 
 	csr = csr.DeepCopy()
 	csr.Status.Conditions = append(csr.Status.Conditions, certificatesv1.CertificateSigningRequestCondition{

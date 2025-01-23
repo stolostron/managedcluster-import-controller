@@ -403,7 +403,7 @@ func autoDetectCAData(ctx context.Context, clientHolder *helpers.ClientHolder, k
 	}
 
 	// failed to get the ca from ocp, fallback to the kube-root-ca.crt configmap from the pod namespace.
-	klog.Info(fmt.Sprintf("No ca.crt was found, fallback to the %s/kube-root-ca.crt", caNamespace))
+	klog.V(5).Info(fmt.Sprintf("No ca.crt was found, fallback to the %s/kube-root-ca.crt", caNamespace))
 	return getKubeRootCABundle(ctx, clientHolder, caNamespace)
 }
 

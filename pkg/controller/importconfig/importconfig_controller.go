@@ -52,7 +52,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	reqLogger.Info("Reconciling managed cluster")
+	reqLogger.V(5).Info("Reconciling managed cluster")
 
 	mode := helpers.DetermineKlusterletMode(managedCluster)
 	if err := helpers.ValidateKlusterletMode(mode); err != nil {
