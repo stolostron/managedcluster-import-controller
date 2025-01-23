@@ -59,6 +59,11 @@ var (
 		Version:  "v1beta1",
 		Resource: "hostedclusters",
 	}
+	capiGVR = schema.GroupVersionResource{
+		Group:    "cluster.x-k8s.io",
+		Version:  "v1beta1",
+		Resource: "clusters",
+	}
 )
 
 func Logf(format string, args ...interface{}) {
@@ -213,6 +218,22 @@ func CreateManagedClusterWithShortLeaseDuration(clusterClient clusterclient.Inte
 	}
 
 	return cluster, err
+}
+
+func CreateCapiCluster(dynamicClient dynamic.Interface, namespace, name string) error {
+	capiCluster := newCAPICluster(namespace, name)
+	capiClusterClient := dynamicClient.Resource(capiGVR).Namespace(namespace)
+	_, err := capiClusterClient.Get(context.TODO(), name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		_, err := capiClusterClient.Create(context.TODO(), capiCluster, metav1.CreateOptions{})
+		return err
+	}
+	return err
+}
+
+func DeleteCapiCluster(dynamicClient dynamic.Interface, namespace, name string) error {
+	capiClusterClient := dynamicClient.Resource(capiGVR).Namespace(namespace)
+	return capiClusterClient.Delete(context.TODO(), name, metav1.DeleteOptions{})
 }
 
 func CreateHostedCluster(dynamicClient dynamic.Interface, namespace, name string) error {
@@ -541,6 +562,20 @@ func getServerAndToken(kubeClient kubernetes.Interface, dynamicClient dynamic.In
 	}
 
 	return []byte(apiServer), tokenSecret.Data["token"], nil
+}
+
+func newCAPICluster(namespace, name string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{
+		Object: map[string]interface{}{
+			"apiVersion": "cluster.x-k8s.io/v1beta1",
+			"kind":       "Cluster",
+			"metadata": map[string]interface{}{
+				"name":      name,
+				"namespace": namespace,
+			},
+			"spec": map[string]interface{}{},
+		},
+	}
 }
 
 func newHostedCluster(namespace, name string) *unstructured.Unstructured {

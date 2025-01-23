@@ -1096,7 +1096,7 @@ func assertAgentLeaderElection() {
 		gomega.Eventually(func() error {
 			namespace := "open-cluster-management-agent"
 			agentSelector := "app=klusterlet-agent"
-			leaseName := "klusterlet-lock"
+			leaseName := "klusterlet-agent-lock"
 			// agent pod
 			pods, err := hubKubeClient.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
 				LabelSelector: agentSelector,
