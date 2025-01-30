@@ -131,6 +131,8 @@ func main() {
 		}
 	}))
 
+	fmt.Println("Starting Controller Manager")
+
 	ctx := ctrl.SetupSignalHandler()
 
 	// Get a config to talk to the kube-apiserver
