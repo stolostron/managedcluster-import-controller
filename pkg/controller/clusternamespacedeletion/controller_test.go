@@ -6,6 +6,7 @@ package clusternamespacedeletion
 import (
 	"context"
 	"fmt"
+	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"time"
 
 	"github.com/onsi/ginkgo/v2"
@@ -241,6 +242,46 @@ var _ = ginkgo.Describe("cluster namespace deletion controller", func() {
 			gomega.Expect(ns.DeletionTimestamp.IsZero()).Should(gomega.BeTrue())
 
 			err = util.DeleteClusterDeployment(hubDynamicClient, cluster.Name)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			gomega.Eventually(func() error {
+				ns, err := k8sClient.CoreV1().Namespaces().Get(context.TODO(), cluster.Name, metav1.GetOptions{})
+
+				if err == nil && !ns.DeletionTimestamp.IsZero() {
+					return nil
+				}
+
+				if errors.IsNotFound(err) {
+					return nil
+				}
+				return fmt.Errorf("namespace still exist with err: %v", err)
+			}, timeout, interval).ShouldNot(gomega.HaveOccurred())
+		})
+
+		ginkgo.It("Should not delete ns when cluster has capi clusters", func() {
+			ginkgo.By("create capi cluster")
+			err := util.CreateCapiCluster(hubDynamicClient, cluster.Name, cluster.Name)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			// Use the runtime client, the same client the controller uses, to Wait for hostedcluster to exist,
+			// otherwise this may fail occasionally
+			gomega.Eventually(func() error {
+				capiCluster := capiv1beta1.Cluster{}
+				return runtimeClient.Get(context.TODO(),
+					types.NamespacedName{Name: cluster.Name, Namespace: cluster.Name}, &capiCluster)
+			}, timeout, interval).ShouldNot(gomega.HaveOccurred())
+
+			ginkgo.By("delete cluster")
+			err = runtimeClient.Delete(context.TODO(), cluster)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			ginkgo.By("wait for 5 seconds and ns should not be deleted")
+			time.Sleep(5 * time.Second)
+			ns, err := k8sClient.CoreV1().Namespaces().Get(context.TODO(), cluster.Name, metav1.GetOptions{})
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			gomega.Expect(ns.DeletionTimestamp.IsZero()).Should(gomega.BeTrue())
+
+			err = util.DeleteCapiCluster(hubDynamicClient, cluster.Name, cluster.Name)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
 			gomega.Eventually(func() error {

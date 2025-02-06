@@ -269,6 +269,13 @@ rules:
   - get
   - list
 - apiGroups:
+  - cluster.x-k8s.io
+  resources:
+  - clusters
+  verbs:
+  - get
+  - list
+- apiGroups:
   - networking.k8s.io
   resources:
   - networkpolicies

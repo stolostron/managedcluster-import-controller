@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"testing"
 
 	"github.com/onsi/ginkgo/v2"
@@ -56,6 +57,7 @@ var _ = ginkgo.BeforeSuite(func() {
 			filepath.Join("../../../", "test", "e2e", "resources", "assisted-service"),
 			filepath.Join("../../../", "test", "e2e", "resources", "hypershift"),
 			filepath.Join("../../../", "test", "e2e", "resources", "ocm"),
+			filepath.Join("../../../", "test", "e2e", "resources", "capi"),
 		},
 	}
 
@@ -76,6 +78,7 @@ var _ = ginkgo.BeforeSuite(func() {
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	err = addonv1alpha1.AddToScheme(scheme.Scheme)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	err = capiv1beta1.AddToScheme(scheme.Scheme)
 
 	opts := ctrl.Options{
 		Scheme: scheme.Scheme,

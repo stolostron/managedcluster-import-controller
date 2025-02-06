@@ -13,17 +13,17 @@ import (
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	hyperv1beta1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
 	"github.com/openshift/library-go/pkg/operator/events"
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	clustercontroller "github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
-	clustercontroller "github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
 )
 
 var (
@@ -140,6 +140,17 @@ func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, reque
 		reqLogger.Info(fmt.Sprintf("Waiting for infra envs, there are %d infraEnvs in namespace %s",
 			len(infraEnvList.Items), ns.Name))
 		return reconcile.Result{}, nil
+	}
+
+	capiClusterList := &capiv1beta1.ClusterList{}
+	if err := r.client.List(ctx, capiClusterList, client.InNamespace(ns.Name)); err != nil &&
+		!errors.IsNotFound(err) && !strings.Contains(err.Error(), "no matches for kind") {
+		return reconcile.Result{}, err
+	}
+	if len(capiClusterList.Items) > 0 {
+		reqLogger.Info(fmt.Sprintf("Waiting for capi clusters, there are %d remaining in the namespace %s",
+			len(capiClusterList.Items), ns.Name))
+		return reconcile.Result{RequeueAfter: hostedClusterRequeuePeriod}, nil
 	}
 
 	pods := &corev1.PodList{}
