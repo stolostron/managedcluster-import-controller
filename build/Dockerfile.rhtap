@@ -8,13 +8,18 @@ ENV REMOTE_SOURCE_DIR='/remote-source'
 COPY $REMOTE_SOURCE $REMOTE_SOURCE_DIR/app/
 WORKDIR $REMOTE_SOURCE_DIR/app
 
-# This is used to fix "Error: building at STEP "RUN BUILD_OUTPUT_DIR=${REMOTE_SOURCE_DIR}/app make build": exit status 2" in konflux build
-RUN go mod vendor
-
-RUN BUILD_OUTPUT_DIR=${REMOTE_SOURCE_DIR}/app make build
+RUN go build -mod=readonly -o $REMOTE_SOURCE_DIR/app/manager ./cmd/manager
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
-RUN microdnf update -y
+LABEL \
+      name="multicluster-engine/managedcluster-import-controller-rhel9" \
+      summary="managedcluster-import-controller" \
+      description="managedcluster-import-controller" \
+      io.k8s.description="managedcluster-import-controller" \
+      io.k8s.display-name="managedcluster-import-controller" \
+      com.redhat.component="multicluster-engine-managedcluster-import-controller-container" \
+      io.openshift.tags="data,images"
+
 ENV REMOTE_SOURCE_DIR='/remote-source'
 
 ENV OPERATOR=/usr/local/bin/managedcluster-import-controller \
