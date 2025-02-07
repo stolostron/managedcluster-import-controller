@@ -92,7 +92,7 @@ func (r *ReconcileLocalCluster) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	reqLogger.Info("Reconciling self managed cluster")
+	reqLogger.V(5).Info("Reconciling self managed cluster")
 
 	// if there is an auto import secret in the managed cluster namespace, we will use the auto import secret to import
 	// the cluster

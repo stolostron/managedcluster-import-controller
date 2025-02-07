@@ -88,7 +88,7 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	reqLogger.Info("Reconciling the manifest works of the managed cluster")
+	reqLogger.V(5).Info("Reconciling the manifest works of the managed cluster")
 
 	if !managedCluster.DeletionTimestamp.IsZero() {
 		// use work client to list all works only when a managed cluster is deleting
