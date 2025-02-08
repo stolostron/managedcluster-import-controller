@@ -97,7 +97,7 @@ func (r *ReconcileImportStatus) Reconcile(ctx context.Context, request reconcile
 	}
 
 	available, err := helpers.IsManifestWorksAvailable(ctx, r.workClient, managedClusterName,
-		fmt.Sprintf("%s-%s", managedClusterName, constants.KlusterletCRDsSuffix),
+		// only check if the klusterlet is available, check the klusterlet-crd will break the no-operator mode
 		fmt.Sprintf("%s-%s", managedClusterName, constants.KlusterletSuffix))
 	if err != nil {
 		reqLogger.V(5).Info("Check klusterlet manifestworks availability failed", "error", err)
