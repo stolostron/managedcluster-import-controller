@@ -106,6 +106,8 @@ func main() {
 		}
 	}
 
+	fmt.Println("enablePprof", enablePprof)
+
 	var clusterIngressDomain string
 	var enableFlightCtl bool = false
 
