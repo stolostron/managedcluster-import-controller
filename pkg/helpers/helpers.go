@@ -980,10 +980,10 @@ func ValidateNodeSelector(nodeSelector map[string]string) error {
 	errs := []error{}
 	for key, val := range nodeSelector {
 		if errMsgs := validation.IsQualifiedName(key); len(errMsgs) != 0 {
-			errs = append(errs, fmt.Errorf(strings.Join(errMsgs, ";")))
+			errs = append(errs, fmt.Errorf("%s", strings.Join(errMsgs, ";")))
 		}
 		if errMsgs := validation.IsValidLabelValue(val); len(errMsgs) != 0 {
-			errs = append(errs, fmt.Errorf(strings.Join(errMsgs, ";")))
+			errs = append(errs, fmt.Errorf("%s", strings.Join(errMsgs, ";")))
 		}
 	}
 	return utilerrors.NewAggregate(errs)
@@ -996,7 +996,7 @@ func ValidateTolerations(tolerations []corev1.Toleration) error {
 		// validate the toleration key
 		if len(toleration.Key) > 0 {
 			if errMsgs := validation.IsQualifiedName(toleration.Key); len(errMsgs) != 0 {
-				errs = append(errs, fmt.Errorf(strings.Join(errMsgs, ";")))
+				errs = append(errs, fmt.Errorf("%s", strings.Join(errMsgs, ";")))
 			}
 		}
 
@@ -1017,7 +1017,7 @@ func ValidateTolerations(tolerations []corev1.Toleration) error {
 		// empty operator means Equal
 		case corev1.TolerationOpEqual, "":
 			if errMsgs := validation.IsValidLabelValue(toleration.Value); len(errMsgs) != 0 {
-				errs = append(errs, fmt.Errorf(strings.Join(errMsgs, ";")))
+				errs = append(errs, fmt.Errorf("%s", strings.Join(errMsgs, ";")))
 			}
 		case corev1.TolerationOpExists:
 			if len(toleration.Value) > 0 {

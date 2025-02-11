@@ -124,7 +124,11 @@ func main() {
 	pflag.Parse()
 
 	logs.InitLogs()
-	defer logs.FlushLogs()
+	exitCode := 0
+	defer func() {
+		logs.FlushLogs()
+		os.Exit(exitCode)
+	}()
 
 	ctrl.SetLogger(zap.New(func(o *zap.Options) {
 		o.Development = true
@@ -139,7 +143,8 @@ func main() {
 	cfg, err := ctrl.GetConfig()
 	if err != nil {
 		setupLog.Error(err, "failed to get kube config")
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 
 	cfg.QPS = QPS
@@ -148,37 +153,43 @@ func main() {
 	kubeClient, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		setupLog.Error(err, "failed to create kube client")
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 
 	apiExtensionsClient, err := apiextensionsclient.NewForConfig(cfg)
 	if err != nil {
 		setupLog.Error(err, "failed to create api extensions client")
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 
 	operatorClient, err := operatorclient.NewForConfig(cfg)
 	if err != nil {
 		setupLog.Error(err, "failed to create registration operator client")
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 
 	workClient, err := workclient.NewForConfig(cfg)
 	if err != nil {
 		setupLog.Error(err, "failed to create work client")
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 
 	klusterletconfigClient, err := klusterletconfigclient.NewForConfig(cfg)
 	if err != nil {
 		setupLog.Error(err, "failed to create klusterletconfig client")
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 
 	managedclusterClient, err := clusterclient.NewForConfig(cfg)
 	if err != nil {
 		setupLog.Error(err, "failed to create managedcluster client")
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 
 	importSecertInformerF := informers.NewFilteredSharedInformerFactory(
@@ -245,7 +256,8 @@ func main() {
 		},
 	); err != nil {
 		setupLog.Error(err, "failed to add indexers to klusterletconfig informer")
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 	klusterletconfigLister := klusterletconfigInformerF.Config().V1alpha1().KlusterletConfigs().Lister()
 
@@ -259,7 +271,8 @@ func main() {
 		},
 	); err != nil {
 		setupLog.Error(err, "failed to add indexers to managedcluster informer")
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 
 	// Create controller-runtime manager
@@ -274,7 +287,8 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "failed to create manager")
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 
 	clientHolder := &helpers.ClientHolder{
@@ -317,7 +331,8 @@ func main() {
 		mcRecorder,
 	); err != nil {
 		setupLog.Error(err, "failed to register controller")
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 
 	importSecertInformerF.Start(ctx.Done())
@@ -348,7 +363,8 @@ func main() {
 		err = flightctlManager.ApplyResources(ctx)
 		if err != nil {
 			setupLog.Error(err, "failed to install FlightCtl resources")
-			os.Exit(1)
+			exitCode = 1
+			return
 		}
 	}
 
@@ -372,6 +388,7 @@ func main() {
 	setupLog.Info("Starting Controller Manager")
 	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "failed to start manager")
-		os.Exit(1)
+		exitCode = 1
+		return
 	}
 }

@@ -49,9 +49,17 @@ check: check-copyright lint
 check-copyright:
 	@build/check-copyright.sh
 
+GOLANGCI_LINT_VERSION = v1.63.4
+TOOLS_DIR = $(PWD)/_output
+GOLANGCI_LINT = $(TOOLS_DIR)/golangci-lint
+
 .PHONY: lint
-lint:
-	build/run-lint-check.sh
+lint: $(GOLANGCI_LINT)
+	$(GOLANGCI_LINT) run --timeout=5m ./...
+
+$(GOLANGCI_LINT):
+	@mkdir -p $(TOOLS_DIR)
+	@curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(TOOLS_DIR) $(GOLANGCI_LINT_VERSION)
 
 ## Runs unit tests
 .PHONY: test
