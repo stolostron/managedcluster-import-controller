@@ -63,9 +63,15 @@ func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, reque
 	}
 
 	// not interested in non-cluster namespace
-	if _, ok := ns.Labels[clustercontroller.ClusterLabel]; !ok {
+	labels := ns.GetLabels()
+	// TODO: use one cluster label to filter the cluster ns.
+	// in ocm we use open-cluster-management.io/cluster-name label to filter cluster ns,
+	// but in acm we use cluster.open-cluster-management.io/managedCluster to filter cluster ns.
+	// to make sure the cluster ns can be filtered in some cases, check the 2 labels here.
+	if labels[clusterv1.ClusterNameLabelKey] == "" && labels[clustercontroller.ClusterLabel] == "" {
 		return reconcile.Result{}, nil
 	}
+
 	if !ns.DeletionTimestamp.IsZero() {
 		return reconcile.Result{}, nil
 	}
@@ -88,7 +94,8 @@ func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, reque
 			return reconcile.Result{}, nil
 		}
 
-		if len(managedCluster.Finalizers) == 0 || managedCluster.Finalizers[0] != constants.ImportFinalizer {
+		// should delete ns if there is no finalizer
+		if len(managedCluster.Finalizers) == 1 && managedCluster.Finalizers[0] != constants.ImportFinalizer {
 			// managed cluster import finalizer is missed, this should not be happened,
 			// if happened, we ask user to handle this manually
 			r.recorder.Warningf("ManagedClusterImportFinalizerMissed",
