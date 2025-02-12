@@ -95,7 +95,12 @@ func (r *ReconcileManagedCluster) Reconcile(ctx context.Context, request reconci
 		}
 
 		modified := resourcemerge.BoolPtr(false)
-		resourcemerge.MergeMap(modified, &ns.Labels, map[string]string{ClusterLabel: managedCluster.Name})
+		// TODO: use one cluster label to filter the cluster ns.
+		// in ocm we use open-cluster-management.io/cluster-name label to filter cluster ns,
+		// but in acm we use cluster.open-cluster-management.io/managedCluster to filter cluster ns.
+		// to make sure the cluster ns can be filtered in some cases, add the 2 labels to the cluster ns here.
+		resourcemerge.MergeMap(modified, &ns.Labels, map[string]string{ClusterLabel: managedCluster.Name,
+			clusterv1.ClusterNameLabelKey: managedCluster.Name})
 
 		if !*modified {
 			return reconcile.Result{}, nil
