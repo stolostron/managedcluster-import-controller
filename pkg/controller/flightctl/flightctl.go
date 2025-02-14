@@ -4,11 +4,9 @@ import (
 	"context"
 	"embed"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	flightctlclient "github.com/flightctl/flightctl/lib/api/client"
@@ -18,81 +16,132 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/wait"
+	v1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/utils/ptr"
 )
 
 const (
-	FlightCtlNamespace      = "flightctl"
-	FlightCtlInternalServer = "https://flightctl-api.flightctl.svc.cluster.local:3443"
+	FlightCtlServerServiceName = "flightctl-api"
 )
 
 //go:embed manifests
 var FlightCtlManifestFiles embed.FS
 
-// The flightctl-client's service account token has 2 usages:
-// 1. delivered to the devices, used to access the agent-registration to get klusterlet manifests used for registration.
-// 2. on the hub side, used for the import-controller to apply the flightctl's Repository resources and get devices.
+// 1. flightctl-agent-registration <-> flightctl-agent-registration: used in the flightctl Repository,
+// will be delivered to the flightctl-agent in managed cluster side.
+// 2. managedcluster-import-controller-v2 <-> flightctl-client: used for import-controller to access
+// the flightctl-api service on the hub side.
 var files = []string{
 	"manifests/clusterrole.yml",
 	"manifests/clusterrolebinding_agentregistration.yml",
 	"manifests/clusterrolebinding_flightctl.yml",
 	"manifests/serviceaccount.yml",
-	"manifests/networkpolicy.yml",
 }
 
-func NewFlightCtlManager(clientHolder *helpers.ClientHolder, clusterIngressDomain string) *FlightCtlManager {
+func NewFlightCtlManager(clientHolder *helpers.ClientHolder, serviceLister v1.ServiceLister,
+	clusterIngressDomain string, flightctlServer string) *FlightCtlManager {
 	return &FlightCtlManager{
-		flightctlClient:         &flightctlClientImpl{flightctlServer: FlightCtlInternalServer},
 		agentRegistrationServer: "https://agent-registration-multicluster-engine." + clusterIngressDomain,
 		clientHolder:            clientHolder,
 		recorder:                helpers.NewEventRecorder(clientHolder.KubeClient, "FlightCtl"),
+		serviceLister:           serviceLister,
+		flightctlServer:         flightctlServer,
+		flightctlClient:         &flightctlClientImpl{flightctlServer: flightctlServer},
 	}
 }
 
 type FlightCtlManager struct {
-	clientHolder *helpers.ClientHolder
-	recorder     events.Recorder
+	clientHolder  *helpers.ClientHolder
+	serviceLister v1.ServiceLister
+	recorder      events.Recorder
 
 	flightctlClient         flightctlClient
+	flightctlServer         string
 	agentRegistrationServer string
-
-	cachedToken string
 }
 
-func (f *FlightCtlManager) ApplyResources(ctx context.Context) error {
-	var err error
+// StartReconcileFlightCtlResources starts a loop to reconcile FlightCtl resources
+// 1. ensure the flightctl-api service is running on the hub side.
+// 2. apply the kubernetes resources.
+// 3. apply the Repository resources.
+// 4. keep reconcile the Repository resource every day to keep agent registration token fresh.
+func (f *FlightCtlManager) StartReconcileFlightCtlResources(ctx context.Context) {
+	// Helper function to apply resources and record errors
+	applyFunc := func(ctx context.Context) (bool, error) {
+		if err := f.ensureFlightCtlServer(); err != nil {
+			f.recorder.Event("FlightCtlServerFailed",
+				fmt.Sprintf("Failed to ensure FlightCtl server: %v", err))
+			return false, nil
+		}
 
-	// Apply kubernetes resources
-	err = f.applyKuberentesResources(ctx)
-	if err != nil {
-		return err
+		// Apply kubernetes resources
+		if err := f.applyKuberentesResources(ctx); err != nil {
+			f.recorder.Event("KubernetesResourcesFailed",
+				fmt.Sprintf("Failed to apply Kubernetes resources: %v", err))
+			return false, nil
+		}
+
+		// Create Repository resources
+		if err := f.applyRepository(ctx); err != nil {
+			f.recorder.Event("RepositoryFailed",
+				fmt.Sprintf("Failed to apply Repository resources: %v", err))
+			return false, nil
+		}
+
+		// Record successful sync
+		f.recorder.Event("ResourcesSynced", "Successfully synced FlightCtl resources")
+		return true, nil
 	}
 
-	// Create Repository resources
-	err = f.applyRepository(ctx)
-	if err != nil {
-		return err
+	// Poll every 5 minutes until success
+	if err := wait.PollUntilContextCancel(ctx, 5*time.Minute, true, applyFunc); err != nil {
+		f.recorder.Event("ResourcesSynced", "Failed to sync FlightCtl resources")
 	}
 
-	return nil
+	// Keep reconcile the Repository resource every day to keep agent registration token fresh.
+	wait.Until(func() {
+		if err := f.applyRepository(context.TODO()); err != nil {
+			f.recorder.Event("RepositoryFailed", fmt.Sprintf("Failed to reconcile Repository resources: %v", err))
+		}
+	}, 24*time.Hour, ctx.Done())
 }
 
-func (f *FlightCtlManager) applyKuberentesResources(ctx context.Context) error {
-	var err error
-
-	// Check if the FlightCtl namespace exists
-	_, err = f.clientHolder.KubeClient.CoreV1().Namespaces().Get(ctx, FlightCtlNamespace, metav1.GetOptions{})
-	if err != nil {
-		return err
+// If the flightctl server is not set, then:
+// 1. list all services in the cluster scope, find the one with name "flightctl-api", and set the server to the cluster IP of the service.
+// 2. if not found, return an error.
+// TODO: @xuezhaojun, this is a temporary solution, because in this release, `flightctl-server` is not pass by installer, will remove
+// this ensureFlightCtlServer() after `flightctl-server` is passed by installer.
+func (f *FlightCtlManager) ensureFlightCtlServer() error {
+	if f.flightctlServer != "" {
+		return nil
 	}
+
+	services, err := f.serviceLister.List(labels.Everything())
+	if err != nil {
+		return fmt.Errorf("failed to list services: %v", err)
+	}
+
+	for _, service := range services {
+		if service.Name == FlightCtlServerServiceName {
+			f.flightctlServer = fmt.Sprintf("https://%s.%s.svc:3443", FlightCtlServerServiceName, service.Namespace)
+			f.flightctlClient = &flightctlClientImpl{flightctlServer: f.flightctlServer}
+			return nil
+		}
+	}
+
+	return fmt.Errorf("flightctl-api service not found")
+}
+
+func (f *FlightCtlManager) applyKuberentesResources(_ context.Context) error {
+	var err error
 
 	// Create rbac resources and set owner reference to the ns.
 	objects, err := helpers.FilesToObjects(files, struct {
-		Namespace    string
-		PodNamespace string
+		Namespace string
 	}{
-		Namespace:    FlightCtlNamespace,
-		PodNamespace: os.Getenv("POD_NAMESPACE"),
+		Namespace: os.Getenv("POD_NAMESPACE"),
 	}, &FlightCtlManifestFiles)
 	if err != nil {
 		return err
@@ -106,7 +155,12 @@ func (f *FlightCtlManager) applyKuberentesResources(ctx context.Context) error {
 }
 
 func (f *FlightCtlManager) applyRepository(ctx context.Context) error {
-	token, err := f.getFlightCtlClientServiceAccountToken(ctx)
+	flightctlClientToken, err := f.getFlightCtlClientToken()
+	if err != nil {
+		return err
+	}
+
+	agentRegistrationToken, err := f.getFlightCtlAgentRegistrationServiceAccountToken(ctx)
 	if err != nil {
 		return err
 	}
@@ -130,7 +184,7 @@ func (f *FlightCtlManager) applyRepository(ctx context.Context) error {
 		Type: flightctlapiv1.Http,
 		Url:  f.agentRegistrationServer,
 		HttpConfig: flightctlapiv1.HttpConfig{
-			Token: &token,
+			Token: &agentRegistrationToken,
 			CaCrt: &ca,
 		},
 		ValidationSuffix: ptr.To("/agent-registration"),
@@ -139,16 +193,16 @@ func (f *FlightCtlManager) applyRepository(ctx context.Context) error {
 		return err
 	}
 
-	return f.flightctlClient.ApplyRepository(ctx, token, expectedRepository)
+	return f.flightctlClient.ApplyRepository(ctx, flightctlClientToken, expectedRepository)
 }
 
 func (f *FlightCtlManager) IsManagedClusterAFlightctlDevice(ctx context.Context, managedClusterName string) (bool, error) {
-	token, err := f.getFlightCtlClientServiceAccountToken(ctx)
+	flightctlClientToken, err := f.getFlightCtlClientToken()
 	if err != nil {
 		return false, err
 	}
 
-	response, err := f.flightctlClient.GetDevice(ctx, token, managedClusterName)
+	response, err := f.flightctlClient.GetDevice(ctx, flightctlClientToken, managedClusterName)
 	if err != nil {
 		return false, err
 	}
@@ -164,16 +218,9 @@ func (f *FlightCtlManager) IsManagedClusterAFlightctlDevice(ctx context.Context,
 	return true, nil
 }
 
-func (f *FlightCtlManager) getFlightCtlClientServiceAccountToken(ctx context.Context) (string, error) {
-	if f.cachedToken != "" {
-		// check if the cached token is close to expire, use 7 days as the threshold
-		if closeToExpire, err := tokenCloseToExpire(f.cachedToken, 7*24*time.Hour); err != nil {
-			return "", err
-		} else if !closeToExpire { // if not close to expire, return the cached token
-			return f.cachedToken, nil
-		}
-	}
-
+// getFlightCtlAgentRegistrationServiceAccountToken creates a token for the flightctl-agent-registration service account.
+// The token duration is set to 10 days to prevent flightctl-agent from holding a long-term credential.
+func (f *FlightCtlManager) getFlightCtlAgentRegistrationServiceAccountToken(ctx context.Context) (string, error) {
 	// Create token request for the service account
 	tokenRequest := &authenticationv1.TokenRequest{
 		Spec: authenticationv1.TokenRequestSpec{
@@ -182,14 +229,22 @@ func (f *FlightCtlManager) getFlightCtlClientServiceAccountToken(ctx context.Con
 	}
 
 	// Get the token using TokenRequest API
-	tokenResponse, err := f.clientHolder.KubeClient.CoreV1().ServiceAccounts(FlightCtlNamespace).
-		CreateToken(ctx, "flightctl-client", tokenRequest, metav1.CreateOptions{})
+	tokenResponse, err := f.clientHolder.KubeClient.CoreV1().ServiceAccounts(os.Getenv("POD_NAMESPACE")).
+		CreateToken(ctx, "flightctl-agent-registration", tokenRequest, metav1.CreateOptions{})
 	if err != nil {
 		return "", fmt.Errorf("failed to create token: %v", err)
 	}
 
-	f.cachedToken = tokenResponse.Status.Token
-	return f.cachedToken, nil
+	return tokenResponse.Status.Token, nil
+}
+
+// The token is mounted from the service account in the pod.
+func (f *FlightCtlManager) getFlightCtlClientToken() (string, error) {
+	tokenData, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")
+	if err != nil {
+		return "", fmt.Errorf("failed to read service account token: %v", err)
+	}
+	return string(tokenData), nil
 }
 
 // TODO: @xuezhaojun need to consider cases like: https proxy in the middle, route using system CA cert instead of OCP self-signed cert, etc.
@@ -201,33 +256,6 @@ func (f *FlightCtlManager) getAgentRegistrationCA() (string, error) {
 	}
 
 	return base64.StdEncoding.EncodeToString(caData), nil
-}
-
-func tokenCloseToExpire(token string, timeDuration time.Duration) (bool, error) {
-	// Split the token into parts
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return false, fmt.Errorf("invalid token format")
-	}
-
-	// Decode the claims (second part of the token)
-	claimBytes, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return false, fmt.Errorf("failed to decode token claims: %v", err)
-	}
-
-	// Parse the claims
-	var claims struct {
-		Exp int64 `json:"exp"`
-	}
-	if err := json.Unmarshal(claimBytes, &claims); err != nil {
-		return false, fmt.Errorf("failed to parse token claims: %v", err)
-	}
-
-	// Check if token will expire within the given duration
-	expirationTime := time.Unix(claims.Exp, 0)
-	timeUntilExpiration := time.Until(expirationTime)
-	return timeUntilExpiration <= timeDuration, nil
 }
 
 type flightctlClient interface {

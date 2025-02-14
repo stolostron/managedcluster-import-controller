@@ -276,14 +276,6 @@ rules:
   - get
   - list
 - apiGroups:
-  - networking.k8s.io
-  resources:
-  - networkpolicies
-  verbs:
-  - create
-  - get
-  - update
-- apiGroups:
   - register.open-cluster-management.io
   resources:
   - managedclusters/accept
