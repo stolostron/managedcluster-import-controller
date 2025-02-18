@@ -1,37 +1,109 @@
 [comment]: # ( Copyright Contributors to the Open Cluster Management project )
 
-<!--
-    Auto-import not supported 
--->
 # Auto importing of a ClusterAPI provisioned cluster
 
 ## Prereq
 
-### Creating a ClusterAPI Cluster
+These are one time configurations.
 
-- For information about how to create clusters swith ClusterAPI `https://www.ibm.com/support/knowledgecenter/SSFC4F_1.2.0/mcm/manage_cluster/create_gui.html`
+### Enable the ClusterImporter feature gates on the ClusterManager
 
-### Creating a Multicloud KlusterletConfig for the cluster you are importing
+```yaml
+apiVersion: operator.open-cluster-management.io/v1
+kind: ClusterManager
+metadata:
+  name: cluster-manager
+spec:
+  registrationConfiguration:
+    featureGates:
+    - feature: ClusterImporter
+      mode: Enable
+    - feature: ManagedClusterAutoApproval
+      mode: Enable
+    autoApproveUsers:
+    - system:serviceaccount:multicluster-engine:agent-registration-bootstrap
+```
+run `kubectl apply -f` to apply the above yaml content to ClusterManager.
 
-- Example of KlusterletConfig resource refer to test/resources/test_klusterlet_config.yaml
-- Refer to apis/agent/v1beta1/klusterletconfig_types.go and apis/multicloud/v1beta1/endpoint_types.go for API definition
-- `ClusterName` and `ClusterNamespace` of KlusterletConfig must match the ClusterAPI Cluster `Name` and `Namespace`.
+### Bind the CAPI manager permission to the import controller
 
-## ClusterController actions
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: cluster-manager-registration-capi
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: capi-operator-manager-role
+subjects:
+- kind: ServiceAccount
+  name: registration-controller-sa
+  namespace: open-cluster-management-hub
+```
+run `kubectl apply -f` to apply the above yaml content to create the clusterrolebinding.
 
-### (external) ClusterAPI Controller
 
-- ClusterAPI controller will start the provision process.
-- Once the cluster provision process is complete the ClusterAPI controller will generate a secret that contains the KUBECONFIG for the newly provisioned cluster
-- The KUBECONFIG secret will contain the label: `purpose: import-cluster`
+## Create cluster-info configmap
 
-### KlusterletConfig Controller
+- Get the CA bundle from the hub cluster
+```shell
+kubectl get cm -n kube-public kube-root-ca.crt -o yaml | yq '.data."ca.crt"' | base64
+```
+- build the configmap
+```shell
+apiVersion: v1
+data:
+  kubeconfig: |
+    apiVersion: v1
+    clusters:
+    - cluster:
+        server: {APIServer address}
+        certificate-authority-data: {CA data obtained from the last step}
+        name: ""
+    contexts: null
+    current-context: ""
+    kind: Config
+    preferences: {}
+    users: null
+kind: ConfigMap
+metadata:
+  name: cluster-info
+  namespace: kube-public
+```
+- create the configmap on the hub cluster.
+```shell
+kubectl apply -f cm.yaml
+```
 
-- KlusterletConfig creation triggers `Reconcile()` in `pkg/controllers/klusterletconfig/klusterletconfig_controller.go`.
-- Controller will use information in KlusterletConfig to generate a secret named `{cluster-name}-import`.
-- The `{cluster-name}-import` secret contains the import.yaml that the will be apply to the managed cluster to install klusterlet.
+## Create the CAPI cluster and the managedCluster
 
-### AutoImport Controller
+The name of the managedcluster MUST be the same as CAPI cluster's name and namespace. e.g.
 
-- Secret with `purpose: import-cluster` label will trigger the `Reconcile()` in `pkg/controller/autoimport/import_controller.go`
-- The controller will use the import KUBECONFIG secret and the import manifest to run `kubectl apply` on the target cluster to install klusterlet.
+```yaml
+kind: Cluster
+metadata:
+  name: capi-rosa-cluster
+  namespace: capi-rosa-cluster
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks:
+      - 192.168.0.0/16
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+    kind: ROSAControlPlane
+    name: capi-rosa-cluster-control-plane
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
+    kind: ROSACluster
+    name: capi-rosa-cluster
+---
+apiVersion: cluster.open-cluster-management.io/v1
+kind: ManagedCluster
+metadata:
+  name: capi-rosa-cluster
+spec:
+  hubAcceptsClient: true
+```
+The managedCluster will be auto-imported when the CAPI cluster is provisioned.
