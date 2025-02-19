@@ -8,5 +8,5 @@ roleRef:
   name: managedcluster-import-controller-agent-registration-client
 subjects:
 - kind: ServiceAccount
-  name: flightctl-client
+  name: flightctl-agent-registration
   namespace: "{{ .Namespace }}"

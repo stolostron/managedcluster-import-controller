@@ -108,9 +108,10 @@ func main() {
 
 	var clusterIngressDomain string
 	var enableFlightCtl bool = false
-
+	var flightctlServer string
 	pflag.StringVar(&clusterIngressDomain, "cluster-ingress-domain", "", "the ingress domain of the cluster")
 	pflag.BoolVar(&enableFlightCtl, "enable-flightctl", false, "enable flightctl")
+	pflag.StringVar(&flightctlServer, "flightctl-server", "", "the server address of the flightctl")
 
 	pflag.StringVar(&leaderElectionNamespace, "leader-election-namespace", "", "required when the process is not running in cluster")
 	pflag.BoolVar(&helpers.DeployOnOCP, "deploy-on-ocp", true, "used to deploy the controller on OCP or not")
@@ -306,7 +307,16 @@ func main() {
 	mcRecorder := helpers.NewManagedClusterEventRecorder(ctx, clientHolder.KubeClient)
 
 	// Init flightctlManager
-	flightctlManager := flightctl.NewFlightCtlManager(clientHolder, clusterIngressDomain)
+	serviceInformerF := informers.NewFilteredSharedInformerFactory(
+		kubeClient,
+		10*time.Minute,
+		metav1.NamespaceAll, func(listOptions *metav1.ListOptions) {
+			listOptions.FieldSelector = fields.OneTermEqualSelector("metadata.name",
+				flightctl.FlightCtlServerServiceName).String()
+		},
+	)
+	serviceLister := serviceInformerF.Core().V1().Services().Lister()
+	flightctlManager := flightctl.NewFlightCtlManager(clientHolder, serviceLister, clusterIngressDomain, flightctlServer)
 
 	setupLog.Info("Registering Controllers")
 	if err := controller.AddToManager(
@@ -341,7 +351,7 @@ func main() {
 	hostedWorksInformerF.Start(ctx.Done())
 	klusterletconfigInformerF.Start(ctx.Done())
 	managedclusterInformerF.Start(ctx.Done())
-
+	serviceInformerF.Start(ctx.Done())
 	importSecertInformerF.WaitForCacheSync(ctx.Done())
 	autoimportSecretInformerF.WaitForCacheSync(ctx.Done())
 	klusterletWorksInformerF.WaitForCacheSync(ctx.Done())
@@ -360,12 +370,7 @@ func main() {
 	}
 
 	if enableFlightCtl {
-		err = flightctlManager.ApplyResources(ctx)
-		if err != nil {
-			setupLog.Error(err, "failed to install FlightCtl resources")
-			exitCode = 1
-			return
-		}
+		go flightctlManager.StartReconcileFlightCtlResources(ctx)
 	}
 
 	if enablePprof {
