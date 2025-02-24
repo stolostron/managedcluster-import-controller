@@ -6,6 +6,7 @@ package managedcluster
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
@@ -140,9 +141,23 @@ func (r *ReconcileManagedCluster) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, nil
 	}
 
-	// managed cluster is deleting, remove all addons
-	if err = r.deleteManagedClusterAddon(ctx, managedCluster); err != nil {
+	// managedCluster is deleting here.
+	// all manifestWorks in the cluster ns should be deleted since the api-resource-cleanup finalizer is removed.
+	// normally the addons should have been deleted too here.
+	// and we should wait all addon are deleted before remove the last finalizer from the cluster,
+	// because there is a case that the addon for the hosted cluster has finalizer hosting-manifests-cleanup/hosting-addon-pre-delete
+	// the addon-framework will not remove the finalizer from the addon for the hosted cluster when the cluster is not found.
+	addons, err := helpers.ListManagedClusterAddons(ctx, r.client, managedCluster.Name)
+	if err != nil {
 		return reconcile.Result{}, err
+	}
+	if len(addons.Items) != 0 {
+		// for safety force delete remained addon again here.
+		if err = r.deleteManagedClusterAddon(ctx, managedCluster); err != nil {
+			return reconcile.Result{}, err
+		}
+
+		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
 	}
 
 	return reconcile.Result{}, helpers.RemoveManagedClusterFinalizer(ctx, r.client, r.recorder, managedCluster, constants.ImportFinalizer)
