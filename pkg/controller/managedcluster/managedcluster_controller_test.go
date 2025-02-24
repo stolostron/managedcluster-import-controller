@@ -240,6 +240,35 @@ func TestReconcile(t *testing.T) {
 				if err := runtimeClient.Get(context.TODO(), types.NamespacedName{Namespace: "test", Name: "test"}, addon); !errors.IsNotFound(err) {
 					t.Errorf("unexpected not found, but failed, %v, addon: %v", err, addon)
 				}
+
+				managedCluster := &clusterv1.ManagedCluster{}
+				if err := runtimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, managedCluster); err != nil {
+					t.Errorf("unexpected error, but failed, %v", err)
+				}
+			},
+		},
+		{
+			name: "managed clusters is deleting, no addon in the ns",
+			startObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "test",
+						Finalizers:        []string{constants.ImportFinalizer},
+						DeletionTimestamp: &now,
+					},
+				},
+			},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, runtimeClient client.Client) {
+				managedCluster := &clusterv1.ManagedCluster{}
+				if err := runtimeClient.Get(context.TODO(), types.NamespacedName{Name: "test"}, managedCluster); !errors.IsNotFound(err) {
+					t.Errorf("expected not found, but failed, %v", managedCluster)
+				}
+
 			},
 		},
 	}
