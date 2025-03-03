@@ -44,6 +44,10 @@ func Add(ctx context.Context,
 				DeleteFunc:  func(e event.DeleteEvent) bool { return true },
 				CreateFunc:  func(e event.CreateEvent) bool { return true },
 				UpdateFunc: func(e event.UpdateEvent) bool {
+					// prevent losing the event when cluster is deleting
+					if !e.ObjectNew.GetDeletionTimestamp().IsZero() {
+						return true
+					}
 					// only handle the finalizers/labels/annotations changes
 					return !equality.Semantic.DeepEqual(e.ObjectOld.GetFinalizers(), e.ObjectNew.GetFinalizers()) ||
 						!equality.Semantic.DeepEqual(e.ObjectOld.GetLabels(), e.ObjectNew.GetLabels()) ||
