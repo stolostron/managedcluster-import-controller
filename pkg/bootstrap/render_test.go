@@ -653,9 +653,9 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				},
 			}),
 			validateFunc: func(t *testing.T, objs []runtime.Object) {
-				// 12 objects for klusterlet manifests, 3 objects for bootstrap kubeconfig secrets
-				if len(objs) != 12 {
-					t.Fatalf("Expected 12 objects, but got %d", len(objs))
+				// 11 objects for klusterlet manifests, 2 objects for bootstrap kubeconfig secrets
+				if len(objs) != 11 {
+					t.Fatalf("Expected 11 objects, but got %d", len(objs))
 				}
 
 				// validate bootstrapkubeconfig secrets
@@ -681,16 +681,8 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 					t.Fatalf("the bootstrapkubeconfig-hub2 kubeconfig is not fake-kubeconfig")
 				}
 
-				bootstrapkubeconfighub1current, ok := objs[9].(*corev1.Secret)
-				if !ok {
-					t.Fatal("the bootstrap-hub-kubeconfig-current-hub is not secret")
-				}
-				if bootstrapkubeconfighub1current.Name != "bootstrap-hub-kubeconfig-current-hub" {
-					t.Fatalf("the bootstrap-hub-kubeconfig-current-hub name is not bootstrap-hub-kubeconfig-current-hub")
-				}
-
 				// klusterlet should have MultipleHubs featuregate enabled, and also bootstrapkubeconfigs configured
-				klusterlet, ok := objs[10].(*operatorv1.Klusterlet)
+				klusterlet, ok := objs[9].(*operatorv1.Klusterlet)
 				if !ok {
 					t.Fatal("the klusterlet is not klusterlet")
 				}

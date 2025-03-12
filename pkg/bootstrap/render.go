@@ -363,13 +363,6 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 		if err != nil {
 			return nil, err
 		}
-		// add default bootstrap kubeconfig secret into the list:
-		// TODO: deduplicate the bootstrap kubeconfig secrets @xuezhaojun
-		bootstrapKubeConfigSecrets = append(bootstrapKubeConfigSecrets, BootstrapKubeConfigSecret{
-			Name:       constants.DefaultBootstrapHubKubeConfigSecretName + "-current-hub",
-			KubeConfig: base64.StdEncoding.EncodeToString(b.BootstrapKubeconfig),
-		})
-
 		renderConfig.MultipleHubsEnabled = true
 		renderConfig.BootstrapKubeConfigSecrets = bootstrapKubeConfigSecrets
 	}
