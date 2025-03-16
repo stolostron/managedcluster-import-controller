@@ -6,7 +6,7 @@ go 1.23.0
 replace github.com/flightctl/flightctl/lib => github.com/xuezhaojun/flightctl/lib v0.0.0-20241125124411-7eec33f53a61
 
 require (
-	github.com/flightctl/flightctl/lib v0.0.0
+	github.com/flightctl/flightctl/lib v0.5.0
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-logr/logr v1.4.2
 	github.com/google/go-cmp v0.6.0
