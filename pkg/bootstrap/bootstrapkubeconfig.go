@@ -228,15 +228,8 @@ func GetKubeAPIServerAddress(ctx context.Context, client client.Client,
 		return klusterletConfig.Spec.HubKubeAPIServerConfig.URL, nil
 	}
 
-	// TODO: DEPRECATE the following code and only use the HubKubeAPIServerConfig in the future
-	// use the custom hub Kube APIServer URL if specified
-	if klusterletConfig != nil && klusterletConfig.Spec.HubKubeAPIServerConfig == nil &&
-		len(klusterletConfig.Spec.HubKubeAPIServerURL) > 0 {
-		return klusterletConfig.Spec.HubKubeAPIServerURL, nil
-	}
-
 	if !helpers.DeployOnOCP {
-		return "", fmt.Errorf("failed get Hub kube apiserver on non-OCP cluster")
+		return "", fmt.Errorf("failed to get Hub kube apiserver on non-OCP cluster: HubKubeAPIServerConfig.URL must be specified")
 	}
 
 	infraConfig := &ocinfrav1.Infrastructure{}
@@ -245,8 +238,8 @@ func GetKubeAPIServerAddress(ctx context.Context, client client.Client,
 		return infraConfig.Status.APIServerURL, nil
 	}
 	if helpers.ResourceIsNotFound(err) {
-		return "", fmt.Errorf("cannot get kubeAPIServer URL since the Infrastructure is not found, please use" +
-			"klusterletConfig to set the hub kubeAPIServer URL")
+		return "", fmt.Errorf("cannot get kubeAPIServer URL since the Infrastructure is not found, please use " +
+			"klusterletConfig.spec.hubKubeAPIServerConfig.url to set the hub kubeAPIServer URL")
 	}
 
 	return "", err
@@ -295,13 +288,6 @@ func getKubeAPIServerCAData(ctx context.Context, clientHolder *helpers.ClientHol
 	if klusterletConfig != nil && klusterletConfig.Spec.HubKubeAPIServerConfig != nil {
 		return getKubeAPIServerCADataFromConfig(ctx, clientHolder, kubeAPIServer, caNamespace,
 			klusterletConfig.Spec.HubKubeAPIServerConfig)
-	}
-
-	// TODO: DEPRECATE the following code and only use the HubKubeAPIServerConfig in the future
-	// use the custom hub Kube APIServer CA bundle if specified
-	if klusterletConfig != nil && klusterletConfig.Spec.HubKubeAPIServerConfig == nil &&
-		len(klusterletConfig.Spec.HubKubeAPIServerCABundle) > 0 {
-		return klusterletConfig.Spec.HubKubeAPIServerCABundle, nil
 	}
 
 	return autoDetectCAData(ctx, clientHolder, kubeAPIServer, caNamespace)
