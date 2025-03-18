@@ -178,14 +178,11 @@ func RequestSAToken(ctx context.Context, kubeClient kubernetes.Interface, saName
 	return []byte(tokenRequest.Status.Token), tokenCreation, expiration, nil
 }
 
-// GetBootstrapToken lists the secrets from the managed cluster namespace to look for the managed cluster
-// bootstrap token firstly (compatibility with the ocp that version is less than 4.11), if there is no
-// token found, uses tokenrequest to request token.
-func GetBootstrapToken(ctx context.Context, kubeClient kubernetes.Interface,
-	saName, secretNamespace string, tokenExpirationSeconds int64) ([]byte, []byte, []byte, error) {
+// findExistingBootstrapToken searches for an existing bootstrap token in the secrets
+func findExistingBootstrapToken(ctx context.Context, kubeClient kubernetes.Interface, saName, secretNamespace string) ([]byte, error) {
 	secrets, err := kubeClient.CoreV1().Secrets(secretNamespace).List(ctx, metav1.ListOptions{})
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, err
 	}
 
 	for _, secret := range secrets.Items {
@@ -214,6 +211,23 @@ func GetBootstrapToken(ctx context.Context, kubeClient kubernetes.Interface,
 			continue
 		}
 
+		return token, nil
+	}
+
+	return nil, nil
+}
+
+// GetBootstrapToken lists the secrets from the managed cluster namespace to look for the managed cluster
+// bootstrap token firstly (compatibility with the ocp that version is less than 4.11), if there is no
+// token found, uses tokenrequest to request token.
+func GetBootstrapToken(ctx context.Context, kubeClient kubernetes.Interface,
+	saName, secretNamespace string, tokenExpirationSeconds int64) ([]byte, []byte, []byte, error) {
+
+	token, err := findExistingBootstrapToken(ctx, kubeClient, saName, secretNamespace)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	if token != nil {
 		return token, nil, nil, nil
 	}
 
