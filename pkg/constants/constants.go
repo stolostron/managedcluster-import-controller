@@ -11,6 +11,7 @@ import (
 
 const YamlSperator = "\n---\n"
 
+// AutoImport related constants
 /* #nosec */
 const AutoImportSecretName string = "auto-import-secret"
 
@@ -28,6 +29,29 @@ const (
 
 	// LabelAutoImportRestore is the label key of auto import secret used for backup restore case
 	LabelAutoImportRestore = "cluster.open-cluster-management.io/restore-auto-import-secret"
+
+	// AutoImport secret types and keys
+	AutoImportSecretKubeConfig    corev1.SecretType = "auto-import/kubeconfig" // #nosec G101
+	AutoImportSecretKubeConfigKey string            = "kubeconfig"             // #nosec G101
+
+	AutoImportSecretKubeToken     corev1.SecretType = "auto-import/kubetoken" // #nosec G101
+	AutoImportSecretKubeServerKey string            = "server"
+	AutoImportSecretKubeTokenKey  string            = "token"
+
+	AutoImportSecretRosaConfig                corev1.SecretType = "auto-import/rosa"
+	AutoImportSecretRosaConfigAPIURLKey       string            = "api_url"
+	AutoImportSecretRosaConfigAPITokenKey     string            = "api_token"
+	AutoImportSecretRosaConfigTokenURLKey     string            = "token_url"
+	AutoImportSecretRosaConfigClusterIDKey    string            = "cluster_id"
+	AutoImportSecretRosaConfigClientIDKey     string            = "client_id"
+	AutoImportSecretRosaConfigClientSecretKey string            = "client_secret"
+	AutoImportSecretRosaConfigRetryTimesKey   string            = "retry_times"
+	AutoImportSecretRosaConfigAuthMethodKey   string            = "auth_method"
+	// The definitions of the auth methods follow the same approach as in discovery:
+	// https://github.com/stolostron/discovery/blob/13cb209687bf963b58232eb96b25cf0d20d111ec/controllers/discoveryconfig_controller.go#L251
+	// TODO: @xuezhaojun, in long term, the offline-token should be removed, and only use service-account, see more details in Jira 10404.
+	AutoImportSecretRosaConfigAuthMethodOfflineToken   string = "offline-token"
+	AutoImportSecretRosaConfigAuthMethodServiceAccount string = "service-account"
 )
 
 /* #nosec */
@@ -144,31 +168,6 @@ const (
 
 	EventReasonManagedClusterDetaching      = "Detaching"
 	EventReasonManagedClusterForceDetaching = "ForceDetaching"
-)
-
-/* #nosec */
-const (
-	AutoImportSecretKubeConfig    corev1.SecretType = "auto-import/kubeconfig" // #nosec G101
-	AutoImportSecretKubeConfigKey string            = "kubeconfig"             // #nosec G101
-
-	AutoImportSecretKubeToken     corev1.SecretType = "auto-import/kubetoken" // #nosec G101
-	AutoImportSecretKubeServerKey string            = "server"
-	AutoImportSecretKubeTokenKey  string            = "token"
-
-	AutoImportSecretRosaConfig                corev1.SecretType = "auto-import/rosa"
-	AutoImportSecretRosaConfigAPIURLKey       string            = "api_url"
-	AutoImportSecretRosaConfigAPITokenKey     string            = "api_token"
-	AutoImportSecretRosaConfigTokenURLKey     string            = "token_url"
-	AutoImportSecretRosaConfigClusterIDKey    string            = "cluster_id"
-	AutoImportSecretRosaConfigClientIDKey     string            = "client_id"
-	AutoImportSecretRosaConfigClientSecretKey string            = "client_secret"
-	AutoImportSecretRosaConfigRetryTimesKey   string            = "retry_times"
-	AutoImportSecretRosaConfigAuthMethodKey   string            = "auth_method"
-	// The definitions of the auth methods follow the same approach as in discovery:
-	// https://github.com/stolostron/discovery/blob/13cb209687bf963b58232eb96b25cf0d20d111ec/controllers/discoveryconfig_controller.go#L251
-	// TODO: @xuezhaojun, in long term, the offline-token should be removed, and only use service-account, see more details in Jira 10404.
-	AutoImportSecretRosaConfigAuthMethodOfflineToken   string = "offline-token"
-	AutoImportSecretRosaConfigAuthMethodServiceAccount string = "service-account"
 )
 
 const (
