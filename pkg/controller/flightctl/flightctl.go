@@ -102,7 +102,7 @@ func (f *FlightCtlManager) StartReconcileFlightCtlResources(ctx context.Context)
 
 	// Keep reconcile the Repository resource every day to keep agent registration token fresh.
 	wait.Until(func() {
-		if err := f.applyRepository(context.TODO()); err != nil {
+		if err := f.applyRepository(ctx); err != nil {
 			f.recorder.Event("RepositoryFailed", fmt.Sprintf("Failed to reconcile Repository resources: %v", err))
 		}
 	}, 24*time.Hour, ctx.Done())
