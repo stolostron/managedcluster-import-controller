@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
-	"reflect"
 	"strings"
 
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
@@ -564,42 +563,53 @@ func GetProxySettings(klusterletConfig *klusterletconfigv1alpha1.KlusterletConfi
 	return "", nil
 }
 
+// removeDuplicateCertificates removes duplicate certificates from a slice of certificates
+// by comparing their raw data
+func removeDuplicateCertificates(certs []*x509.Certificate) []*x509.Certificate {
+	seen := make(map[string]bool)
+	var unique []*x509.Certificate
+
+	for _, cert := range certs {
+		// Use the raw certificate data as a key to detect duplicates
+		key := string(cert.Raw)
+		if !seen[key] {
+			seen[key] = true
+			unique = append(unique, cert)
+		}
+	}
+
+	return unique
+}
+
 func mergeCertificateData(caBundles ...[]byte) ([]byte, error) {
-	var all []*x509.Certificate
+	// Parse and collect all certificates
+	var allCerts []*x509.Certificate
 	for _, caBundle := range caBundles {
 		if len(caBundle) == 0 {
 			continue
 		}
 		certs, err := certutil.ParseCertsPEM(caBundle)
 		if err != nil {
-			return []byte{}, err
+			return nil, fmt.Errorf("failed to parse certificate bundle: %w", err)
 		}
-		all = append(all, certs...)
+		allCerts = append(allCerts, certs...)
 	}
 
-	// remove duplicated cert
-	var merged []*x509.Certificate
-	for i := range all {
-		found := false
-		for j := range merged {
-			if reflect.DeepEqual(all[i].Raw, merged[j].Raw) {
-				found = true
-				break
-			}
-		}
-		if !found {
-			merged = append(merged, all[i])
+	// Remove duplicate certificates
+	uniqueCerts := removeDuplicateCertificates(allCerts)
+
+	// Encode the unique certificates
+	var buffer bytes.Buffer
+	for _, cert := range uniqueCerts {
+		if err := pem.Encode(&buffer, &pem.Block{
+			Type:  "CERTIFICATE",
+			Bytes: cert.Raw,
+		}); err != nil {
+			return nil, fmt.Errorf("failed to encode certificate: %w", err)
 		}
 	}
 
-	// encode the merged certificates
-	b := bytes.Buffer{}
-	for _, cert := range merged {
-		if err := pem.Encode(&b, &pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}); err != nil {
-			return []byte{}, err
-		}
-	}
-	return b.Bytes(), nil
+	return buffer.Bytes(), nil
 }
 
 // ValidateBootstrapKubeconfig validates the bootstrap kubeconfig data by checking for changes in:
