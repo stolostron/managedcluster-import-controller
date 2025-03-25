@@ -135,7 +135,7 @@ func defaultApplyResourcesFunc(backupRestore bool, client *ClientHolder,
 
 // Import uses the managedClusterKubeClientSecret to generate a managed cluster client,
 // then use this client to import the managed cluster, return managed cluster import condition
-// when finished apply
+// when finished apply. If totalRetry is -1, there is no retry limit.
 func (i *ImportHelper) Import(backupRestore bool, cluster *clusterv1.ManagedCluster,
 	managedClusterKubeClientSecret *corev1.Secret, lastRetry, totalRetry int) (
 	reconcile.Result, metav1.Condition, bool, int, error) {
@@ -234,6 +234,12 @@ func (i *ImportHelper) Import(backupRestore bool, cluster *clusterv1.ManagedClus
 			fmt.Sprintf("Try to import managed cluster, retry times: %d/%d, error: %v",
 				currentRetry, totalRetry, err),
 		)
+
+		if totalRetry == -1 {
+			condition.Message = fmt.Sprintf("Try to import managed cluster, retry times: %d, error: %v",
+				currentRetry, err)
+			return reconcile.Result{}, condition, modified, currentRetry, err
+		}
 
 		if ContainAuthError(err) {
 			// return message reflects the auto import secret is invalid, so the user knows that
