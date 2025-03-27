@@ -25,7 +25,7 @@ export XDG_CACHE_HOME="${cache_dir}"
 
 export KUBEBUILDER_ASSETS="${repo_dir}/_output/kubebuilder/bin"
 
-k8s_version="1.23.1"
+k8s_version="1.30.0"
 kubebuilder="kubebuilder-tools-${k8s_version}-${GOHOSTOS}-${GOHOSTARCH}.tar.gz"
 kubebuilder_path="${repo_dir}/_output/${kubebuilder}"
 
