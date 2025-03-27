@@ -81,41 +81,51 @@ func (r *ReconcileManagedCluster) Reconcile(ctx context.Context, request reconci
 	reqLogger.V(5).Info("Reconciling the managed cluster meta object")
 
 	if managedCluster.DeletionTimestamp.IsZero() {
-		if err := r.ensureManagedClusterMetaObj(ctx, managedCluster); err != nil {
-			return reconcile.Result{}, err
-		}
+		return r.reconcileNonDeletingCluster(ctx, managedCluster)
+	}
 
-		// set cluster label on the managed cluster namespace
-		ns := &corev1.Namespace{}
-		err := r.client.Get(ctx, types.NamespacedName{Name: managedCluster.Name}, ns)
-		if errors.IsNotFound(err) {
-			return reconcile.Result{}, nil
-		}
-		if err != nil {
-			return reconcile.Result{}, err
-		}
+	return r.reconcileDeletingCluster(ctx, managedCluster)
+}
 
-		modified := resourcemerge.BoolPtr(false)
-		// TODO: use one cluster label to filter the cluster ns.
-		// in ocm we use open-cluster-management.io/cluster-name label to filter cluster ns,
-		// but in acm we use cluster.open-cluster-management.io/managedCluster to filter cluster ns.
-		// to make sure the cluster ns can be filtered in some cases, add the 2 labels to the cluster ns here.
-		resourcemerge.MergeMap(modified, &ns.Labels, map[string]string{ClusterLabel: managedCluster.Name,
-			clusterv1.ClusterNameLabelKey: managedCluster.Name})
+// reconcileNonDeletingCluster handles the reconciliation logic for a managed cluster that is not being deleted
+func (r *ReconcileManagedCluster) reconcileNonDeletingCluster(ctx context.Context, managedCluster *clusterv1.ManagedCluster) (reconcile.Result, error) {
+	if err := r.ensureManagedClusterMetaObj(ctx, managedCluster); err != nil {
+		return reconcile.Result{}, err
+	}
 
-		if !*modified {
-			return reconcile.Result{}, nil
-		}
+	// set cluster label on the managed cluster namespace
+	ns := &corev1.Namespace{}
+	err := r.client.Get(ctx, types.NamespacedName{Name: managedCluster.Name}, ns)
+	if errors.IsNotFound(err) {
+		return reconcile.Result{}, nil
+	}
+	if err != nil {
+		return reconcile.Result{}, err
+	}
 
-		if err := r.client.Update(ctx, ns); err != nil {
-			return reconcile.Result{}, err
-		}
+	modified := resourcemerge.BoolPtr(false)
+	// TODO: use one cluster label to filter the cluster ns.
+	// in ocm we use open-cluster-management.io/cluster-name label to filter cluster ns,
+	// but in acm we use cluster.open-cluster-management.io/managedCluster to filter cluster ns.
+	// to make sure the cluster ns can be filtered in some cases, add the 2 labels to the cluster ns here.
+	resourcemerge.MergeMap(modified, &ns.Labels, map[string]string{ClusterLabel: managedCluster.Name,
+		clusterv1.ClusterNameLabelKey: managedCluster.Name})
 
-		r.recorder.Eventf("ManagedClusterNamespaceLabelUpdated",
-			"The managed cluster %s namespace label is added", managedCluster.Name)
+	if !*modified {
 		return reconcile.Result{}, nil
 	}
 
+	if err := r.client.Update(ctx, ns); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	r.recorder.Eventf("ManagedClusterNamespaceLabelUpdated",
+		"The managed cluster %s namespace label is added", managedCluster.Name)
+	return reconcile.Result{}, nil
+}
+
+// reconcileDeletingCluster handles the reconciliation logic for a managed cluster that is being deleted
+func (r *ReconcileManagedCluster) reconcileDeletingCluster(ctx context.Context, managedCluster *clusterv1.ManagedCluster) (reconcile.Result, error) {
 	// add a detaching condition to the managed cluster if the managed cluster is deleting
 	// if it is already in detaching or force deaching state, skip it
 	ic := meta.FindStatusCondition(managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
