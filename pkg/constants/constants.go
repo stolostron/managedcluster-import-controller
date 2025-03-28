@@ -61,6 +61,7 @@ const (
 	CreatedViaHive       = "hive"
 	CreatedViaDiscovery  = "discovery"
 	CreatedViaHypershift = "hypershift"
+	CreatedViaOther      = "other"
 )
 
 // NOSONAR-START
