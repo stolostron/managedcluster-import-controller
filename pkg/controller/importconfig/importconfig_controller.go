@@ -9,18 +9,16 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+
+	"github.com/openshift/library-go/pkg/operator/events"
+	listerklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/listers/klusterletconfig/v1alpha1"
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/openshift/library-go/pkg/operator/events"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-
 	"github.com/stolostron/managedcluster-import-controller/pkg/bootstrap"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
-
-	listerklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/listers/klusterletconfig/v1alpha1"
-
-	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 )
 
 var log = logf.Log.WithName(ControllerName)

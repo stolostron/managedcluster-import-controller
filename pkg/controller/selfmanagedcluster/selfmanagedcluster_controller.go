@@ -7,13 +7,14 @@ import (
 	"context"
 	"strings"
 
-	"github.com/openshift/library-go/pkg/operator/events"
-	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	kevents "k8s.io/client-go/tools/events"
+
+	"github.com/openshift/library-go/pkg/operator/events"
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"

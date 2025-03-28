@@ -12,6 +12,10 @@ import (
 	"context"
 	"fmt"
 
+	certificatesv1 "k8s.io/api/certificates/v1"
+	kevents "k8s.io/client-go/tools/events"
+	"sigs.k8s.io/controller-runtime/pkg/manager"
+
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/autoimport"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/clusterdeployment"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/clusternamespacedeletion"
@@ -26,10 +30,6 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
-
-	certificatesv1 "k8s.io/api/certificates/v1"
-	kevents "k8s.io/client-go/tools/events"
-	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
 // AddToManager adds all controllers to the manager
