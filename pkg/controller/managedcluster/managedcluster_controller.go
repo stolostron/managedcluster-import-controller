@@ -29,10 +29,6 @@ const clusterNameLabel = "name"
 
 const ClusterLabel = "cluster.open-cluster-management.io/managedCluster"
 
-const (
-	createdViaOther = "other"
-)
-
 var log = logf.Log.WithName(ControllerName)
 
 // ReconcileManagedCluster reconciles a ManagedCluster object
@@ -227,7 +223,7 @@ func (r *ReconcileManagedCluster) deleteManagedClusterAddon(
 }
 
 func ensureCreateViaAnnotation(modified *bool, cluster *clusterv1.ManagedCluster) {
-	createViaOtherAnnotation := map[string]string{constants.CreatedViaAnnotation: createdViaOther}
+	createViaOtherAnnotation := map[string]string{constants.CreatedViaAnnotation: constants.CreatedViaOther}
 	viaAnnotation, ok := cluster.Annotations[constants.CreatedViaAnnotation]
 	if !ok {
 		// no created-via annotation, set it with default annotation (other)
