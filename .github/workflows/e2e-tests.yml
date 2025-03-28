@@ -4,35 +4,35 @@ name: Go
 
 on:
   push:
-    branches: [ main, release-*, backplane-* ]
+    branches: [main, release-*, backplane-*]
   pull_request:
-    branches: [ main, release-*, backplane-* ]
+    branches: [main, release-*, backplane-*]
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v2
+      - uses: actions/checkout@v2
 
-    - name: Set up Go
-      uses: actions/setup-go@v2
-      with:
-        go-version: '1.23'
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: "1.24"
 
-    - name: Set up kubectl
-      uses: azure/setup-kubectl@v3
-      with:
-        version: 'v1.24.0' # default is latest stable
-      id: install
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: "v1.24.0" # default is latest stable
+        id: install
 
-    - name: E2E Tests
-      run: make e2e-test
+      - name: E2E Tests
+        run: make e2e-test
 
-    - if:  ${{ failure() }}
-      name: Logs after Tests Failed
-      run: kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=-1
+      - if: ${{ failure() }}
+        name: Logs after Tests Failed
+        run: kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=-1
 
-    - if: ${{ failure() }}
-      name: Setup tmate session after Tests Failed
-      uses: mxschmitt/action-tmate@v3
-      timeout-minutes: 120 # 120 minutes timeout
+      - if: ${{ failure() }}
+        name: Setup tmate session after Tests Failed
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: 120 # 120 minutes timeout
