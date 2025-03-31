@@ -34,7 +34,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
@@ -76,10 +75,6 @@ const (
 
 // DeployOnOCP is set once at the beginning
 var DeployOnOCP bool = true
-
-var v1APIExtensionMinVersion = versionutil.MustParseGeneric("v1.16.0")
-
-var crdGroupKind = schema.GroupKind{Group: "apiextensions.k8s.io", Kind: "CustomResourceDefinition"}
 
 var (
 	genericScheme = runtime.NewScheme()
@@ -395,15 +390,9 @@ func ImportManagedClusterFromSecret(client *ClientHolder, restMapper meta.RESTMa
 		return false, err
 	}
 
-	crdsKey := constants.ImportSecretCRDSV1YamlKey
-	if _, err := restMapper.RESTMapping(crdGroupKind, "v1"); err != nil {
-		klog.Infof("crd v1 is not supported, deploy v1beta1")
-		crdsKey = constants.ImportSecretCRDSV1beta1YamlKey
-	}
-
 	objs := []runtime.Object{}
-	if val, ok := importSecret.Data[crdsKey]; ok && len(val) > 0 {
-		objs = append(objs, MustCreateObject(importSecret.Data[crdsKey]))
+	if val, ok := importSecret.Data[constants.ImportSecretCRDSYamlKey]; ok && len(val) > 0 {
+		objs = append(objs, MustCreateObject(importSecret.Data[constants.ImportSecretCRDSYamlKey]))
 	}
 	for _, yaml := range SplitYamls(importSecret.Data[constants.ImportSecretImportYamlKey]) {
 		objs = append(objs, MustCreateObject(yaml))
@@ -444,16 +433,6 @@ func SplitYamls(yamls []byte) [][]byte {
 		bYamls = append(bYamls, []byte(yaml))
 	}
 	return bYamls
-}
-
-// IsAPIExtensionV1Supported if the cluster can support the crdv1, return true
-func IsAPIExtensionV1Supported(kubeVersion string) bool {
-	isV1, err := v1APIExtensionMinVersion.Compare(kubeVersion)
-	if err != nil {
-		klog.Errorf("a bad kube version: %v", kubeVersion)
-		return false
-	}
-	return isV1 == -1
 }
 
 // MustCreateObjectFromTemplate render a template to a runtime object with its configuration
