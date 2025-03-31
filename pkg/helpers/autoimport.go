@@ -198,6 +198,15 @@ func (i *ImportHelper) Import(backupRestore bool, cluster *clusterv1.ManagedClus
 				), false, currentRetry, nil
 		}
 
+		if totalRetry == -1 {
+			return result,
+				NewManagedClusterImportSucceededCondition(
+					metav1.ConditionFalse,
+					constants.ConditionReasonManagedClusterImportFailed,
+					failureMessageOfKubeClientGerneration(managedClusterKubeClientSecret, err),
+				), false, currentRetry, err
+		}
+
 		return result,
 			NewManagedClusterImportSucceededCondition(
 				metav1.ConditionFalse,
