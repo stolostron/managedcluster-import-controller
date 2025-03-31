@@ -730,6 +730,9 @@ func applyNetworkPolicy(client kubernetes.Interface, recorder events.Recorder,
 
 // MustCreateObject translate object from raw bytes to runtime object
 func MustCreateObject(raw []byte) runtime.Object {
+	if len(raw) == 0 {
+		return nil
+	}
 	obj, _, err := genericCodec.Decode(raw, nil, nil)
 	if err != nil {
 		panic(err)

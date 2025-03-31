@@ -4,24 +4,17 @@
 package importconfig
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
-	"fmt"
 	"reflect"
 	"testing"
 	"time"
 
+	ocinfrav1 "github.com/openshift/api/config/v1"
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/bootstrap"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	operatorv1 "open-cluster-management.io/api/operator/v1"
-
-	ocinfrav1 "github.com/openshift/api/config/v1"
-
 	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,6 +23,8 @@ import (
 	clienttesting "k8s.io/client-go/testing"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	clientcmdlatest "k8s.io/client-go/tools/clientcmd/api/latest"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	"open-cluster-management.io/ocm/pkg/operator/helpers/chart"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -397,23 +392,17 @@ func mockImportSecret(t *testing.T, expirationTime time.Time, server string, caD
 		return nil
 	}
 
-	template, err := bootstrap.ManifestFiles.ReadFile("manifests/klusterlet/bootstrap_secret.yaml")
+	config := &chart.KlusterletChartConfig{
+		CreateNamespace:        false,
+		Klusterlet:             chart.KlusterletConfig{Namespace: "test", Name: "klusterlet"},
+		BootstrapHubKubeConfig: string(boostrapConfigData),
+	}
+	_, objects, err := chart.RenderKlusterletChart(config, "test")
 	if err != nil {
 		t.Fatal(err)
-		return nil
 	}
-	config := bootstrap.KlusterletRenderConfig{
-		KlusterletNamespace: "test",
-		DefaultBootstrapKubeConfigSecret: bootstrap.BootstrapKubeConfigSecret{
-			Name:       "bootstrap-hub-kubeconfig",
-			KubeConfig: base64.StdEncoding.EncodeToString(boostrapConfigData),
-		},
-		InstallMode: string(operatorv1.InstallModeDefault),
-	}
-	raw := helpers.MustCreateAssetFromTemplate("bootstrap_secret", template, config)
 
-	importYAML := new(bytes.Buffer)
-	importYAML.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, string(raw)))
+	importYAML := bootstrap.AggregateObjects(objects)
 
 	expiration, err := expirationTime.MarshalText()
 	if err != nil {
@@ -433,7 +422,7 @@ func mockImportSecret(t *testing.T, expirationTime time.Time, server string, caD
 			Namespace: "testcluster",
 		},
 		Data: map[string][]byte{
-			"import.yaml": importYAML.Bytes(),
+			"import.yaml": importYAML,
 			"expiration":  expiration,
 			"creation":    creation,
 		},

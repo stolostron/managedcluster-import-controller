@@ -224,22 +224,18 @@ func buildImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, 
 			WithManagedCluster(managedCluster).
 			WithKlusterletConfig(klusterletConfig).
 			WithPriorityClassName(priorityClassName)
-		yamlcontent, err = config.Generate(ctx, clientHolder)
+		yamlcontent, crdsV1YAML, err = config.Generate(ctx, clientHolder)
 		if err != nil {
 			return nil, err
 		}
 
-		crdsV1YAML, err = config.GenerateKlusterletCRDsV1()
-		if err != nil {
-			return nil, err
-		}
 	case operatorv1.InstallModeHosted, operatorv1.InstallModeSingletonHosted:
-		yamlcontent, err = bootstrap.NewKlusterletManifestsConfig(
+		yamlcontent, _, err = bootstrap.NewKlusterletManifestsConfig(
 			mode,
 			managedCluster.Name,
 			bootstrapKubeconfigData).
 			WithManagedCluster(managedCluster).
-			WithImagePullSecretGenerate(false).
+			WithoutImagePullSecretGenerate().
 			// the hosting cluster should support PriorityClass API and have
 			// already had the default PriorityClass
 			WithPriorityClassName(constants.DefaultKlusterletPriorityClassName).

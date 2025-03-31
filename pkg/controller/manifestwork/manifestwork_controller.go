@@ -328,7 +328,7 @@ func createManifestWorks(
 
 	works = append(works, klwork)
 
-	// if crd is not set, we only apply klusterlet only, and the deletOption
+	// if crd is not set, we only apply klusterlet only, and the deleteOption
 	// should be foreground.
 	if len(crdYaml) == 0 {
 		klwork.Spec.DeleteOption = &workv1.DeleteOption{

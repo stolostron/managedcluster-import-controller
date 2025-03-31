@@ -32,7 +32,6 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 		response := map[string]interface{}{
 			"paths": []string{
 				"/crds/v1",
-				"/crds/v1beta1",
 				"/manifests",
 			},
 			"serverInfo": map[string]string{
@@ -51,26 +50,11 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 			operatorv1.InstallModeDefault,
 			"dummy",
 			nil)
-		content, err := config.GenerateKlusterletCRDsV1()
+		_, crdContent, err := config.Generate(ctx, clientHolder)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
-		_, err = w.Write(content)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-	})))
-
-	mux.Handle("/agent-registration/crds/v1beta1", authMiddleware(clientHolder, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		config := bootstrap.NewKlusterletManifestsConfig(
-			operatorv1.InstallModeDefault,
-			"dummy",
-			nil)
-		content, err := config.GenerateKlusterletCRDsV1Beta1()
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-		}
-		_, err = w.Write(content)
+		_, err = w.Write(crdContent)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -146,7 +130,7 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 			klusterletClusterAnnotations[apiconstants.AnnotationKlusterletConfig] = klusterletconfigName
 		}
 
-		content, err := bootstrap.NewKlusterletManifestsConfig(
+		content, _, err := bootstrap.NewKlusterletManifestsConfig(
 			operatorv1.InstallModeDefault,
 			clusterID,
 			bootstrapkubeconfig).
