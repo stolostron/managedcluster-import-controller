@@ -127,7 +127,3 @@ vendor:
 	go mod tidy -compat=1.18
 	go mod vendor
 
-# Copy CRDs
-.PHONY: copy-crd
-copy-crd: vendor
-	bash -x hack/copy-crds.sh

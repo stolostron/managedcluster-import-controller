@@ -128,21 +128,11 @@ type: kubernetes.io/dockerconfigjson
 data:
     .dockerconfigjson: test
 `
-var crdsv1Yaml = `
+var crdsYaml = `
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
-  name: klusterlets.operator.open-cluster-management.io
-spec: {}
-`
-
-var crdsv1beta1Yaml = `
----
-apiVersion: apiextensions.k8s.io/v1beta1
-kind: CustomResourceDefinition
-metadata:
-  creationTimestamp: null
   name: klusterlets.operator.open-cluster-management.io
 spec: {}
 `
@@ -178,10 +168,8 @@ func GetImportSecret(managedClusterName string) *corev1.Secret {
 			Namespace: managedClusterName,
 		},
 		Data: map[string][]byte{
-			"crdsv1.yaml":      []byte(crdsv1Yaml),
-			"crdsv1beta1.yaml": []byte(crdsv1beta1Yaml),
-			"crds.yaml":        []byte(crdsv1Yaml),
-			"import.yaml":      []byte(importYaml),
+			"crds.yaml":   []byte(crdsYaml),
+			"import.yaml": []byte(importYaml),
 		},
 	}
 }
@@ -204,10 +192,10 @@ func BuildKubeconfig(restConfig *rest.Config) []byte {
 			Clusters: map[string]*clientcmdapi.Cluster{"test-cluster": {
 				Server:                   restConfig.Host,
 				CertificateAuthorityData: restConfig.CAData,
-				//InsecureSkipTLSVerify: true,
+				// InsecureSkipTLSVerify: true,
 			}},
 			AuthInfos: map[string]*clientcmdapi.AuthInfo{"test-auth": {
-				//Token: restConfig.BearerToken,
+				// Token: restConfig.BearerToken,
 				ClientCertificateData: restConfig.CertData,
 				ClientKeyData:         restConfig.KeyData,
 			}},

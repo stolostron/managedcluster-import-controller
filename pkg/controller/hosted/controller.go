@@ -7,6 +7,7 @@ import (
 	"context"
 	"embed"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -19,10 +20,12 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kevents "k8s.io/client-go/tools/events"
+	"k8s.io/klog/v2"
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
@@ -470,13 +473,24 @@ func createHostingManifestWork(managedClusterName string,
 		if err != nil {
 			panic(err)
 		}
+
+		unstructuredObj := &unstructured.Unstructured{}
+		if err := json.Unmarshal(jsonData, unstructuredObj); err != nil {
+			klog.Errorf("failed to unmarshal object %s: %v", string(jsonData), err)
+			continue
+		}
+		// the namespace has been created by other component, so should not be managed by manifestWork.
+		// otherwise, the ns will be deleted when the manifestWork is deleting, may bring some cleanup issue.
+		if unstructuredObj.GetKind() == "Namespace" {
+			continue
+		}
 		manifests = append(manifests, workv1.Manifest{
 			RawExtension: runtime.RawExtension{Raw: jsonData},
 		})
 	}
 
-	// For hosted mode, the klusterletManifestWork only contains a klusterlet CR
-	// and a bootstrap secret, delete it in foreground.
+	// For hosted mode, the klusterletManifestWork only contains a klusterlet CR, a bootstrap secret and an agent namespace,
+	// delete klusterlet and bootstrap in foreground.
 	return &workv1.ManifestWork{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{

@@ -104,7 +104,7 @@ func TestGetImagePullSecret(t *testing.T) {
 			},
 		},
 		{
-			name:       "with klusterletconfig image pull secret",
+			name:       "with klusterletConfig image pull secret",
 			clientObjs: []client.Object{},
 			secret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
