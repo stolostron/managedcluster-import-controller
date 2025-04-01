@@ -204,7 +204,7 @@ func isSelfManaged(managedCluster *clusterv1.ManagedCluster) bool {
 func buildImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, managedCluster *clusterv1.ManagedCluster,
 	mode operatorv1.InstallMode, klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig,
 	bootstrapKubeconfigData, tokenCreation, tokenExpiration []byte) (*corev1.Secret, error) {
-	var yamlcontent, crdsV1YAML, crdsV1beta1YAML []byte
+	var yamlcontent, crdsV1YAML []byte
 	var secretAnnotations map[string]string
 	var err error
 	switch mode {
@@ -225,11 +225,6 @@ func buildImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, 
 			WithKlusterletConfig(klusterletConfig).
 			WithPriorityClassName(priorityClassName)
 		yamlcontent, err = config.Generate(ctx, clientHolder)
-		if err != nil {
-			return nil, err
-		}
-
-		crdsV1beta1YAML, err = config.GenerateKlusterletCRDsV1Beta1()
 		if err != nil {
 			return nil, err
 		}
@@ -273,10 +268,8 @@ func buildImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, 
 			Annotations: secretAnnotations,
 		},
 		Data: map[string][]byte{
-			constants.ImportSecretImportYamlKey:      yamlcontent,
-			constants.ImportSecretCRDSYamlKey:        crdsV1YAML,
-			constants.ImportSecretCRDSV1YamlKey:      crdsV1YAML,
-			constants.ImportSecretCRDSV1beta1YamlKey: crdsV1beta1YAML,
+			constants.ImportSecretImportYamlKey: yamlcontent,
+			constants.ImportSecretCRDSYamlKey:   crdsV1YAML,
 		},
 	}
 

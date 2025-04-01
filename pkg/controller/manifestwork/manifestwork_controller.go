@@ -267,14 +267,7 @@ func createManifestWorks(
 	var works []runtime.Object
 
 	// create crd work if it contains in the secret.
-	crdsKey := constants.ImportSecretCRDSV1YamlKey
-	if managedCluster.Status.Version.Kubernetes != "" &&
-		!helpers.IsAPIExtensionV1Supported(managedCluster.Status.Version.Kubernetes) {
-		log.Info("crd v1 is not supported, put v1beta1 to manifest work")
-		crdsKey = constants.ImportSecretCRDSV1beta1YamlKey
-	}
-
-	crdYaml := importSecret.Data[crdsKey]
+	crdYaml := importSecret.Data[constants.ImportSecretCRDSYamlKey]
 	if len(crdYaml) > 0 {
 		jsonData, err := yaml.YAMLToJSON(crdYaml)
 		if err != nil {

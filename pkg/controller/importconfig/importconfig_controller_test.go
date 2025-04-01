@@ -168,14 +168,6 @@ func TestReconcile(t *testing.T) {
 					t.Errorf("the %s is required", constants.ImportSecretCRDSYamlKey)
 				}
 
-				if data, ok := importSecret.Data[constants.ImportSecretCRDSV1beta1YamlKey]; !ok || len(data) == 0 {
-					t.Errorf("the %s is required", constants.ImportSecretCRDSV1beta1YamlKey)
-				}
-
-				if data, ok := importSecret.Data[constants.ImportSecretCRDSV1YamlKey]; !ok || len(data) == 0 {
-					t.Errorf("the %s is required", constants.ImportSecretCRDSV1YamlKey)
-				}
-
 				data, ok := importSecret.Data[constants.ImportSecretImportYamlKey]
 				if !ok {
 					t.Errorf("the %s is required, %s", constants.ImportSecretImportYamlKey, string(data))
@@ -576,14 +568,6 @@ func TestReconcile(t *testing.T) {
 
 				if data, ok := importSecret.Data[constants.ImportSecretCRDSYamlKey]; !ok || len(data) == 0 {
 					t.Errorf("the %s is required", constants.ImportSecretCRDSYamlKey)
-				}
-
-				if data, ok := importSecret.Data[constants.ImportSecretCRDSV1beta1YamlKey]; !ok || len(data) == 0 {
-					t.Errorf("the %s is required", constants.ImportSecretCRDSV1beta1YamlKey)
-				}
-
-				if data, ok := importSecret.Data[constants.ImportSecretCRDSV1YamlKey]; !ok || len(data) == 0 {
-					t.Errorf("the %s is required", constants.ImportSecretCRDSV1YamlKey)
 				}
 
 				data, ok := importSecret.Data[constants.ImportSecretImportYamlKey]

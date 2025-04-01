@@ -68,9 +68,7 @@ const (
 const (
 	ImportSecretNameSuffix             = "import"
 	ImportSecretImportYamlKey          = "import.yaml"
-	ImportSecretCRDSYamlKey            = "crds.yaml"        // #nosec G101
-	ImportSecretCRDSV1YamlKey          = "crdsv1.yaml"      // #nosec G101
-	ImportSecretCRDSV1beta1YamlKey     = "crdsv1beta1.yaml" // #nosec G101
+	ImportSecretCRDSYamlKey            = "crds.yaml" // #nosec G101
 	ImportSecretTokenExpiration        = "expiration"
 	DefaultSecretTokenExpirationSecond = 360 * 24 * 60 * 60 // 360 days
 	ImportSecretTokenCreation          = "creation"
