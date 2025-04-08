@@ -204,7 +204,7 @@ func isSelfManaged(managedCluster *clusterv1.ManagedCluster) bool {
 func buildImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, managedCluster *clusterv1.ManagedCluster,
 	mode operatorv1.InstallMode, klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig,
 	bootstrapKubeconfigData, tokenCreation, tokenExpiration []byte) (*corev1.Secret, error) {
-	var yamlcontent, crdsV1YAML []byte
+	var yamlcontent, crdsYAML []byte
 	var secretAnnotations map[string]string
 	var err error
 	switch mode {
@@ -224,22 +224,18 @@ func buildImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, 
 			WithManagedCluster(managedCluster).
 			WithKlusterletConfig(klusterletConfig).
 			WithPriorityClassName(priorityClassName)
-		yamlcontent, err = config.Generate(ctx, clientHolder)
+		yamlcontent, crdsYAML, err = config.Generate(ctx, clientHolder)
 		if err != nil {
 			return nil, err
 		}
 
-		crdsV1YAML, err = config.GenerateKlusterletCRDsV1()
-		if err != nil {
-			return nil, err
-		}
 	case operatorv1.InstallModeHosted, operatorv1.InstallModeSingletonHosted:
-		yamlcontent, err = bootstrap.NewKlusterletManifestsConfig(
+		yamlcontent, _, err = bootstrap.NewKlusterletManifestsConfig(
 			mode,
 			managedCluster.Name,
 			bootstrapKubeconfigData).
 			WithManagedCluster(managedCluster).
-			WithImagePullSecretGenerate(false).
+			WithoutImagePullSecretGenerate().
 			// the hosting cluster should support PriorityClass API and have
 			// already had the default PriorityClass
 			WithPriorityClassName(constants.DefaultKlusterletPriorityClassName).
@@ -269,7 +265,7 @@ func buildImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, 
 		},
 		Data: map[string][]byte{
 			constants.ImportSecretImportYamlKey: yamlcontent,
-			constants.ImportSecretCRDSYamlKey:   crdsV1YAML,
+			constants.ImportSecretCRDSYamlKey:   crdsYAML,
 		},
 	}
 

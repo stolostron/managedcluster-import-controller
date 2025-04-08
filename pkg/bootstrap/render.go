@@ -7,9 +7,9 @@ import (
 	"bytes"
 	"context"
 	"embed"
-	"encoding/base64"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -19,23 +19,21 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/klog/v2"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	apifeature "open-cluster-management.io/api/feature"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
+	"open-cluster-management.io/ocm/pkg/operator/helpers/chart"
+	"sigs.k8s.io/yaml"
 )
 
 //go:embed manifests
 var ManifestFiles embed.FS
-
-const managedClusterImagePullSecretName = "open-cluster-management-image-pull-credentials"
-
-const (
-	klusterletCrdsV1File      = "manifests/klusterlet/crds/klusterlets.crd.v1.yaml"
-	klusterletCrdsV1beta1File = "manifests/klusterlet/crds/klusterlets.crd.v1beta1.yaml"
-)
 
 var hubFiles = []string{
 	"manifests/hub/managedcluster-service-account.yaml",
@@ -43,32 +41,9 @@ var hubFiles = []string{
 	"manifests/hub/managedcluster-clusterrolebinding.yaml",
 }
 
-var klusterletNamespaceFile = "manifests/klusterlet/namespace.yaml"
-
-var klusterletOperatorFiles = []string{
-	"manifests/klusterlet/service_account.yaml",
-	"manifests/klusterlet/cluster_role.yaml",
+var additionalClusterRoleFiles = []string{
 	"manifests/klusterlet/clusterrole_bootstrap.yaml",
 	"manifests/klusterlet/clusterrole_aggregate.yaml",
-	"manifests/klusterlet/cluster_role_binding.yaml",
-	"manifests/klusterlet/operator.yaml",
-}
-
-var klusterletFiles = []string{
-	"manifests/klusterlet/bootstrap_secret.yaml",
-	"manifests/klusterlet/klusterlet.yaml",
-}
-
-// TODO: The clusterrole_priority_class.yaml is only for upgrade case and should be removed
-// after two or three releases.
-var priorityClassFiles = []string{
-	"manifests/klusterlet/clusterrole_priority_class.yaml",
-	"manifests/klusterlet/priority_class.yaml",
-}
-
-type RenderConfig struct {
-	KlusterletRenderConfig
-	ImagePullSecretConfig
 }
 
 type BootstrapKubeConfigSecret struct {
@@ -76,157 +51,150 @@ type BootstrapKubeConfigSecret struct {
 	KubeConfig string
 }
 
-// KlusterletRenderConfig defines variables used in the klusterletFiles.
-type KlusterletRenderConfig struct {
-	KlusterletName            string
-	KlusterletNamespace       string
-	ManagedClusterNamespace   string
-	RegistrationOperatorImage string
-	RegistrationImageName     string
-	WorkImageName             string
-	ImageName                 string
-	PriorityClassName         string
-	InstallMode               string
-
-	NodeSelector  map[string]string
-	Tolerations   []corev1.Toleration
-	NodePlacement *operatorv1.NodePlacement
-
-	RegistrationConfiguration *operatorv1.RegistrationConfiguration
-	WorkConfiguration         *operatorv1.WorkAgentConfiguration
-
-	MultipleHubsEnabled              bool
-	DefaultBootstrapKubeConfigSecret BootstrapKubeConfigSecret
-	BootstrapKubeConfigSecrets       []BootstrapKubeConfigSecret
-}
-
-type ImagePullSecretConfig struct {
-	UseImagePullSecret       bool
-	ImagePullSecretName      string
-	ImagePullSecretData      string
-	ImagePullSecretConfigKey string
-	ImagePullSecretType      corev1.SecretType
-}
-
 type KlusterletManifestsConfig struct {
-	InstallMode operatorv1.InstallMode
-
-	ClusterName                  string
-	KlusterletNamespace          string
-	KlusterletClusterAnnotations map[string]string
-	BootstrapKubeconfig          []byte
-
-	// PriorityClassName is the name of the PriorityClass used by the klusterlet and operator
-	PriorityClassName string
-
-	// Used to determine whether mc is a localcluster.
-	ManagedCluster *clusterv1.ManagedCluster
-
-	klusterletconfig *klusterletconfigv1alpha1.KlusterletConfig
-
-	generateImagePullSecret bool // by default is true, in hosted mode, it will be set false
+	chartConfig      *chart.KlusterletChartConfig
+	managedCluster   *clusterv1.ManagedCluster
+	klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig
 }
 
 func NewKlusterletManifestsConfig(installMode operatorv1.InstallMode,
-	clusterName string, bootstrapKubeconfig []byte) *KlusterletManifestsConfig {
+	clusterName string, bootstrapKubeConfig []byte) *KlusterletManifestsConfig {
 	return &KlusterletManifestsConfig{
-		InstallMode:             installMode,
-		ClusterName:             clusterName,
-		BootstrapKubeconfig:     bootstrapKubeconfig,
-		generateImagePullSecret: true,
+		chartConfig: newKlusterletChartConfig(installMode, clusterName, bootstrapKubeConfig),
 	}
+}
+
+func newKlusterletChartConfig(installMode operatorv1.InstallMode,
+	clusterName string, bootstrapKubeConfig []byte) *chart.KlusterletChartConfig {
+	allowPrivilegeEscalation := false
+	privileged := false
+	runAsNonRoot := true
+	readOnlyRootFilesystem := true
+
+	chartConfig := &chart.KlusterletChartConfig{
+		ReplicaCount: 1,
+		Images: chart.ImagesConfig{
+			ImagePullPolicy: corev1.PullIfNotPresent,
+			ImageCredentials: chart.ImageCredentials{
+				// set true by default
+				CreateImageCredentials: true,
+			},
+		},
+		CreateNamespace: true,
+		PodSecurityContext: corev1.PodSecurityContext{
+			RunAsNonRoot: &runAsNonRoot,
+		},
+		SecurityContext: corev1.SecurityContext{
+			Capabilities: &corev1.Capabilities{
+				Drop: []corev1.Capability{"ALL"},
+			},
+			Privileged: &privileged,
+
+			RunAsNonRoot:             &runAsNonRoot,
+			ReadOnlyRootFilesystem:   &readOnlyRootFilesystem,
+			AllowPrivilegeEscalation: &allowPrivilegeEscalation,
+		},
+		Resources: corev1.ResourceRequirements{
+			Limits: corev1.ResourceList{
+				corev1.ResourceMemory: resource.MustParse("2Gi"),
+			},
+			Requests: corev1.ResourceList{
+				corev1.ResourceMemory: resource.MustParse("64Mi"),
+				corev1.ResourceCPU:    resource.MustParse("50m"),
+			},
+		},
+		NodeSelector: map[string]string{},
+		Tolerations:  []corev1.Toleration{},
+		Affinity:     corev1.Affinity{},
+		Klusterlet: chart.KlusterletConfig{
+			ClusterName: clusterName,
+			Mode:        installMode,
+		},
+		PriorityClassName:         "",
+		EnableSyncLabels:          false,
+		BootstrapHubKubeConfig:    string(bootstrapKubeConfig),
+		ExternalManagedKubeConfig: "",
+		NoOperator:                false,
+	}
+
+	if chartConfig.Klusterlet.Mode == operatorv1.InstallModeHosted ||
+		chartConfig.Klusterlet.Mode == operatorv1.InstallModeSingletonHosted {
+		chartConfig.CreateNamespace = false
+	}
+
+	return chartConfig
 }
 
 // WithKlusterletClusterAnnotations sets the klusterlet cluster annotations(klusterlet.spec.registrationConfiguration.clusterAnnotations).
 // These annotations must begin with a prefix "agent.open-cluster-management.io*".
 func (c *KlusterletManifestsConfig) WithKlusterletClusterAnnotations(a map[string]string) *KlusterletManifestsConfig {
-	c.KlusterletClusterAnnotations = a
+	c.chartConfig.Klusterlet.RegistrationConfiguration.ClusterAnnotations = a
 	return c
 }
 
-// WithManagedClusterLabels sets the managed cluster.
+// WithManagedCluster sets the managed cluster.
 func (c *KlusterletManifestsConfig) WithManagedCluster(mc *clusterv1.ManagedCluster) *KlusterletManifestsConfig {
-	c.ManagedCluster = mc
+	c.managedCluster = mc
 	return c
 }
 
 func (c *KlusterletManifestsConfig) WithKlusterletConfig(klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) *KlusterletManifestsConfig {
-	c.klusterletconfig = klusterletConfig
+	c.klusterletConfig = klusterletConfig
 	return c
 }
 
-func (c *KlusterletManifestsConfig) WithImagePullSecretGenerate(g bool) *KlusterletManifestsConfig {
-	c.generateImagePullSecret = g
+func (c *KlusterletManifestsConfig) WithoutImagePullSecretGenerate() *KlusterletManifestsConfig {
+	c.chartConfig.Images.ImageCredentials.CreateImageCredentials = false
 	return c
 }
 
 func (c *KlusterletManifestsConfig) WithPriorityClassName(priorityClassName string) *KlusterletManifestsConfig {
-	c.PriorityClassName = priorityClassName
+	c.chartConfig.PriorityClassName = priorityClassName
 	return c
 }
 
-// Generate returns the rendered klusterlet manifests in bytes.
-func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *helpers.ClientHolder) ([]byte, error) {
-	// Files depends on the install mode
-	var files []string
-	switch b.InstallMode {
-	case operatorv1.InstallModeHosted, operatorv1.InstallModeSingletonHosted:
-		files = append(files, klusterletFiles...)
-	case operatorv1.InstallModeDefault, operatorv1.InstallModeSingleton:
-		if b.PriorityClassName == constants.DefaultKlusterletPriorityClassName {
-			files = append(files, priorityClassFiles...)
-		}
-		files = append(files, klusterletNamespaceFile)
-		if !installNoOperator(b.InstallMode, b.klusterletconfig) {
-			files = append(files, klusterletOperatorFiles...)
-		}
-		files = append(files, klusterletFiles...)
-	default:
-		return nil, fmt.Errorf("invalid install mode: %s", b.InstallMode)
-	}
+// Generate returns the rendered klusterlet manifests in bytes. return manifests, crd, error.
+func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
+	clientHolder *helpers.ClientHolder) ([]byte, []byte, error) {
+	installMode := c.chartConfig.Klusterlet.Mode
+	clusterName := c.chartConfig.Klusterlet.ClusterName
 
-	// For image, image pull secret, nodeplacement, we use configurations in klusterletconfg over configurations in managed cluster annotations.
+	// For image, image pull secret, nodePlacement, we use configurations in klusterletConfig over
+	// configurations in managed cluster annotations.
 	var kcRegistries []klusterletconfigv1alpha1.Registries
 	var kcNodePlacement *operatorv1.NodePlacement
 	var kcImagePullSecret corev1.ObjectReference
 	var appliedManifestWorkEvictionGracePeriod string
-	if b.klusterletconfig != nil {
-		if b.InstallMode == operatorv1.InstallModeDefault || b.InstallMode == operatorv1.InstallModeSingleton {
-			kcRegistries = b.klusterletconfig.Spec.Registries
-			kcNodePlacement = b.klusterletconfig.Spec.NodePlacement
-			kcImagePullSecret = b.klusterletconfig.Spec.PullSecret
+
+	switch installMode {
+	case operatorv1.InstallModeHosted, operatorv1.InstallModeSingletonHosted:
+		// do nothing
+	case operatorv1.InstallModeDefault, operatorv1.InstallModeSingleton:
+		if c.klusterletConfig != nil {
+			kcRegistries = c.klusterletConfig.Spec.Registries
+			kcNodePlacement = c.klusterletConfig.Spec.NodePlacement
+			kcImagePullSecret = c.klusterletConfig.Spec.PullSecret
+			appliedManifestWorkEvictionGracePeriod = c.klusterletConfig.Spec.AppliedManifestWorkEvictionGracePeriod
 		}
-		appliedManifestWorkEvictionGracePeriod = b.klusterletconfig.Spec.AppliedManifestWorkEvictionGracePeriod
+	default:
+		return nil, nil, fmt.Errorf("invalid install mode: %s", installMode)
 	}
+
+	c.chartConfig.NoOperator = installNoOperator(installMode, c.klusterletConfig)
 
 	var managedClusterAnnotations map[string]string
-	if b.ManagedCluster != nil {
-		managedClusterAnnotations = b.ManagedCluster.GetAnnotations()
-	}
-
-	var localCluster bool
-	if b.ManagedCluster != nil && localcluster.IsClusterSelfManaged(b.ManagedCluster) {
-		localCluster = true
+	if c.managedCluster != nil {
+		managedClusterAnnotations = c.managedCluster.GetAnnotations()
 	}
 
 	// Images override
-	registrationOperatorImageName, err := getImage(constants.RegistrationOperatorImageEnvVarName,
-		kcRegistries, managedClusterAnnotations)
+	klusterletAgentImages, err := getKlusterletAgentImages(kcRegistries, managedClusterAnnotations)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-
-	registrationImageName, err := getImage(constants.RegistrationImageEnvVarName,
-		kcRegistries, managedClusterAnnotations)
-	if err != nil {
-		return nil, err
-	}
-
-	workImageName, err := getImage(constants.WorkImageEnvVarName,
-		kcRegistries, managedClusterAnnotations)
-	if err != nil {
-		return nil, err
-	}
+	c.chartConfig.Images.Overrides.OperatorImage = klusterletAgentImages[constants.RegistrationOperatorImageEnvVarName]
+	c.chartConfig.Images.Overrides.RegistrationImage = klusterletAgentImages[constants.RegistrationImageEnvVarName]
+	c.chartConfig.Images.Overrides.WorkImage = klusterletAgentImages[constants.WorkImageEnvVarName]
 
 	// NodeSelector
 	var nodeSelector map[string]string
@@ -235,12 +203,14 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 	} else {
 		nodeSelector, err = helpers.GetNodeSelectorFromManagedClusterAnnotations(managedClusterAnnotations)
 		if err != nil {
-			return nil, fmt.Errorf("Get nodeSelector for cluster %s failed: %v", b.ClusterName, err)
+			return nil, nil, fmt.Errorf("get nodeSelector for cluster %s failed: %v", clusterName, err)
 		}
 	}
 	if err := helpers.ValidateNodeSelector(nodeSelector); err != nil {
-		return nil, fmt.Errorf("invalid nodeSelector annotation %v", err)
+		return nil, nil, fmt.Errorf("invalid nodeSelector annotation %v", err)
 	}
+	c.chartConfig.NodeSelector = nodeSelector
+	c.chartConfig.Klusterlet.NodePlacement.NodeSelector = nodeSelector
 
 	// Tolerations
 	var tolerations []corev1.Toleration
@@ -249,143 +219,112 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 	} else {
 		tolerations, err = helpers.GetTolerationsFromManagedClusterAnnotations(managedClusterAnnotations)
 		if err != nil {
-			return nil, fmt.Errorf("Get tolerations for cluster %s failed: %v", b.ClusterName, err)
+			return nil, nil, fmt.Errorf("get tolerations for cluster %s failed: %v", clusterName, err)
 		}
 	}
 	if err := helpers.ValidateTolerations(tolerations); err != nil {
-		return nil, fmt.Errorf("invalid tolerations annotation %v", err)
+		return nil, nil, fmt.Errorf("invalid tolerations annotation %v", err)
 	}
+	c.chartConfig.Tolerations = tolerations
+	c.chartConfig.Klusterlet.NodePlacement.Tolerations = tolerations
 
-	klusterletName, klusterletNamespace := getKlusterletNamespaceName(
-		b.klusterletconfig, b.ClusterName, managedClusterAnnotations, b.InstallMode)
+	c.chartConfig.Klusterlet.Name, c.chartConfig.Klusterlet.Namespace = getKlusterletNamespaceName(
+		c.klusterletConfig, clusterName, managedClusterAnnotations, installMode)
 
 	// WorkAgentConfiguration
-	workAgentConfiguration := &operatorv1.WorkAgentConfiguration{}
+	workAgentConfiguration := operatorv1.WorkAgentConfiguration{}
 	if appliedManifestWorkEvictionGracePeriod == constants.AppliedManifestWorkEvictionGracePeriodInfinite {
 		appliedManifestWorkEvictionGracePeriod = constants.AppliedManifestWorkEvictionGracePeriod100Years
 	}
 	if appliedManifestWorkEvictionGracePeriod != "" {
 		appliedManifestWorkEvictionGracePeriodTimeDuration, err := time.ParseDuration(appliedManifestWorkEvictionGracePeriod)
 		if err != nil {
-			return nil, fmt.Errorf("parse appliedManifestWorkEvictionGracePeriod %s failed: %v",
+			return nil, nil, fmt.Errorf("parse appliedManifestWorkEvictionGracePeriod %s failed: %v",
 				appliedManifestWorkEvictionGracePeriod, err)
 		}
 		workAgentConfiguration.AppliedManifestWorkEvictionGracePeriod = &metav1.Duration{
 			Duration: appliedManifestWorkEvictionGracePeriodTimeDuration,
 		}
 	}
+	c.chartConfig.Klusterlet.WorkConfiguration = workAgentConfiguration
 
-	// RegistrationConfiguration
-	registrationConfiguration := &operatorv1.RegistrationConfiguration{
-		ClusterAnnotations: b.KlusterletClusterAnnotations,
-	}
-
-	renderConfig := RenderConfig{
-		KlusterletRenderConfig: KlusterletRenderConfig{
-			ManagedClusterNamespace: b.ClusterName,
-			KlusterletName:          klusterletName,
-			KlusterletNamespace:     klusterletNamespace,
-			InstallMode:             string(b.InstallMode),
-
-			// Images
-			RegistrationOperatorImage: registrationOperatorImageName,
-			RegistrationImageName:     registrationImageName,
-			WorkImageName:             workImageName,
-			ImageName:                 registrationOperatorImageName,
-			DefaultBootstrapKubeConfigSecret: BootstrapKubeConfigSecret{
-				Name:       constants.DefaultBootstrapHubKubeConfigSecretName,
-				KubeConfig: base64.StdEncoding.EncodeToString(b.BootstrapKubeconfig),
-			},
-
-			// PriorityClassName
-			PriorityClassName: b.PriorityClassName,
-
-			// NodeSelector and Tolerations used in operator
-			NodeSelector: nodeSelector,
-			Tolerations:  tolerations,
-
-			// NodePlacement used in klusterlet
-			NodePlacement: &operatorv1.NodePlacement{
-				NodeSelector: nodeSelector,
-				Tolerations:  tolerations,
-			},
-
-			// WorkAgetnConfiguration
-			WorkConfiguration: workAgentConfiguration,
-
-			// RegistrationConfiguration
-			RegistrationConfiguration: registrationConfiguration,
-		},
-	}
-
-	// If need to generate imagePullSecret
-	if b.generateImagePullSecret {
-		// Image pull secret, need to add `manifests/klusterlet/image_pull_secret.yaml` to files if imagePullSecret is not nil
-
+	// need to generate imagePullSecret
+	if c.chartConfig.Images.ImageCredentials.CreateImageCredentials {
 		imagePullSecret, err := getImagePullSecret(ctx, clientHolder, kcImagePullSecret, managedClusterAnnotations)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		if imagePullSecret == nil {
-			return nil, fmt.Errorf("imagePullSecret is nil")
+			return nil, nil, fmt.Errorf("imagePullSecret is nil")
 		}
-		files = append(files, "manifests/klusterlet/image_pull_secret.yaml")
-
-		imagePullSecretConfig, err := getImagePullSecretConfig(imagePullSecret)
-		if err != nil {
-			return nil, err
+		if len(imagePullSecret.Data[corev1.DockerConfigJsonKey]) == 0 {
+			return nil, nil, fmt.Errorf("imagePullSecret.Data is empty")
 		}
 
-		renderConfig.ImagePullSecretConfig = imagePullSecretConfig
+		c.chartConfig.Images.ImageCredentials.DockerConfigJson = string(imagePullSecret.Data[corev1.DockerConfigJsonKey])
 	}
 
 	// MultipleHubs
 	// Doesn't affect on the local-cluster.
-	// Using MultipleHubs can controls the bootstrap kubeconfig secret/secrets easier.
-	if !localCluster &&
-		b.klusterletconfig != nil &&
-		b.klusterletconfig.Spec.BootstrapKubeConfigs.Type == operatorv1.LocalSecrets {
+	// Using MultipleHubs can control the bootstrap kubeConfig secret/secrets easier.
+	var localCluster bool
+	if c.managedCluster != nil && localcluster.IsClusterSelfManaged(c.managedCluster) {
+		localCluster = true
+	}
 
-		registrationConfiguration.FeatureGates = append(registrationConfiguration.FeatureGates,
+	if !localCluster &&
+		c.klusterletConfig != nil &&
+		c.klusterletConfig.Spec.BootstrapKubeConfigs.Type == operatorv1.LocalSecrets {
+
+		c.chartConfig.Klusterlet.RegistrationConfiguration.FeatureGates = append(c.chartConfig.Klusterlet.RegistrationConfiguration.FeatureGates,
 			operatorv1.FeatureGate{
 				Feature: string(apifeature.MultipleHubs),
 				Mode:    operatorv1.FeatureGateModeTypeEnable,
 			})
-		registrationConfiguration.BootstrapKubeConfigs = b.klusterletconfig.Spec.BootstrapKubeConfigs
-		registrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets = append(
-			registrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets, operatorv1.KubeConfigSecret{
+		c.chartConfig.Klusterlet.RegistrationConfiguration.BootstrapKubeConfigs = c.klusterletConfig.Spec.BootstrapKubeConfigs
+		c.chartConfig.Klusterlet.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets = append(
+			c.chartConfig.Klusterlet.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets, operatorv1.KubeConfigSecret{
 				Name: constants.DefaultBootstrapHubKubeConfigSecretName + "-current-hub",
 			})
 
 		bootstrapKubeConfigSecrets, err := convertKubeConfigSecrets(ctx,
-			b.klusterletconfig.Spec.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets, clientHolder.KubeClient)
+			c.klusterletConfig.Spec.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets, clientHolder.KubeClient)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		// add default bootstrap kubeconfig secret into the list:
 		// TODO: deduplicate the bootstrap kubeconfig secrets @xuezhaojun
-		bootstrapKubeConfigSecrets = append(bootstrapKubeConfigSecrets, BootstrapKubeConfigSecret{
+		bootstrapKubeConfigSecrets = append(bootstrapKubeConfigSecrets, chart.BootStrapKubeConfig{
 			Name:       constants.DefaultBootstrapHubKubeConfigSecretName + "-current-hub",
-			KubeConfig: base64.StdEncoding.EncodeToString(b.BootstrapKubeconfig),
+			KubeConfig: c.chartConfig.BootstrapHubKubeConfig,
 		})
-
-		renderConfig.MultipleHubsEnabled = true
-		renderConfig.BootstrapKubeConfigSecrets = bootstrapKubeConfigSecrets
+		c.chartConfig.MultiHubBootstrapHubKubeConfigs = bootstrapKubeConfigSecrets
 	}
 
-	// Render the klusterlet manifests
-	manifestsBytes, err := filesToTemplateBytes(files, renderConfig)
+	crds, objects, err := chart.RenderKlusterletChart(c.chartConfig, c.chartConfig.Klusterlet.Namespace)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return manifestsBytes, nil
+	crdBytes := AggregateObjects(crds)
+	manifestsBytes := AggregateObjects(objects)
+
+	if c.chartConfig.NoOperator {
+		return manifestsBytes, nil, nil
+	}
+
+	additionalManifestsBytes, err := filesToTemplateBytes(additionalClusterRoleFiles, c.chartConfig)
+	if err != nil {
+		return nil, nil, err
+	}
+	manifestsBytes = append(manifestsBytes, additionalManifestsBytes...)
+	return manifestsBytes, crdBytes, nil
 }
 
 func convertKubeConfigSecrets(ctx context.Context,
-	kcs []operatorv1.KubeConfigSecret, kubeClient kubernetes.Interface) ([]BootstrapKubeConfigSecret, error) {
-	var bootstrapKubeConfigSecrets []BootstrapKubeConfigSecret
+	kcs []operatorv1.KubeConfigSecret, kubeClient kubernetes.Interface) ([]chart.BootStrapKubeConfig, error) {
+	var bootstrapKubeConfigSecrets []chart.BootStrapKubeConfig
 	for _, s := range kcs {
 		ns := os.Getenv(constants.PodNamespaceEnvVarName)
 		secret, err := kubeClient.CoreV1().Secrets(ns).Get(ctx, s.Name, metav1.GetOptions{})
@@ -398,27 +337,13 @@ func convertKubeConfigSecrets(ctx context.Context,
 			return nil, fmt.Errorf("kubeconfig key not found in secret %s", s.Name)
 		}
 
-		bootstrapKubeConfigSecrets = append(bootstrapKubeConfigSecrets, BootstrapKubeConfigSecret{
+		bootstrapKubeConfigSecrets = append(bootstrapKubeConfigSecrets, chart.BootStrapKubeConfig{
 			Name:       s.Name,
-			KubeConfig: base64.StdEncoding.EncodeToString(secret.Data["kubeconfig"]),
+			KubeConfig: string(secret.Data["kubeconfig"]),
 		})
 	}
 
 	return bootstrapKubeConfigSecrets, nil
-}
-
-func (b *KlusterletManifestsConfig) GenerateKlusterletCRDsV1() ([]byte, error) {
-	if installNoOperator(b.InstallMode, b.klusterletconfig) {
-		return []byte{}, nil
-	}
-	return filesToTemplateBytes([]string{klusterletCrdsV1File}, nil)
-}
-
-func (b *KlusterletManifestsConfig) GenerateKlusterletCRDsV1Beta1() ([]byte, error) {
-	if installNoOperator(b.InstallMode, b.klusterletconfig) {
-		return []byte{}, nil
-	}
-	return filesToTemplateBytes([]string{klusterletCrdsV1beta1File}, nil)
 }
 
 func GenerateHubBootstrapRBACObjects(managedClusterName string) ([]runtime.Object, error) {
@@ -447,6 +372,48 @@ func filesToTemplateBytes(files []string, config interface{}) ([]byte, error) {
 		manifests.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, string(b)))
 	}
 	return manifests.Bytes(), nil
+}
+
+func AggregateObjects(objects [][]byte) []byte {
+	var namespaces, otherObjs []string
+	var klusterlet string
+	for _, obj := range objects {
+		unstructuredObj := &unstructured.Unstructured{}
+		if err := yaml.Unmarshal(obj, unstructuredObj); err != nil {
+			klog.Errorf("failed to unmarshal object %s: %v", string(obj), err)
+			continue
+		}
+		switch unstructuredObj.GetKind() {
+		case "Namespace":
+			namespaces = append(namespaces, string(obj))
+		case "Klusterlet":
+			klusterlet = string(obj)
+		case "":
+			// do nothing
+		default:
+			otherObjs = append(otherObjs, string(obj))
+		}
+	}
+
+	manifests := new(bytes.Buffer)
+	for _, ns := range namespaces {
+		manifests.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, ns))
+	}
+
+	sort.SliceStable(otherObjs, func(i, j int) bool {
+		return otherObjs[i] < otherObjs[j]
+	})
+
+	for _, obj := range otherObjs {
+		manifests.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, obj))
+	}
+
+	// put klusterlet CR behind in order to make sure the klusterlet CR can be applied after the CRD is applied successfully.
+	if klusterlet != "" {
+		manifests.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, klusterlet))
+	}
+
+	return manifests.Bytes()
 }
 
 // installNoOperator return true if operator is not to be installed.
@@ -498,25 +465,39 @@ func getKlusterletNamespaceName(
 	return klusterletName, klusterletNamespace
 }
 
-func getImage(envName string, kcRegistries []klusterletconfigv1alpha1.Registries, clusterAnnotations map[string]string) (string, error) {
-	defaultImage := os.Getenv(envName)
-	if defaultImage == "" {
-		return "", fmt.Errorf("environment variable %s not defined", envName)
-	}
+func getKlusterletAgentImages(kcRegistries []klusterletconfigv1alpha1.Registries,
+	clusterAnnotations map[string]string) (map[string]string, error) {
+	agentImageNames := map[string]string{
+		constants.RegistrationOperatorImageEnvVarName: os.Getenv(constants.RegistrationOperatorImageEnvVarName),
+		constants.RegistrationImageEnvVarName:         os.Getenv(constants.RegistrationImageEnvVarName),
+		constants.WorkImageEnvVarName:                 os.Getenv(constants.WorkImageEnvVarName)}
 
-	if len(kcRegistries) != 0 {
-		overrideImageName := defaultImage
-		for i := 0; i < len(kcRegistries); i++ {
-			registry := kcRegistries[i]
-			name := imageOverride(registry.Source, registry.Mirror, defaultImage)
-			if name != defaultImage {
-				overrideImageName = name
+	agentImageEnvNames := []string{constants.RegistrationOperatorImageEnvVarName,
+		constants.RegistrationImageEnvVarName, constants.WorkImageEnvVarName}
+
+	for _, agentImageEnvName := range agentImageEnvNames {
+		defaultImage := agentImageNames[agentImageEnvName]
+		if defaultImage == "" {
+			return nil, fmt.Errorf("environment variable %s not defined", agentImageEnvName)
+		}
+		if len(kcRegistries) != 0 {
+			for i := 0; i < len(kcRegistries); i++ {
+				registry := kcRegistries[i]
+				name := imageOverride(registry.Source, registry.Mirror, defaultImage)
+				if name != defaultImage {
+					agentImageNames[agentImageEnvName] = name
+				}
+			}
+		} else {
+			var err error
+			agentImageNames[agentImageEnvName], err = imageregistry.OverrideImageByAnnotation(clusterAnnotations, defaultImage)
+			if err != nil {
+				return nil, err
 			}
 		}
-		return overrideImageName, nil
 	}
 
-	return imageregistry.OverrideImageByAnnotation(clusterAnnotations, defaultImage)
+	return agentImageNames, nil
 }
 
 // imageOverride is a copy from /pkg/helpers/imageregistry/client.go

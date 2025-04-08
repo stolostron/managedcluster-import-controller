@@ -126,7 +126,7 @@ func CreateManagedCluster(clusterClient clusterclient.Interface, name string, la
 	}
 
 	cluster, err := clusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), name, metav1.GetOptions{})
-	Logf("create managed cluster get cluster error: %v, cluster: %s", err, cluster)
+	Logf("create managed cluster get cluster error: %v, cluster: %+v", err, cluster)
 	if errors.IsNotFound(err) {
 		return clusterClient.ClusterV1().ManagedClusters().Create(
 			context.TODO(),

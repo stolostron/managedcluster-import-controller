@@ -6,7 +6,6 @@ package importconfig
 import (
 	"context"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -176,33 +175,26 @@ func TestReconcile(t *testing.T) {
 					for _, yaml := range helpers.SplitYamls(importSecret.Data[constants.ImportSecretImportYamlKey]) {
 						objs = append(objs, helpers.MustCreateObject(yaml))
 					}
-					if len(objs) < 1 {
-						t.Errorf("import secret data %s, objs is empty: %v", constants.ImportSecretImportYamlKey, objs)
-					}
-					ns, ok := objs[0].(*corev1.Namespace)
-					if !ok {
-						t.Errorf("import secret data %s, the first element is not namespace", constants.ImportSecretImportYamlKey)
-					}
-					if ns.Name != constants.DefaultKlusterletNamespace {
-						t.Errorf("import secret data %s, the namespace name %s is not %s",
-							constants.ImportSecretImportYamlKey, ns.Name, constants.DefaultKlusterletNamespace)
-					}
-					pullSecret, ok := objs[9].(*corev1.Secret)
-					if !ok {
-						t.Errorf("import secret data %s, the last element is not secret", constants.ImportSecretImportYamlKey)
-					}
-					if pullSecret.Type != corev1.SecretTypeDockerConfigJson {
-						t.Errorf("import secret data %s, the pull secret type %s is not %s", constants.ImportSecretImportYamlKey,
-							pullSecret.Type, corev1.SecretTypeDockerConfigJson)
-					}
-					if _, ok := pullSecret.Data[corev1.DockerConfigJsonKey]; !ok {
-						t.Errorf("import secret data %s, the pull secret data %s is not %s", constants.ImportSecretImportYamlKey,
-							pullSecret.Data, corev1.DockerConfigJsonKey)
-					}
-				}
 
-				if len(strings.Split(strings.Replace(string(data), constants.YamlSperator, "", 1), constants.YamlSperator)) != 10 {
-					t.Errorf("expect 10 files, but failed")
+					testinghelpers.ValidateObjectCount(t, objs, 10)
+					testinghelpers.ValidateNamespace(t, objs[0], constants.DefaultKlusterletNamespace)
+					testinghelpers.ValidateImagePullSecret(t, objs[4], constants.DefaultKlusterletNamespace, "fake-token")
+					secret, ok := objs[3].(*corev1.Secret)
+					if !ok {
+						t.Errorf("expected secret, but got %v", objs[3])
+					}
+					if secret.Name != "bootstrap-hub-kubeconfig" {
+						t.Errorf("expected secret bootstrap-hub-kubeconfig, but got %s", secret.Name)
+					}
+					if secret.Namespace != constants.DefaultKlusterletNamespace {
+						t.Errorf("expected secret ns %s, but got %s", constants.DefaultKlusterletNamespace, secret.Namespace)
+					}
+					if secret.Type != corev1.SecretTypeOpaque {
+						t.Errorf("expected bootstrap secret, but got %#v", secret)
+					}
+					if data := secret.Data["kubeconfig"]; string(data) == "" {
+						t.Errorf("expected bootstrap secret data %v, but got empty", string(data))
+					}
 				}
 			},
 		},
@@ -257,9 +249,9 @@ func TestReconcile(t *testing.T) {
 						Namespace: os.Getenv("POD_NAMESPACE"),
 					},
 					Data: map[string][]byte{
-						corev1.DockerConfigKey: []byte("fake-token"),
+						corev1.DockerConfigJsonKey: []byte("fake-token"),
 					},
-					Type: corev1.SecretTypeDockercfg,
+					Type: corev1.SecretTypeDockerConfigJson,
 				},
 				&corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
@@ -289,9 +281,9 @@ func TestReconcile(t *testing.T) {
 					for _, yaml := range helpers.SplitYamls(importSecret.Data[constants.ImportSecretImportYamlKey]) {
 						objs = append(objs, helpers.MustCreateObject(yaml))
 					}
-					if len(objs) != 2 {
-						t.Errorf("objs should be 2, but get %v", objs)
-					}
+					testinghelpers.ValidateObjectCount(t, objs, 3)
+					testinghelpers.ValidateKlusterlet(t, objs[2], operatorv1.InstallModeHosted, "klusterlet-test",
+						"test", "open-cluster-management-test")
 				}
 			},
 		},
@@ -346,9 +338,9 @@ func TestReconcile(t *testing.T) {
 						Namespace: os.Getenv("POD_NAMESPACE"),
 					},
 					Data: map[string][]byte{
-						corev1.DockerConfigKey: []byte("fake-token"),
+						corev1.DockerConfigJsonKey: []byte("fake-token"),
 					},
-					Type: corev1.SecretTypeDockercfg,
+					Type: corev1.SecretTypeDockerConfigJson,
 				},
 				&corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
@@ -378,17 +370,9 @@ func TestReconcile(t *testing.T) {
 					for _, yaml := range helpers.SplitYamls(importSecret.Data[constants.ImportSecretImportYamlKey]) {
 						objs = append(objs, helpers.MustCreateObject(yaml))
 					}
-					if len(objs) < 2 {
-						t.Errorf("import secret data %s, objs is empty: %v", constants.ImportSecretImportYamlKey, objs)
-					}
-					klusterlet, ok := objs[1].(*operatorv1.Klusterlet)
-					if !ok {
-						t.Fatalf("import secret data %s, the first element is not klusterlet", constants.ImportSecretImportYamlKey)
-					}
-					if klusterlet.Spec.Namespace != "open-cluster-management-test" {
-						t.Errorf("import secret data %s, the klusterlet namespace %s is not %s",
-							constants.ImportSecretImportYamlKey, klusterlet.Namespace, constants.DefaultKlusterletNamespace)
-					}
+					testinghelpers.ValidateObjectCount(t, objs, 3)
+					testinghelpers.ValidateKlusterlet(t, objs[2], operatorv1.InstallModeHosted, "klusterlet-test",
+						"test", "open-cluster-management-test")
 				}
 			},
 		},
@@ -444,9 +428,9 @@ func TestReconcile(t *testing.T) {
 						Namespace: os.Getenv("POD_NAMESPACE"),
 					},
 					Data: map[string][]byte{
-						corev1.DockerConfigKey: []byte("fake-token"),
+						corev1.DockerConfigJsonKey: []byte("fake-token"),
 					},
-					Type: corev1.SecretTypeDockercfg,
+					Type: corev1.SecretTypeDockerConfigJson,
 				},
 				&corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
@@ -476,17 +460,9 @@ func TestReconcile(t *testing.T) {
 					for _, yaml := range helpers.SplitYamls(importSecret.Data[constants.ImportSecretImportYamlKey]) {
 						objs = append(objs, helpers.MustCreateObject(yaml))
 					}
-					if len(objs) < 2 {
-						t.Errorf("import secret data %s, objs is empty: %v", constants.ImportSecretImportYamlKey, objs)
-					}
-					klusterlet, ok := objs[1].(*operatorv1.Klusterlet)
-					if !ok {
-						t.Fatalf("import secret data %s, the first element is not klusterlet", constants.ImportSecretImportYamlKey)
-					}
-					if klusterlet.Spec.Namespace != "test-ns" {
-						t.Errorf("import secret data %s, the klusterlet namespace %s is not %s",
-							constants.ImportSecretImportYamlKey, klusterlet.Namespace, constants.DefaultKlusterletNamespace)
-					}
+					testinghelpers.ValidateObjectCount(t, objs, 3)
+					testinghelpers.ValidateKlusterlet(t, objs[2], operatorv1.InstallModeHosted, "klusterlet-test",
+						"test", "test-ns")
 				}
 			},
 		},
@@ -541,9 +517,9 @@ func TestReconcile(t *testing.T) {
 						Namespace: os.Getenv("POD_NAMESPACE"),
 					},
 					Data: map[string][]byte{
-						corev1.DockerConfigKey: []byte("fake-token"),
+						corev1.DockerConfigJsonKey: []byte("fake-token"),
 					},
-					Type: corev1.SecretTypeDockercfg,
+					Type: corev1.SecretTypeDockerConfigJson,
 				},
 				&corev1.ConfigMap{
 					ObjectMeta: metav1.ObjectMeta{
@@ -578,32 +554,11 @@ func TestReconcile(t *testing.T) {
 					for _, yaml := range helpers.SplitYamls(importSecret.Data[constants.ImportSecretImportYamlKey]) {
 						objs = append(objs, helpers.MustCreateObject(yaml))
 					}
-					if len(objs) < 1 {
-						t.Errorf("import secret data %s, objs is empty: %v", constants.ImportSecretImportYamlKey, objs)
-					}
-					ns, ok := objs[0].(*corev1.Namespace)
-					if !ok {
-						t.Errorf("import secret data %s, the first element is not namespace", constants.ImportSecretImportYamlKey)
-					}
-					if ns.Name != testKlusterletNamespace {
-						t.Errorf("import secret data %s, the namespace name %s is not %s", constants.ImportSecretImportYamlKey, ns.Name, testKlusterletNamespace)
-					}
-					pullSecret, ok := objs[9].(*corev1.Secret)
-					if !ok {
-						t.Errorf("import secret data %s, the last element is not secret", constants.ImportSecretImportYamlKey)
-					}
-					if pullSecret.Type != corev1.SecretTypeDockercfg {
-						t.Errorf("import secret data %s, the pull secret type %s is not %s", constants.ImportSecretImportYamlKey,
-							pullSecret.Type, corev1.SecretTypeDockercfg)
-					}
-					if _, ok := pullSecret.Data[corev1.DockerConfigKey]; !ok {
-						t.Errorf("import secret data %s, the pull secret data %s is not %s", constants.ImportSecretImportYamlKey,
-							pullSecret.Data, corev1.DockerConfigKey)
-					}
-				}
-
-				if len(strings.Split(strings.Replace(string(data), constants.YamlSperator, "", 1), constants.YamlSperator)) != 10 {
-					t.Errorf("expect 10 files, but failed")
+					testinghelpers.ValidateObjectCount(t, objs, 10)
+					testinghelpers.ValidateNamespace(t, objs[0], "open-cluster-management-agent-test")
+					testinghelpers.ValidateKlusterlet(t, objs[7], operatorv1.InstallModeSingleton, "klusterlet",
+						"test", "open-cluster-management-agent-test")
+					testinghelpers.ValidateImagePullSecret(t, objs[4], "open-cluster-management-agent-test", "fake-token")
 				}
 			},
 		},
@@ -679,9 +634,37 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			validateFunc: func(t *testing.T, client runtimeclient.Client, kubeClient kubernetes.Interface) {
-				_, err := kubeClient.CoreV1().Secrets("test").Get(context.TODO(), "test-import", metav1.GetOptions{})
+				importSecret, err := kubeClient.CoreV1().Secrets("test").Get(context.TODO(), "test-import", metav1.GetOptions{})
 				if err != nil {
 					t.Errorf("unexpected error: %v", err)
+				}
+				if data, ok := importSecret.Data[constants.ImportSecretCRDSYamlKey]; !ok || len(data) == 0 {
+					t.Errorf("the %s is required", constants.ImportSecretCRDSYamlKey)
+				}
+
+				data, ok := importSecret.Data[constants.ImportSecretImportYamlKey]
+				if !ok {
+					t.Errorf("the %s is required, %s", constants.ImportSecretImportYamlKey, string(data))
+				} else {
+					objs := []runtime.Object{}
+					for _, yaml := range helpers.SplitYamls(importSecret.Data[constants.ImportSecretImportYamlKey]) {
+						objs = append(objs, helpers.MustCreateObject(yaml))
+					}
+					testinghelpers.ValidateObjectCount(t, objs, 10)
+					testinghelpers.ValidateNamespace(t, objs[0], constants.DefaultKlusterletNamespace)
+					testinghelpers.ValidateKlusterlet(t, objs[7], operatorv1.InstallModeSingleton, "klusterlet",
+						"test", constants.DefaultKlusterletNamespace)
+					testinghelpers.ValidateImagePullSecret(t, objs[4], constants.DefaultKlusterletNamespace, "fake-token")
+					klusterlet, ok := objs[7].(*operatorv1.Klusterlet)
+					if !ok {
+						t.Errorf("the klusterlet is not found")
+					}
+					if len(klusterlet.Spec.NodePlacement.NodeSelector) != 1 {
+						t.Errorf("the klusterlet node selector is not found")
+					}
+					if len(klusterlet.Spec.NodePlacement.Tolerations) != 1 {
+						t.Errorf("the klusterlet node Tolerations is not found")
+					}
 				}
 			},
 		},
@@ -787,12 +770,14 @@ func TestReconcile(t *testing.T) {
 					for _, yaml := range helpers.SplitYamls(importSecret.Data[constants.ImportSecretImportYamlKey]) {
 						objs = append(objs, helpers.MustCreateObject(yaml))
 					}
-					if len(objs) < 1 {
-						t.Errorf("import secret data %s, objs is empty: %v", constants.ImportSecretImportYamlKey, objs)
-					}
-					klusterlet, ok := objs[8].(*operatorv1.Klusterlet)
+					testinghelpers.ValidateObjectCount(t, objs, 10)
+					testinghelpers.ValidateNamespace(t, objs[0], constants.DefaultKlusterletNamespace)
+					testinghelpers.ValidateKlusterlet(t, objs[7], operatorv1.InstallModeSingleton, "klusterlet",
+						"test", constants.DefaultKlusterletNamespace)
+					testinghelpers.ValidateImagePullSecret(t, objs[4], constants.DefaultKlusterletNamespace, "fake-token")
+					klusterlet, ok := objs[7].(*operatorv1.Klusterlet)
 					if !ok {
-						t.Errorf("import secret data %s, the objs[7] is not klusterlet", constants.ImportSecretImportYamlKey)
+						t.Errorf("the klusterlet is not found")
 					}
 					if klusterlet.Spec.NodePlacement.NodeSelector["kubernetes.io/os"] != "linux" {
 						t.Errorf("the klusterlet node selector %s is not %s",
@@ -803,6 +788,7 @@ func TestReconcile(t *testing.T) {
 							klusterlet.Spec.NodePlacement.Tolerations[0].Key, "foo")
 					}
 				}
+
 			},
 		},
 		{
