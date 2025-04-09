@@ -282,6 +282,10 @@ func createManifestWorks(
 				Labels: map[string]string{
 					constants.KlusterletWorksLabel: "true",
 				},
+				Annotations: map[string]string{
+					// make sure the crd manifestWork is the last to be deleted.
+					clusterv1.CleanupPriorityAnnotationKey: "100",
+				},
 			},
 			Spec: workv1.ManifestWorkSpec{
 				Workload: workv1.ManifestsTemplate{
@@ -331,6 +335,10 @@ func createManifestWorks(
 	// if crd is not set, we only apply klusterlet only, and the deleteOption
 	// should be foreground.
 	if len(crdYaml) == 0 {
+		klwork.SetAnnotations(map[string]string{
+			// make sure the klusterlet manifestWork is the last to be deleted if there is no crd manifestWork.
+			clusterv1.CleanupPriorityAnnotationKey: "100",
+		})
 		klwork.Spec.DeleteOption = &workv1.DeleteOption{
 			PropagationPolicy: workv1.DeletePropagationPolicyTypeForeground,
 		}
