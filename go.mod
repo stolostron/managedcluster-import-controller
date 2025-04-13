@@ -29,7 +29,7 @@ require (
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/utils v0.0.0-20241104100929-3ea5e8cea738
 	open-cluster-management.io/api v0.16.1
-	sigs.k8s.io/controller-runtime v0.19.3
+	sigs.k8s.io/controller-runtime v0.19.6
 )
 
 require (
@@ -40,7 +40,7 @@ require (
 	github.com/sethvargo/go-password v0.2.0
 	github.com/stretchr/testify v1.10.0
 	open-cluster-management.io/ocm v0.16.1-0.20250408035735-1974d75f2f9a
-	sigs.k8s.io/cluster-api v1.9.3
+	sigs.k8s.io/cluster-api v1.9.6
 	sigs.k8s.io/yaml v1.4.0
 )
 
@@ -62,6 +62,7 @@ require (
 	github.com/emicklei/go-restful/v3 v3.12.1 // indirect
 	github.com/evanphx/json-patch v5.9.0+incompatible // indirect
 	github.com/evanphx/json-patch/v5 v5.9.0 // indirect
+	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/getkin/kin-openapi v0.128.0 // indirect
 	github.com/go-chi/chi v1.5.5 // indirect
