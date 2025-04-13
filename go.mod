@@ -31,7 +31,7 @@ require (
 require (
 	github.com/openshift-online/ocm-sdk-go v0.1.392
 	github.com/openshift/hypershift/api v0.0.0-20241022184855-1fa7be0211e4
-	github.com/sethvargo/go-password v0.2.0
+	github.com/sethvargo/go-password v0.3.1
 )
 
 require (
