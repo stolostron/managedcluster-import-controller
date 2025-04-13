@@ -12,7 +12,7 @@ require (
 	github.com/openshift/assisted-service/api v0.0.0-20230809093954-25856935f237 // https://github.com/openshift/assisted-service/tree/release-ocm-2.9/api
 	github.com/openshift/hive/apis v0.0.0-20240503201730-e11a23b88b31
 	github.com/openshift/library-go v0.0.0-20230809121909-d7e7beca5bae // https://github.com/openshift/library-go/tree/release-4.14
-	github.com/spf13/pflag v1.0.6-0.20210604193023-d5e0c0615ace
+	github.com/spf13/pflag v1.0.6
 	github.com/stolostron/cluster-lifecycle-api v0.0.0-20240511020626-f2cac5194d99
 	go.uber.org/zap v1.26.0
 	golang.org/x/text v0.23.0
