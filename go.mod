@@ -5,7 +5,7 @@ go 1.23.6
 require (
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-logr/logr v1.4.2
-	github.com/google/go-cmp v0.6.0
+	github.com/google/go-cmp v0.7.0
 	github.com/onsi/ginkgo/v2 v2.15.0
 	github.com/onsi/gomega v1.31.0
 	github.com/openshift/api v0.0.0-20240524162738-d899f8877d22 // https://github.com/openshift/api/tree/release-4.14
@@ -99,7 +99,7 @@ require (
 	github.com/prometheus/client_golang v1.18.0 // indirect
 	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.45.0 // indirect
-	github.com/prometheus/procfs v0.12.0 // indirect
+	github.com/prometheus/procfs v0.16.0 // indirect
 	github.com/spf13/cobra v1.7.0 // indirect
 	go.mongodb.org/mongo-driver v1.7.5 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
