@@ -37,7 +37,7 @@ require (
 	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/openshift-online/ocm-sdk-go v0.1.392
 	github.com/openshift/hypershift/api v0.0.0-20241022184855-1fa7be0211e4
-	github.com/sethvargo/go-password v0.2.0
+	github.com/sethvargo/go-password v0.3.1
 	github.com/stretchr/testify v1.10.0
 	open-cluster-management.io/ocm v0.16.1-0.20250408035735-1974d75f2f9a
 	sigs.k8s.io/cluster-api v1.9.3
