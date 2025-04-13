@@ -16,7 +16,7 @@ require (
 	github.com/openshift/assisted-service/api v0.0.0
 	github.com/openshift/hive/apis v0.0.0-20250212001559-5d3f4d77dc90
 	github.com/openshift/library-go v0.0.0-20240207105404-126b47137408 // https://github.com/openshift/library-go/tree/release-4.14
-	github.com/spf13/pflag v1.0.6-0.20210604193023-d5e0c0615ace
+	github.com/spf13/pflag v1.0.6
 	github.com/stolostron/cluster-lifecycle-api v0.0.0-20240918064238-a5e71b599118
 	go.uber.org/zap v1.27.0
 	golang.org/x/text v0.23.0
@@ -121,7 +121,7 @@ require (
 	github.com/samber/lo v1.47.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
 	github.com/spf13/cast v1.7.0 // indirect
-	github.com/spf13/cobra v1.8.1 // indirect
+	github.com/spf13/cobra v1.9.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
 	go.mongodb.org/mongo-driver v1.14.0 // indirect
 	go.opentelemetry.io/otel v1.28.0 // indirect
