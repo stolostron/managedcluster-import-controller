@@ -235,12 +235,16 @@ func ensureCreateViaAnnotation(modified *bool, cluster *clusterv1.ManagedCluster
 		return
 	}
 
-	// there is a created-via annotation and the annotation is not created by hive or hypershift, we ensue that the
-	// created-via annotation is default annotation
-	if viaAnnotation != constants.CreatedViaAI &&
-		viaAnnotation != constants.CreatedViaHive &&
-		viaAnnotation != constants.CreatedViaDiscovery &&
-		viaAnnotation != constants.CreatedViaHypershift {
+	// Define a set of valid created-via values
+	validCreatedViaValues := map[string]bool{
+		constants.CreatedViaAI:         true,
+		constants.CreatedViaHive:       true,
+		constants.CreatedViaDiscovery:  true,
+		constants.CreatedViaHypershift: true,
+	}
+
+	// If the annotation value is not in the valid set, set it to the default value (other)
+	if !validCreatedViaValues[viaAnnotation] {
 		resourcemerge.MergeMap(modified, &cluster.Annotations, createViaOtherAnnotation)
 	}
 }
