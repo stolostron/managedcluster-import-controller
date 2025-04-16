@@ -1129,6 +1129,41 @@ func HasCertificates(supersetCertData, subsetCertData []byte) (bool, error) {
 	return true, nil
 }
 
+// ValidateCreatedViaAnnotation validates the created-via annotation value and returns whether it's valid.
+// If not valid, it can update the annotation to a default value if updateIfInvalid is true.
+func ValidateCreatedViaAnnotation(
+	modified *bool,
+	annotations map[string]string,
+	defaultValue string,
+	updateIfInvalid bool) bool {
+
+	viaAnnotation, ok := annotations[constants.CreatedViaAnnotation]
+	if !ok && updateIfInvalid {
+		// No created-via annotation, set it with the provided default value
+		resourcemerge.MergeMap(modified, &annotations, map[string]string{constants.CreatedViaAnnotation: defaultValue})
+		return false
+	}
+
+	// Define a set of valid created-via values
+	validCreatedViaValues := map[string]bool{
+		constants.CreatedViaAI:         true,
+		constants.CreatedViaHive:       true,
+		constants.CreatedViaDiscovery:  true,
+		constants.CreatedViaHypershift: true,
+	}
+
+	// If the annotation value is not in the valid set and updateIfInvalid is true,
+	// set it to the provided default value
+	if !validCreatedViaValues[viaAnnotation] {
+		if updateIfInvalid {
+			resourcemerge.MergeMap(modified, &annotations, map[string]string{constants.CreatedViaAnnotation: defaultValue})
+		}
+		return false
+	}
+
+	return true
+}
+
 func FilesToObjects(files []string, config interface{}, manifestFiles *embed.FS) ([]runtime.Object, error) {
 	objects := []runtime.Object{}
 	for _, file := range files {

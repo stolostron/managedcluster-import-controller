@@ -173,20 +173,21 @@ func (r *ReconcileClusterDeployment) setCreatedViaAnnotation(
 	ctx context.Context, clusterDeployment *hivev1.ClusterDeployment, cluster *clusterv1.ManagedCluster) error {
 	patch := client.MergeFrom(cluster.DeepCopy())
 
-	viaAnnotation := cluster.Annotations[constants.CreatedViaAnnotation]
-	if viaAnnotation == constants.CreatedViaDiscovery {
-		// create-via annotaion is discovery, do nothing
+	// If the annotation is already set to discovery, don't change it
+	if viaAnnotation, ok := cluster.Annotations[constants.CreatedViaAnnotation]; ok &&
+		viaAnnotation == constants.CreatedViaDiscovery {
 		return nil
 	}
 
 	modified := resourcemerge.BoolPtr(false)
+	// Set the appropriate annotation based on the platform type
+	newValue := constants.CreatedViaHive
 	if clusterDeployment.Spec.Platform.AgentBareMetal != nil {
-		resourcemerge.MergeMap(modified,
-			&cluster.Annotations, map[string]string{constants.CreatedViaAnnotation: constants.CreatedViaAI})
-	} else {
-		resourcemerge.MergeMap(modified,
-			&cluster.Annotations, map[string]string{constants.CreatedViaAnnotation: constants.CreatedViaHive})
+		newValue = constants.CreatedViaAI
 	}
+
+	resourcemerge.MergeMap(modified, &cluster.Annotations,
+		map[string]string{constants.CreatedViaAnnotation: newValue})
 
 	if !*modified {
 		return nil

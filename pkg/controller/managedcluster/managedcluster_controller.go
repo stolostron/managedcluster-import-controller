@@ -227,24 +227,5 @@ func (r *ReconcileManagedCluster) deleteManagedClusterAddon(
 }
 
 func ensureCreateViaAnnotation(modified *bool, cluster *clusterv1.ManagedCluster) {
-	createViaOtherAnnotation := map[string]string{constants.CreatedViaAnnotation: createdViaOther}
-	viaAnnotation, ok := cluster.Annotations[constants.CreatedViaAnnotation]
-	if !ok {
-		// no created-via annotation, set it with default annotation (other)
-		resourcemerge.MergeMap(modified, &cluster.Annotations, createViaOtherAnnotation)
-		return
-	}
-
-	// Define a set of valid created-via values
-	validCreatedViaValues := map[string]bool{
-		constants.CreatedViaAI:         true,
-		constants.CreatedViaHive:       true,
-		constants.CreatedViaDiscovery:  true,
-		constants.CreatedViaHypershift: true,
-	}
-
-	// If the annotation value is not in the valid set, set it to the default value (other)
-	if !validCreatedViaValues[viaAnnotation] {
-		resourcemerge.MergeMap(modified, &cluster.Annotations, createViaOtherAnnotation)
-	}
+	helpers.ValidateCreatedViaAnnotation(modified, cluster.Annotations, createdViaOther, true)
 }
