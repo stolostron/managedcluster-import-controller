@@ -201,7 +201,7 @@ func TestEnqueueManagedClusterByBootstrapKubeconfigSecret(t *testing.T) {
 			Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
 				BootstrapKubeConfigs: operatorv1.BootstrapKubeConfigs{
 					Type: operatorv1.LocalSecrets,
-					LocalSecrets: operatorv1.LocalSecretsConfig{
+					LocalSecrets: &operatorv1.LocalSecretsConfig{
 						KubeConfigSecrets: []operatorv1.KubeConfigSecret{
 							{
 								Name: "test-secret1",
@@ -218,7 +218,7 @@ func TestEnqueueManagedClusterByBootstrapKubeconfigSecret(t *testing.T) {
 			Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
 				BootstrapKubeConfigs: operatorv1.BootstrapKubeConfigs{
 					Type: operatorv1.LocalSecrets,
-					LocalSecrets: operatorv1.LocalSecretsConfig{
+					LocalSecrets: &operatorv1.LocalSecretsConfig{
 						KubeConfigSecrets: []operatorv1.KubeConfigSecret{
 							{
 								Name: "test-secret2",
@@ -343,7 +343,7 @@ func TestIndexKlusterletConfigByBootstrapKubeConfigSecrets(t *testing.T) {
 		Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
 			BootstrapKubeConfigs: operatorv1.BootstrapKubeConfigs{
 				Type: operatorv1.LocalSecrets,
-				LocalSecrets: operatorv1.LocalSecretsConfig{
+				LocalSecrets: &operatorv1.LocalSecretsConfig{
 					KubeConfigSecrets: []operatorv1.KubeConfigSecret{
 						{
 							Name: "test-secret1",
