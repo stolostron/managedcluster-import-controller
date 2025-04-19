@@ -146,7 +146,8 @@ func IndexKlusterletConfigByBootstrapKubeConfigSecrets() func(obj interface{}) (
 		}
 
 		var bootstrapKubeConfigSecrets []string
-		if kc.Spec.BootstrapKubeConfigs.Type == operatorv1.LocalSecrets {
+		if kc.Spec.BootstrapKubeConfigs.Type == operatorv1.LocalSecrets &&
+			kc.Spec.BootstrapKubeConfigs.LocalSecrets != nil {
 			for _, secret := range kc.Spec.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets {
 				bootstrapKubeConfigSecrets = append(bootstrapKubeConfigSecrets, secret.Name)
 			}
