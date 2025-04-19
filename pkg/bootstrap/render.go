@@ -276,13 +276,16 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 	if !localCluster &&
 		c.klusterletConfig != nil &&
 		c.klusterletConfig.Spec.BootstrapKubeConfigs.Type == operatorv1.LocalSecrets {
+		if c.klusterletConfig.Spec.BootstrapKubeConfigs.LocalSecrets == nil {
+			return nil, nil, fmt.Errorf("local secrets should be set")
+		}
 
 		c.chartConfig.Klusterlet.RegistrationConfiguration.FeatureGates = append(c.chartConfig.Klusterlet.RegistrationConfiguration.FeatureGates,
 			operatorv1.FeatureGate{
 				Feature: string(apifeature.MultipleHubs),
 				Mode:    operatorv1.FeatureGateModeTypeEnable,
 			})
-		c.chartConfig.Klusterlet.RegistrationConfiguration.BootstrapKubeConfigs = c.klusterletConfig.Spec.BootstrapKubeConfigs
+		c.chartConfig.Klusterlet.RegistrationConfiguration.BootstrapKubeConfigs = *c.klusterletConfig.Spec.BootstrapKubeConfigs.DeepCopy()
 		c.chartConfig.Klusterlet.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets = append(
 			c.chartConfig.Klusterlet.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets, operatorv1.KubeConfigSecret{
 				Name: constants.DefaultBootstrapHubKubeConfigSecretName + "-current-hub",
