@@ -14,6 +14,7 @@ import (
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	kubefake "k8s.io/client-go/kubernetes/fake"
@@ -705,6 +706,88 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 
 				testinghelpers.ValidateBoostrapSecret(t, objs[3], "bootstrap-hub-kubeconfig",
 					constants.DefaultKlusterletNamespace, "bootstrap kubeconfig")
+			},
+		},
+		{
+			name: "default cluster claim configuration",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+			},
+			defaultImagePullSecret: "",
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeDefault,
+				"test", // cluster name
+				[]byte("bootstrap kubeconfig"),
+			),
+			validateFunc: func(t *testing.T, objs, crds []runtime.Object) {
+				testinghelpers.ValidateObjectCount(t, objs, 10)
+
+				testinghelpers.ValidateKlusterlet(t, objs[7], operatorv1.InstallModeDefault,
+					"klusterlet", "test", constants.DefaultKlusterletNamespace)
+				klusterlet, _ := objs[7].(*operatorv1.Klusterlet)
+				if klusterlet.Spec.RegistrationConfiguration.ClusterClaimConfiguration == nil {
+					t.Errorf("the klusterlet ClusterClaimConfiguration should not be nil")
+				}
+
+				if klusterlet.Spec.RegistrationConfiguration.ClusterClaimConfiguration.MaxCustomClusterClaims != 0 {
+					t.Errorf("the klusterlet ClusterClaimConfiguration MaxCustomClusterClaims %d should be 0",
+						klusterlet.Spec.RegistrationConfiguration.ClusterClaimConfiguration.MaxCustomClusterClaims)
+				}
+				if !equality.Semantic.DeepEqual(
+					klusterlet.Spec.RegistrationConfiguration.ClusterClaimConfiguration.ReservedClusterClaimSuffixes,
+					reservedClusterClaims) {
+					t.Errorf("not expected klusterlet ClusterClaimConfiguration ReservedClusterClaimSuffixes %v",
+						klusterlet.Spec.RegistrationConfiguration.ClusterClaimConfiguration.ReservedClusterClaimSuffixes)
+				}
+			},
+		},
+		{
+			name: "with cluster claim configuration",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+			},
+			defaultImagePullSecret: "",
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeDefault,
+				"test", // cluster name
+				[]byte("bootstrap kubeconfig"),
+			).WithKlusterletConfig(&klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					ClusterClaimConfiguration: &operatorv1.ClusterClaimConfiguration{
+						MaxCustomClusterClaims:       25,
+						ReservedClusterClaimSuffixes: []string{"mce1", "mce2"},
+					},
+				},
+			}),
+			validateFunc: func(t *testing.T, objs, crds []runtime.Object) {
+				testinghelpers.ValidateObjectCount(t, objs, 10)
+
+				testinghelpers.ValidateKlusterlet(t, objs[7], operatorv1.InstallModeDefault,
+					"klusterlet", "test", constants.DefaultKlusterletNamespace)
+				klusterlet, _ := objs[7].(*operatorv1.Klusterlet)
+				if klusterlet.Spec.RegistrationConfiguration.ClusterClaimConfiguration == nil {
+					t.Errorf("the klusterlet ClusterClaimConfiguration should not be nil")
+				}
+
+				if klusterlet.Spec.RegistrationConfiguration.ClusterClaimConfiguration.MaxCustomClusterClaims != 25 {
+					t.Errorf("the klusterlet ClusterClaimConfiguration MaxCustomClusterClaims %d should be 25",
+						klusterlet.Spec.RegistrationConfiguration.ClusterClaimConfiguration.MaxCustomClusterClaims)
+				}
+				expectedReservedClusterClaims := append(reservedClusterClaims, []string{"mce1", "mce2"}...)
+				if !equality.Semantic.DeepEqual(
+					klusterlet.Spec.RegistrationConfiguration.ClusterClaimConfiguration.ReservedClusterClaimSuffixes,
+					expectedReservedClusterClaims) {
+					t.Errorf("not expected klusterlet ClusterClaimConfiguration ReservedClusterClaimSuffixes %v",
+						klusterlet.Spec.RegistrationConfiguration.ClusterClaimConfiguration.ReservedClusterClaimSuffixes)
+				}
 			},
 		},
 	}

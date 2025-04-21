@@ -47,6 +47,31 @@ var additionalClusterRoleFiles = []string{
 	"manifests/klusterlet/clusterrole_aggregate.yaml",
 }
 
+var reservedClusterClaims = []string{
+	"above.threshold.hostedclustercount.hypershift.openshift.io",
+	"apiserverurl.openshift.io",
+	"consoleurl.cluster.open-cluster-management.io",
+	"controlplanetopology.openshift.io",
+	"exclude-from-backup.velero.io",
+	"full.hostedclustercount.hypershift.openshift.io",
+	"hostingcluster.hypershift.openshift.io",
+	"id.k8s.io",
+	"id.openshift.io",
+	"infrastructure.openshift.io",
+	"kubeversion.open-cluster-management.io",
+	"local-cluster",
+	"name",
+	"nodearchitecture",
+	"oauthredirecturis.openshift.io",
+	"openshiftversion-major",
+	"openshiftversion-major-minor",
+	"platform.open-cluster-management.io",
+	"product.open-cluster-management.io",
+	"schedulable.open-cluster-management.io",
+	"version.openshift.io",
+	"zero.hostedclustercount.hypershift.openshift.io",
+}
+
 type BootstrapKubeConfigSecret struct {
 	Name       string
 	KubeConfig string
@@ -330,30 +355,6 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 }
 
 func setClusterClaimConfiguation(cc *chart.KlusterletChartConfig, kc *klusterletconfigv1alpha1.KlusterletConfig) {
-	reservedClusterClaims := []string{
-		"above.threshold.hostedclustercount.hypershift.openshift.io",
-		"apiserverurl.openshift.io",
-		"consoleurl.cluster.open-cluster-management.io",
-		"controlplanetopology.openshift.io",
-		"exclude-from-backup.velero.io",
-		"full.hostedclustercount.hypershift.openshift.io",
-		"hostingcluster.hypershift.openshift.io",
-		"id.k8s.io",
-		"id.openshift.io",
-		"infrastructure.openshift.io",
-		"kubeversion.open-cluster-management.io",
-		"local-cluster",
-		"name",
-		"nodearchitecture",
-		"oauthredirecturis.openshift.io",
-		"openshiftversion-major",
-		"openshiftversion-major-minor",
-		"platform.open-cluster-management.io",
-		"product.open-cluster-management.io",
-		"schedulable.open-cluster-management.io",
-		"version.openshift.io",
-		"zero.hostedclustercount.hypershift.openshift.io",
-	}
 	reservedClusterClaimsMap := sets.New[string]()
 	reservedClusterClaimsMap.Insert(reservedClusterClaims...)
 	defaultConfiguation := &operatorv1.ClusterClaimConfiguration{
