@@ -329,8 +329,7 @@ func NewAutoImportSecret(kubeClient kubernetes.Interface, clusterName string, mo
 			Namespace: clusterName,
 		},
 		Data: map[string][]byte{
-			"autoImportRetry": []byte("1"),
-			"kubeconfig":      secret.Data["kubeconfig"],
+			"kubeconfig": secret.Data["kubeconfig"],
 		},
 	}, nil
 }
@@ -347,9 +346,8 @@ func NewAutoImportSecretWithToken(kubeClient kubernetes.Interface, dynamicClient
 			Namespace: clusterName,
 		},
 		Data: map[string][]byte{
-			"autoImportRetry": []byte("1"),
-			"token":           token,
-			"server":          server,
+			"token":  token,
+			"server": server,
 		},
 	}, nil
 }
@@ -369,9 +367,8 @@ func NewRestoreAutoImportSecret(kubeClient kubernetes.Interface, dynamicClient d
 			},
 		},
 		Data: map[string][]byte{
-			"autoImportRetry": []byte("0"),
-			"token":           token,
-			"server":          server,
+			"token":  token,
+			"server": server,
 		},
 	}, nil
 }
@@ -388,9 +385,8 @@ func NewInvalidAutoImportSecret(kubeClient kubernetes.Interface, dynamicClient d
 			Namespace: clusterName,
 		},
 		Data: map[string][]byte{
-			"autoImportRetry": []byte("3"),
-			"token":           token,
-			"server":          server,
+			"token":  token,
+			"server": server,
 		},
 	}, nil
 }

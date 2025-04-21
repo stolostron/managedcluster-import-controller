@@ -135,10 +135,10 @@ func defaultApplyResourcesFunc(backupRestore bool, client *ClientHolder,
 
 // Import uses the managedClusterKubeClientSecret to generate a managed cluster client,
 // then use this client to import the managed cluster, return managed cluster import condition
-// when finished apply. If totalRetry is -1, there is no retry limit.
+// when finished apply.
 func (i *ImportHelper) Import(backupRestore bool, cluster *clusterv1.ManagedCluster,
-	managedClusterKubeClientSecret *corev1.Secret, lastRetry, totalRetry int) (
-	reconcile.Result, metav1.Condition, bool, int, error) {
+	managedClusterKubeClientSecret *corev1.Secret) (
+	reconcile.Result, metav1.Condition, bool, error) {
 	if i.generateClientHolderFunc == nil {
 		// if generateClientHolderFunc is nil, panic here
 		utilruntime.Must(fmt.Errorf("the generateClientHolderFunc in the ImportHelper is nil"))
@@ -146,7 +146,6 @@ func (i *ImportHelper) Import(backupRestore bool, cluster *clusterv1.ManagedClus
 
 	clusterName := cluster.Name
 	reqLogger := i.log.WithValues("Request.Name", clusterName)
-	currentRetry := lastRetry
 
 	// move to importing state for the condition
 	ic := meta.FindStatusCondition(cluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
@@ -156,7 +155,7 @@ func (i *ImportHelper) Import(backupRestore bool, cluster *clusterv1.ManagedClus
 				metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImporting,
 				"Start to import managed cluster",
-			), false, currentRetry, nil
+			), false, nil
 	}
 
 	// ensure the klusterlet manifest works exist
@@ -168,7 +167,7 @@ func (i *ImportHelper) Import(backupRestore bool, cluster *clusterv1.ManagedClus
 				metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImporting,
 				fmt.Sprintf("Get klusterlet manifestwork failed: %v. Will retry", err),
-			), false, currentRetry, err
+			), false, err
 	}
 	// This check is to ensure when the hub is restored on another cluster, the klusterlet manifestworks are
 	// created before calling the managed cluster to import. Otherwise, it is possible that klusterlet-agent
@@ -183,27 +182,18 @@ func (i *ImportHelper) Import(backupRestore bool, cluster *clusterv1.ManagedClus
 				metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImporting,
 				"Expect klusterlet manifestworks created, but got none. Will retry",
-			), false, currentRetry, nil
+			), false, nil
 	}
 
 	// build import client with managed cluster kube client secret
 	result, clientHolder, restMapper, err := i.generateClientHolderFunc(managedClusterKubeClientSecret)
 	if err != nil {
-		if result.Requeue {
-			return result,
-				NewManagedClusterImportSucceededCondition(
-					metav1.ConditionFalse,
-					constants.ConditionReasonManagedClusterImporting,
-					failureMessageOfKubeClientGerneration(managedClusterKubeClientSecret, err),
-				), false, currentRetry, nil
-		}
-
 		return result,
 			NewManagedClusterImportSucceededCondition(
 				metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImportFailed,
 				failureMessageOfInvalidAutoImportSecret(managedClusterKubeClientSecret, err),
-			), false, currentRetry, nil
+			), false, err
 	}
 
 	importSecretName := fmt.Sprintf("%s-%s", clusterName, constants.ImportSecretNameSuffix)
@@ -214,39 +204,30 @@ func (i *ImportHelper) Import(backupRestore bool, cluster *clusterv1.ManagedClus
 				metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImporting,
 				"Wait for import secret",
-			), false, currentRetry, nil
+			), false, nil
 	}
 	if err != nil {
 		return reconcile.Result{},
 			NewManagedClusterImportSucceededCondition(
 				metav1.ConditionFalse,
-				constants.ConditionReasonManagedClusterImporting,
+				constants.ConditionReasonManagedClusterImportFailed,
 				fmt.Sprintf("Get import secret failed: %v. Will retry", err),
-			), false, currentRetry, err
+			), false, err
 	}
 
-	currentRetry++
 	modified, err := i.applyResourcesFunc(backupRestore, clientHolder, restMapper, i.recorder, importSecret)
 	if err != nil {
 		condition := NewManagedClusterImportSucceededCondition(
 			metav1.ConditionFalse,
 			constants.ConditionReasonManagedClusterImportFailed,
-			fmt.Sprintf("Try to import managed cluster, retry times: %d/%d, error: %v",
-				currentRetry, totalRetry, err),
+			fmt.Sprintf("Try to import managed cluster, error: %v", err),
 		)
-
-		if totalRetry == -1 {
-			condition.Message = fmt.Sprintf("Try to import managed cluster, retry times: %d, error: %v",
-				currentRetry, err)
-			return reconcile.Result{}, condition, modified, currentRetry, err
-		}
 
 		if ContainAuthError(err) {
 			// return message reflects the auto import secret is invalid, so the user knows that
 			// a correct secret needs to be re-provided
 			condition.Message = failureMessageOfInvalidAutoImportSecretPrivileges(
 				managedClusterKubeClientSecret, err)
-			return reconcile.Result{}, condition, modified, currentRetry, nil
 		}
 
 		if ContainInternalServerError(err) {
@@ -254,18 +235,9 @@ func (i *ImportHelper) Import(backupRestore bool, cluster *clusterv1.ManagedClus
 			condition.Reason = constants.ConditionReasonManagedClusterImporting
 			condition.Message = fmt.Sprintf(
 				"Try to import managed cluster, apply resources error: %v. Will Retry", err)
-			return reconcile.Result{}, condition, modified, lastRetry, err
 		}
 
-		if currentRetry < totalRetry {
-			// maybe some network issue, retry after 10 second
-			condition.Reason = constants.ConditionReasonManagedClusterImporting
-			return reconcile.Result{RequeueAfter: 10 * time.Second},
-				condition, modified, currentRetry, nil
-		}
-
-		return reconcile.Result{},
-			condition, modified, currentRetry, nil
+		return reconcile.Result{}, condition, modified, err
 	}
 
 	return reconcile.Result{},
@@ -273,7 +245,7 @@ func (i *ImportHelper) Import(backupRestore bool, cluster *clusterv1.ManagedClus
 			metav1.ConditionFalse,
 			constants.ConditionReasonManagedClusterImporting,
 			conditionMessageImportingResourcesApplied,
-		), modified, currentRetry, nil
+		), modified, nil
 }
 
 func failureMessageOfKubeClientGerneration(managedClusterKubeClientSecret *corev1.Secret,

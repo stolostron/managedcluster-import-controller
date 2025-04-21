@@ -6,7 +6,6 @@ package autoimport
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"github.com/openshift/library-go/pkg/operator/events"
@@ -110,37 +109,6 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 
-	lastRetry := 0
-	totalRetry := 1
-	if len(autoImportSecret.Annotations[constants.AnnotationAutoImportCurrentRetry]) != 0 {
-		lastRetry, err = strconv.Atoi(autoImportSecret.Annotations[constants.AnnotationAutoImportCurrentRetry])
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-	}
-
-	if len(autoImportSecret.Data[constants.AutoImportRetryName]) != 0 {
-		totalRetry, err = strconv.Atoi(string(autoImportSecret.Data[constants.AutoImportRetryName]))
-		if err != nil {
-			if err := helpers.UpdateManagedClusterImportCondition(
-				r.client,
-				managedCluster,
-				helpers.NewManagedClusterImportSucceededCondition(
-					metav1.ConditionFalse,
-					constants.ConditionReasonManagedClusterImportFailed,
-					fmt.Sprintf("AutoImportSecretInvalid %s/%s; please check the value %s",
-						autoImportSecret.Namespace, autoImportSecret.Name, constants.AutoImportRetryName),
-				),
-				r.mcRecorder,
-			); err != nil {
-				return reconcile.Result{}, err
-			}
-			// auto import secret invalid, stop retrying
-			reqLogger.V(5).Info("Auto import secret invalid", "managedCluster", managedCluster.Name)
-			return reconcile.Result{}, nil
-		}
-	}
-
 	backupRestore := false
 	if v, ok := autoImportSecret.Labels[constants.LabelAutoImportRestore]; ok && strings.EqualFold(v, "true") {
 		backupRestore = true
@@ -167,8 +135,8 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	r.importHelper = r.importHelper.WithGenerateClientHolderFunc(generateClientHolderFunc)
-	result, condition, modified, currentRetry, iErr := r.importHelper.Import(
-		backupRestore, managedCluster, autoImportSecret, lastRetry, totalRetry)
+	result, condition, modified, iErr := r.importHelper.Import(
+		backupRestore, managedCluster, autoImportSecret)
 	// if resources are applied but NOT modified, will not update the condition, keep the original condition.
 	// This check is to prevent the current controller and import status controller from modifying the
 	// ManagedClusterImportSucceeded condition of the managed cluster in a loop
@@ -184,10 +152,9 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	reqLogger.V(5).Info("Import result", "importError", iErr, "condition", condition,
-		"current", currentRetry, "result", result, "modified", modified)
+		"result", result, "modified", modified)
 
-	if condition.Reason == constants.ConditionReasonManagedClusterImportFailed ||
-		helpers.ImportingResourcesApplied(&condition) {
+	if helpers.ImportingResourcesApplied(&condition) {
 		// clean up the import user when current cluster is rosa
 		if getter, ok := r.rosaKubeConfigGetters[managedClusterName]; ok {
 			if err := getter.Cleanup(); err != nil {
@@ -198,11 +165,9 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		}
 
 		// update the cluster URL before the auto secret is deleted if the importing resources are applied
-		if helpers.ImportingResourcesApplied(&condition) {
-			if err := updateClusterURL(ctx, r.client, managedCluster, autoImportSecret); err != nil {
-				reqLogger.Error(err, "Failed to update clusterURL")
-				return reconcile.Result{}, err
-			}
+		if err := updateClusterURL(ctx, r.client, managedCluster, autoImportSecret); err != nil {
+			reqLogger.Error(err, "Failed to update clusterURL")
+			return reconcile.Result{}, err
 		}
 
 		// delete secret
@@ -210,20 +175,6 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 			return reconcile.Result{}, err
 		}
 		return reconcile.Result{}, nil
-	}
-
-	if lastRetry < currentRetry && currentRetry < totalRetry {
-		// update secret
-		if autoImportSecret.Annotations == nil {
-			autoImportSecret.Annotations = make(map[string]string)
-		}
-		autoImportSecret.Annotations[constants.AnnotationAutoImportCurrentRetry] = strconv.Itoa(currentRetry)
-
-		if _, err := r.kubeClient.CoreV1().Secrets(managedClusterName).Update(
-			ctx, autoImportSecret, metav1.UpdateOptions{},
-		); err != nil {
-			return reconcile.Result{}, err
-		}
 	}
 
 	return result, iErr

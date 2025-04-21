@@ -148,10 +148,7 @@ func (r *ReconcileClusterDeployment) Reconcile(
 		return reconcile.Result{}, err
 	}
 
-	// totalRetry is not set for clusters provisioned via the ClusterDeployment API.
-	// If an import attempt fails (e.g., due to an unavailable API server), an error is returned, triggering
-	// another attempt after a backoff period until the cluster is successfully imported
-	result, condition, modified, _, iErr := r.importHelper.Import(false, managedCluster, hiveSecret, 0, -1)
+	result, condition, modified, iErr := r.importHelper.Import(false, managedCluster, hiveSecret)
 	// if resources are applied but NOT modified, will not update the condition, keep the original condition.
 	// This check is to prevent the current controller and import status controller from modifying the
 	// ManagedClusterImportSucceeded condition of the managed cluster in a loop
