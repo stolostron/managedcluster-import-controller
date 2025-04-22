@@ -106,11 +106,6 @@ spec:
                     description: Maximum number of custom ClusterClaims allowed.
                     format: int32
                     type: integer
-                  reservedClusterClaimSuffixes:
-                    description: Custom suffixes for reserved ClusterClaims.
-                    items:
-                      type: string
-                    type: array
                 required:
                 - maxCustomClusterClaims
                 type: object

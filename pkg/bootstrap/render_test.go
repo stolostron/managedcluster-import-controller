@@ -761,9 +761,8 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				[]byte("bootstrap kubeconfig"),
 			).WithKlusterletConfig(&klusterletconfigv1alpha1.KlusterletConfig{
 				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
-					ClusterClaimConfiguration: &operatorv1.ClusterClaimConfiguration{
-						MaxCustomClusterClaims:       25,
-						ReservedClusterClaimSuffixes: []string{"mce1", "mce2"},
+					ClusterClaimConfiguration: &klusterletconfigv1alpha1.ClusterClaimConfiguration{
+						MaxCustomClusterClaims: 25,
 					},
 				},
 			}),
@@ -781,10 +780,9 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 					t.Errorf("the klusterlet ClusterClaimConfiguration MaxCustomClusterClaims %d should be 25",
 						klusterlet.Spec.RegistrationConfiguration.ClusterClaimConfiguration.MaxCustomClusterClaims)
 				}
-				expectedReservedClusterClaims := append(reservedClusterClaims, []string{"mce1", "mce2"}...)
 				if !equality.Semantic.DeepEqual(
 					klusterlet.Spec.RegistrationConfiguration.ClusterClaimConfiguration.ReservedClusterClaimSuffixes,
-					expectedReservedClusterClaims) {
+					reservedClusterClaims) {
 					t.Errorf("not expected klusterlet ClusterClaimConfiguration ReservedClusterClaimSuffixes %v",
 						klusterlet.Spec.RegistrationConfiguration.ClusterClaimConfiguration.ReservedClusterClaimSuffixes)
 				}

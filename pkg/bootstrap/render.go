@@ -23,7 +23,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -355,19 +354,12 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 }
 
 func setClusterClaimConfiguation(cc *chart.KlusterletChartConfig, kc *klusterletconfigv1alpha1.KlusterletConfig) {
-	reservedClusterClaimsMap := sets.New[string]()
-	reservedClusterClaimsMap.Insert(reservedClusterClaims...)
 	defaultConfiguation := &operatorv1.ClusterClaimConfiguration{
 		ReservedClusterClaimSuffixes: reservedClusterClaims,
 	}
 
 	if kc != nil && kc.Spec.ClusterClaimConfiguration != nil {
 		defaultConfiguation.MaxCustomClusterClaims = kc.Spec.ClusterClaimConfiguration.MaxCustomClusterClaims
-		for _, rc := range kc.Spec.ClusterClaimConfiguration.ReservedClusterClaimSuffixes {
-			if !reservedClusterClaimsMap.Has(rc) {
-				defaultConfiguation.ReservedClusterClaimSuffixes = append(defaultConfiguation.ReservedClusterClaimSuffixes, rc)
-			}
-		}
 	}
 
 	cc.Klusterlet.RegistrationConfiguration.ClusterClaimConfiguration = defaultConfiguation
