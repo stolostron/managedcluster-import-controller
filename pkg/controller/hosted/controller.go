@@ -499,6 +499,10 @@ func createHostingManifestWork(managedClusterName string,
 			Labels: map[string]string{
 				constants.HostedClusterLabel: managedClusterName,
 			},
+			Annotations: map[string]string{
+				// make sure the klusterlet manifestWork is the last to be deleted.
+				clusterv1.CleanupPriorityAnnotationKey: "100",
+			},
 		},
 		Spec: workv1.ManifestWorkSpec{
 			Workload: workv1.ManifestsTemplate{
