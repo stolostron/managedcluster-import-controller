@@ -739,7 +739,7 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				}
 				if !equality.Semantic.DeepEqual(
 					klusterlet.Spec.RegistrationConfiguration.ClusterClaimConfiguration.ReservedClusterClaimSuffixes,
-					reservedClusterClaims) {
+					reservedClusterClaimSuffixes) {
 					t.Errorf("not expected klusterlet ClusterClaimConfiguration ReservedClusterClaimSuffixes %v",
 						klusterlet.Spec.RegistrationConfiguration.ClusterClaimConfiguration.ReservedClusterClaimSuffixes)
 				}
@@ -782,7 +782,7 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				}
 				if !equality.Semantic.DeepEqual(
 					klusterlet.Spec.RegistrationConfiguration.ClusterClaimConfiguration.ReservedClusterClaimSuffixes,
-					reservedClusterClaims) {
+					reservedClusterClaimSuffixes) {
 					t.Errorf("not expected klusterlet ClusterClaimConfiguration ReservedClusterClaimSuffixes %v",
 						klusterlet.Spec.RegistrationConfiguration.ClusterClaimConfiguration.ReservedClusterClaimSuffixes)
 				}
