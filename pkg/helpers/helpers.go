@@ -47,6 +47,7 @@ import (
 	kevents "k8s.io/client-go/tools/events"
 	certutil "k8s.io/client-go/util/cert"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/clock"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterscheme "open-cluster-management.io/api/client/cluster/clientset/versioned/scheme"
 	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
@@ -762,7 +763,8 @@ func NewEventRecorder(kubeClient kubernetes.Interface, controllerName string) ev
 	}
 
 	options := events.RecommendedClusterSingletonCorrelatorOptions()
-	return events.NewKubeRecorderWithOptions(kubeClient.CoreV1().Events(namespace), options, controllerName, controllerRef)
+	return events.NewKubeRecorderWithOptions(kubeClient.CoreV1().Events(namespace), options,
+		controllerName, controllerRef, clock.RealClock{})
 }
 
 func NewManagedClusterEventRecorder(ctx context.Context,
