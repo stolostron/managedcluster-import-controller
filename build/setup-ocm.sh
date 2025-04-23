@@ -26,27 +26,19 @@ function wait_deployment() {
   set -e
 }
 
+echo "###### deploy ocm"
+
+go mod tidy
+go mod vendor
+
 BUILD_DIR="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 REPO_DIR="$(dirname "$BUILD_DIR")"
-WORK_DIR="${REPO_DIR}/_output"
+HELM="${REPO_DIR}/_output/helm"
 
-mkdir -p "${WORK_DIR}"
 
-echo "###### deploy ocm"
-rm -rf "$WORK_DIR/_repo_ocm"
+${HELM} upgrade --install cluster-manager vendor/open-cluster-management.io/ocm/deploy/cluster-manager/chart/cluster-manager \
+--namespace=open-cluster-management --create-namespace --set replicaCount=1,images.registry="quay.io/stolostron",images.tag=$OCM_VERSION
 
-export OCM_BRANCH=$OCM_VERSION
-export IMAGE_NAME=quay.io/stolostron/registration-operator:$OCM_VERSION
-export REGISTRATION_OPERATOR_IMAGE=quay.io/stolostron/registration-operator:$OCM_VERSION
-export REGISTRATION_IMAGE=quay.io/stolostron/registration:$OCM_VERSION
-export WORK_IMAGE=quay.io/stolostron/work:$OCM_VERSION
-export PLACEMENT_IMAGE=quay.io/stolostron/placement:$OCM_VERSION
-export ADDON_MANAGER_IMAGE=quay.io/stolostron/addon-manager:$OCM_VERSION
-
-git clone --depth 1 --branch $OCM_BRANCH https://github.com/stolostron/ocm.git "$WORK_DIR/_repo_ocm"
-make deploy-hub-operator apply-hub-cr -C "$WORK_DIR/_repo_ocm"
-
-rm -rf "$WORK_DIR/_repo_ocm"
 
 wait_deployment open-cluster-management cluster-manager
 ${KUBECTL} -n open-cluster-management rollout status deploy cluster-manager --timeout=120s

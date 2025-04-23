@@ -6,23 +6,19 @@ package managedcluster
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	kevents "k8s.io/client-go/tools/events"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 )
 
 const clusterNameLabel = "name"
@@ -80,92 +76,42 @@ func (r *ReconcileManagedCluster) Reconcile(ctx context.Context, request reconci
 
 	reqLogger.V(5).Info("Reconciling the managed cluster meta object")
 
-	if managedCluster.DeletionTimestamp.IsZero() {
-		if err := r.ensureManagedClusterMetaObj(ctx, managedCluster); err != nil {
-			return reconcile.Result{}, err
-		}
-
-		// set cluster label on the managed cluster namespace
-		ns := &corev1.Namespace{}
-		err := r.client.Get(ctx, types.NamespacedName{Name: managedCluster.Name}, ns)
-		if errors.IsNotFound(err) {
-			return reconcile.Result{}, nil
-		}
-		if err != nil {
-			return reconcile.Result{}, err
-		}
-
-		modified := resourcemerge.BoolPtr(false)
-		// TODO: use one cluster label to filter the cluster ns.
-		// in ocm we use open-cluster-management.io/cluster-name label to filter cluster ns,
-		// but in acm we use cluster.open-cluster-management.io/managedCluster to filter cluster ns.
-		// to make sure the cluster ns can be filtered in some cases, add the 2 labels to the cluster ns here.
-		resourcemerge.MergeMap(modified, &ns.Labels, map[string]string{ClusterLabel: managedCluster.Name,
-			clusterv1.ClusterNameLabelKey: managedCluster.Name})
-
-		if !*modified {
-			return reconcile.Result{}, nil
-		}
-
-		if err := r.client.Update(ctx, ns); err != nil {
-			return reconcile.Result{}, err
-		}
-
-		r.recorder.Eventf("ManagedClusterNamespaceLabelUpdated",
-			"The managed cluster %s namespace label is added", managedCluster.Name)
+	if !managedCluster.DeletionTimestamp.IsZero() {
 		return reconcile.Result{}, nil
 	}
-
-	// add a detaching condition to the managed cluster if the managed cluster is deleting
-	// if it is already in detaching or force deaching state, skip it
-	ic := meta.FindStatusCondition(managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
-	if ic == nil || (ic.Reason != constants.ConditionReasonManagedClusterDetaching &&
-		ic.Reason != constants.ConditionReasonManagedClusterForceDetaching) {
-
-		if err := helpers.UpdateManagedClusterImportCondition(
-			r.client,
-			managedCluster,
-			helpers.NewManagedClusterImportSucceededCondition(
-				metav1.ConditionFalse,
-				constants.ConditionReasonManagedClusterDetaching,
-				"The managed cluster is being detached now",
-			),
-			r.mcRecorder,
-		); err != nil {
-			return reconcile.Result{}, err
-		}
+	if err := r.ensureManagedClusterMetaObj(ctx, managedCluster); err != nil {
+		return reconcile.Result{}, err
 	}
 
-	if len(managedCluster.Finalizers) > 1 {
-		// managed cluster is deleting, but other components finalizers are remaining,
-		// wait for other components to remove their finalizers
+	// set cluster label on the managed cluster namespace
+	ns := &corev1.Namespace{}
+	err = r.client.Get(ctx, types.NamespacedName{Name: managedCluster.Name}, ns)
+	if errors.IsNotFound(err) {
 		return reconcile.Result{}, nil
 	}
-
-	if len(managedCluster.Finalizers) == 0 || managedCluster.Finalizers[0] != constants.ImportFinalizer {
-		return reconcile.Result{}, nil
-	}
-
-	// managedCluster is deleting here.
-	// all manifestWorks in the cluster ns should be deleted since the api-resource-cleanup finalizer is removed.
-	// normally the addons should have been deleted too here.
-	// and we should wait all addon are deleted before remove the last finalizer from the cluster,
-	// because there is a case that the addon for the hosted cluster has finalizer hosting-manifests-cleanup/hosting-addon-pre-delete
-	// the addon-framework will not remove the finalizer from the addon for the hosted cluster when the cluster is not found.
-	addons, err := helpers.ListManagedClusterAddons(ctx, r.client, managedCluster.Name)
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	if len(addons.Items) != 0 {
-		// for safety force delete remained addon again here.
-		if err = r.deleteManagedClusterAddon(ctx, managedCluster); err != nil {
-			return reconcile.Result{}, err
-		}
 
-		return reconcile.Result{RequeueAfter: 5 * time.Second}, nil
+	modified := resourcemerge.BoolPtr(false)
+	// TODO: use one cluster label to filter the cluster ns.
+	// in ocm we use open-cluster-management.io/cluster-name label to filter cluster ns,
+	// but in acm we use cluster.open-cluster-management.io/managedCluster to filter cluster ns.
+	// to make sure the cluster ns can be filtered in some cases, add the 2 labels to the cluster ns here.
+	resourcemerge.MergeMap(modified, &ns.Labels, map[string]string{ClusterLabel: managedCluster.Name,
+		clusterv1.ClusterNameLabelKey: managedCluster.Name})
+
+	if !*modified {
+		return reconcile.Result{}, nil
 	}
 
-	return reconcile.Result{}, helpers.RemoveManagedClusterFinalizer(ctx, r.client, r.recorder, managedCluster, constants.ImportFinalizer)
+	if err := r.client.Update(ctx, ns); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	r.recorder.Eventf("ManagedClusterNamespaceLabelUpdated",
+		"The managed cluster %s namespace label is added", managedCluster.Name)
+	return reconcile.Result{}, nil
 }
 
 func (r *ReconcileManagedCluster) ensureManagedClusterMetaObj(ctx context.Context, managedCluster *clusterv1.ManagedCluster) error {
@@ -206,24 +152,6 @@ func (r *ReconcileManagedCluster) ensureManagedClusterMetaObj(ctx context.Contex
 	r.recorder.Eventf("ManagedClusterMetaObjModified", "The managed cluster %s meta data is modified: %s",
 		managedCluster.Name, strings.Join(msgs, ","))
 	return nil
-}
-
-func (r *ReconcileManagedCluster) deleteManagedClusterAddon(
-	ctx context.Context, managedCluster *clusterv1.ManagedCluster) error {
-	clusterName := managedCluster.Name
-	ns := &corev1.Namespace{}
-	err := r.client.Get(ctx, types.NamespacedName{Name: clusterName}, ns)
-	if errors.IsNotFound(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-
-	// force delete addons before delete cluster namespace in this case the addon is in deleting with finalizer.
-	// otherwise, the deleting addon may prevent the cluster namespace from being deleted.
-	// TODO: consider to delete this since addons should be deleted by the manifestwork controller.
-	return helpers.ForceDeleteAllManagedClusterAddons(ctx, r.client, managedCluster, r.recorder, r.mcRecorder)
 }
 
 func ensureCreateViaAnnotation(modified *bool, cluster *clusterv1.ManagedCluster) {

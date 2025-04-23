@@ -849,6 +849,11 @@ func DetermineKlusterletMode(cluster *clusterv1.ManagedCluster) operatorv1.Insta
 	return "Unknown"
 }
 
+func IsHostedCluster(cluster *clusterv1.ManagedCluster) bool {
+	installMode := DetermineKlusterletMode(cluster)
+	return installMode == operatorv1.InstallModeHosted || installMode == operatorv1.InstallModeSingletonHosted
+}
+
 func ValidateKlusterletMode(mode operatorv1.InstallMode) error {
 	if mode == operatorv1.InstallModeHosted && !features.DefaultMutableFeatureGate.Enabled(features.KlusterletHostedMode) {
 		return fmt.Errorf("featurn gate %s is not enabled", features.KlusterletHostedMode)
@@ -924,29 +929,11 @@ func ForceDeleteManagedClusterAddon(
 func ForceDeleteAllManagedClusterAddons(
 	ctx context.Context,
 	runtimeClient client.Client,
-	cluster *clusterv1.ManagedCluster,
-	recorder events.Recorder,
-	mcRecorder kevents.EventRecorder) error {
-
-	addons, err := ListManagedClusterAddons(ctx, runtimeClient, cluster.Name)
+	clusterName string,
+	recorder events.Recorder) error {
+	addons, err := ListManagedClusterAddons(ctx, runtimeClient, clusterName)
 	if err != nil {
 		return err
-	}
-
-	if len(addons.Items) > 0 {
-		// update the managed cluster import condition to force detaching if there are addons need to be deleted
-		if err := UpdateManagedClusterImportCondition(
-			runtimeClient,
-			cluster,
-			NewManagedClusterImportSucceededCondition(
-				metav1.ConditionFalse,
-				constants.ConditionReasonManagedClusterForceDetaching,
-				"The managed cluster is being detached forcely",
-			),
-			mcRecorder,
-		); err != nil {
-			return err
-		}
 	}
 
 	for _, item := range addons.Items {

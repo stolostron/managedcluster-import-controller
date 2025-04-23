@@ -106,12 +106,6 @@ const (
 	// ManifestWorkFinalizer is used to delete all manifestworks before deleting a managed cluster.
 	ManifestWorkFinalizer = "managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup"
 
-	// PostponeDeletionAnnotation is used to delete the manifest work with this annotation until 10 min after the cluster is deleted.
-	PostponeDeletionAnnotation = "open-cluster-management/postpone-delete"
-
-	// ManifestWorkPostponeDeleteTime is the postponed time to delete manifest work with postpone-delete annotation
-	ManifestWorkPostponeDeleteTime = 10 * time.Minute
-
 	DefaultKlusterletNamespace = "open-cluster-management-agent"
 )
 

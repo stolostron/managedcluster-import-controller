@@ -41,6 +41,23 @@ GIT_REMOTE_URL  = $(shell git config --get remote.origin.url)
 VCS_REF     = $(if $(shell git status --porcelain),$(GIT_COMMIT)-$(BUILD_DATE),$(GIT_COMMIT))
 endif
 
+
+HELM_ARCHOS:=linux-amd64
+ifeq ($(GOHOSTOS),darwin)
+	ifeq ($(GOHOSTARCH),amd64)
+		OPERATOR_SDK_ARCHOS:=darwin_amd64
+		HELM_ARCHOS:=darwin-amd64
+	endif
+	ifeq ($(GOHOSTARCH),arm64)
+		OPERATOR_SDK_ARCHOS:=darwin_arm64
+		HELM_ARCHOS:=darwin-arm64
+	endif
+endif
+
+HELM?=$(PWD)/_output/helm
+HELM_VERSION?=v3.14.0
+helm_gen_dir:=$(dir $(HELM))
+
 ## Runs a set of required checks
 .PHONY: check
 check: check-copyright lint
@@ -100,7 +117,7 @@ deploy:
 
 ## Runs e2e test
 .PHONY: e2e-test
-e2e-test: build-image
+e2e-test: build-image ensure-helm
 	@build/setup-kind-clusters.sh
 	@build/setup-ocm.sh
 	@build/setup-import-controller.sh
@@ -114,7 +131,7 @@ clean-e2e-test:
 
 ## Run e2e test against Prow(an OCP cluster)
 .PHONY: e2e-test-prow
-e2e-test-prow:
+e2e-test-prow: ensure-helm
 	@build/setup-prow.sh
 	@build/setup-ocm.sh enable-auto-approval
 	@build/setup-import-controller.sh enable-agent-registration
@@ -127,3 +144,15 @@ vendor:
 	go mod tidy -compat=1.18
 	go mod vendor
 
+ensure-helm:
+ifeq "" "$(wildcard $(HELM))"
+	$(info Installing helm into '$(HELM)')
+	mkdir -p '$(helm_gen_dir)'
+	curl -s -f -L https://get.helm.sh/helm-$(HELM_VERSION)-$(HELM_ARCHOS).tar.gz -o '$(helm_gen_dir)$(HELM_VERSION)-$(HELM_ARCHOS).tar.gz'
+	tar -zvxf '$(helm_gen_dir)/$(HELM_VERSION)-$(HELM_ARCHOS).tar.gz' -C $(helm_gen_dir)
+	mv $(helm_gen_dir)/$(HELM_ARCHOS)/helm $(HELM)
+	rm -rf $(helm_gen_dir)/$(HELM_ARCHOS)
+	chmod +x '$(HELM)';
+else
+	$(info Using existing helm from "$(HELM)")
+endif
