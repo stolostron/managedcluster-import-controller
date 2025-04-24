@@ -46,6 +46,11 @@ var additionalClusterRoleFiles = []string{
 	"manifests/klusterlet/clusterrole_aggregate.yaml",
 }
 
+var reservedClusterClaimSuffixes = []string{
+	"openshift.io",
+	"open-cluster-management.io",
+}
+
 type BootstrapKubeConfigSecret struct {
 	Name       string
 	KubeConfig string
@@ -305,6 +310,9 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 		c.chartConfig.MultiHubBootstrapHubKubeConfigs = bootstrapKubeConfigSecrets
 	}
 
+	// Set MCE reserved clusterclaims
+	setClusterClaimConfiguation(c.chartConfig, c.klusterletConfig)
+
 	crds, objects, err := chart.RenderKlusterletChart(c.chartConfig, c.chartConfig.Klusterlet.Namespace)
 	if err != nil {
 		return nil, nil, err
@@ -323,6 +331,18 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 	}
 	manifestsBytes = append(manifestsBytes, additionalManifestsBytes...)
 	return manifestsBytes, crdBytes, nil
+}
+
+func setClusterClaimConfiguation(cc *chart.KlusterletChartConfig, kc *klusterletconfigv1alpha1.KlusterletConfig) {
+	defaultConfiguation := &operatorv1.ClusterClaimConfiguration{
+		ReservedClusterClaimSuffixes: reservedClusterClaimSuffixes,
+	}
+
+	if kc != nil && kc.Spec.ClusterClaimConfiguration != nil {
+		defaultConfiguation.MaxCustomClusterClaims = kc.Spec.ClusterClaimConfiguration.MaxCustomClusterClaims
+	}
+
+	cc.Klusterlet.RegistrationConfiguration.ClusterClaimConfiguration = defaultConfiguation
 }
 
 func convertKubeConfigSecrets(ctx context.Context,
