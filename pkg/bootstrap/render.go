@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/component-base/featuregate"
 	"k8s.io/klog/v2"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	apifeature "open-cluster-management.io/api/feature"
@@ -268,6 +269,19 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 		}
 
 		c.chartConfig.Images.ImageCredentials.DockerConfigJson = string(imagePullSecret.Data[corev1.DockerConfigJsonKey])
+	}
+
+	// feature gates
+	if c.klusterletConfig != nil {
+		for _, f := range c.klusterletConfig.Spec.FeatureGates {
+			if _, ok := apifeature.DefaultSpokeRegistrationFeatureGates[featuregate.Feature(f.Feature)]; ok {
+				c.chartConfig.Klusterlet.RegistrationConfiguration.FeatureGates = append(c.chartConfig.Klusterlet.RegistrationConfiguration.FeatureGates,
+					f)
+			} else if _, ok := apifeature.DefaultSpokeWorkFeatureGates[featuregate.Feature(f.Feature)]; ok {
+				c.chartConfig.Klusterlet.WorkConfiguration.FeatureGates = append(c.chartConfig.Klusterlet.WorkConfiguration.FeatureGates,
+					f)
+			}
+		}
 	}
 
 	// MultipleHubs
