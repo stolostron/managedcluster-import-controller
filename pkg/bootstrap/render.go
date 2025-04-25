@@ -299,11 +299,21 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 			return nil, nil, fmt.Errorf("local secrets should be set")
 		}
 
-		c.chartConfig.Klusterlet.RegistrationConfiguration.FeatureGates = append(c.chartConfig.Klusterlet.RegistrationConfiguration.FeatureGates,
-			operatorv1.FeatureGate{
-				Feature: string(apifeature.MultipleHubs),
-				Mode:    operatorv1.FeatureGateModeTypeEnable,
-			})
+		// if multipleHubFeatures is not set in featureGates field, set it to enable.
+		var multipleHubFeatureSet bool
+		for _, f := range c.chartConfig.Klusterlet.RegistrationConfiguration.FeatureGates {
+			if f.Feature == string(apifeature.MultipleHubs) {
+				multipleHubFeatureSet = true
+			}
+		}
+
+		if !multipleHubFeatureSet {
+			c.chartConfig.Klusterlet.RegistrationConfiguration.FeatureGates = append(c.chartConfig.Klusterlet.RegistrationConfiguration.FeatureGates,
+				operatorv1.FeatureGate{
+					Feature: string(apifeature.MultipleHubs),
+					Mode:    operatorv1.FeatureGateModeTypeEnable,
+				})
+		}
 		c.chartConfig.Klusterlet.RegistrationConfiguration.BootstrapKubeConfigs = *c.klusterletConfig.Spec.BootstrapKubeConfigs.DeepCopy()
 		c.chartConfig.Klusterlet.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets = append(
 			c.chartConfig.Klusterlet.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets, operatorv1.KubeConfigSecret{
