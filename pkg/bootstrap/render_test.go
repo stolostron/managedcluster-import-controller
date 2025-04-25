@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"context"
+	"k8s.io/apimachinery/pkg/api/equality"
+	apifeature "open-cluster-management.io/api/feature"
 	"os"
 	"testing"
 	"time"
@@ -14,7 +16,6 @@ import (
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
-	"k8s.io/apimachinery/pkg/api/equality"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	kubefake "k8s.io/client-go/kubernetes/fake"
@@ -709,14 +710,7 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 			},
 		},
 		{
-			name: "default cluster claim configuration",
-			clientObjs: []runtimeclient.Object{
-				&corev1.Namespace{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test",
-					},
-				},
-			},
+			name:                   "default cluster claim configuration",
 			defaultImagePullSecret: "",
 			config: NewKlusterletManifestsConfig(
 				operatorv1.InstallModeDefault,
@@ -785,6 +779,77 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 					reservedClusterClaimSuffixes) {
 					t.Errorf("not expected klusterlet ClusterClaimConfiguration ReservedClusterClaimSuffixes %v",
 						klusterlet.Spec.RegistrationConfiguration.ClusterClaimConfiguration.ReservedClusterClaimSuffixes)
+				}
+			},
+		},
+		{
+			name: "with feature gates",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+			},
+			defaultImagePullSecret: "test-image-pull-secret",
+			runtimeObjs: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-image-pull-secret",
+					},
+					Data: map[string][]byte{
+						corev1.DockerConfigJsonKey: []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeDockerConfigJson,
+				},
+			},
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeDefault,
+				"test", // cluster name
+				[]byte("bootstrap kubeconfig"),
+			).WithKlusterletConfig(&klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					FeatureGates: []operatorv1.FeatureGate{
+						{
+							Feature: string(apifeature.RawFeedbackJsonString),
+							Mode:    operatorv1.FeatureGateModeTypeEnable,
+						},
+						{
+							Feature: string(apifeature.ClusterClaim),
+							Mode:    operatorv1.FeatureGateModeTypeDisable,
+						},
+					},
+				},
+			}),
+			validateFunc: func(t *testing.T, objects, crds []runtime.Object) {
+				testinghelpers.ValidateObjectCount(t, objects, 10)
+				testinghelpers.ValidateCRDs(t, crds, 1)
+				testinghelpers.ValidateNamespace(t, objects[0], constants.DefaultKlusterletNamespace)
+				testinghelpers.ValidateKlusterlet(t, objects[7], operatorv1.InstallModeDefault,
+					"klusterlet", "test", constants.DefaultKlusterletNamespace)
+
+				klusterlet, _ := objects[7].(*operatorv1.Klusterlet)
+				if klusterlet.Spec.WorkConfiguration == nil {
+					t.Errorf("the klusterlet WorkConfiguration is not specified")
+				}
+				if !equality.Semantic.DeepEqual(klusterlet.Spec.WorkConfiguration.FeatureGates, []operatorv1.FeatureGate{
+					{
+						Feature: string(apifeature.RawFeedbackJsonString),
+						Mode:    operatorv1.FeatureGateModeTypeEnable,
+					},
+				}) {
+					t.Errorf("the klusterlet work feature gate is not set.")
+				}
+				if klusterlet.Spec.RegistrationConfiguration == nil {
+					t.Errorf("the klusterlet RegistrationConfiguration is not specified")
+				}
+				if !equality.Semantic.DeepEqual(klusterlet.Spec.RegistrationConfiguration.FeatureGates, []operatorv1.FeatureGate{
+					{
+						Feature: string(apifeature.ClusterClaim),
+						Mode:    operatorv1.FeatureGateModeTypeDisable,
+					},
+				}) {
+					t.Errorf("the klusterlet registration feature gate is not set.")
 				}
 			},
 		},

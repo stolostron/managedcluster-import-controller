@@ -1018,6 +1018,49 @@ func assertAppliedManifestWorkEvictionGracePeriod(evictionGracePeriod *metav1.Du
 	})
 }
 
+func assertFeatureGate(name string, regsitrationFeatureGates, workFeatureGates []operatorv1.FeatureGate) {
+	ginkgo.By(fmt.Sprintf("Klusterlet %s should have desired feature gate", name), func() {
+		gomega.Eventually(func() error {
+			var err error
+
+			klusterlet, err := hubOperatorClient.OperatorV1().Klusterlets().Get(context.TODO(), name, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+
+			if len(regsitrationFeatureGates) > 0 {
+				if klusterlet.Spec.RegistrationConfiguration == nil {
+					return fmt.Errorf("klusterlet %v has no registration configuration", klusterlet.Name)
+				}
+				if !equality.Semantic.DeepEqual(regsitrationFeatureGates, klusterlet.Spec.RegistrationConfiguration.FeatureGates) {
+					return fmt.Errorf("feature gate is not correct set, get %v, desired %v",
+						klusterlet.Spec.RegistrationConfiguration.FeatureGates, regsitrationFeatureGates)
+				}
+			} else {
+				if klusterlet.Spec.RegistrationConfiguration != nil && len(klusterlet.Spec.RegistrationConfiguration.FeatureGates) > 0 {
+					return fmt.Errorf("klusterlet %v has no registration configuration", klusterlet.Name)
+				}
+			}
+
+			if len(workFeatureGates) > 0 {
+				if klusterlet.Spec.WorkConfiguration == nil {
+					return fmt.Errorf("klusterlet %v has no work configuration", klusterlet.Name)
+				}
+				if !equality.Semantic.DeepEqual(workFeatureGates, klusterlet.Spec.WorkConfiguration.FeatureGates) {
+					return fmt.Errorf("feature gate is not correct set, get %v, desired %v",
+						klusterlet.Spec.WorkConfiguration.FeatureGates, workFeatureGates)
+				}
+			} else {
+				if klusterlet.Spec.WorkConfiguration != nil && len(klusterlet.Spec.WorkConfiguration.FeatureGates) > 0 {
+					return fmt.Errorf("klusterlet %v has no work configuration", klusterlet.Name)
+				}
+			}
+
+			return nil
+		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+	})
+}
+
 func hasCertificate(certs []*x509.Certificate, cert *x509.Certificate) bool {
 	if cert == nil {
 		return true

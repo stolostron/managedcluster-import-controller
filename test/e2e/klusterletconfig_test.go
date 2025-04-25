@@ -10,6 +10,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
+	apifeature "open-cluster-management.io/api/feature"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -487,6 +488,55 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 		assertAppliedManifestWorkEvictionGracePeriod(nil)
 		assertManagedClusterAvailable(managedClusterName)
 		assertManagedClusterManifestWorksAvailable(managedClusterName)
+	})
+
+	It("Should deploy the klusterlet with featuregate", func() {
+		By("Create managed cluster", func() {
+			_, err := util.CreateManagedClusterWithShortLeaseDuration(
+				hubClusterClient,
+				managedClusterName,
+				map[string]string{
+					"agent.open-cluster-management.io/klusterlet-config": klusterletConfigName,
+				},
+				util.NewLable("local-cluster", "true"))
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		// klusterletconfig is missing and it will be ignored
+		assertManagedClusterAvailable(managedClusterName)
+		assertManagedClusterManifestWorksAvailable(managedClusterName)
+
+		By("Create KlusterletConfig with feature gate", func() {
+			_, err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Create(context.TODO(), &klusterletconfigv1alpha1.KlusterletConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: klusterletConfigName,
+				},
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					FeatureGates: []operatorv1.FeatureGate{
+						{
+							Feature: string(apifeature.RawFeedbackJsonString),
+							Mode:    operatorv1.FeatureGateModeTypeEnable,
+						},
+					},
+				},
+			}, metav1.CreateOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		assertFeatureGate("klusterlet", nil, []operatorv1.FeatureGate{
+			{
+				Feature: string(apifeature.RawFeedbackJsonString),
+				Mode:    operatorv1.FeatureGateModeTypeEnable,
+			}})
+		assertManagedClusterAvailable(managedClusterName)
+
+		By("Delete Klusterletconfig", func() {
+			err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Delete(context.TODO(), klusterletConfigName, metav1.DeleteOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		assertFeatureGate("klusterlet", nil, nil)
+		assertManagedClusterAvailable(managedClusterName)
 	})
 })
 
