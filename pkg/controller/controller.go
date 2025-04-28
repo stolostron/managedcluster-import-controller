@@ -22,11 +22,11 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/importstatus"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/manifestwork"
+	"github.com/stolostron/managedcluster-import-controller/pkg/controller/resourcecleanup"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/selfmanagedcluster"
 	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
-
 	certificatesv1 "k8s.io/api/certificates/v1"
 	kevents "k8s.io/client-go/tools/events"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
@@ -98,6 +98,12 @@ func AddToManager(ctx context.Context,
 					return hosted.Add(ctx, manager, clientHolder, informerHolder, mcRecorder)
 				}
 				return nil
+			},
+		},
+		{
+			resourcecleanup.ControllerName,
+			func() error {
+				return resourcecleanup.Add(ctx, manager, clientHolder, mcRecorder)
 			},
 		},
 	}

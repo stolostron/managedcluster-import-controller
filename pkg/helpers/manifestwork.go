@@ -7,24 +7,21 @@ package helpers
 import (
 	"context"
 	"fmt"
-	"strings"
-	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
-	kevents "k8s.io/client-go/tools/events"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
+	"k8s.io/client-go/kubernetes"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 type WorkSelector func(string, workv1.ManifestWork) bool
@@ -86,7 +83,11 @@ func ForceDeleteManifestWork(ctx context.Context, workClient workclient.Interfac
 		return err
 	}
 
-	if err := workClient.WorkV1().ManifestWorks(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
+	err = workClient.WorkV1().ManifestWorks(namespace).Delete(ctx, name, metav1.DeleteOptions{})
+	if errors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
 		return err
 	}
 
@@ -102,8 +103,8 @@ func ForceDeleteManifestWork(ctx context.Context, workClient workclient.Interfac
 	// if the manifest work is not deleted, force remove its finalizers
 	if len(manifestWork.Finalizers) != 0 {
 		patch := "{\"metadata\": {\"finalizers\":[]}}"
-		if _, err := workClient.WorkV1().ManifestWorks(namespace).Patch(
-			ctx, name, types.MergePatchType, []byte(patch), metav1.PatchOptions{}); err != nil {
+		if _, err = workClient.WorkV1().ManifestWorks(namespace).Patch(ctx, name, types.MergePatchType,
+			[]byte(patch), metav1.PatchOptions{}); err != nil && !errors.IsNotFound(err) {
 			return err
 		}
 	}
@@ -113,10 +114,37 @@ func ForceDeleteManifestWork(ctx context.Context, workClient workclient.Interfac
 	return nil
 }
 
-// DeleteManifestWork triggers the deletion action of the manifestwork
-func DeleteManifestWork(ctx context.Context, workClient workclient.Interface, recorder events.Recorder,
-	namespace, name string) error {
-	manifestWork, err := workClient.WorkV1().ManifestWorks(namespace).Get(ctx, name, metav1.GetOptions{})
+// ListManagedClusterAddons lists all managedclusteraddons for the managed cluster
+func ListManagedClusterAddons(ctx context.Context, runtimeClient client.Client, clusterName string) (
+	*addonv1alpha1.ManagedClusterAddOnList, error) {
+	managedClusterAddons := &addonv1alpha1.ManagedClusterAddOnList{}
+	if err := runtimeClient.List(ctx, managedClusterAddons, client.InNamespace(clusterName)); err != nil {
+		return managedClusterAddons, err
+	}
+	return managedClusterAddons, nil
+}
+
+// GetWorkRoleBinding gets the work roleBinding in the cluster ns
+func GetWorkRoleBinding(ctx context.Context, runtimeClient client.Client, clusterName string) (
+	*rbacv1.RoleBinding, error) {
+	workRoleBinding := &rbacv1.RoleBinding{}
+	workRoleBindingName := fmt.Sprintf("open-cluster-management:managedcluster:%s:work", clusterName)
+	err := runtimeClient.Get(ctx, types.NamespacedName{Name: workRoleBindingName, Namespace: clusterName}, workRoleBinding)
+	if errors.IsNotFound(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return workRoleBinding, nil
+}
+
+// ForceDeleteWorkRoleBinding gets the work roleBinding in the cluster ns
+func ForceDeleteWorkRoleBinding(ctx context.Context, kubeClient kubernetes.Interface, clusterName string,
+	recorder events.Recorder) error {
+	workRoleBindingName := fmt.Sprintf("open-cluster-management:managedcluster:%s:work", clusterName)
+	workRoleBinding, err := kubeClient.RbacV1().RoleBindings(clusterName).Get(ctx, workRoleBindingName, metav1.GetOptions{})
 	if errors.IsNotFound(err) {
 		return nil
 	}
@@ -124,102 +152,37 @@ func DeleteManifestWork(ctx context.Context, workClient workclient.Interface, re
 		return err
 	}
 
-	if !manifestWork.DeletionTimestamp.IsZero() {
-		// the manifest work is deleting, do nothing
-		return nil
-	}
-
-	if err := workClient.WorkV1().ManifestWorks(namespace).Delete(ctx, name, metav1.DeleteOptions{}); err != nil {
-		return err
-	}
-
-	recorder.Eventf("ManifestWorksDeleted", fmt.Sprintf("The manifest work %s/%s is deleted", namespace, name))
-	return nil
-}
-
-// NoPendingManifestWorks checks whether there are pending manifestworks for the managed cluster
-func NoPendingManifestWorks(ctx context.Context, log logr.Logger,
-	clusterName string, manifestWorks []workv1.ManifestWork,
-	ignoredSelector WorkSelector) (bool, error) {
-	manifestWorkNames := []string{}
-	ignoredManifestWorkNames := []string{}
-	for _, manifestWork := range manifestWorks {
-		if ignoredSelector(clusterName, manifestWork) {
-			ignoredManifestWorkNames = append(ignoredManifestWorkNames, manifestWork.GetName())
-		} else {
-			manifestWorkNames = append(manifestWorkNames, manifestWork.GetName())
-		}
-	}
-
-	if len(manifestWorkNames) != 0 {
-		log.Info(fmt.Sprintf("In addition to ignored manifest works %s, there are also have %s",
-			strings.Join(ignoredManifestWorkNames, ","), strings.Join(manifestWorkNames, ",")))
-		return false, nil
-	}
-
-	return true, nil
-}
-
-// ListManagedClusterAddons lists all managedclusteraddons for the managed cluster
-func ListManagedClusterAddons(ctx context.Context, runtimeClient client.Client, clusterName string) (
-	*addonv1alpha1.ManagedClusterAddOnList, error) {
-	managedClusterAddons := &addonv1alpha1.ManagedClusterAddOnList{}
-	if err := runtimeClient.List(ctx, managedClusterAddons, client.InNamespace(clusterName)); err != nil {
-		return nil, err
-	}
-	return managedClusterAddons, nil
-}
-
-// NoManagedClusterAddons checks whether there are managedclusteraddons for the managed cluster
-func NoManagedClusterAddons(ctx context.Context, runtimeClient client.Client, clusterName string) (bool, error) {
-	managedclusteraddons, err := ListManagedClusterAddons(ctx, runtimeClient, clusterName)
-	if err != nil {
-		return false, err
-	}
-
-	return len(managedclusteraddons.Items) == 0, nil
-}
-
-// DeleteManagedClusterAddons deletes all managedclusteraddons for the managed cluster
-func DeleteManagedClusterAddons(
-	ctx context.Context,
-	runtimeClient client.Client,
-	cluster *clusterv1.ManagedCluster,
-	recorder events.Recorder,
-	mcRecorder kevents.EventRecorder) error {
-	if IsClusterUnavailable(cluster) {
-		// the managed cluster is offline, force delete all managed cluster addons
-		return ForceDeleteAllManagedClusterAddons(ctx, runtimeClient, cluster, recorder, mcRecorder)
-	}
-
-	return runtimeClient.DeleteAllOf(ctx, &addonv1alpha1.ManagedClusterAddOn{}, client.InNamespace(cluster.GetName()))
-}
-
-// DeleteManifestWorkWithSelector deletes manifestworks but ignores the ignoredSelector selected manifestworks
-func DeleteManifestWorkWithSelector(ctx context.Context, workClient workclient.Interface, recorder events.Recorder,
-	cluster *clusterv1.ManagedCluster, works []workv1.ManifestWork,
-	ignoredSelector func(clusterName string, manifestWork workv1.ManifestWork) bool) error {
-
-	for _, manifestWork := range works {
-		if ignoredSelector(cluster.GetName(), manifestWork) {
-			continue
-		}
-
-		annotations := manifestWork.GetAnnotations()
-		if _, ok := annotations[constants.PostponeDeletionAnnotation]; ok {
-			if time.Since(cluster.DeletionTimestamp.Time) < constants.ManifestWorkPostponeDeleteTime {
-				continue
-			}
-		}
-		if err := DeleteManifestWork(ctx, workClient, recorder, manifestWork.Namespace, manifestWork.Name); err != nil {
+	if workRoleBinding.DeletionTimestamp.IsZero() {
+		if err = kubeClient.RbacV1().RoleBindings(clusterName).
+			Delete(ctx, workRoleBindingName, metav1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
 			return err
 		}
 	}
 
+	// reload the manifest work
+	workRoleBinding, err = kubeClient.RbacV1().RoleBindings(clusterName).Get(ctx, workRoleBindingName, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	// if the manifest work is not deleted, force remove its finalizers
+	if len(workRoleBinding.Finalizers) != 0 {
+		patch := "{\"metadata\": {\"finalizers\":[]}}"
+		if _, err = kubeClient.RbacV1().RoleBindings(clusterName).Patch(ctx, workRoleBindingName,
+			types.MergePatchType, []byte(patch), metav1.PatchOptions{}); err != nil && !errors.IsNotFound(err) {
+			return err
+		}
+	}
+
+	recorder.Eventf("workRoleBindingDeleted",
+		fmt.Sprintf("The manifest work roleBinding %s/%s is force deleted", clusterName, workRoleBindingName))
 	return nil
 }
 
-// IsClusterUnavailable checks whether the cluster is unavilable
+// IsClusterUnavailable checks whether the cluster is unavailable
 func IsClusterUnavailable(cluster *clusterv1.ManagedCluster) bool {
 	if meta.IsStatusConditionFalse(cluster.Status.Conditions, clusterv1.ManagedClusterConditionAvailable) {
 		return true

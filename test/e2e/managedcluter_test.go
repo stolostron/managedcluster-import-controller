@@ -10,14 +10,9 @@ import (
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/util/rand"
-	"k8s.io/client-go/util/retry"
-	workv1 "open-cluster-management.io/api/work/v1"
-
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/rand"
 )
 
 // ginkgo.Serial promise specs not run in parallel
@@ -123,66 +118,4 @@ var _ = ginkgo.Describe("Importing a managed cluster manually", func() {
 		ginkgo.By("Recover after delete", func() { assertManagedClusterImportSecret(managedClusterName) })
 	})
 
-	ginkgo.It("Should postpone delete manifest with postpone-delete annotation", ginkgo.Serial, func() {
-		assertManagedClusterNamespace(managedClusterName)
-
-		manifestwork := &workv1.ManifestWork{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-postpone-time",
-				Namespace: managedClusterName,
-				Annotations: map[string]string{
-					"open-cluster-management/postpone-delete": "",
-				},
-			},
-			Spec: workv1.ManifestWorkSpec{
-				Workload: workv1.ManifestsTemplate{
-					Manifests: []workv1.Manifest{
-						{
-							RawExtension: runtime.RawExtension{Raw: []byte("{\"apiVersion\": \"v1\", \"kind\": " +
-								"\"Namespace\", \"metadata\": {\"name\": \"open-cluster-management-agent-addon\"}}")},
-						},
-					},
-				},
-			},
-		}
-		_, err := hubWorkClient.WorkV1().ManifestWorks(managedClusterName).Create(context.TODO(), manifestwork, metav1.CreateOptions{})
-		gomega.Expect(err).ToNot(gomega.HaveOccurred())
-
-		err = hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), managedClusterName, metav1.DeleteOptions{})
-		gomega.Expect(err).ToNot(gomega.HaveOccurred())
-
-		gomega.Eventually(func() error {
-			_, err := hubWorkClient.WorkV1().ManifestWorks(managedClusterName).Get(context.TODO(), manifestwork.GetName(), metav1.GetOptions{})
-			if err != nil {
-				return err
-			}
-			return nil
-		}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
-
-		err = retry.RetryOnConflict(retry.DefaultBackoff, func() error {
-			currentWork, err := hubWorkClient.WorkV1().ManifestWorks(managedClusterName).Get(context.TODO(), manifestwork.GetName(), metav1.GetOptions{})
-			if err != nil {
-				return err
-			}
-			newWork := currentWork.DeepCopy()
-			newWork.SetAnnotations(map[string]string{})
-			_, err = hubWorkClient.WorkV1().ManifestWorks(managedClusterName).Update(context.TODO(), newWork, metav1.UpdateOptions{})
-			if err != nil {
-				return err
-			}
-			return nil
-		})
-		gomega.Expect(err).ToNot(gomega.HaveOccurred())
-
-		gomega.Eventually(func() error {
-			_, err := hubWorkClient.WorkV1().ManifestWorks(managedClusterName).Get(context.TODO(), manifestwork.GetName(), metav1.GetOptions{})
-			if err != nil && errors.IsNotFound(err) {
-				return nil
-			}
-			if err != nil {
-				return err
-			}
-			return fmt.Errorf("waiting for the manifestwork is deleted")
-		}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
-	})
 })
