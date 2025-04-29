@@ -88,9 +88,9 @@ type KlusterletConfigSpec struct {
 	// InstallMode is the mode to install the klusterlet
 	InstallMode *InstallMode `json:"installMode,omitempty"`
 
-	// BootstrapKubeConfigSecrets is the list of secrets that reflects the
-	// Klusterlet.Spec.RegistrationConfiguration.BootstrapKubeConfigs.
-	BootstrapKubeConfigs operatorv1.BootstrapKubeConfigs `json:"bootstrapKubeConfigs,omitempty"`
+	// MultipleHubsConfig contains configuration specific to multiple hub scenarios
+	// +optional
+	MultipleHubsConfig *MultipleHubsConfig `json:"multipleHubsConfig,omitempty"`
 
 	// FeatureGates is the list of feature gate for the klusterlet agent.
 	// If it is set empty, default feature gates will be used.
@@ -126,6 +126,11 @@ const (
 	// the klusterlet is by default klusterlet and can be set to klusterlet-{KlusterletNamePostFix}. The
 	// install namespace of the klusterlet is open-cluster-management-{KlusterletNamePostFix}
 	InstallModeNoOperator InstallModeType = "noOperator"
+
+	// GenBootstrapKubeConfigStrategyDefault represents the default strategy for bootstrap kubeconfig generation
+	GenBootstrapKubeConfigStrategyDefault string = "Default"
+	// GenBootstrapKubeConfigStrategyIncludeCurrentHub represents the strategy to include current hub when generating bootstrap kubeconfig
+	GenBootstrapKubeConfigStrategyIncludeCurrentHub string = "IncludeCurrentHub"
 )
 
 type NoOperator struct {
@@ -254,6 +259,21 @@ type ClusterClaimConfiguration struct {
 	// +kubebuilder:default:=20
 	// +required
 	MaxCustomClusterClaims int32 `json:"maxCustomClusterClaims"`
+}
+
+// MultipleHubsConfig contains configuration specific to multiple hub scenarios
+type MultipleHubsConfig struct {
+	// GenBootstrapKubeConfigStrategy controls the strategy for generating bootstrap kubeconfig files.
+	// Default - Generate bootstrap kubeconfigs only with the BootstrapKubeConfigs configured in KlusterletConfig.
+	// IncludeCurrentHub - When generating bootstrap kubeconfigs, automatically include the current hub's kubeconfig.
+	// +optional
+	// +kubebuilder:default:=Default
+	// +kubebuilder:validation:Enum=Default;IncludeCurrentHub
+	GenBootstrapKubeConfigStrategy string `json:"genBootstrapKubeConfigStrategy,omitempty"`
+
+	// BootstrapKubeConfigs is the list of bootstrap kubeconfigs for multiple hubs
+	// +optional
+	BootstrapKubeConfigs operatorv1.BootstrapKubeConfigs `json:"bootstrapKubeConfigs,omitempty"`
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

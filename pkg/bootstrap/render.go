@@ -294,12 +294,13 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 
 	if !localCluster &&
 		c.klusterletConfig != nil &&
-		c.klusterletConfig.Spec.BootstrapKubeConfigs.Type == operatorv1.LocalSecrets {
-		if c.klusterletConfig.Spec.BootstrapKubeConfigs.LocalSecrets == nil {
+		c.klusterletConfig.Spec.MultipleHubsConfig != nil &&
+		c.klusterletConfig.Spec.MultipleHubsConfig.BootstrapKubeConfigs.Type == operatorv1.LocalSecrets {
+		if c.klusterletConfig.Spec.MultipleHubsConfig.BootstrapKubeConfigs.LocalSecrets == nil {
 			return nil, nil, fmt.Errorf("local secrets should be set")
 		}
 
-		// if multipleHubFeatures is not set in featureGates field, set it to enable.
+		// If MultipleHubs feature is not set in featureGates field, set it to enable.
 		var multipleHubFeatureSet bool
 		for _, f := range c.chartConfig.Klusterlet.RegistrationConfiguration.FeatureGates {
 			if f.Feature == string(apifeature.MultipleHubs) {
@@ -314,23 +315,31 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 					Mode:    operatorv1.FeatureGateModeTypeEnable,
 				})
 		}
-		c.chartConfig.Klusterlet.RegistrationConfiguration.BootstrapKubeConfigs = *c.klusterletConfig.Spec.BootstrapKubeConfigs.DeepCopy()
-		c.chartConfig.Klusterlet.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets = append(
-			c.chartConfig.Klusterlet.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets, operatorv1.KubeConfigSecret{
-				Name: constants.DefaultBootstrapHubKubeConfigSecretName + "-current-hub",
-			})
+		c.chartConfig.Klusterlet.RegistrationConfiguration.BootstrapKubeConfigs = *c.klusterletConfig.Spec.MultipleHubsConfig.BootstrapKubeConfigs.DeepCopy()
+
+		// Only append the current hub KubeConfigSecret if the strategy is IncludeCurrentHub
+		if c.klusterletConfig.Spec.MultipleHubsConfig != nil &&
+			c.klusterletConfig.Spec.MultipleHubsConfig.GenBootstrapKubeConfigStrategy == klusterletconfigv1alpha1.GenBootstrapKubeConfigStrategyIncludeCurrentHub {
+			c.chartConfig.Klusterlet.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets = append(
+				c.chartConfig.Klusterlet.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets, operatorv1.KubeConfigSecret{
+					Name: constants.DefaultBootstrapHubKubeConfigSecretName + "-current-hub",
+				})
+		}
 
 		bootstrapKubeConfigSecrets, err := convertKubeConfigSecrets(ctx,
-			c.klusterletConfig.Spec.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets, clientHolder.KubeClient)
+			c.klusterletConfig.Spec.MultipleHubsConfig.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets, clientHolder.KubeClient)
 		if err != nil {
 			return nil, nil, err
 		}
-		// add default bootstrap kubeconfig secret into the list:
-		// TODO: deduplicate the bootstrap kubeconfig secrets @xuezhaojun
-		bootstrapKubeConfigSecrets = append(bootstrapKubeConfigSecrets, chart.BootStrapKubeConfig{
-			Name:       constants.DefaultBootstrapHubKubeConfigSecretName + "-current-hub",
-			KubeConfig: c.chartConfig.BootstrapHubKubeConfig,
-		})
+
+		// Only append the current hub KubeConfigSecret if the strategy is IncludeCurrentHub
+		if c.klusterletConfig.Spec.MultipleHubsConfig != nil &&
+			c.klusterletConfig.Spec.MultipleHubsConfig.GenBootstrapKubeConfigStrategy == klusterletconfigv1alpha1.GenBootstrapKubeConfigStrategyIncludeCurrentHub {
+			bootstrapKubeConfigSecrets = append(bootstrapKubeConfigSecrets, chart.BootStrapKubeConfig{
+				Name:       constants.DefaultBootstrapHubKubeConfigSecretName + "-current-hub",
+				KubeConfig: c.chartConfig.BootstrapHubKubeConfig,
+			})
+		}
 		c.chartConfig.MultiHubBootstrapHubKubeConfigs = bootstrapKubeConfigSecrets
 	}
 

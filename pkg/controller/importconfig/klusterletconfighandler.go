@@ -146,9 +146,10 @@ func IndexKlusterletConfigByBootstrapKubeConfigSecrets() func(obj interface{}) (
 		}
 
 		var bootstrapKubeConfigSecrets []string
-		if kc.Spec.BootstrapKubeConfigs.Type == operatorv1.LocalSecrets &&
-			kc.Spec.BootstrapKubeConfigs.LocalSecrets != nil {
-			for _, secret := range kc.Spec.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets {
+		if kc.Spec.MultipleHubsConfig != nil &&
+			kc.Spec.MultipleHubsConfig.BootstrapKubeConfigs.Type == operatorv1.LocalSecrets &&
+			kc.Spec.MultipleHubsConfig.BootstrapKubeConfigs.LocalSecrets != nil {
+			for _, secret := range kc.Spec.MultipleHubsConfig.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets {
 				bootstrapKubeConfigSecrets = append(bootstrapKubeConfigSecrets, secret.Name)
 			}
 		}
