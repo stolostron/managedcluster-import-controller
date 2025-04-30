@@ -12,9 +12,9 @@ require (
 	github.com/google/go-cmp v0.7.0
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.36.3
-	github.com/openshift/api v0.0.0-20250124212313-a770960d61e0
+	github.com/openshift/api v0.0.0-20250313134101-8a7efbfb5316
 	github.com/openshift/assisted-service/api v0.0.0
-	github.com/openshift/hive/apis v0.0.0-20250212001559-5d3f4d77dc90
+	github.com/openshift/hive/apis v0.0.0-20250429225910-aaacfdeef819
 	github.com/openshift/library-go v0.0.0-20250228164547-bad2d1bf3a37 // https://github.com/openshift/library-go/tree/release-4.14
 	github.com/spf13/pflag v1.0.6-0.20210604193023-d5e0c0615ace
 	github.com/stolostron/cluster-lifecycle-api v0.0.0-20250423070327-874816736d44
@@ -27,7 +27,7 @@ require (
 	k8s.io/client-go v0.32.3
 	k8s.io/component-base v0.32.3
 	k8s.io/klog/v2 v2.130.1
-	k8s.io/utils v0.0.0-20241104100929-3ea5e8cea738
+	k8s.io/utils v0.0.0-20241210054802-24370beab758
 	open-cluster-management.io/api v0.16.2-0.20250422072120-cadf714c3055
 	sigs.k8s.io/controller-runtime v0.20.2
 )
@@ -138,7 +138,7 @@ require (
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.36.0 // indirect
-	golang.org/x/net v0.37.0 // indirect
+	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/oauth2 v0.28.0 // indirect
 	golang.org/x/sync v0.12.0 // indirect
 	golang.org/x/sys v0.32.0 // indirect
@@ -155,9 +155,9 @@ require (
 	helm.sh/helm/v3 v3.17.3 // indirect
 	k8s.io/kube-aggregator v0.32.1 // indirect
 	k8s.io/kube-openapi v0.0.0-20241105132330-32ad38e42d3f // indirect
-	sigs.k8s.io/json v0.0.0-20241010143419-9aa6b5e7a4b3 // indirect
+	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
 	sigs.k8s.io/kube-storage-version-migrator v0.0.6-0.20230721195810-5c8923c5ff96 // indirect
-	sigs.k8s.io/structured-merge-diff/v4 v4.4.2 // indirect
+	sigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect
 )
 
 // hive/apis depends on openshift/installer depends these required openshift/assisted-service pkgs
