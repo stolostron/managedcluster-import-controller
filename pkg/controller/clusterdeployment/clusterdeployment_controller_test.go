@@ -222,7 +222,7 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedErr:             false,
+			expectedErr:             true,
 			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
 		},
 	}

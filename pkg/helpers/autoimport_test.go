@@ -260,6 +260,46 @@ func TestImportHelper(t *testing.T) {
 			expectedConditionReason:  constants.ConditionReasonManagedClusterImporting,
 		},
 		{
+			name:       "retry forever with invalid auto-import kubeconfig",
+			lastRetry:  0,
+			totalRetry: -1,
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: managedClusterName,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: managedClusterName,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
+			importSecret: testinghelpers.GetImportSecret(managedClusterName),
+			autoImportSecret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-admin-kubeconfig",
+					Namespace: managedClusterName,
+				},
+				Data: map[string][]byte{
+					"kubeconfig": []byte("invalid-kubeconfig"),
+				},
+			},
+			generateClientHolderFunc: GenerateImportClientFromKubeConfigSecret,
+			expectedErr:              true,
+			expectedCurrentRetry:     0,
+			expectedConditionStatus:  metav1.ConditionFalse,
+			expectedConditionReason:  constants.ConditionReasonManagedClusterImportFailed,
+		},
+		{
 			name:       "retry forever",
 			lastRetry:  0,
 			totalRetry: -1,
