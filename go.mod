@@ -101,7 +101,7 @@ require (
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
 
-replace github.com/openshift/assisted-service/models => github.com/openshift/assisted-service/models v0.0.0-20230809093954-25856935f237 // https://github.com/openshift/assisted-service/tree/release-ocm-2.9/models
+replace github.com/openshift/assisted-service/models => github.com/openshift/assisted-service/models 36feaa473765 // https://github.com/openshift/assisted-service/tree/release-ocm-2.9/models
 
 // CVE-2025-22868
 // This is from tag v0.26.openshift.1
