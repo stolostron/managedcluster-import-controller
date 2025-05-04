@@ -136,6 +136,6 @@ require (
 
 // hive/apis depends on openshift/installer depends these required openshift/assisted-service pkgs
 // https://github.com/openshift/installer/blob/24dec5d33b436e100c9b7b1a36aece38d716041d/go.mod#L315-L319
-replace github.com/openshift/assisted-service/models => github.com/openshift/assisted-service/models v0.0.0-20230831114549-1922eda29cf8
+replace github.com/openshift/assisted-service/models => github.com/openshift/assisted-service/models 36feaa473765
 
 replace github.com/openshift/assisted-service/api => github.com/openshift/assisted-service/api v0.0.0-20230831114549-1922eda29cf8
