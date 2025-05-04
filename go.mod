@@ -9,7 +9,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.9.5
 	github.com/onsi/gomega v1.27.7
 	github.com/openshift/api v0.0.0-20230809230802-fd420c26854b // https://github.com/openshift/api/tree/release-4.14
-	github.com/openshift/assisted-service/api v0.0.0-20230809093954-25856935f237 // https://github.com/openshift/assisted-service/tree/release-ocm-2.9/api
+	github.com/openshift/assisted-service/api 36feaa473765 // https://github.com/openshift/assisted-service/tree/release-ocm-2.9/api
 	github.com/openshift/hive/apis v0.0.0-20230825202726-4418e43e27a3
 	github.com/openshift/library-go v0.0.0-20230809121909-d7e7beca5bae // https://github.com/openshift/library-go/tree/release-4.14
 	github.com/spf13/pflag v1.0.5
