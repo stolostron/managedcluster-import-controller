@@ -154,7 +154,7 @@ require (
 	gorm.io/gorm v1.24.5 // indirect
 	helm.sh/helm/v3 v3.17.3 // indirect
 	k8s.io/kube-aggregator v0.32.1 // indirect
-	k8s.io/kube-openapi v0.0.0-20241105132330-32ad38e42d3f // indirect
+	k8s.io/kube-openapi c8a335a9a2ff // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
 	sigs.k8s.io/kube-storage-version-migrator v0.0.6-0.20230721195810-5c8923c5ff96 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect
