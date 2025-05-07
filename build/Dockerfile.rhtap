@@ -7,8 +7,7 @@ ENV REMOTE_SOURCE_DIR='/remote-source'
 
 COPY $REMOTE_SOURCE $REMOTE_SOURCE_DIR/app/
 WORKDIR $REMOTE_SOURCE_DIR/app
-
-RUN go build -mod=readonly -o $REMOTE_SOURCE_DIR/app/manager ./cmd/manager
+RUN BUILD_OUTPUT_DIR=${REMOTE_SOURCE_DIR}/app make build
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 LABEL \
