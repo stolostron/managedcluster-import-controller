@@ -45,34 +45,10 @@ func TestDeleteAutoImportSecret(t *testing.T) {
 					Name:      "auto-import-secret",
 					Namespace: "test",
 				},
-				Data: map[string][]byte{
-					"autoImportRetry": []byte("0"),
-				},
 			},
 			verifyFunc: func(t *testing.T, kubeClinent kubernetes.Interface) {
 				_, err := kubeClinent.CoreV1().Secrets("test").Get(context.TODO(), "auto-import-secret", metav1.GetOptions{})
 				if !errors.IsNotFound(err) {
-					t.Errorf("unexpect err %v", err)
-				}
-			},
-		},
-		{
-			name: "delete the secret failed",
-			autoImportSecret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "auto-import-secret",
-					Namespace: "test",
-					Annotations: map[string]string{
-						constants.AnnotationKeepingAutoImportSecret: "",
-					},
-				},
-				Data: map[string][]byte{
-					"autoImportRetry": []byte("0"),
-				},
-			},
-			verifyFunc: func(t *testing.T, kubeClinent kubernetes.Interface) {
-				_, err := kubeClinent.CoreV1().Secrets("test").Get(context.TODO(), "auto-import-secret", metav1.GetOptions{})
-				if err != nil {
 					t.Errorf("unexpect err %v", err)
 				}
 			},
@@ -145,28 +121,22 @@ func TestImportHelper(t *testing.T) {
 		autoImportSecret         *corev1.Secret
 		importSecret             *corev1.Secret
 		works                    []runtime.Object
-		lastRetry                int
-		totalRetry               int
 		generateClientHolderFunc GenerateClientHolderFunc
 		expectedErr              bool
-		expectedCurrentRetry     int
 		expectedRequeueAfter     time.Duration
 		expectedConditionStatus  metav1.ConditionStatus
 		expectedConditionReason  string
 	}{
 		{
-			name:       "no manifest works",
-			lastRetry:  0,
-			totalRetry: 1,
-			works:      []runtime.Object{},
+			name:  "no manifest works",
+			works: []runtime.Object{},
 			autoImportSecret: &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "auto-import-secret",
 					Namespace: managedClusterName,
 				},
 				Data: map[string][]byte{
-					"autoImportRetry": []byte("2"),
-					"kubeconfig":      testinghelpers.BuildKubeconfig(config),
+					"kubeconfig": testinghelpers.BuildKubeconfig(config),
 				},
 			},
 			importSecret: testinghelpers.GetImportSecret(managedClusterName),
@@ -174,15 +144,12 @@ func TestImportHelper(t *testing.T) {
 				return reconcile.Result{}, nil, nil, fmt.Errorf("not Implemented")
 			},
 			expectedErr:             false,
-			expectedCurrentRetry:    0,
 			expectedRequeueAfter:    3 * time.Second,
 			expectedConditionStatus: metav1.ConditionFalse,
 			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
 		},
 		{
-			name:       "no import-secret",
-			lastRetry:  0,
-			totalRetry: 1,
+			name: "no import-secret",
 			works: []runtime.Object{
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
@@ -214,95 +181,11 @@ func TestImportHelper(t *testing.T) {
 			},
 			generateClientHolderFunc: GenerateImportClientFromKubeConfigSecret,
 			expectedErr:              false,
-			expectedCurrentRetry:     0,
 			expectedConditionStatus:  metav1.ConditionFalse,
 			expectedConditionReason:  constants.ConditionReasonManagedClusterImporting,
 		},
 		{
-			name:       "update auto import secret current retry times",
-			lastRetry:  1,
-			totalRetry: 3,
-			works: []runtime.Object{
-				&workv1.ManifestWork{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-klusterlet-crds",
-						Namespace: managedClusterName,
-						Labels: map[string]string{
-							constants.KlusterletWorksLabel: "true",
-						},
-					},
-				},
-				&workv1.ManifestWork{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-klusterlet",
-						Namespace: managedClusterName,
-						Labels: map[string]string{
-							constants.KlusterletWorksLabel: "true",
-						},
-					},
-				},
-			},
-			importSecret: testinghelpers.GetImportSecret(managedClusterName),
-			autoImportSecret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "auto-import-secret",
-					Namespace: managedClusterName,
-				},
-				Data: map[string][]byte{
-					"kubeconfig": testinghelpers.BuildKubeconfig(config),
-				},
-			},
-			generateClientHolderFunc: GenerateImportClientFromKubeConfigSecret,
-			expectedErr:              false,
-			expectedCurrentRetry:     2,
-			expectedRequeueAfter:     10 * time.Second,
-			expectedConditionStatus:  metav1.ConditionFalse,
-			expectedConditionReason:  constants.ConditionReasonManagedClusterImporting,
-		},
-		{
-			name:       "retry forever",
-			lastRetry:  0,
-			totalRetry: -1,
-			works: []runtime.Object{
-				&workv1.ManifestWork{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-klusterlet-crds",
-						Namespace: managedClusterName,
-						Labels: map[string]string{
-							constants.KlusterletWorksLabel: "true",
-						},
-					},
-				},
-				&workv1.ManifestWork{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-klusterlet",
-						Namespace: managedClusterName,
-						Labels: map[string]string{
-							constants.KlusterletWorksLabel: "true",
-						},
-					},
-				},
-			},
-			importSecret: testinghelpers.GetImportSecret(managedClusterName),
-			autoImportSecret: &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-admin-kubeconfig",
-					Namespace: managedClusterName,
-				},
-				Data: map[string][]byte{
-					"kubeconfig": testinghelpers.BuildKubeconfig(config),
-				},
-			},
-			generateClientHolderFunc: GenerateImportClientFromKubeConfigSecret,
-			expectedErr:              true,
-			expectedCurrentRetry:     1,
-			expectedConditionStatus:  metav1.ConditionFalse,
-			expectedConditionReason:  constants.ConditionReasonManagedClusterImportFailed,
-		},
-		{
-			name:       "import cluster with auto-import secret invalid",
-			lastRetry:  0,
-			totalRetry: 1,
+			name: "import cluster with invalid auto-import secret",
 			works: []runtime.Object{
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
@@ -335,16 +218,13 @@ func TestImportHelper(t *testing.T) {
 				},
 			},
 			generateClientHolderFunc: GenerateImportClientFromKubeTokenSecret,
-			expectedErr:              false,
-			expectedCurrentRetry:     0,
+			expectedErr:              true,
 			expectedRequeueAfter:     0 * time.Second,
 			expectedConditionStatus:  metav1.ConditionFalse,
 			expectedConditionReason:  constants.ConditionReasonManagedClusterImportFailed,
 		},
 		{
-			name:       "only update the bootstrap secret",
-			lastRetry:  0,
-			totalRetry: 1,
+			name: "only update the bootstrap secret",
 			works: []runtime.Object{
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
@@ -380,15 +260,12 @@ func TestImportHelper(t *testing.T) {
 			},
 			generateClientHolderFunc: GenerateImportClientFromKubeConfigSecret,
 			expectedErr:              false,
-			expectedCurrentRetry:     1,
 			expectedRequeueAfter:     0 * time.Second,
 			expectedConditionStatus:  metav1.ConditionFalse,
 			expectedConditionReason:  constants.ConditionReasonManagedClusterImporting,
 		},
 		{
-			name:       "import cluster with auto-import secret valid",
-			lastRetry:  0,
-			totalRetry: 1,
+			name: "import cluster with valid auto-import secret",
 			works: []runtime.Object{
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
@@ -414,30 +291,23 @@ func TestImportHelper(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "auto-import-secret",
 					Namespace: managedClusterName,
-					Labels: map[string]string{
-						constants.LabelAutoImportRestore: "true",
-					},
 				},
 				Data: map[string][]byte{
 					"kubeconfig": testinghelpers.BuildKubeconfig(config),
 				},
 			},
 			generateClientHolderFunc: GenerateImportClientFromKubeConfigSecret,
-			expectedErr:              false,
-			expectedCurrentRetry:     1,
+			expectedErr:              true,
 			expectedRequeueAfter:     0,
 			expectedConditionStatus:  metav1.ConditionFalse,
-			expectedConditionReason:  constants.ConditionReasonManagedClusterImporting,
+			expectedConditionReason:  constants.ConditionReasonManagedClusterImportFailed,
 		},
 		{
 			name: "importing condition does not exist",
 			managedCluster: testinghelpers.NewManagedClusterBuilder(managedClusterName).
 				WithImportingCondition(false).Build(),
-			lastRetry:                0,
-			totalRetry:               1,
 			generateClientHolderFunc: GenerateImportClientFromKubeConfigSecret,
 			expectedErr:              false,
-			expectedCurrentRetry:     0,
 			expectedRequeueAfter:     0,
 			expectedConditionStatus:  metav1.ConditionFalse,
 			expectedConditionReason:  constants.ConditionReasonManagedClusterImporting,
@@ -486,8 +356,8 @@ func TestImportHelper(t *testing.T) {
 				managedCluster = c.managedCluster
 			}
 
-			result, condition, _, currentRetry, err := importHelper.Import(
-				backupRestore, managedCluster, c.autoImportSecret, c.lastRetry, c.totalRetry)
+			result, condition, _, err := importHelper.Import(
+				backupRestore, managedCluster, c.autoImportSecret)
 			if c.expectedErr && err == nil {
 				t.Errorf("name %v : expected error, but failed", c.name)
 			}
@@ -508,10 +378,6 @@ func TestImportHelper(t *testing.T) {
 					t.Errorf("name %v : expect condition reason %s, got %s, message: %s",
 						c.name, c.expectedConditionReason, condition.Reason, condition.Message)
 				}
-			}
-
-			if currentRetry != c.expectedCurrentRetry {
-				t.Errorf("name %v : expected currentRetry %v, but got %v", c.name, c.expectedCurrentRetry, currentRetry)
 			}
 		})
 	}

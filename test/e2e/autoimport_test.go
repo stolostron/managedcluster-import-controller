@@ -129,38 +129,6 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", f
 		assertAutoImportSecretDeleted(managedClusterName)
 	})
 
-	ginkgo.It("Should delete the invalid auto-import-secret after retry times exceeded", func() {
-		ginkgo.By(fmt.Sprintf("Create auto-import-secret for managed cluster %s with token", managedClusterName), func() {
-			secret, err := util.NewInvalidAutoImportSecret(hubKubeClient, hubDynamicClient, managedClusterName)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-
-			_, err = hubKubeClient.CoreV1().Secrets(managedClusterName).Create(context.TODO(), secret, metav1.CreateOptions{})
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-		})
-
-		ginkgo.By(fmt.Sprintf("Create managed cluster %s", managedClusterName), func() {
-			_, err := util.CreateManagedCluster(hubClusterClient, managedClusterName)
-			gomega.Expect(err).ToNot(gomega.HaveOccurred())
-		})
-
-		ginkgo.By("Managed cluster should not be imported", func() {
-			gomega.Eventually(func() error {
-				cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
-				if err != nil {
-					return err
-				}
-
-				if meta.IsStatusConditionFalse(cluster.Status.Conditions, "ManagedClusterImportSucceeded") {
-					return nil
-				} else {
-					return fmt.Errorf("managed cluster %s should not be imported", managedClusterName)
-				}
-			}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
-		})
-
-		assertAutoImportSecretDeleted(managedClusterName)
-	})
-
 	ginkgo.It("Should keep the auto-import-secret after the cluster was imported", func() {
 		ginkgo.By(fmt.Sprintf("Create auto-import-secret for managed cluster %s with kubeconfig", managedClusterName), func() {
 			secret, err := util.NewAutoImportSecret(hubKubeClient, managedClusterName)

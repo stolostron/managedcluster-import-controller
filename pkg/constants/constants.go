@@ -15,13 +15,6 @@ const YamlSperator = "\n---\n"
 const AutoImportSecretName string = "auto-import-secret"
 
 const (
-	// AutoImportRetryName is the secret data key of auto import retry
-	AutoImportRetryName string = "autoImportRetry"
-
-	// AnnotationAutoImportCurrentRetry is the annotation key of auto import secret used to indicate
-	// the current retry times of auto importing a managed cluster
-	AnnotationAutoImportCurrentRetry = "managedcluster-import-controller.open-cluster-management.io/current-retry"
-
 	// AnnotationKeepingAutoImportSecret is the annotation key of auto import secret used to indicate
 	// keeping this secret after the cluster is imported successfully
 	AnnotationKeepingAutoImportSecret = "managedcluster-import-controller.open-cluster-management.io/keeping-auto-import-secret"
