@@ -5,8 +5,6 @@
 .vscode
 .idea
 
-vendor
-
 # Files
 OPENSOURCE.check
 .DS_Store
