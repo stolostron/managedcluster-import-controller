@@ -199,15 +199,18 @@ func TestEnqueueManagedClusterByBootstrapKubeconfigSecret(t *testing.T) {
 				Name: "test-klusterletconfig1",
 			},
 			Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
-				BootstrapKubeConfigs: operatorv1.BootstrapKubeConfigs{
-					Type: operatorv1.LocalSecrets,
-					LocalSecrets: &operatorv1.LocalSecretsConfig{
-						KubeConfigSecrets: []operatorv1.KubeConfigSecret{
-							{
-								Name: "test-secret1",
+				MultipleHubsConfig: &klusterletconfigv1alpha1.MultipleHubsConfig{
+					BootstrapKubeConfigs: operatorv1.BootstrapKubeConfigs{
+						Type: operatorv1.LocalSecrets,
+						LocalSecrets: &operatorv1.LocalSecretsConfig{
+							KubeConfigSecrets: []operatorv1.KubeConfigSecret{
+								{
+									Name: "test-secret1",
+								},
 							},
 						},
 					},
+					GenBootstrapKubeConfigStrategy: klusterletconfigv1alpha1.GenBootstrapKubeConfigStrategyIncludeCurrentHub,
 				},
 			},
 		},
@@ -216,15 +219,18 @@ func TestEnqueueManagedClusterByBootstrapKubeconfigSecret(t *testing.T) {
 				Name: "test-klusterletconfig2",
 			},
 			Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
-				BootstrapKubeConfigs: operatorv1.BootstrapKubeConfigs{
-					Type: operatorv1.LocalSecrets,
-					LocalSecrets: &operatorv1.LocalSecretsConfig{
-						KubeConfigSecrets: []operatorv1.KubeConfigSecret{
-							{
-								Name: "test-secret2",
+				MultipleHubsConfig: &klusterletconfigv1alpha1.MultipleHubsConfig{
+					BootstrapKubeConfigs: operatorv1.BootstrapKubeConfigs{
+						Type: operatorv1.LocalSecrets,
+						LocalSecrets: &operatorv1.LocalSecretsConfig{
+							KubeConfigSecrets: []operatorv1.KubeConfigSecret{
+								{
+									Name: "test-secret2",
+								},
 							},
 						},
 					},
+					GenBootstrapKubeConfigStrategy: klusterletconfigv1alpha1.GenBootstrapKubeConfigStrategyDefault,
 				},
 			},
 		},
@@ -341,18 +347,21 @@ func TestIndexKlusterletConfigByBootstrapKubeConfigSecrets(t *testing.T) {
 	// Create a new klusterletconfig with a bootstrap kubeconfig secret
 	kc := &klusterletconfigv1alpha1.KlusterletConfig{
 		Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
-			BootstrapKubeConfigs: operatorv1.BootstrapKubeConfigs{
-				Type: operatorv1.LocalSecrets,
-				LocalSecrets: &operatorv1.LocalSecretsConfig{
-					KubeConfigSecrets: []operatorv1.KubeConfigSecret{
-						{
-							Name: "test-secret1",
-						},
-						{
-							Name: "test-secret2",
+			MultipleHubsConfig: &klusterletconfigv1alpha1.MultipleHubsConfig{
+				BootstrapKubeConfigs: operatorv1.BootstrapKubeConfigs{
+					Type: operatorv1.LocalSecrets,
+					LocalSecrets: &operatorv1.LocalSecretsConfig{
+						KubeConfigSecrets: []operatorv1.KubeConfigSecret{
+							{
+								Name: "test-secret1",
+							},
+							{
+								Name: "test-secret2",
+							},
 						},
 					},
 				},
+				GenBootstrapKubeConfigStrategy: klusterletconfigv1alpha1.GenBootstrapKubeConfigStrategyDefault,
 			},
 		},
 	}

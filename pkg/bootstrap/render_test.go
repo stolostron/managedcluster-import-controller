@@ -2,11 +2,12 @@ package bootstrap
 
 import (
 	"context"
-	"k8s.io/apimachinery/pkg/api/equality"
-	apifeature "open-cluster-management.io/api/feature"
 	"os"
 	"testing"
 	"time"
+
+	"k8s.io/apimachinery/pkg/api/equality"
+	apifeature "open-cluster-management.io/api/feature"
 
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
@@ -564,30 +565,36 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				[]byte("bootstrap kubeconfig"),
 			).WithKlusterletConfig(&klusterletconfigv1alpha1.KlusterletConfig{
 				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
-					BootstrapKubeConfigs: operatorv1.BootstrapKubeConfigs{
-						Type: operatorv1.LocalSecrets,
-						LocalSecrets: &operatorv1.LocalSecretsConfig{
-							KubeConfigSecrets: []operatorv1.KubeConfigSecret{
-								{
-									Name: "bootstrapkubeconfig-hub1",
+					MultipleHubsConfig: &klusterletconfigv1alpha1.MultipleHubsConfig{
+						BootstrapKubeConfigs: operatorv1.BootstrapKubeConfigs{
+							Type: operatorv1.LocalSecrets,
+							LocalSecrets: &operatorv1.LocalSecretsConfig{
+								KubeConfigSecrets: []operatorv1.KubeConfigSecret{
+									{
+										Name: "bootstrapkubeconfig-hub1",
+									},
+									{
+										Name: "bootstrapkubeconfig-hub2",
+									},
 								},
-								{
-									Name: "bootstrapkubeconfig-hub2",
-								},
+								HubConnectionTimeoutSeconds: 500,
 							},
-							HubConnectionTimeoutSeconds: 500,
 						},
+						GenBootstrapKubeConfigStrategy: klusterletconfigv1alpha1.GenBootstrapKubeConfigStrategyDefault,
 					},
 				},
 			}),
 			validateFunc: func(t *testing.T, objs, crds []runtime.Object) {
-				// 12 objects for klusterlet manifests, 3 objects for bootstrap kubeconfig secrets
-				testinghelpers.ValidateObjectCount(t, objs, 12)
+				// 11 objects for klusterlet manifests, 2 objects for bootstrap kubeconfig secrets (no current hub)
+				// The current hub secret should NOT be present in this case.
+				// Keep the original validation logic for Klusterlet and other fields.
+				// Find the Klusterlet object
+				testinghelpers.ValidateObjectCount(t, objs, 11)
 				testinghelpers.ValidateCRDs(t, crds, 1)
 				testinghelpers.ValidateNamespace(t, objs[0], constants.DefaultKlusterletNamespace)
-				testinghelpers.ValidateKlusterlet(t, objs[9], operatorv1.InstallModeDefault,
+				testinghelpers.ValidateKlusterlet(t, objs[8], operatorv1.InstallModeDefault,
 					"klusterlet", "test", constants.DefaultKlusterletNamespace)
-				klusterlet, _ := objs[9].(*operatorv1.Klusterlet)
+				klusterlet, _ := objs[8].(*operatorv1.Klusterlet)
 				if klusterlet.Spec.RegistrationConfiguration == nil {
 					t.Errorf("the klusterlet features is not specified")
 				}
@@ -601,29 +608,108 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				if !multiplehubsEnabled {
 					t.Errorf("the klusterlet MultipleHubs feature is not enabled")
 				}
-
 				if klusterlet.Spec.RegistrationConfiguration.BootstrapKubeConfigs.Type != operatorv1.LocalSecrets {
 					t.Errorf("the klusterlet bootstrap kubeconfig type is not %s", operatorv1.LocalSecrets)
 				}
-				if len(klusterlet.Spec.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets) != 3 {
-					t.Errorf("the klusterlet bootstrap kubeconfig secrets count is not 3")
+				if len(klusterlet.Spec.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets) != 2 {
+					t.Errorf("the klusterlet bootstrap kubeconfig secrets count is not 2")
 				}
 				for _, secret := range klusterlet.Spec.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets {
-					if secret.Name != "bootstrapkubeconfig-hub1" && secret.Name != "bootstrapkubeconfig-hub2" && secret.Name != "bootstrap-hub-kubeconfig-current-hub" {
-						t.Errorf("the klusterlet bootstrap kubeconfig secret name is not bootstrapkubeconfig-hub1 or bootstrapkubeconfig-hub2 or bootstrap-hub-kubeconfig-current-hub")
+					if secret.Name != "bootstrapkubeconfig-hub1" && secret.Name != "bootstrapkubeconfig-hub2" {
+						t.Errorf("the klusterlet bootstrap kubeconfig secret name is not bootstrapkubeconfig-hub1 or bootstrapkubeconfig-hub2")
 					}
 				}
+				t.Logf("klusterlet: %v", klusterlet.Spec.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets)
 				if klusterlet.Spec.RegistrationConfiguration.BootstrapKubeConfigs.LocalSecrets.HubConnectionTimeoutSeconds != 500 {
 					t.Errorf("the klusterlet bootstrap kubeconfig hub connection timeout seconds is not 500")
 				}
-
-				testinghelpers.ValidateBoostrapSecret(t, objs[3], "bootstrap-hub-kubeconfig-current-hub",
-					constants.DefaultKlusterletNamespace, "bootstrap kubeconfig")
-				testinghelpers.ValidateBoostrapSecret(t, objs[4], "bootstrapkubeconfig-hub1",
-					constants.DefaultKlusterletNamespace, "fake-kubeconfig")
-				testinghelpers.ValidateBoostrapSecret(t, objs[5], "bootstrapkubeconfig-hub2",
-					constants.DefaultKlusterletNamespace, "fake-kubeconfig")
-
+				// Validate the actual secrets in the objects (should not include current hub)
+				var foundSecrets []string
+				for _, obj := range objs {
+					secret, ok := obj.(*corev1.Secret)
+					if ok && (secret.Name == "bootstrapkubeconfig-hub1" || secret.Name == "bootstrapkubeconfig-hub2") {
+						foundSecrets = append(foundSecrets, secret.Name)
+					}
+				}
+				if len(foundSecrets) != 2 {
+					t.Errorf("expected 2 bootstrap secrets, got %d: %v", len(foundSecrets), foundSecrets)
+				}
+				for _, name := range foundSecrets {
+					if name != "bootstrapkubeconfig-hub1" && name != "bootstrapkubeconfig-hub2" {
+						t.Errorf("unexpected secret name: %s", name)
+					}
+				}
+			},
+		},
+		{
+			name: "with mutliplehubs enabled and IncludeCurrentHub strategy (should include current hub)",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+			},
+			runtimeObjs: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "bootstrapkubeconfig-hub1",
+					},
+					Data: map[string][]byte{
+						"kubeconfig": []byte("fake-kubeconfig"),
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "bootstrapkubeconfig-hub2",
+					},
+					Data: map[string][]byte{
+						"kubeconfig": []byte("fake-kubeconfig"),
+					},
+				},
+			},
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeDefault,
+				"test",
+				[]byte("bootstrap kubeconfig"),
+			).WithKlusterletConfig(&klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					MultipleHubsConfig: &klusterletconfigv1alpha1.MultipleHubsConfig{
+						BootstrapKubeConfigs: operatorv1.BootstrapKubeConfigs{
+							Type: operatorv1.LocalSecrets,
+							LocalSecrets: &operatorv1.LocalSecretsConfig{
+								KubeConfigSecrets: []operatorv1.KubeConfigSecret{
+									{
+										Name: "bootstrapkubeconfig-hub1",
+									},
+									{
+										Name: "bootstrapkubeconfig-hub2",
+									},
+								},
+								HubConnectionTimeoutSeconds: 500,
+							},
+						},
+						GenBootstrapKubeConfigStrategy: klusterletconfigv1alpha1.GenBootstrapKubeConfigStrategyIncludeCurrentHub,
+					},
+				},
+			}),
+			validateFunc: func(t *testing.T, objs, crds []runtime.Object) {
+				// Only count bootstrap kubeconfig secrets, not unrelated secrets like image pull credentials
+				var foundSecrets []string
+				for _, obj := range objs {
+					secret, ok := obj.(*corev1.Secret)
+					if ok && (secret.Name == "bootstrapkubeconfig-hub1" || secret.Name == "bootstrapkubeconfig-hub2" || secret.Name == "bootstrap-hub-kubeconfig-current-hub") {
+						foundSecrets = append(foundSecrets, secret.Name)
+					}
+				}
+				if len(foundSecrets) != 3 {
+					t.Errorf("expected 3 bootstrap secrets, got %d: %v", len(foundSecrets), foundSecrets)
+				}
+				for _, name := range foundSecrets {
+					if name != "bootstrapkubeconfig-hub1" && name != "bootstrapkubeconfig-hub2" && name != "bootstrap-hub-kubeconfig-current-hub" {
+						t.Errorf("unexpected secret name: %s", name)
+					}
+				}
 			},
 		},
 		{
@@ -669,19 +755,22 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				[]byte("bootstrap kubeconfig"),
 			).WithKlusterletConfig(&klusterletconfigv1alpha1.KlusterletConfig{
 				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
-					BootstrapKubeConfigs: operatorv1.BootstrapKubeConfigs{
-						Type: operatorv1.LocalSecrets,
-						LocalSecrets: &operatorv1.LocalSecretsConfig{
-							KubeConfigSecrets: []operatorv1.KubeConfigSecret{
-								{
-									Name: "bootstrapkubeconfig-hub1",
+					MultipleHubsConfig: &klusterletconfigv1alpha1.MultipleHubsConfig{
+						BootstrapKubeConfigs: operatorv1.BootstrapKubeConfigs{
+							Type: operatorv1.LocalSecrets,
+							LocalSecrets: &operatorv1.LocalSecretsConfig{
+								KubeConfigSecrets: []operatorv1.KubeConfigSecret{
+									{
+										Name: "bootstrapkubeconfig-hub1",
+									},
+									{
+										Name: "bootstrapkubeconfig-hub2",
+									},
 								},
-								{
-									Name: "bootstrapkubeconfig-hub2",
-								},
+								HubConnectionTimeoutSeconds: 500,
 							},
-							HubConnectionTimeoutSeconds: 500,
 						},
+						GenBootstrapKubeConfigStrategy: klusterletconfigv1alpha1.GenBootstrapKubeConfigStrategyDefault,
 					},
 				},
 			}).WithManagedCluster(
