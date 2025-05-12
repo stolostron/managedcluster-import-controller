@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	userNameSignature = "system:serviceaccount:%s:%s-bootstrap-sa"
+	userNameSignature = "system:serviceaccount:%s:%s"
 )
 
 var log = logf.Log.WithName("controller_csr")
@@ -40,7 +40,7 @@ func getApprovalType(csr *certificatesv1.CertificateSigningRequest) string {
 }
 
 func validUsername(csr *certificatesv1.CertificateSigningRequest, clusterName string) bool {
-	return csr.Spec.Username == fmt.Sprintf(userNameSignature, clusterName, clusterName)
+	return csr.Spec.Username == fmt.Sprintf(userNameSignature, clusterName, helpers.GetBootstrapSAName(clusterName))
 }
 
 // isValidUnapprovedBootstrapCSR checks if the CSR:

@@ -168,7 +168,7 @@ func buildBootstrapKubeconfigData(ctx context.Context, clientHolder *helpers.Cli
 	if len(tokenData) == 0 {
 		klog.Infof("create a new token for the managed cluster %s", managedCluster.Name)
 		tokenData, tokenCreation, tokenExpiration, err = bootstrap.GetBootstrapToken(ctx, clientHolder.KubeClient,
-			bootstrap.GetBootstrapSAName(managedCluster.Name),
+			helpers.GetBootstrapSAName(managedCluster.Name),
 			managedCluster.Name, constants.DefaultSecretTokenExpirationSecond)
 		if err != nil {
 			return nil, nil, nil, err

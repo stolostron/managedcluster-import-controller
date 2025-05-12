@@ -410,7 +410,7 @@ func GenerateHubBootstrapRBACObjects(managedClusterName string) ([]runtime.Objec
 	}{
 		ManagedClusterName:          managedClusterName,
 		ManagedClusterNamespace:     managedClusterName,
-		BootstrapServiceAccountName: GetBootstrapSAName(managedClusterName),
+		BootstrapServiceAccountName: helpers.GetBootstrapSAName(managedClusterName),
 	}, &ManifestFiles)
 }
 

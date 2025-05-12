@@ -42,7 +42,7 @@ func TestReconcileCSR_Reconcile(t *testing.T) {
 			},
 		},
 		Spec: certificatesv1.CertificateSigningRequestSpec{
-			Username: fmt.Sprintf(userNameSignature, clusterName, clusterName),
+			Username: fmt.Sprintf(userNameSignature, clusterName, helpers.GetBootstrapSAName(clusterName)),
 		},
 	}
 
@@ -54,7 +54,7 @@ func TestReconcileCSR_Reconcile(t *testing.T) {
 			},
 		},
 		Spec: certificatesv1.CertificateSigningRequestSpec{
-			Username: fmt.Sprintf(userNameSignature, "specialCluster", "specialCluster"),
+			Username: fmt.Sprintf(userNameSignature, "specialCluster", helpers.GetBootstrapSAName("specialCluster")),
 		},
 	}
 
@@ -209,7 +209,7 @@ func Test_getApproval(t *testing.T) {
 			},
 		},
 		Spec: certificatesv1.CertificateSigningRequestSpec{
-			Username: fmt.Sprintf(userNameSignature, clusterName, clusterName),
+			Username: fmt.Sprintf(userNameSignature, clusterName, helpers.GetBootstrapSAName(clusterName)),
 		},
 	}
 
@@ -221,7 +221,7 @@ func Test_getApproval(t *testing.T) {
 			},
 		},
 		Spec: certificatesv1.CertificateSigningRequestSpec{
-			Username: fmt.Sprintf(userNameSignature, clusterName, clusterName),
+			Username: fmt.Sprintf(userNameSignature, clusterName, helpers.GetBootstrapSAName(clusterName)),
 		},
 		Status: certificatesv1.CertificateSigningRequestStatus{
 			Conditions: []certificatesv1.CertificateSigningRequestCondition{
@@ -238,7 +238,7 @@ func Test_getApproval(t *testing.T) {
 			},
 		},
 		Spec: certificatesv1.CertificateSigningRequestSpec{
-			Username: fmt.Sprintf(userNameSignature, clusterName, clusterName),
+			Username: fmt.Sprintf(userNameSignature, clusterName, helpers.GetBootstrapSAName(clusterName)),
 		},
 		Status: certificatesv1.CertificateSigningRequestStatus{
 			Conditions: []certificatesv1.CertificateSigningRequestCondition{
@@ -295,7 +295,7 @@ func Test_validUsername(t *testing.T) {
 			},
 		},
 		Spec: certificatesv1.CertificateSigningRequestSpec{
-			Username: fmt.Sprintf(userNameSignature, clusterName, clusterName),
+			Username: fmt.Sprintf(userNameSignature, clusterName, helpers.GetBootstrapSAName(clusterName)),
 		},
 	}
 
@@ -355,7 +355,7 @@ func Test_isValidUnapprovedBootstrapCSR(t *testing.T) {
 			},
 		},
 		Spec: certificatesv1.CertificateSigningRequestSpec{
-			Username: fmt.Sprintf(userNameSignature, clusterName, clusterName),
+			Username: fmt.Sprintf(userNameSignature, clusterName, helpers.GetBootstrapSAName(clusterName)),
 		},
 	}
 
@@ -367,7 +367,7 @@ func Test_isValidUnapprovedBootstrapCSR(t *testing.T) {
 			},
 		},
 		Spec: certificatesv1.CertificateSigningRequestSpec{
-			Username: fmt.Sprintf(userNameSignature, clusterName, clusterName),
+			Username: fmt.Sprintf(userNameSignature, clusterName, helpers.GetBootstrapSAName(clusterName)),
 		},
 	}
 
