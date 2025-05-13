@@ -76,8 +76,8 @@ func (r *ReconcileResourceCleanup) Reconcile(ctx context.Context, request reconc
 		return reconcile.Result{}, err
 	}
 
-	if helpers.IsClusterUnavailable(copyCluster) {
-		reqLogger.Info(fmt.Sprintf("cluster %s is unavailable, start force cleanup.", copyCluster.Name))
+	if clusterNeedForceDelete(copyCluster) {
+		reqLogger.Info(fmt.Sprintf("cluster %s is unavailable or not accepted, start force cleanup.", copyCluster.Name))
 		if err = r.forceCleanup(ctx, copyCluster); err != nil {
 			return reconcile.Result{}, err
 		}
@@ -99,7 +99,7 @@ func (r *ReconcileResourceCleanup) updateDetachingCondition(cluster *clusterv1.M
 	conditionReason := constants.ConditionReasonManagedClusterDetaching
 	conditionMsg := "The managed cluster is being detached now"
 
-	if helpers.IsClusterUnavailable(cluster) {
+	if clusterNeedForceDelete(cluster) {
 		conditionReason = constants.ConditionReasonManagedClusterForceDetaching
 		conditionMsg = "The managed cluster is being detached by force"
 	}
@@ -301,4 +301,12 @@ func (r *ReconcileResourceCleanup) removeClusterFinalizers(ctx context.Context, 
 		return nil
 	}
 	return err
+}
+
+func clusterNeedForceDelete(cluster *clusterv1.ManagedCluster) bool {
+	// need to do force deletion when cluster is deleting but not accepted or not available
+	if !cluster.Spec.HubAcceptsClient {
+		return true
+	}
+	return helpers.IsClusterUnavailable(cluster)
 }
