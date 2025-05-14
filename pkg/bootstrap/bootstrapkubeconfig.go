@@ -39,7 +39,6 @@ import (
 )
 
 const (
-	bootstrapSASuffix           = "bootstrap-sa"
 	apiServerInternalEndpoint   = "https://kubernetes.default.svc:443"
 	apiServerInternalEndpointCA = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 )
@@ -139,14 +138,6 @@ func hasCustomServerURLOrStrategy(klusterletConfig *klusterletconfigv1alpha1.Klu
 	}
 
 	return false
-}
-
-func GetBootstrapSAName(clusterName string) string {
-	bootstrapSAName := fmt.Sprintf("%s-%s", clusterName, bootstrapSASuffix)
-	if len(bootstrapSAName) > 63 {
-		return fmt.Sprintf("%s-%s", clusterName[:63-len("-"+bootstrapSASuffix)], bootstrapSASuffix)
-	}
-	return bootstrapSAName
 }
 
 func RequestSAToken(ctx context.Context, kubeClient kubernetes.Interface, saName, secretNamespace string,
