@@ -62,6 +62,9 @@ func TestReconcile(t *testing.T) {
 						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
 						DeletionTimestamp: &now,
 					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: true,
+					},
 				},
 			},
 			requeue: false,
@@ -82,6 +85,9 @@ func TestReconcile(t *testing.T) {
 						Name:              "test",
 						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
 						DeletionTimestamp: &now,
+					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: true,
 					},
 				},
 			},
@@ -111,6 +117,9 @@ func TestReconcile(t *testing.T) {
 						Name:              "test",
 						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
 						DeletionTimestamp: &now,
+					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: true,
 					},
 				},
 			},
@@ -148,6 +157,9 @@ func TestReconcile(t *testing.T) {
 						Name:              "test",
 						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
 						DeletionTimestamp: &now,
+					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: true,
 					},
 				},
 				&addonv1alpha1.ManagedClusterAddOn{
@@ -222,12 +234,67 @@ func TestReconcile(t *testing.T) {
 						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
 						DeletionTimestamp: &now,
 					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: true,
+					},
 					Status: clusterv1.ManagedClusterStatus{
 						Conditions: []metav1.Condition{
 							{
 								Type:   clusterv1.ManagedClusterConditionAvailable,
 								Status: metav1.ConditionUnknown,
 							}},
+					},
+				},
+				&addonv1alpha1.ManagedClusterAddOn{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "addon1", Namespace: "test", Finalizers: []string{"test"}},
+				},
+			},
+			kubeObjects: []runtime.Object{
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{
+					Name:       "open-cluster-management:managedcluster:test:work",
+					Namespace:  "test",
+					Finalizers: []string{workv1.ManifestWorkFinalizer},
+				}},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{ObjectMeta: metav1.ObjectMeta{
+					Name: "work1", Namespace: "test", Finalizers: []string{"test"}}},
+			},
+			requeue: false,
+			validateFunc: func(t *testing.T, clientHolder *helpers.ClientHolder) {
+				managedCluster := &clusterv1.ManagedCluster{}
+				if err := clientHolder.RuntimeClient.Get(context.TODO(),
+					types.NamespacedName{Name: "test"}, managedCluster); !errors.IsNotFound(err) {
+					t.Errorf("unexpected no cluster,but got error: %v", err)
+				}
+				addons, _ := helpers.ListManagedClusterAddons(context.TODO(), clientHolder.RuntimeClient, "test")
+				if len(addons.Items) != 0 {
+					t.Errorf("expected no addon,but got %v", len(addons.Items))
+				}
+				works, _ := clientHolder.WorkClient.WorkV1().ManifestWorks("test").List(context.TODO(), metav1.ListOptions{})
+				if len(works.Items) != 0 {
+					t.Errorf("expected no work,but got %v", len(works.Items))
+				}
+				workRoleBinding, _ := helpers.GetWorkRoleBinding(context.TODO(), clientHolder.RuntimeClient, "test")
+				if workRoleBinding != nil {
+					t.Errorf("expected no workRolebinding,but got %v", workRoleBinding)
+				}
+			},
+		},
+		{
+			name:    "cluster is not accepted",
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}},
+			runtimeObjects: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "test",
+						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
+						DeletionTimestamp: &now,
+					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: false,
 					},
 				},
 				&addonv1alpha1.ManagedClusterAddOn{
@@ -281,6 +348,9 @@ func TestReconcile(t *testing.T) {
 						}, Finalizers: []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
 						DeletionTimestamp: &now,
 					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: true,
+					},
 				},
 			},
 			requeue: false,
@@ -305,6 +375,9 @@ func TestReconcile(t *testing.T) {
 						},
 						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
 						DeletionTimestamp: &now,
+					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: true,
 					},
 				},
 			},
@@ -347,6 +420,9 @@ func TestReconcile(t *testing.T) {
 						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
 						DeletionTimestamp: &now,
 					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: true,
+					},
 				},
 			},
 			kubeObjects: []runtime.Object{
@@ -385,12 +461,78 @@ func TestReconcile(t *testing.T) {
 						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
 						DeletionTimestamp: &now,
 					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: true,
+					},
 					Status: clusterv1.ManagedClusterStatus{
 						Conditions: []metav1.Condition{
 							{
 								Type:   clusterv1.ManagedClusterConditionAvailable,
 								Status: metav1.ConditionUnknown,
 							}},
+					},
+				},
+				&addonv1alpha1.ManagedClusterAddOn{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "addon1", Namespace: "test", Finalizers: []string{"test"}},
+				},
+			},
+			kubeObjects: []runtime.Object{
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{
+					Name:       "open-cluster-management:managedcluster:test:work",
+					Namespace:  "test",
+					Finalizers: []string{workv1.ManifestWorkFinalizer},
+				}},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{ObjectMeta: metav1.ObjectMeta{
+					Name: "work1", Namespace: "test", Finalizers: []string{"test"}}},
+				&workv1.ManifestWork{ObjectMeta: metav1.ObjectMeta{
+					Name: "work2", Namespace: "hosting", Finalizers: []string{"test"},
+					Labels: map[string]string{constants.HostedClusterLabel: "test"}}},
+			},
+			requeue: false,
+			validateFunc: func(t *testing.T, clientHolder *helpers.ClientHolder) {
+				managedCluster := &clusterv1.ManagedCluster{}
+				if err := clientHolder.RuntimeClient.Get(context.TODO(),
+					types.NamespacedName{Name: "test"}, managedCluster); !errors.IsNotFound(err) {
+					t.Errorf("unexpected no cluster,but got error: %v", err)
+				}
+				addons, _ := helpers.ListManagedClusterAddons(context.TODO(), clientHolder.RuntimeClient, "test")
+				if len(addons.Items) != 0 {
+					t.Errorf("expected no addon,but got %v", len(addons.Items))
+				}
+				works, _ := clientHolder.WorkClient.WorkV1().ManifestWorks("test").List(context.TODO(), metav1.ListOptions{})
+				if len(works.Items) != 0 {
+					t.Errorf("expected no work,but got %v", len(works.Items))
+				}
+				works, _ = clientHolder.WorkClient.WorkV1().ManifestWorks("hosting").List(context.TODO(), metav1.ListOptions{})
+				if len(works.Items) != 0 {
+					t.Errorf("expected no work,but got %v", len(works.Items))
+				}
+				workRoleBinding, _ := helpers.GetWorkRoleBinding(context.TODO(), clientHolder.RuntimeClient, "test")
+				if workRoleBinding != nil {
+					t.Errorf("expected no workRolebinding,but got %v", workRoleBinding)
+				}
+			},
+		},
+		{
+			name:    "hosted cluster is not accepted",
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}},
+			runtimeObjects: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
+							constants.HostingClusterNameAnnotation:   "hosting",
+						},
+						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
+						DeletionTimestamp: &now,
+					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: false,
 					},
 				},
 				&addonv1alpha1.ManagedClusterAddOn{
