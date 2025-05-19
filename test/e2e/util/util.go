@@ -14,6 +14,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"net"
+	"os"
 	"strings"
 
 	"github.com/ghodss/yaml"
@@ -29,6 +30,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
+	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 
@@ -178,6 +180,14 @@ func CreateManagedClusterWithAnnotations(
 	return cluster, err
 }
 
+func RemoveKlusterlet(client operatorclient.Interface, name string) error {
+	err := client.OperatorV1().Klusterlets().Delete(context.TODO(), name, metav1.DeleteOptions{})
+	if errors.IsNotFound(err) {
+		return nil
+	}
+	return err
+}
+
 func RemoveManagedClusterAnnotations(clusterClient clusterclient.Interface, name string) error {
 	cluster, err := clusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), name, metav1.GetOptions{})
 	if err != nil {
@@ -198,7 +208,6 @@ func CreateManagedClusterWithShortLeaseDuration(clusterClient clusterclient.Inte
 	}
 
 	cluster, err := clusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), name, metav1.GetOptions{})
-	Logf("create short lease duration managed cluster get cluster error: %v, cluster: %s", err, cluster)
 	if errors.IsNotFound(err) {
 		return clusterClient.ClusterV1().ManagedClusters().Create(
 			context.TODO(),
@@ -217,6 +226,9 @@ func CreateManagedClusterWithShortLeaseDuration(clusterClient clusterclient.Inte
 		)
 	}
 
+	if err != nil {
+		Logf("create short lease duration managed cluster get cluster error: %v, cluster: %s", err, cluster)
+	}
 	return cluster, err
 }
 
@@ -303,7 +315,11 @@ func InstallClusterDeployment(kubeClient kubernetes.Interface, dynamicClient dyn
 
 func DeleteClusterDeployment(dynamicClient dynamic.Interface, clusterName string) error {
 	clusterdeployments := dynamicClient.Resource(clusterdeploymentGVR).Namespace(clusterName)
-	return clusterdeployments.Delete(context.TODO(), clusterName, metav1.DeleteOptions{})
+	err := clusterdeployments.Delete(context.TODO(), clusterName, metav1.DeleteOptions{})
+	if errors.IsNotFound(err) {
+		return nil
+	}
+	return err
 }
 
 func NewLable(key, value string) Label {
@@ -739,4 +755,92 @@ func CreateClusterWithImageRegistries(clusterClient clusterclient.Interface, nam
 		},
 		metav1.CreateOptions{},
 	)
+}
+
+func SetAutoImportStrategy(kubeClient kubernetes.Interface, strategy string) error {
+	namespace := os.Getenv("POD_NAMESPACE")
+	if len(namespace) == 0 {
+		namespace = ocmNamespace
+	}
+
+	cm, err := kubeClient.CoreV1().ConfigMaps(namespace).Get(context.TODO(), constants.ControllerConfigConfigMapName, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		_, err := kubeClient.CoreV1().ConfigMaps(namespace).Create(context.TODO(), &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      constants.ControllerConfigConfigMapName,
+				Namespace: namespace,
+			},
+			Data: map[string]string{
+				constants.AutoImportStrategyKey: strategy,
+			},
+		}, metav1.CreateOptions{})
+		return err
+	}
+	if err != nil {
+		return err
+	}
+
+	oldStrategy := cm.Data[constants.AutoImportStrategyKey]
+	if oldStrategy != strategy {
+		cm.Data[constants.AutoImportStrategyKey] = strategy
+		_, err := kubeClient.CoreV1().ConfigMaps(namespace).Update(context.TODO(), cm, metav1.UpdateOptions{})
+		if err != nil {
+			return err
+		}
+	}
+
+	cm = &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      constants.ControllerConfigConfigMapName,
+			Namespace: namespace,
+		},
+		Data: map[string]string{
+			constants.AutoImportStrategyKey: strategy,
+		},
+	}
+
+	_, err = kubeClient.CoreV1().ConfigMaps(namespace).Create(context.TODO(), cm, metav1.CreateOptions{})
+	return err
+}
+
+func GetAutoImportStrategy(kubeClient kubernetes.Interface) (string, error) {
+	namespace := os.Getenv("POD_NAMESPACE")
+	if len(namespace) == 0 {
+		namespace = ocmNamespace
+	}
+
+	cm, err := kubeClient.CoreV1().ConfigMaps(namespace).Get(context.TODO(), constants.ControllerConfigConfigMapName, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		return constants.DefaultAutoImportStrategy, nil
+	}
+	if err != nil {
+		return "", err
+	}
+
+	if strategy, ok := cm.Data[constants.AutoImportStrategyKey]; ok {
+		return strategy, nil
+	}
+
+	return constants.DefaultAutoImportStrategy, nil
+}
+
+func RemoveControllerConfigConfigMap(kubeClient kubernetes.Interface) error {
+	namespace := os.Getenv("POD_NAMESPACE")
+	if len(namespace) == 0 {
+		namespace = ocmNamespace
+	}
+
+	err := kubeClient.CoreV1().ConfigMaps(namespace).Delete(context.TODO(), constants.ControllerConfigConfigMapName, metav1.DeleteOptions{})
+	if errors.IsNotFound(err) {
+		return nil
+	}
+	return err
+}
+
+func RemoveImportSecret(kubeClient kubernetes.Interface, clusterName string) error {
+	err := kubeClient.CoreV1().Secrets(clusterName).Delete(context.TODO(), fmt.Sprintf("%s-import", clusterName), metav1.DeleteOptions{})
+	if errors.IsNotFound(err) {
+		return nil
+	}
+	return err
 }

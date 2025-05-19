@@ -65,11 +65,12 @@ func init() {
 
 func TestReconcile(t *testing.T) {
 	cases := []struct {
-		name         string
-		objs         []client.Object
-		works        []runtime.Object
-		secrets      []runtime.Object
-		validateFunc func(t *testing.T, runtimeClient client.Client)
+		name               string
+		objs               []client.Object
+		works              []runtime.Object
+		secrets            []runtime.Object
+		autoImportStrategy string
+		validateFunc       func(t *testing.T, runtimeClient client.Client)
 	}{
 		{
 			name:    "no managed clusters",
@@ -130,6 +131,46 @@ func TestReconcile(t *testing.T) {
 				}
 				if len(cluster.Status.Conditions) != 0 {
 					t.Errorf("unexpected condistions")
+				}
+			},
+		},
+		{
+			name: "with ImportOnly strategy",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "local-cluster",
+						Labels: map[string]string{
+							"local-cluster": "true",
+						},
+						Annotations: map[string]string{
+							apiconstants.DisableAutoImportAnnotation: "",
+						},
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:   constants.ConditionManagedClusterImportSucceeded,
+								Status: metav1.ConditionTrue,
+							},
+						},
+					},
+				},
+			},
+			works:              []runtime.Object{},
+			secrets:            []runtime.Object{},
+			autoImportStrategy: apiconstants.AutoImportStrategyImportOnly,
+			validateFunc: func(t *testing.T, runtimeClient client.Client) {
+				cluster := &clusterv1.ManagedCluster{}
+				err := runtimeClient.Get(context.TODO(), types.NamespacedName{Name: "local-cluster"}, cluster)
+				if err != nil {
+					t.Errorf("unexpected error %v", err)
+				}
+				if len(cluster.Status.Conditions) != 1 {
+					t.Errorf("unexpected condistions")
+				}
+				if len(cluster.Status.Conditions[0].Reason) != 0 {
+					t.Errorf("unexpected condistion reason")
 				}
 			},
 		},
@@ -293,6 +334,12 @@ func TestReconcile(t *testing.T) {
 				restmapper.NewDiscoveryRESTMapper(apiGroupResources),
 				eventstesting.NewTestingEventRecorder(t),
 				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
+				func() (strategy string, err error) {
+					if len(c.autoImportStrategy) > 0 {
+						return c.autoImportStrategy, nil
+					}
+					return constants.DefaultAutoImportStrategy, nil
+				},
 			)
 
 			_, err := r.Reconcile(context.TODO(), reconcile.Request{

@@ -23,6 +23,20 @@ const (
 	LabelAutoImportRestore = "cluster.open-cluster-management.io/restore-auto-import-secret"
 )
 
+const (
+	// ControllerConfigConfigMapName is the name of the ConfigMap including configuration for the
+	// import controller
+	ControllerConfigConfigMapName = "import-controller-config"
+
+	// AutoImportStrategyKey is the data key in the import-controller-config ConfigMap used to specify
+	// the AutoImportStrategy.
+	AutoImportStrategyKey = "autoImportStrategy"
+
+	// DefaultAutoImportStrategy is the default value used by the import-controller when no customized
+	// AutoImportStrategy is specified in the import-controller-config ConfigMap.
+	DefaultAutoImportStrategy = "ImportOnly"
+)
+
 /* #nosec */
 const (
 	RegistrationOperatorImageEnvVarName = "REGISTRATION_OPERATOR_IMAGE"

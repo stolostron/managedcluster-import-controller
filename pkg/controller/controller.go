@@ -37,6 +37,7 @@ func AddToManager(ctx context.Context,
 	manager manager.Manager,
 	clientHolder *helpers.ClientHolder,
 	informerHolder *source.InformerHolder,
+	componentNamespace string,
 	enableFlightCtl bool,
 	flightctlManager *flightctl.FlightCtlManager,
 	mcRecorder kevents.EventRecorder) error {
@@ -73,15 +74,21 @@ func AddToManager(ctx context.Context,
 		},
 		{
 			selfmanagedcluster.ControllerName,
-			func() error { return selfmanagedcluster.Add(ctx, manager, clientHolder, informerHolder, mcRecorder) },
+			func() error {
+				return selfmanagedcluster.Add(ctx, manager, clientHolder, informerHolder, mcRecorder, componentNamespace)
+			},
 		},
 		{
 			autoimport.ControllerName,
-			func() error { return autoimport.Add(ctx, manager, clientHolder, informerHolder, mcRecorder) },
+			func() error {
+				return autoimport.Add(ctx, manager, clientHolder, informerHolder, mcRecorder, componentNamespace)
+			},
 		},
 		{
 			clusterdeployment.ControllerName,
-			func() error { return clusterdeployment.Add(ctx, manager, clientHolder, informerHolder, mcRecorder) },
+			func() error {
+				return clusterdeployment.Add(ctx, manager, clientHolder, informerHolder, mcRecorder, componentNamespace)
+			},
 		},
 		{
 			clusternamespacedeletion.ControllerName,

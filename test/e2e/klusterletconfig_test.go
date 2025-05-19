@@ -10,12 +10,14 @@ import (
 	"encoding/pem"
 	"fmt"
 	"math/big"
-	apifeature "open-cluster-management.io/api/feature"
 	"time"
+
+	apifeature "open-cluster-management.io/api/feature"
 
 	. "github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 	. "github.com/onsi/gomega"
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/bootstrap"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
@@ -44,6 +46,9 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 	})
 
 	AfterEach(func() {
+		// reset the custom controller config
+		util.RemoveControllerConfigConfigMap(hubKubeClient)
+
 		assertManagedClusterDeleted(managedClusterName)
 	})
 
@@ -134,6 +139,11 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 	})
 
 	It("Should deploy the klusterlet with proxy config", func() {
+		By("Use ImportAndSync as auto-import strategy", func() {
+			err := util.SetAutoImportStrategy(hubKubeClient, apiconstants.AutoImportStrategyImportAndSync)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		})
+
 		By("Create managed cluster", func() {
 			_, err := util.CreateManagedClusterWithShortLeaseDuration(
 				hubClusterClient,
@@ -258,6 +268,11 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 	})
 
 	It("Should deploy the klusterlet with custom server URL and CA bundle", func() {
+		By("Use ImportAndSync as auto-import strategy", func() {
+			err := util.SetAutoImportStrategy(hubKubeClient, apiconstants.AutoImportStrategyImportAndSync)
+			Expect(err).ToNot(gomega.HaveOccurred())
+		})
+
 		By("Create managed cluster", func() {
 			_, err := util.CreateManagedClusterWithShortLeaseDuration(
 				hubClusterClient,

@@ -92,6 +92,7 @@ func TestReconcile(t *testing.T) {
 		objs                    []client.Object
 		works                   []runtime.Object
 		secrets                 []runtime.Object
+		autoImportStrategy      string
 		expectedErr             bool
 		expectedConditionStatus metav1.ConditionStatus
 		expectedConditionReason string
@@ -124,6 +125,20 @@ func TestReconcile(t *testing.T) {
 			expectedErr: false,
 		},
 		{
+			name: "with ImportOnly strategy",
+			objs: []client.Object{
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).
+					WithImportedCondition(true).
+					Build(),
+			},
+			works:                   []runtime.Object{},
+			secrets:                 []runtime.Object{},
+			autoImportStrategy:      apiconstants.AutoImportStrategyImportOnly,
+			expectedErr:             false,
+			expectedConditionStatus: metav1.ConditionTrue,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImported,
+		},
+		{
 			name: "no auto-import-secret",
 			objs: []client.Object{
 				testinghelpers.NewManagedClusterBuilder(managedClusterName).Build(),
@@ -147,7 +162,7 @@ func TestReconcile(t *testing.T) {
 					Data: map[string][]byte{},
 				},
 			},
-			expectedErr:             false,
+			expectedErr:             true,
 			expectedConditionStatus: metav1.ConditionFalse,
 			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
 		},
@@ -362,7 +377,7 @@ func TestReconcile(t *testing.T) {
 					Type: corev1.SecretTypeOpaque,
 				},
 			},
-			expectedErr:             false,
+			expectedErr:             true,
 			expectedConditionStatus: metav1.ConditionFalse,
 			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
 		},
@@ -586,6 +601,12 @@ func TestReconcile(t *testing.T) {
 				},
 				eventstesting.NewTestingEventRecorder(t),
 				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
+				func() (strategy string, err error) {
+					if len(c.autoImportStrategy) > 0 {
+						return c.autoImportStrategy, nil
+					}
+					return constants.DefaultAutoImportStrategy, nil
+				},
 			)
 
 			req := reconcile.Request{NamespacedName: types.NamespacedName{Name: managedClusterName}}

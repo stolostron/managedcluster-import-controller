@@ -15,6 +15,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/rand"
 
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 )
 
@@ -22,6 +23,9 @@ var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", fu
 	var managedClusterName string
 
 	ginkgo.BeforeEach(func() {
+		// reset the custom controller config
+		util.RemoveControllerConfigConfigMap(hubKubeClient)
+
 		managedClusterName = fmt.Sprintf("clusterdeployment-test-%s", rand.String(6))
 
 		ginkgo.By(fmt.Sprintf("Create managed cluster namespace %s", managedClusterName), func() {
@@ -71,6 +75,52 @@ var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", fu
 		assertManagedClusterAvailable(managedClusterName)
 		assertManagedClusterManifestWorksAvailable(managedClusterName)
 		assertManagedClusterPriorityClass(managedClusterName)
+	})
+
+	ginkgo.Context("with custom auto-import-strategy", func() {
+		ginkgo.AfterEach(func() {
+			// reset the custom controller config
+			util.RemoveControllerConfigConfigMap(hubKubeClient)
+
+			ginkgo.By(fmt.Sprintf("Delete the clusterdeployment %s", managedClusterName), func() {
+				err := util.DeleteClusterDeployment(hubDynamicClient, managedClusterName)
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			})
+			assertManagedClusterDeleted(managedClusterName)
+		})
+
+		ginkgo.It("Should not recover the agent once joined if auto-import strategy is ImportOnly", func() {
+			ginkgo.By("Ensure the auto-import strategy is ImportOnly", func() {
+				autoImportStrategy, err := util.GetAutoImportStrategy(hubKubeClient)
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+				gomega.Expect(autoImportStrategy).To(gomega.BeEquivalentTo(apiconstants.AutoImportStrategyImportOnly))
+			})
+
+			ginkgo.By(fmt.Sprintf("Should become offline after removing klusterlet of the managed cluster %s", managedClusterName), func() {
+				err := util.RemoveKlusterlet(hubOperatorClient, "klusterlet")
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+				assertManagedClusterAvailableUnknown(managedClusterName)
+			})
+
+			ginkgo.By(fmt.Sprintf("Should not recover the managed cluster %s after deleting import secret", managedClusterName), func() {
+				err := util.RemoveImportSecret(hubKubeClient, managedClusterName)
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+				assertManagedClusterImportSecretCreated(managedClusterName, "hive")
+				assertManagedClusterAvailableUnknownConsistently(managedClusterName, 30*time.Second)
+			})
+
+			ginkgo.By(fmt.Sprintf("Should recover the managed cluster %s once the auto-import strategy is set to ImportAndSync", managedClusterName), func() {
+				err := util.SetAutoImportStrategy(hubKubeClient, apiconstants.AutoImportStrategyImportAndSync)
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+				err = util.RemoveImportSecret(hubKubeClient, managedClusterName)
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+				assertManagedClusterImportSecretCreated(managedClusterName, "hive")
+				assertManagedClusterAvailable(managedClusterName)
+			})
+		})
 	})
 
 	ginkgo.It(fmt.Sprintf("Should destroy the managed cluster %s", managedClusterName), func() {

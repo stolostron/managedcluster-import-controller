@@ -39,7 +39,8 @@ func Add(ctx context.Context,
 	mgr manager.Manager,
 	clientHolder *helpers.ClientHolder,
 	informerHolder *source.InformerHolder,
-	mcRecorder kevents.EventRecorder) error {
+	mcRecorder kevents.EventRecorder,
+	componentNamespace string) error {
 
 	err := ctrl.NewControllerManagedBy(mgr).Named(ControllerName).
 		WithOptions(controller.Options{
@@ -141,6 +142,7 @@ func Add(ctx context.Context,
 			informerHolder,
 			helpers.NewEventRecorder(clientHolder.KubeClient, ControllerName),
 			mcRecorder,
+			helpers.AutoImportStrategyGetter(componentNamespace, informerHolder.ControllerConfigLister, log),
 		))
 
 	return err

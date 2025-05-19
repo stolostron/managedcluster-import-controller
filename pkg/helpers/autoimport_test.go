@@ -26,6 +26,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
@@ -487,6 +488,95 @@ func TestFailureMessageOfInvalidAutoImportSecretPrivileges(t *testing.T) {
 			actual := failureMessageOfInvalidAutoImportSecretPrivileges(c.autoImportSecret, err)
 			if c.message != actual {
 				t.Errorf("expect %s, but got %s", c.message, actual)
+			}
+		})
+	}
+}
+
+func TestAutoImportStrategyGetter(t *testing.T) {
+
+	cases := []struct {
+		name             string
+		controllerConfig *corev1.ConfigMap
+		expectedStrategy string
+	}{
+		{
+			name:             "default auto-import-strategy",
+			expectedStrategy: constants.DefaultAutoImportStrategy,
+		},
+		{
+			name: "configmap without strategy config",
+			controllerConfig: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "import-controller-config",
+					Namespace: "test",
+				},
+				Data: map[string]string{
+					"test": "test",
+				},
+			},
+			expectedStrategy: constants.DefaultAutoImportStrategy,
+		},
+		{
+			name: "configmap with invalid strategy config",
+			controllerConfig: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "import-controller-config",
+					Namespace: "test",
+				},
+				Data: map[string]string{
+					"autoImportStrategy": "invalid-strategy",
+				},
+			},
+			expectedStrategy: constants.DefaultAutoImportStrategy,
+		},
+		{
+			name: "configmap with ImportAndSync strategy",
+			controllerConfig: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "import-controller-config",
+					Namespace: "test",
+				},
+				Data: map[string]string{
+					"autoImportStrategy": apiconstants.AutoImportStrategyImportAndSync,
+				},
+			},
+			expectedStrategy: apiconstants.AutoImportStrategyImportAndSync,
+		},
+		{
+			name: "configmap with ImportOnly strategy",
+			controllerConfig: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "import-controller-config",
+					Namespace: "test",
+				},
+				Data: map[string]string{
+					"autoImportStrategy": apiconstants.AutoImportStrategyImportOnly,
+				},
+			},
+			expectedStrategy: apiconstants.AutoImportStrategyImportOnly,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			objects := []runtime.Object{}
+			if c.controllerConfig != nil {
+				objects = append(objects, c.controllerConfig)
+			}
+			kubeClient := kubefake.NewSimpleClientset(objects...)
+			kubeInformerFactory := informers.NewSharedInformerFactory(kubeClient, 10*time.Minute)
+			configmapInformer := kubeInformerFactory.Core().V1().ConfigMaps().Informer()
+			if c.controllerConfig != nil {
+				configmapInformer.GetStore().Add(c.controllerConfig)
+			}
+			autoImportStrategyGetter := AutoImportStrategyGetter("test", kubeInformerFactory.Core().V1().ConfigMaps().Lister(), logf.Log.WithName("auto-import-strategy-getter"))
+			autoImportStrategy, err := autoImportStrategyGetter()
+			if err != nil {
+				t.Errorf("unexpected err %v", err)
+			}
+			if c.expectedStrategy != autoImportStrategy {
+				t.Errorf("expect %s, but got %s", c.expectedStrategy, autoImportStrategy)
 			}
 		})
 	}

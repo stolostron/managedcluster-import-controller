@@ -692,6 +692,48 @@ func assertManagedClusterAvailable(clusterName string) {
 	})
 }
 
+func assertManagedClusterAvailableUnknown(clusterName string) {
+	start := time.Now()
+	defer func() {
+		util.Logf("assert managed cluster %s available unknown spending time: %.2f seconds", clusterName, time.Since(start).Seconds())
+	}()
+	ginkgo.By(fmt.Sprintf("Managed cluster %s should be available unknown", clusterName), func() {
+		gomega.Eventually(func() error {
+			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+
+			if meta.IsStatusConditionPresentAndEqual(cluster.Status.Conditions, clusterv1.ManagedClusterConditionAvailable, metav1.ConditionUnknown) {
+				return nil
+			}
+
+			return fmt.Errorf("assert managed cluster %s available unknown failed, cluster conditions: %v", clusterName, cluster.Status.Conditions)
+		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+	})
+}
+
+func assertManagedClusterAvailableUnknownConsistently(clusterName string, duration time.Duration) {
+	start := time.Now()
+	defer func() {
+		util.Logf("assert managed cluster %s available unknown consistently spending time: %.2f seconds", clusterName, time.Since(start).Seconds())
+	}()
+	ginkgo.By(fmt.Sprintf("Managed cluster %s should be available unknown for %v", clusterName, duration), func() {
+		gomega.Consistently(func() error {
+			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+
+			if meta.IsStatusConditionPresentAndEqual(cluster.Status.Conditions, clusterv1.ManagedClusterConditionAvailable, metav1.ConditionUnknown) {
+				return nil
+			}
+
+			return fmt.Errorf("assert managed cluster %s available unknown consistently failed, cluster conditions: %v", clusterName, cluster.Status.Conditions)
+		}, duration, 2*time.Second).Should(gomega.Succeed())
+	})
+}
+
 func assertHostedKlusterletManifestWorks(managementClusterName, managedClusterName string) {
 	ginkgo.By(fmt.Sprintf("Hosted cluster %s manifest works should be created", managedClusterName), func() {
 		gomega.Eventually(func() error {
