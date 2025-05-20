@@ -96,8 +96,9 @@ func TestReconcile(t *testing.T) {
 			},
 			works: []runtime.Object{
 				&workv1.ManifestWork{ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-klusterlet-crds",
-					Namespace: "test"}},
+					Name:              "test-klusterlet-crds",
+					Namespace:         "test",
+					DeletionTimestamp: &now}},
 			},
 			requeue: false,
 			validateFunc: func(t *testing.T, clientHolder *helpers.ClientHolder) {
