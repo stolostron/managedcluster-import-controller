@@ -216,6 +216,11 @@ func (r *ReconcileResourceCleanup) Cleanup(ctx context.Context, cluster *cluster
 	// only klusterletCRD manifestWork will be orphaned at the last, need to force delete.
 	klusterletCRDWorkName := fmt.Sprintf("%s-%s", cluster.Name, constants.KlusterletCRDsSuffix)
 	if len(works.Items) == 1 && works.Items[0].Name == klusterletCRDWorkName {
+		// the manifestWorks are deleted by registration controller.
+		// the agent may be orphaned if the CRD manifestWork is force deleted directly.
+		if works.Items[0].DeletionTimestamp.IsZero() {
+			return nil
+		}
 		if err = helpers.ForceDeleteManifestWork(ctx, r.clientHolder.WorkClient, r.recorder,
 			cluster.Name, klusterletCRDWorkName); err != nil {
 			return err
