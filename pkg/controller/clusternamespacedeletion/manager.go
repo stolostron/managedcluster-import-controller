@@ -20,11 +20,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-
 	clustercontroller "github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	siteconfigv1alpha1 "github.com/stolostron/siteconfig/api/v1alpha1"
+	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 )
 
 const ControllerName = "clusternamespacedeletion-controller"
@@ -149,6 +149,29 @@ func Add(ctx context.Context,
 		).
 		Watches(
 			&asv1beta1.InfraEnv{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
+				return []reconcile.Request{
+					{
+						NamespacedName: types.NamespacedName{
+							Name: o.GetNamespace(),
+						},
+					},
+				}
+			}),
+			// only cares deletion
+			builder.WithPredicates(predicate.Funcs{
+				GenericFunc: func(e event.GenericEvent) bool { return false },
+				DeleteFunc:  func(e event.DeleteEvent) bool { return true },
+				CreateFunc: func(e event.CreateEvent) bool {
+					return false
+				},
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					return false
+				},
+			}),
+		).
+		Watches(
+			&siteconfigv1alpha1.ClusterInstance{},
 			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
 				return []reconcile.Request{
 					{

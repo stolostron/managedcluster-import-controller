@@ -40,6 +40,7 @@ import (
 	klusterletconfigclient "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned"
 	klusterletconfiginformer "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/informers/externalversions"
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
+	siteconfigv1alpha1 "github.com/stolostron/siteconfig/api/v1alpha1"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	informerscluster "open-cluster-management.io/api/client/cluster/informers/externalversions"
@@ -92,6 +93,7 @@ func init() {
 	utilruntime.Must(klusterletconfigv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(hyperv1beta1.AddToScheme(scheme))
 	utilruntime.Must(capiv1beta1.AddToScheme(scheme))
+	utilruntime.Must(siteconfigv1alpha1.AddToScheme(scheme))
 }
 
 func main() {

@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"testing"
 
 	"github.com/onsi/ginkgo/v2"
@@ -16,6 +15,8 @@ import (
 	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	hyperv1beta1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	siteconfigv1alpha1 "github.com/stolostron/siteconfig/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -23,12 +24,11 @@ import (
 	"k8s.io/client-go/rest"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 )
 
 // These tests use Ginkgo (BDD-style Go testing framework). Refer to
@@ -58,6 +58,7 @@ var _ = ginkgo.BeforeSuite(func() {
 			filepath.Join("../../../", "test", "e2e", "resources", "hypershift"),
 			filepath.Join("../../../", "test", "e2e", "resources", "ocm"),
 			filepath.Join("../../../", "test", "e2e", "resources", "capi"),
+			filepath.Join("../../../", "test", "e2e", "resources", "siteconfig"),
 		},
 	}
 
@@ -79,6 +80,9 @@ var _ = ginkgo.BeforeSuite(func() {
 	err = addonv1alpha1.AddToScheme(scheme.Scheme)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	err = capiv1beta1.AddToScheme(scheme.Scheme)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	err = siteconfigv1alpha1.AddToScheme(scheme.Scheme)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 	opts := ctrl.Options{
 		Scheme: scheme.Scheme,

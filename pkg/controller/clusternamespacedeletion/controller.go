@@ -15,6 +15,7 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	clustercontroller "github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
+	siteconfigv1alpha1 "github.com/stolostron/siteconfig/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
@@ -146,6 +147,18 @@ func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, reque
 		// the managed cluster is deleted, we need to keep the managed cluster namespace.
 		reqLogger.Info(fmt.Sprintf("Waiting for infra envs, there are %d infraEnvs in namespace %s",
 			len(infraEnvList.Items), ns.Name))
+		return reconcile.Result{}, nil
+	}
+
+	clusterInstanceList := &siteconfigv1alpha1.ClusterInstanceList{}
+	if err := r.client.List(ctx, clusterInstanceList, client.InNamespace(ns.Name)); err != nil {
+		return reconcile.Result{}, client.IgnoreNotFound(err)
+	}
+	if len(clusterInstanceList.Items) != 0 {
+		// there are clusterInstance in the managed cluster namespace.
+		// the managed cluster is deleted, we need to keep the managed cluster namespace.
+		reqLogger.Info(fmt.Sprintf("Waiting for clusterInstance, there are %d clusterInstance in namespace %s",
+			len(clusterInstanceList.Items), ns.Name))
 		return reconcile.Result{}, nil
 	}
 
