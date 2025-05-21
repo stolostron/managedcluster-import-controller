@@ -62,6 +62,9 @@ echo "###### prepare required crds"
 ${KUBECTL} apply -f "$REPO_DIR/test/e2e/resources/hive"
 ${KUBECTL} apply -f "$REPO_DIR/test/e2e/resources/ocp"
 ${KUBECTL} apply -f "$REPO_DIR/test/e2e/resources/assisted-service"
+${KUBECTL} apply -f "$REPO_DIR/test/e2e/resources/siteconfig"
+${KUBECTL} apply -f "$REPO_DIR/test/e2e/resources/capi"
+${KUBECTL} create -f "$REPO_DIR/test/e2e/resources/hypershift"
 
 cat <<EOF | ${KUBECTL} apply -f -
 apiVersion: config.openshift.io/v1

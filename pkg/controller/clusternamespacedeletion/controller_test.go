@@ -6,7 +6,6 @@ package clusternamespacedeletion
 import (
 	"context"
 	"fmt"
-	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"time"
 
 	"github.com/onsi/ginkgo/v2"
@@ -14,7 +13,9 @@ import (
 	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
 	hyperv1beta1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
+	clustercontroller "github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
+	siteconfigv1alpha1 "github.com/stolostron/siteconfig/api/v1alpha1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -22,8 +23,7 @@ import (
 	utilrand "k8s.io/apimachinery/pkg/util/rand"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
-
-	clustercontroller "github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
+	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 )
 
 var _ = ginkgo.Describe("cluster namespace deletion controller", func() {
@@ -341,7 +341,59 @@ var _ = ginkgo.Describe("cluster namespace deletion controller", func() {
 			}, timeout, interval).ShouldNot(gomega.HaveOccurred())
 		})
 
-		ginkgo.It("Should not delete ns when cluster has infraenv", func() {
+		ginkgo.It("Should not delete ns when cluster has clusterInstance", func() {
+			ginkgo.By("create clusterInstance")
+			clusterInstance := &siteconfigv1alpha1.ClusterInstance{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-cluster-instance",
+					Namespace: cluster.Name,
+				},
+				Spec: siteconfigv1alpha1.ClusterInstanceSpec{
+					ClusterName:            cluster.Name,
+					PullSecretRef:          corev1.LocalObjectReference{Name: "fake"},
+					ClusterImageSetNameRef: "fake",
+					BaseDomain:             "fake",
+					Nodes: []siteconfigv1alpha1.NodeSpec{{
+						BmcAddress:         "fake",
+						BmcCredentialsName: siteconfigv1alpha1.BmcCredentialsName{Name: "fake"},
+						BootMACAddress:     "AA:BB:CC:DD:EE:11",
+						HostName:           "fake",
+						TemplateRefs:       []siteconfigv1alpha1.TemplateRef{{Name: "fake", Namespace: "fake"}},
+					}},
+					TemplateRefs: []siteconfigv1alpha1.TemplateRef{{Name: "fake", Namespace: "fake"}},
+				},
+			}
+			err := runtimeClient.Create(context.TODO(), clusterInstance)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			ginkgo.By("delete cluster")
+			err = runtimeClient.Delete(context.TODO(), cluster)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			ginkgo.By("wait for 5 seconds and ns should not be deleted")
+			time.Sleep(5 * time.Second)
+			ns, err := k8sClient.CoreV1().Namespaces().Get(context.TODO(), cluster.Name, metav1.GetOptions{})
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			gomega.Expect(ns.DeletionTimestamp.IsZero()).Should(gomega.BeTrue())
+
+			err = runtimeClient.Delete(context.TODO(), clusterInstance)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			gomega.Eventually(func() error {
+				ns, err := k8sClient.CoreV1().Namespaces().Get(context.TODO(), cluster.Name, metav1.GetOptions{})
+
+				if err == nil && !ns.DeletionTimestamp.IsZero() {
+					return nil
+				}
+
+				if errors.IsNotFound(err) {
+					return nil
+				}
+				return fmt.Errorf("namespace still exist with err: %v", err)
+			}, timeout, interval).ShouldNot(gomega.HaveOccurred())
+		})
+
+		ginkgo.It("Should not delete ns when cluster has pods", func() {
 			ginkgo.By("create pods")
 			prehookpod := &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{

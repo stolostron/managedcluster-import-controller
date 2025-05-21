@@ -282,3 +282,11 @@ rules:
   - managedclusters/accept
   verbs:
   - update
+- apiGroups:
+    - siteconfig.open-cluster-management.io
+  resources:
+    - clusterinstances
+  verbs:
+    - get
+    - list
+    - watch
