@@ -62,6 +62,7 @@ func TestReconcile(t *testing.T) {
 		objs                    []client.Object
 		works                   []runtime.Object
 		secrets                 []runtime.Object
+		autoImportStrategy      string
 		expectedErr             bool
 		expectedConditionReason string
 	}{
@@ -112,6 +113,35 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
+		},
+		{
+			name: "with ImportOnly strategy",
+			objs: []client.Object{
+				testinghelpers.NewManagedClusterBuilder("test").
+					WithImportedCondition(true).Build(),
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+					},
+				},
+			},
+			works: []runtime.Object{},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: "test",
+					},
+				},
+			},
+			autoImportStrategy:      apiconstants.AutoImportStrategyImportOnly,
+			expectedErr:             false,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImported,
 		},
 		{
 			name: "clusterdeployment is not installed",
@@ -254,6 +284,12 @@ func TestReconcile(t *testing.T) {
 				},
 				eventstesting.NewTestingEventRecorder(t),
 				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
+				func() (strategy string, err error) {
+					if len(c.autoImportStrategy) > 0 {
+						return c.autoImportStrategy, nil
+					}
+					return constants.DefaultAutoImportStrategy, nil
+				},
 			)
 
 			_, err := r.Reconcile(context.TODO(), reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}})

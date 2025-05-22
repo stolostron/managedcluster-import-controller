@@ -41,6 +41,9 @@ type InformerHolder struct {
 	KlusterletConfigInformer cache.SharedIndexInformer
 	KlusterletConfigLister   klusterletconfigv1alpha1lister.KlusterletConfigLister
 
+	ControllerConfigInformer cache.SharedIndexInformer
+	ControllerConfigLister   corev1listers.ConfigMapLister
+
 	ManagedClusterInformer cache.SharedIndexInformer
 }
 

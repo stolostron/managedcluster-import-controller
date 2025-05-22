@@ -17,10 +17,12 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
+	corev1listers "k8s.io/client-go/listers/core/v1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/openshift/library-go/pkg/operator/events"
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 )
@@ -288,4 +290,32 @@ func ImportingResourcesApplied(condition *metav1.Condition) bool {
 		return true
 	}
 	return false
+}
+
+type AutoImportStrategyGetterFunc func() (strategy string, err error)
+
+func AutoImportStrategyGetter(componentNamespace string, configMapLister corev1listers.ConfigMapLister, log logr.Logger) AutoImportStrategyGetterFunc {
+	return func() (string, error) {
+		cm, err := configMapLister.ConfigMaps(componentNamespace).Get(constants.ControllerConfigConfigMapName)
+		if errors.IsNotFound(err) {
+			return constants.DefaultAutoImportStrategy, nil
+		}
+		if err != nil {
+			return "", err
+		}
+
+		strategy := cm.Data[constants.AutoImportStrategyKey]
+		switch strategy {
+		case apiconstants.AutoImportStrategyImportAndSync, apiconstants.AutoImportStrategyImportOnly:
+			return strategy, nil
+		case "":
+			return constants.DefaultAutoImportStrategy, nil
+		default:
+			log.Info("Invalid config value found and use default instead.",
+				"configmap", constants.ControllerConfigConfigMapName,
+				constants.AutoImportStrategyKey, strategy,
+				"default", constants.DefaultAutoImportStrategy)
+			return constants.DefaultAutoImportStrategy, nil
+		}
+	}
 }

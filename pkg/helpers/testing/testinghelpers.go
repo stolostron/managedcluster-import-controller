@@ -318,6 +318,7 @@ func NewServerCertificate(commonName string, caCertData, caKeyData []byte) ([]by
 type managedClusterBuilder struct {
 	name                  string
 	setImportingCondition bool
+	setImportedCondition  bool
 	annotations           map[string]string
 }
 
@@ -331,6 +332,10 @@ func NewManagedClusterBuilder(name string) *managedClusterBuilder {
 }
 func (b *managedClusterBuilder) WithImportingCondition(set bool) *managedClusterBuilder {
 	b.setImportingCondition = set
+	return b
+}
+func (b *managedClusterBuilder) WithImportedCondition(set bool) *managedClusterBuilder {
+	b.setImportedCondition = set
 	return b
 }
 func (b *managedClusterBuilder) WithAnnotations(k, v string) *managedClusterBuilder {
@@ -352,6 +357,16 @@ func (b *managedClusterBuilder) Build() *clusterv1.ManagedCluster {
 				Status:  metav1.ConditionFalse,
 				Reason:  constants.ConditionReasonManagedClusterImporting,
 				Message: "Start to import managed cluster test",
+			},
+		}
+	}
+	if b.setImportedCondition {
+		mc.Status.Conditions = []metav1.Condition{
+			{
+				Type:    constants.ConditionManagedClusterImportSucceeded,
+				Status:  metav1.ConditionTrue,
+				Reason:  constants.ConditionReasonManagedClusterImported,
+				Message: "Managed cluster imported",
 			},
 		}
 	}

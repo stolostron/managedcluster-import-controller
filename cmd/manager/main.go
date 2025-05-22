@@ -193,6 +193,21 @@ func main() {
 		return
 	}
 
+	// get component namespace
+	componentNamespace, err := helpers.GetComponentNamespace()
+	if err != nil {
+		setupLog.Error(err, "failed to get component namespace")
+		exitCode = 1
+		return
+	}
+
+	controllerConfigInformerF := informers.NewFilteredSharedInformerFactory(
+		kubeClient,
+		10*time.Minute,
+		componentNamespace, func(listOptions *metav1.ListOptions) {
+			listOptions.FieldSelector = fields.OneTermEqualSelector("metadata.name", constants.ControllerConfigConfigMapName).String()
+		})
+
 	importSecertInformerF := informers.NewFilteredSharedInformerFactory(
 		kubeClient,
 		10*time.Minute,
@@ -334,8 +349,11 @@ func main() {
 			HostedWorkLister:         hostedWorksInformerF.Work().V1().ManifestWorks().Lister(),
 			KlusterletConfigInformer: klusterletconfigInformer,
 			KlusterletConfigLister:   klusterletconfigLister,
+			ControllerConfigInformer: controllerConfigInformerF.Core().V1().ConfigMaps().Informer(),
+			ControllerConfigLister:   controllerConfigInformerF.Core().V1().ConfigMaps().Lister(),
 			ManagedClusterInformer:   managedclusterInformer,
 		},
+		componentNamespace,
 		enableFlightCtl,
 		flightctlManager,
 		mcRecorder,
@@ -345,6 +363,7 @@ func main() {
 		return
 	}
 
+	controllerConfigInformerF.Start(ctx.Done())
 	importSecertInformerF.Start(ctx.Done())
 	autoimportSecretInformerF.Start(ctx.Done())
 	klusterletWorksInformerF.Start(ctx.Done())

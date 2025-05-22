@@ -27,12 +27,13 @@ var log = logf.Log.WithName(ControllerName)
 
 // ReconcileLocalCluster reconciles the import secret of a self managed cluster to import the managed cluster
 type ReconcileLocalCluster struct {
-	clientHolder   *helpers.ClientHolder
-	restMapper     meta.RESTMapper
-	informerHolder *source.InformerHolder
-	recorder       events.Recorder
-	mcRecorder     kevents.EventRecorder
-	importHelper   *helpers.ImportHelper
+	clientHolder             *helpers.ClientHolder
+	restMapper               meta.RESTMapper
+	informerHolder           *source.InformerHolder
+	recorder                 events.Recorder
+	mcRecorder               kevents.EventRecorder
+	importHelper             *helpers.ImportHelper
+	autoImportStrategyGetter helpers.AutoImportStrategyGetterFunc
 }
 
 func NewReconcileLocalCluster(
@@ -41,6 +42,7 @@ func NewReconcileLocalCluster(
 	restMapper meta.RESTMapper,
 	recorder events.Recorder,
 	mcRecorder kevents.EventRecorder,
+	autoImportStrategyGetter helpers.AutoImportStrategyGetterFunc,
 ) *ReconcileLocalCluster {
 
 	return &ReconcileLocalCluster{
@@ -54,6 +56,7 @@ func NewReconcileLocalCluster(
 				return reconcile.Result{}, clientHolder, restMapper, nil
 			},
 		),
+		autoImportStrategyGetter: autoImportStrategyGetter,
 	}
 }
 
@@ -87,13 +90,6 @@ func (r *ReconcileLocalCluster) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	if _, autoImportDisabled := managedCluster.Annotations[apiconstants.DisableAutoImportAnnotation]; autoImportDisabled {
-		// skip if auto import is disabled
-		return reconcile.Result{}, nil
-	}
-
-	reqLogger.V(5).Info("Reconciling self managed cluster")
-
 	// if there is an auto import secret in the managed cluster namespace, we will use the auto import secret to import
 	// the cluster
 	_, err = r.informerHolder.AutoImportSecretLister.Secrets(request.Name).Get(constants.AutoImportSecretName)
@@ -103,6 +99,31 @@ func (r *ReconcileLocalCluster) Reconcile(ctx context.Context, request reconcile
 	if !errors.IsNotFound(err) {
 		return reconcile.Result{}, err
 	}
+
+	if _, autoImportDisabled := managedCluster.Annotations[apiconstants.DisableAutoImportAnnotation]; autoImportDisabled {
+		// skip if auto import is disabled
+		reqLogger.Info("Auto import is disabled", "managedCluster", managedCluster.Name)
+		return reconcile.Result{}, nil
+	} else {
+		reqLogger.V(5).Info("Auto import is enabled", "managedCluster", managedCluster.Name)
+	}
+
+	autoImportStrategy, err := r.autoImportStrategyGetter()
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	reqLogger.Info("Auto import strategy is fetched", "managedCluster", managedCluster.Name, "AutoImportStrategy", autoImportStrategy)
+	importSucceeded := meta.IsStatusConditionTrue(managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+	if autoImportStrategy == apiconstants.AutoImportStrategyImportOnly && importSucceeded {
+		reqLogger.Info("Auto import is skipped due to the auto import strategy",
+			"managedCluster", managedCluster.Name,
+			"autoImportStrategy", autoImportStrategy,
+			"importSucceeded", importSucceeded,
+		)
+		return reconcile.Result{}, nil
+	}
+
+	reqLogger.V(5).Info("Reconciling self managed cluster")
 
 	result, condition, modified, iErr := r.importHelper.Import(false, managedCluster, nil)
 	// if resources are applied but NOT modified, will not update the condition, keep the original condition.

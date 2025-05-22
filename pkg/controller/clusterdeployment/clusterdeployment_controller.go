@@ -15,6 +15,7 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
@@ -30,12 +31,13 @@ var log = logf.Log.WithName(ControllerName)
 // ReconcileClusterDeployment reconciles the clusterdeployment that is in the managed cluster namespace
 // to import the managed cluster
 type ReconcileClusterDeployment struct {
-	client         client.Client
-	kubeClient     kubernetes.Interface
-	informerHolder *source.InformerHolder
-	recorder       events.Recorder
-	mcRecorder     kevents.EventRecorder
-	importHelper   *helpers.ImportHelper
+	client                   client.Client
+	kubeClient               kubernetes.Interface
+	informerHolder           *source.InformerHolder
+	recorder                 events.Recorder
+	mcRecorder               kevents.EventRecorder
+	importHelper             *helpers.ImportHelper
+	autoImportStrategyGetter helpers.AutoImportStrategyGetterFunc
 }
 
 func NewReconcileClusterDeployment(
@@ -44,6 +46,7 @@ func NewReconcileClusterDeployment(
 	informerHolder *source.InformerHolder,
 	recorder events.Recorder,
 	mcRecorder kevents.EventRecorder,
+	autoImportStrategyGetter helpers.AutoImportStrategyGetterFunc,
 ) *ReconcileClusterDeployment {
 
 	return &ReconcileClusterDeployment{
@@ -54,6 +57,7 @@ func NewReconcileClusterDeployment(
 		mcRecorder:     mcRecorder,
 		importHelper: helpers.NewImportHelper(informerHolder, recorder, log).
 			WithGenerateClientHolderFunc(helpers.GenerateImportClientFromKubeConfigSecret),
+		autoImportStrategyGetter: autoImportStrategyGetter,
 	}
 }
 
@@ -106,6 +110,24 @@ func (r *ReconcileClusterDeployment) Reconcile(
 
 	if _, autoImportDisabled := managedCluster.Annotations[apiconstants.DisableAutoImportAnnotation]; autoImportDisabled {
 		// skip if auto import is disabled
+		reqLogger.Info("Auto import is disabled", "managedCluster", managedCluster.Name)
+		return reconcile.Result{}, nil
+	} else {
+		reqLogger.V(5).Info("Auto import is enabled", "managedCluster", managedCluster.Name)
+	}
+
+	autoImportStrategy, err := r.autoImportStrategyGetter()
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	reqLogger.Info("Auto import strategy is fetched", "managedCluster", managedCluster.Name, "AutoImportStrategy", autoImportStrategy)
+	importSucceeded := meta.IsStatusConditionTrue(managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+	if autoImportStrategy == apiconstants.AutoImportStrategyImportOnly && importSucceeded {
+		reqLogger.Info("Auto import is skipped due to the auto import strategy",
+			"managedCluster", managedCluster.Name,
+			"autoImportStrategy", autoImportStrategy,
+			"importSucceeded", importSucceeded,
+		)
 		return reconcile.Result{}, nil
 	}
 

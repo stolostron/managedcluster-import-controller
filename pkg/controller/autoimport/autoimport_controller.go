@@ -32,13 +32,14 @@ var log = logf.Log.WithName(ControllerName)
 
 // ReconcileAutoImport reconciles the managed cluster auto import secret to import the managed cluster
 type ReconcileAutoImport struct {
-	client                client.Client
-	kubeClient            kubernetes.Interface
-	informerHolder        *source.InformerHolder
-	recorder              events.Recorder
-	mcRecorder            kevents.EventRecorder
-	importHelper          *helpers.ImportHelper
-	rosaKubeConfigGetters map[string]*helpers.RosaKubeConfigGetter
+	client                   client.Client
+	kubeClient               kubernetes.Interface
+	informerHolder           *source.InformerHolder
+	recorder                 events.Recorder
+	mcRecorder               kevents.EventRecorder
+	importHelper             *helpers.ImportHelper
+	rosaKubeConfigGetters    map[string]*helpers.RosaKubeConfigGetter
+	autoImportStrategyGetter helpers.AutoImportStrategyGetterFunc
 }
 
 func NewReconcileAutoImport(
@@ -47,15 +48,17 @@ func NewReconcileAutoImport(
 	informerHolder *source.InformerHolder,
 	recorder events.Recorder,
 	mcRecorder kevents.EventRecorder,
+	autoImportStrategyGetter helpers.AutoImportStrategyGetterFunc,
 ) *ReconcileAutoImport {
 	return &ReconcileAutoImport{
-		client:                client,
-		kubeClient:            kubeClient,
-		informerHolder:        informerHolder,
-		recorder:              recorder,
-		mcRecorder:            mcRecorder,
-		importHelper:          helpers.NewImportHelper(informerHolder, recorder, log),
-		rosaKubeConfigGetters: make(map[string]*helpers.RosaKubeConfigGetter),
+		client:                   client,
+		kubeClient:               kubeClient,
+		informerHolder:           informerHolder,
+		recorder:                 recorder,
+		mcRecorder:               mcRecorder,
+		importHelper:             helpers.NewImportHelper(informerHolder, recorder, log),
+		rosaKubeConfigGetters:    make(map[string]*helpers.RosaKubeConfigGetter),
+		autoImportStrategyGetter: autoImportStrategyGetter,
 	}
 }
 
@@ -93,10 +96,25 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 
 	if _, autoImportDisabled := managedCluster.Annotations[apiconstants.DisableAutoImportAnnotation]; autoImportDisabled {
 		// skip if auto import is disabled
-		reqLogger.V(5).Info("Auto import is disabled", "managedCluster", managedCluster.Name)
+		reqLogger.Info("Auto import is disabled", "managedCluster", managedCluster.Name)
 		return reconcile.Result{}, nil
 	} else {
 		reqLogger.V(5).Info("Auto import is enabled", "managedCluster", managedCluster.Name)
+	}
+
+	autoImportStrategy, err := r.autoImportStrategyGetter()
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	reqLogger.Info("Auto import strategy is fetched", "managedCluster", managedCluster.Name, "AutoImportStrategy", autoImportStrategy)
+	importSucceeded := meta.IsStatusConditionTrue(managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+	if autoImportStrategy == apiconstants.AutoImportStrategyImportOnly && importSucceeded {
+		reqLogger.Info("Auto import is skipped due to the auto import strategy",
+			"managedCluster", managedCluster.Name,
+			"autoImportStrategy", autoImportStrategy,
+			"importSucceeded", importSucceeded,
+		)
+		return reconcile.Result{}, nil
 	}
 
 	autoImportSecret, err := r.informerHolder.AutoImportSecretLister.Secrets(managedClusterName).Get(constants.AutoImportSecretName)
@@ -129,9 +147,9 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		); err != nil {
 			return reconcile.Result{}, err
 		}
-		// auto import secret invalid, stop retrying
-		reqLogger.V(5).Info("Auto import secret invalid", "managedCluster", managedCluster.Name)
-		return reconcile.Result{}, nil
+		// return error if the auto import secret invalid
+		reqLogger.Info("Auto import secret invalid", "managedCluster", managedCluster.Name, "error", err)
+		return reconcile.Result{}, err
 	}
 
 	r.importHelper = r.importHelper.WithGenerateClientHolderFunc(generateClientHolderFunc)
