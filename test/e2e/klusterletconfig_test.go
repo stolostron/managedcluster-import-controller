@@ -361,7 +361,8 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 		assertManagedClusterAvailable(managedClusterName)
 		assertManagedClusterManifestWorksAvailable(managedClusterName)
 
-		defaultServerUrl, err := bootstrap.GetKubeAPIServerAddress(context.TODO(), hubRuntimeClient, nil)
+		customServerURL := "https://invalid.server.url:6443"
+		customCAData, _, err := newCert("custom CA for hub Kube API server")
 		Expect(err).ToNot(HaveOccurred())
 
 		By("Create KlusterletConfig with custom server URL", func() {
@@ -370,45 +371,32 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 					Name: klusterletConfigName,
 				},
 				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
-					HubKubeAPIServerURL: defaultServerUrl,
+					HubKubeAPIServerURL:      customServerURL,
+					HubKubeAPIServerCABundle: customCAData,
 				},
 			}, metav1.CreateOptions{})
 			Expect(err).ToNot(HaveOccurred())
 		})
+		assertBootstrapKubeconfig(customServerURL, "", "", customCAData, false)
 
-		defaultCABundle, err := bootstrap.GetBootstrapCAData(context.TODO(), &helpers.ClientHolder{
-			KubeClient:    hubKubeClient,
-			RuntimeClient: hubRuntimeClient,
-		}, defaultServerUrl, managedClusterName, nil)
-		Expect(err).ToNot(HaveOccurred())
+		// cluster should become offline because the custom server URL and CA bundle is invalid
+		assertManagedClusterOffline(managedClusterName, 120*time.Second)
 
-		assertBootstrapKubeconfig(defaultServerUrl, "", "", defaultCABundle, false)
-		assertManagedClusterAvailable(managedClusterName)
-
-		By("Delete Klusterletconfig", func() {
+		By("Delete Klusterletconfig and re-create the import secret", func() {
 			err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Delete(context.TODO(), klusterletConfigName, metav1.DeleteOptions{})
 			Expect(err).ToNot(HaveOccurred())
+
+			err = util.RemoveImportSecret(hubKubeClient, managedClusterName)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 		})
 
-		assertBootstrapKubeconfig("https://kubernetes.default.svc:443", "",
-			"/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", nil, false)
-		// cluster should become available because custom server URL and CA bundle is removed
-		assertManagedClusterAvailable(managedClusterName)
-
-		// The hubhash changes in this case, update EvictionGracePeriod to 10s to cleanup the unmanaged AppliedWork
-		By("Setup KlusterletConfig EvictionGracePeriod to clean up resource", func() {
-			_, err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Create(context.TODO(), &klusterletconfigv1alpha1.KlusterletConfig{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: klusterletConfigName,
-				},
-				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
-					AppliedManifestWorkEvictionGracePeriod: "10s",
-				},
-			}, metav1.CreateOptions{})
-			Expect(err).ToNot(HaveOccurred())
+		By(fmt.Sprintf("Should recover the managed cluster %s", managedClusterName), func() {
+			err := util.SetImmediateImportAnnotation(hubClusterClient, managedClusterName, "")
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			assertManagedClusterAvailable(managedClusterName)
+			assertBootstrapKubeconfig("https://kubernetes.default.svc:443", "",
+				"/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", nil, false)
 		})
-		// here to restart agent pods to trigger update to save time.
-		restartAgentPods()
 	})
 
 	It("Should deploy the klusterlet with customized namespace", func() {
