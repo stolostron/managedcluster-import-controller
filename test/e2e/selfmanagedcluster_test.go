@@ -107,6 +107,34 @@ var _ = ginkgo.Describe("Importing a self managed cluster", func() {
 				assertManagedClusterAvailable(localClusterName)
 			})
 		})
+
+		ginkgo.It("Should trigger auto-import with immediate-import annotation", func() {
+			ginkgo.By(fmt.Sprintf("Should import the managed cluster %s sucessfully", localClusterName), func() {
+				assertManagedClusterAvailable(localClusterName)
+			})
+
+			ginkgo.By("Ensure the auto-import strategy is ImportOnly", func() {
+				autoImportStrategy, err := util.GetAutoImportStrategy(hubKubeClient)
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+				gomega.Expect(autoImportStrategy).To(gomega.BeEquivalentTo(apiconstants.AutoImportStrategyImportOnly))
+			})
+
+			ginkgo.By(fmt.Sprintf("Should become offline after removing klusterlet of the managed cluster %s", localClusterName), func() {
+				err := util.RemoveKlusterlet(hubOperatorClient, "klusterlet")
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+				assertManagedClusterAvailableUnknown(localClusterName)
+			})
+
+			ginkgo.By(fmt.Sprintf("Should recover the managed cluster %s once the immediate-import annotation is added", localClusterName), func() {
+				err := util.SetImmediateImportAnnotation(hubClusterClient, localClusterName, "")
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+				assertManagedClusterImportSecretCreated(localClusterName, "other")
+				assertManagedClusterAvailable(localClusterName)
+			})
+
+			assertImmediateImportCompleted(localClusterName)
+		})
 	})
 
 	ginkgo.Context("Importing a cluster with self managed cluster label", func() {

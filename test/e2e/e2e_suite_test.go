@@ -46,6 +46,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
 	klusterletconfigclient "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned"
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
@@ -688,6 +689,28 @@ func assertManagedClusterAvailable(clusterName string) {
 			}
 
 			return fmt.Errorf("assert managed cluster %s available failed, cluster conditions: %v", clusterName, cluster.Status.Conditions)
+		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+	})
+}
+
+func assertImmediateImportCompleted(clusterName string) {
+	start := time.Now()
+	defer func() {
+		util.Logf("assert immediate-import annotation of managed cluster %s completed spending time: %.2f seconds", clusterName, time.Since(start).Seconds())
+	}()
+	ginkgo.By(fmt.Sprintf("The immediate-import annotation of Managed cluster %s should be completed", clusterName), func() {
+		gomega.Eventually(func() error {
+			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+
+			immediateImportValue := cluster.Annotations[apiconstants.AnnotationImmediateImport]
+			if immediateImportValue == apiconstants.AnnotationValueImmediateImportCompleted {
+				return nil
+			}
+
+			return fmt.Errorf("assert immediate-import annotation of managed cluster %s failed, value: %v", clusterName, immediateImportValue)
 		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
 	})
 }

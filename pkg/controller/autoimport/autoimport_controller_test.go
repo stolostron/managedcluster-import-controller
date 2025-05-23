@@ -139,6 +139,67 @@ func TestReconcile(t *testing.T) {
 			expectedConditionReason: constants.ConditionReasonManagedClusterImported,
 		},
 		{
+			name: "with ImportOnly strategy and immediate-import annotation",
+			objs: []client.Object{
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).
+					WithAnnotations(apiconstants.AnnotationImmediateImport, "").
+					WithImportedCondition(true).
+					Build(),
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: managedClusterName,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: managedClusterName,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret(managedClusterName),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: managedClusterName,
+					},
+					Data: map[string][]byte{
+						"kubeconfig": testinghelpers.BuildKubeconfig(config),
+					},
+					Type: constants.AutoImportSecretKubeConfig,
+				},
+			},
+			autoImportStrategy:      apiconstants.AutoImportStrategyImportOnly,
+			expectedErr:             true,
+			expectedConditionStatus: metav1.ConditionFalse,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
+		},
+		{
+			name: "with ImportOnly strategy and unempty immediate-import annotation",
+			objs: []client.Object{
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).
+					WithImportedCondition(true).
+					WithAnnotations(apiconstants.AnnotationImmediateImport, "Completed").
+					Build(),
+			},
+			works:                   []runtime.Object{},
+			secrets:                 []runtime.Object{},
+			autoImportStrategy:      apiconstants.AutoImportStrategyImportOnly,
+			expectedErr:             false,
+			expectedConditionStatus: metav1.ConditionTrue,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImported,
+		},
+		{
 			name: "no auto-import-secret",
 			objs: []client.Object{
 				testinghelpers.NewManagedClusterBuilder(managedClusterName).Build(),

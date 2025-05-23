@@ -53,6 +53,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 )
 
@@ -2169,6 +2170,128 @@ func TestHasCertificates(t *testing.T) {
 				if result != c.result {
 					t.Errorf("expected %v, but got %v", c.result, result)
 				}
+			}
+		})
+	}
+}
+
+func TestSetImmediateImportCompleted(t *testing.T) {
+	completed := apiconstants.AnnotationValueImmediateImportCompleted
+	cases := []struct {
+		name                    string
+		managedClusterName      string
+		managedCluster          *clusterv1.ManagedCluster
+		expectedAnnotationValue *string
+	}{
+		{
+			name:               "without annotation",
+			managedClusterName: "cluster1",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "cluster1",
+				},
+			},
+		},
+		{
+			name:               "annotation added with empty value",
+			managedClusterName: "cluster1",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "cluster1",
+					Annotations: map[string]string{
+						apiconstants.AnnotationImmediateImport: "",
+					},
+				},
+			},
+			expectedAnnotationValue: &completed,
+		},
+		{
+			name:               "annotation added with unempty value",
+			managedClusterName: "cluster1",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "cluster1",
+					Annotations: map[string]string{
+						apiconstants.AnnotationImmediateImport: "test",
+					},
+				},
+			},
+			expectedAnnotationValue: &completed,
+		},
+	}
+
+	s := scheme.Scheme
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			clusterObjs := []runtime.Object{}
+			if c.managedCluster != nil {
+				clusterObjs = append(clusterObjs, c.managedCluster)
+			}
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(s).
+				WithRuntimeObjects(clusterObjs...).
+				Build()
+			err := SetImmediateImportCompleted(fakeClient, c.managedClusterName)
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+
+			cluster := &clusterv1.ManagedCluster{}
+			err = fakeClient.Get(context.Background(), types.NamespacedName{Name: c.managedClusterName}, cluster)
+			if errors.IsNotFound(err) && c.expectedAnnotationValue == nil {
+				return
+			}
+			if err != nil {
+				t.Errorf("failed to get managed cluster %s error: %v", c.managedClusterName, err)
+			}
+			actual, ok := cluster.Annotations[apiconstants.AnnotationImmediateImport]
+			if !ok && c.expectedAnnotationValue == nil {
+				return
+			}
+			if actual != *c.expectedAnnotationValue {
+				t.Errorf("expect annotation value %s, but got %v", *c.expectedAnnotationValue, actual)
+			}
+		})
+	}
+}
+
+func TestIsImmediateImport(t *testing.T) {
+	cases := []struct {
+		name          string
+		annotations   map[string]string
+		expectedValue bool
+	}{
+		{
+			name:          "without annotation",
+			expectedValue: false,
+		},
+		{
+			name: "annotation added with unempty value",
+			annotations: map[string]string{
+				apiconstants.AnnotationImmediateImport: "test",
+			},
+			expectedValue: false,
+		},
+		{
+			name: "annotation added with completed value",
+			annotations: map[string]string{
+				apiconstants.AnnotationImmediateImport: "Completed",
+			},
+			expectedValue: false,
+		},
+		{
+			name: "annotation added with empthy value",
+			annotations: map[string]string{
+				apiconstants.AnnotationImmediateImport: "",
+			},
+			expectedValue: true,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			actual := IsImmediateImport(c.annotations)
+			if actual != c.expectedValue {
+				t.Errorf("expect value %v, but got %v", c.expectedValue, actual)
 			}
 		})
 	}
