@@ -61,6 +61,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/Masterminds/sprig/v3"
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
@@ -325,6 +326,31 @@ func updateManagedClusterStatus(client client.Client, managedClusterName string,
 	klog.Infof("Update the managed cluster %s condition %v succeeded.", managedClusterName, cond)
 
 	return true, nil
+}
+
+func SetImmediateImportCompleted(client client.Client, managedClusterName string) error {
+	managedCluster := &clusterv1.ManagedCluster{}
+	err := client.Get(context.TODO(), types.NamespacedName{Name: managedClusterName}, managedCluster)
+	if err != nil {
+		return err
+	}
+
+	ImmediateImport, ok := managedCluster.Annotations[apiconstants.AnnotationImmediateImport]
+	if !ok || ImmediateImport == apiconstants.AnnotationValueImmediateImportCompleted {
+		return nil
+	}
+
+	managedCluster = managedCluster.DeepCopy()
+	managedCluster.Annotations[apiconstants.AnnotationImmediateImport] = apiconstants.AnnotationValueImmediateImportCompleted
+
+	if err := client.Update(context.TODO(), managedCluster); err != nil {
+		klog.Errorf("Update ImmediateImport annotation of the managed cluster %s to Completed failed, error: %v",
+			managedClusterName, err)
+		return err
+	}
+
+	klog.Infof("Update ImmediateImport annotation of the managed cluster %s to Completed succeeded.", managedClusterName)
+	return nil
 }
 
 // UpdateManagedClusterImportCondition update managed cluster status and record the event
@@ -1129,4 +1155,13 @@ func FilesToObjects(files []string, config interface{}, manifestFiles *embed.FS)
 		objects = append(objects, MustCreateObjectFromTemplate(file, template, config))
 	}
 	return objects, nil
+}
+
+func IsImmediateImport(annotations map[string]string) bool {
+	immediateImport, ok := annotations[apiconstants.AnnotationImmediateImport]
+	if ok && len(immediateImport) == 0 {
+		return true
+	}
+
+	return false
 }

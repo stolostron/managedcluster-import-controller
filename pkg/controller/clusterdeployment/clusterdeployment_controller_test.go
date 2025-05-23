@@ -144,6 +144,94 @@ func TestReconcile(t *testing.T) {
 			expectedConditionReason: constants.ConditionReasonManagedClusterImported,
 		},
 		{
+			name: "with ImportOnly strategy and immediate-import annotation",
+			objs: []client.Object{
+				testinghelpers.NewManagedClusterBuilder("test").
+					WithAnnotations(apiconstants.AnnotationImmediateImport, "").
+					WithImportedCondition(true).Build(),
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+						ClusterMetadata: &hivev1.ClusterMetadata{
+							AdminKubeconfigSecretRef: corev1.LocalObjectReference{
+								Name: "test",
+							},
+						},
+					},
+				},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"token":  []byte(config.BearerToken),
+						"server": []byte(config.Host),
+					},
+				},
+			},
+			autoImportStrategy:      apiconstants.AutoImportStrategyImportOnly,
+			expectedErr:             true,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
+		},
+		{
+			name: "with ImportOnly strategy and unempty immediate-import annotation",
+			objs: []client.Object{
+				testinghelpers.NewManagedClusterBuilder("test").
+					WithAnnotations(apiconstants.AnnotationImmediateImport, "Completed").
+					WithImportedCondition(true).Build(),
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+					},
+				},
+			},
+			works: []runtime.Object{},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: "test",
+					},
+				},
+			},
+			autoImportStrategy:      apiconstants.AutoImportStrategyImportOnly,
+			expectedErr:             false,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImported,
+		},
+		{
 			name: "clusterdeployment is not installed",
 			objs: []client.Object{
 				testinghelpers.NewManagedClusterBuilder("test").Build(),
