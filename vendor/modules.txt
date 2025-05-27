@@ -708,7 +708,7 @@ helm.sh/helm/v3/pkg/chart/loader
 helm.sh/helm/v3/pkg/chartutil
 helm.sh/helm/v3/pkg/engine
 helm.sh/helm/v3/pkg/ignore
-# k8s.io/api v0.32.3
+# k8s.io/api v0.32.4
 ## explicit; go 1.23.0
 k8s.io/api/admission/v1
 k8s.io/api/admission/v1beta1
@@ -785,7 +785,7 @@ k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextension
 k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1/fake
 k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1beta1
 k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1beta1/fake
-# k8s.io/apimachinery v0.32.3
+# k8s.io/apimachinery v0.32.4
 ## explicit; go 1.23.0
 k8s.io/apimachinery/pkg/api/equality
 k8s.io/apimachinery/pkg/api/errors
@@ -846,7 +846,7 @@ k8s.io/apimachinery/third_party/forked/golang/reflect
 # k8s.io/apiserver v0.32.3
 ## explicit; go 1.23.0
 k8s.io/apiserver/pkg/storage/names
-# k8s.io/client-go v0.32.3
+# k8s.io/client-go v0.32.4
 ## explicit; go 1.23.0
 k8s.io/client-go/applyconfigurations
 k8s.io/client-go/applyconfigurations/admissionregistration/v1
@@ -1182,7 +1182,7 @@ k8s.io/client-go/util/keyutil
 k8s.io/client-go/util/retry
 k8s.io/client-go/util/watchlist
 k8s.io/client-go/util/workqueue
-# k8s.io/component-base v0.32.3
+# k8s.io/component-base v0.32.4
 ## explicit; go 1.23.0
 k8s.io/component-base/cli/flag
 k8s.io/component-base/featuregate
@@ -1238,7 +1238,7 @@ k8s.io/utils/net
 k8s.io/utils/pointer
 k8s.io/utils/ptr
 k8s.io/utils/trace
-# open-cluster-management.io/api v0.16.2-0.20250422072120-cadf714c3055
+# open-cluster-management.io/api v0.16.2-0.20250527062515-98a1d87193c1
 ## explicit; go 1.23.6
 open-cluster-management.io/api/addon/v1alpha1
 open-cluster-management.io/api/client/addon/clientset/versioned
@@ -1288,7 +1288,7 @@ open-cluster-management.io/api/feature
 open-cluster-management.io/api/operator/v1
 open-cluster-management.io/api/work/v1
 open-cluster-management.io/api/work/v1alpha1
-# open-cluster-management.io/ocm v0.16.1-0.20250422150056-f4b6dcb15929
+# open-cluster-management.io/ocm v0.16.1-0.20250527120941-4cbb12d5a262
 ## explicit; go 1.23.6
 open-cluster-management.io/ocm/deploy/cluster-manager/chart
 open-cluster-management.io/ocm/deploy/klusterlet/chart

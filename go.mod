@@ -20,15 +20,15 @@ require (
 	github.com/stolostron/cluster-lifecycle-api v0.0.0-20250521101300-d1731ad54b6d
 	go.uber.org/zap v1.27.0
 	golang.org/x/text v0.23.0
-	k8s.io/api v0.32.3
+	k8s.io/api v0.32.4
 	k8s.io/apiextensions-apiserver v0.32.2
-	k8s.io/apimachinery v0.32.3
+	k8s.io/apimachinery v0.32.4
 	k8s.io/apiserver v0.32.3
-	k8s.io/client-go v0.32.3
-	k8s.io/component-base v0.32.3
+	k8s.io/client-go v0.32.4
+	k8s.io/component-base v0.32.4
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/utils v0.0.0-20241210054802-24370beab758
-	open-cluster-management.io/api v0.16.2-0.20250422072120-cadf714c3055
+	open-cluster-management.io/api v0.16.2-0.20250527062515-98a1d87193c1
 	sigs.k8s.io/controller-runtime v0.20.2
 )
 
@@ -39,7 +39,7 @@ require (
 	github.com/openshift/hypershift/api v0.0.0-20241022184855-1fa7be0211e4
 	github.com/sethvargo/go-password v0.2.0
 	github.com/stretchr/testify v1.10.0
-	open-cluster-management.io/ocm v0.16.1-0.20250422150056-f4b6dcb15929
+	open-cluster-management.io/ocm v0.16.1-0.20250527120941-4cbb12d5a262
 	sigs.k8s.io/cluster-api v1.9.3
 	sigs.k8s.io/yaml v1.4.0
 )
