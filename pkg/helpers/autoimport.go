@@ -87,10 +87,6 @@ func ContainInternalServerError(err error) bool {
 	return false
 }
 
-// ApplyResourcesFunc is a function to apply resources to the manged cluster to import it to the hub
-type ApplyResourcesFunc func(backupRestore bool, client *ClientHolder, restMapper meta.RESTMapper,
-	recorder events.Recorder, importSecret *corev1.Secret) (bool, error)
-
 // GenerateClientHolderFunc is a function to generate the managed cluster client holder which is
 // used to import cluster(apply resources to the managed cluster)
 type GenerateClientHolderFunc func(secret *corev1.Secret) (reconcile.Result, *ClientHolder, meta.RESTMapper, error)
@@ -102,12 +98,6 @@ type ImportHelper struct {
 	log            logr.Logger
 
 	generateClientHolderFunc GenerateClientHolderFunc
-	applyResourcesFunc       ApplyResourcesFunc
-}
-
-func (i *ImportHelper) WithApplyResourcesFunc(f ApplyResourcesFunc) *ImportHelper {
-	i.applyResourcesFunc = f
-	return i
 }
 
 func (i *ImportHelper) WithGenerateClientHolderFunc(f GenerateClientHolderFunc) *ImportHelper {
@@ -119,14 +109,13 @@ func NewImportHelper(informerHolder *source.InformerHolder,
 	recorder events.Recorder,
 	log logr.Logger) *ImportHelper {
 	return &ImportHelper{
-		informerHolder:     informerHolder,
-		log:                log,
-		recorder:           recorder,
-		applyResourcesFunc: defaultApplyResourcesFunc,
+		informerHolder: informerHolder,
+		log:            log,
+		recorder:       recorder,
 	}
 }
 
-func defaultApplyResourcesFunc(backupRestore bool, client *ClientHolder,
+func applyResourcesFunc(backupRestore bool, client *ClientHolder,
 	restMapper meta.RESTMapper, recorder events.Recorder, importSecret *corev1.Secret) (bool, error) {
 	if backupRestore {
 		// only update the bootstrap secret on the managed cluster with the auto-import-secret
@@ -217,7 +206,7 @@ func (i *ImportHelper) Import(backupRestore bool, cluster *clusterv1.ManagedClus
 			), false, err
 	}
 
-	modified, err := i.applyResourcesFunc(backupRestore, clientHolder, restMapper, i.recorder, importSecret)
+	modified, err := applyResourcesFunc(backupRestore, clientHolder, restMapper, i.recorder, importSecret)
 	if err != nil {
 		condition := NewManagedClusterImportSucceededCondition(
 			metav1.ConditionFalse,
