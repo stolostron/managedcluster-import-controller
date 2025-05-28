@@ -11,6 +11,13 @@ on:
     branches: [main, release-*, backplane-*]
     paths-ignore:
       - ".tekton/**"
+  workflow_dispatch:
+    inputs:
+      enable_debug_session:
+        description: "Enable tmate debug session on failure"
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   test:
@@ -36,7 +43,9 @@ jobs:
         name: Logs after Tests Failed
         run: kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=-1
 
-      - if: ${{ failure() }}
-        name: Setup tmate session after Tests Failed
+      - if: ${{ failure() && github.event_name == 'workflow_dispatch' && github.event.inputs.enable_debug_session == 'true' }}
+        name: Setup tmate session for debugging (Manual trigger only)
         uses: mxschmitt/action-tmate@v3
-        timeout-minutes: 120 # 120 minutes timeout
+        timeout-minutes: 30 # Reduced timeout to 30 minutes
+        with:
+          limit-access-to-actor: true # Only allow the workflow triggerer to access
