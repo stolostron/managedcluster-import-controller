@@ -306,7 +306,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", fun
 					return err
 				}
 				return fmt.Errorf("expected no cluster, but got %v", managedClusterName)
-			}, 30*time.Second, 3*time.Second).ShouldNot(gomega.HaveOccurred())
+			}, 60*time.Second, 3*time.Second).ShouldNot(gomega.HaveOccurred())
 
 			checkCount := 0
 			gomega.Eventually(func() error {

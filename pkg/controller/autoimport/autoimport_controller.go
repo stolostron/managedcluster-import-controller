@@ -102,13 +102,14 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		reqLogger.V(5).Info("Auto import is enabled", "managedCluster", managedCluster.Name)
 	}
 
+	immediateImport := helpers.IsImmediateImport(managedCluster.Annotations)
 	autoImportStrategy, err := r.autoImportStrategyGetter()
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 	reqLogger.Info("Auto import strategy is fetched", "managedCluster", managedCluster.Name, "AutoImportStrategy", autoImportStrategy)
 	importSucceeded := meta.IsStatusConditionTrue(managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
-	if autoImportStrategy == apiconstants.AutoImportStrategyImportOnly && importSucceeded {
+	if !immediateImport && autoImportStrategy == apiconstants.AutoImportStrategyImportOnly && importSucceeded {
 		reqLogger.Info("Auto import is skipped due to the auto import strategy",
 			"managedCluster", managedCluster.Name,
 			"autoImportStrategy", autoImportStrategy,

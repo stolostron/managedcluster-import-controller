@@ -71,6 +71,11 @@ func Add(ctx context.Context,
 						oldAnnotations := e.ObjectOld.GetAnnotations()
 						newAnnotations := e.ObjectNew.GetAnnotations()
 
+						// handle the case where the ImmediateImport annotation is added with empty value
+						if helpers.IsImmediateImport(newAnnotations) {
+							return true
+						}
+
 						// handle the removal of the disable-auto-import annotation
 						_, oldAutoImportDisabled := oldAnnotations[apiconstants.DisableAutoImportAnnotation]
 						_, newAutoImportDisabled := newAnnotations[apiconstants.DisableAutoImportAnnotation]

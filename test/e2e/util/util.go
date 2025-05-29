@@ -34,6 +34,7 @@ import (
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 )
@@ -755,6 +756,25 @@ func CreateClusterWithImageRegistries(clusterClient clusterclient.Interface, nam
 		},
 		metav1.CreateOptions{},
 	)
+}
+
+func SetImmediateImportAnnotation(clusterClient clusterclient.Interface, clusterName, annotationValue string) error {
+	cluster, err := clusterClient.ClusterV1().ManagedClusters().Get(context.Background(), clusterName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+
+	cluster = cluster.DeepCopy()
+	if len(cluster.Annotations) == 0 {
+		cluster.Annotations = map[string]string{
+			apiconstants.AnnotationImmediateImport: annotationValue,
+		}
+	} else {
+		cluster.Annotations[apiconstants.AnnotationImmediateImport] = annotationValue
+	}
+
+	_, err = clusterClient.ClusterV1().ManagedClusters().Update(context.Background(), cluster, metav1.UpdateOptions{})
+	return err
 }
 
 func SetAutoImportStrategy(kubeClient kubernetes.Interface, strategy string) error {

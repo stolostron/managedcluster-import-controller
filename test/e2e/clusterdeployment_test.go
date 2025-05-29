@@ -123,6 +123,43 @@ var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", fu
 		})
 	})
 
+	ginkgo.Context("with immediate-import annotation", func() {
+		ginkgo.AfterEach(func() {
+			// reset the custom controller config
+			util.RemoveControllerConfigConfigMap(hubKubeClient)
+
+			ginkgo.By(fmt.Sprintf("Delete the clusterdeployment %s", managedClusterName), func() {
+				err := util.DeleteClusterDeployment(hubDynamicClient, managedClusterName)
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+			})
+			assertManagedClusterDeleted(managedClusterName)
+		})
+
+		ginkgo.It("Should trigger auto-import with immediate-import annotation", func() {
+			ginkgo.By("Ensure the auto-import strategy is ImportOnly", func() {
+				autoImportStrategy, err := util.GetAutoImportStrategy(hubKubeClient)
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+				gomega.Expect(autoImportStrategy).To(gomega.BeEquivalentTo(apiconstants.AutoImportStrategyImportOnly))
+			})
+
+			ginkgo.By(fmt.Sprintf("Should become offline after removing klusterlet of the managed cluster %s", managedClusterName), func() {
+				err := util.RemoveKlusterlet(hubOperatorClient, "klusterlet")
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+				assertManagedClusterAvailableUnknown(managedClusterName)
+			})
+
+			ginkgo.By(fmt.Sprintf("Should recover the managed cluster %s once the immediate-import annotation is added", managedClusterName), func() {
+				err := util.SetImmediateImportAnnotation(hubClusterClient, managedClusterName, "")
+				gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+				assertManagedClusterImportSecretCreated(managedClusterName, "hive")
+				assertManagedClusterAvailable(managedClusterName)
+			})
+
+			assertImmediateImportCompleted(managedClusterName)
+		})
+	})
+
 	ginkgo.It(fmt.Sprintf("Should destroy the managed cluster %s", managedClusterName), func() {
 		ginkgo.By(fmt.Sprintf("Delete the clusterdeployment %s", managedClusterName), func() {
 			err := util.DeleteClusterDeployment(hubDynamicClient, managedClusterName)

@@ -110,6 +110,13 @@ func (r *ReconcileImportStatus) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
+	if helpers.IsImmediateImport(managedCluster.Annotations) {
+		// update the ImmediateImport annotation value to `Completed`
+		if err := helpers.SetImmediateImportCompleted(r.client, managedCluster.Name); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
 	reqLogger.V(5).Info("Klusterlet manifestworks are available")
 	return reconcile.Result{}, helpers.UpdateManagedClusterImportCondition(
 		r.client,

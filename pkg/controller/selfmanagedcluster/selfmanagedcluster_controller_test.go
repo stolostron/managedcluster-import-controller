@@ -143,8 +143,105 @@ func TestReconcile(t *testing.T) {
 						Labels: map[string]string{
 							"local-cluster": "true",
 						},
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:   constants.ConditionManagedClusterImportSucceeded,
+								Status: metav1.ConditionTrue,
+							},
+						},
+					},
+				},
+			},
+			works:              []runtime.Object{},
+			secrets:            []runtime.Object{},
+			autoImportStrategy: apiconstants.AutoImportStrategyImportOnly,
+			validateFunc: func(t *testing.T, runtimeClient client.Client) {
+				cluster := &clusterv1.ManagedCluster{}
+				err := runtimeClient.Get(context.TODO(), types.NamespacedName{Name: "local-cluster"}, cluster)
+				if err != nil {
+					t.Errorf("unexpected error %v", err)
+				}
+
+				condition := meta.FindStatusCondition(
+					cluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+				if condition == nil || condition.Status != metav1.ConditionTrue {
+					t.Errorf("unexpected condition")
+				}
+			},
+		},
+		{
+			name: "with ImportOnly strategy and immediate-import annotation",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "local-cluster",
+						Labels: map[string]string{
+							"local-cluster": "true",
+						},
 						Annotations: map[string]string{
-							apiconstants.DisableAutoImportAnnotation: "",
+							apiconstants.AnnotationImmediateImport: "",
+						},
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:   constants.ConditionManagedClusterImportSucceeded,
+								Status: metav1.ConditionTrue,
+							},
+						},
+					},
+				},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "local-cluster-klusterlet-crds",
+						Namespace: "local-cluster",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "local-cluster-klusterlet",
+						Namespace: "local-cluster",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("local-cluster"),
+			},
+			autoImportStrategy: apiconstants.AutoImportStrategyImportOnly,
+			validateFunc: func(t *testing.T, runtimeClient client.Client) {
+				cluster := &clusterv1.ManagedCluster{}
+				err := runtimeClient.Get(context.TODO(), types.NamespacedName{Name: "local-cluster"}, cluster)
+				if err != nil {
+					t.Errorf("unexpected error %v", err)
+				}
+				condition := meta.FindStatusCondition(
+					cluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+				if condition == nil || condition.Status != metav1.ConditionFalse {
+					t.Errorf("unexpected condition")
+				}
+			},
+		},
+		{
+			name: "with ImportOnly strategy and unempty immediate-import annotation",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "local-cluster",
+						Labels: map[string]string{
+							"local-cluster": "true",
+						},
+						Annotations: map[string]string{
+							apiconstants.AnnotationImmediateImport: "Completed",
 						},
 					},
 					Status: clusterv1.ManagedClusterStatus{
@@ -166,11 +263,10 @@ func TestReconcile(t *testing.T) {
 				if err != nil {
 					t.Errorf("unexpected error %v", err)
 				}
-				if len(cluster.Status.Conditions) != 1 {
-					t.Errorf("unexpected condistions")
-				}
-				if len(cluster.Status.Conditions[0].Reason) != 0 {
-					t.Errorf("unexpected condistion reason")
+				condition := meta.FindStatusCondition(
+					cluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+				if condition == nil || condition.Status != metav1.ConditionTrue {
+					t.Errorf("unexpected condition")
 				}
 			},
 		},
