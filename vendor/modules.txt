@@ -507,7 +507,7 @@ github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.6
 ## explicit; go 1.12
 github.com/spf13/pflag
-# github.com/stolostron/cluster-lifecycle-api v0.0.0-20250521101300-d1731ad54b6d => github.com/zhujian7/cluster-lifecycle-api v0.0.0-20250530022115-ae0b4528cb81
+# github.com/stolostron/cluster-lifecycle-api v0.0.0-20250521101300-d1731ad54b6d => github.com/zhujian7/cluster-lifecycle-api v0.0.0-20250530024510-b11d0731926a
 ## explicit; go 1.23.6
 github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned
 github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned/fake
@@ -1385,4 +1385,4 @@ sigs.k8s.io/yaml/goyaml.v3
 # github.com/flightctl/flightctl/lib => github.com/xuezhaojun/flightctl/lib v0.0.0-20241125124411-7eec33f53a61
 # github.com/openshift/assisted-service/models => github.com/openshift/assisted-service/models v0.0.0-20230831114549-1922eda29cf8
 # github.com/openshift/assisted-service/api => github.com/openshift/assisted-service/api v0.0.0-20230831114549-1922eda29cf8
-# github.com/stolostron/cluster-lifecycle-api => github.com/zhujian7/cluster-lifecycle-api v0.0.0-20250530022115-ae0b4528cb81
+# github.com/stolostron/cluster-lifecycle-api => github.com/zhujian7/cluster-lifecycle-api v0.0.0-20250530024510-b11d0731926a

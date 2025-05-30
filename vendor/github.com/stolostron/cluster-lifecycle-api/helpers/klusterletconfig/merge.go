@@ -19,6 +19,7 @@ var klusterletConfigMergeFuncs map[string]func(base, override interface{}) (inte
 	"HubKubeAPIServerURL":                    override,
 	"HubKubeAPIServerCABundle":               override,
 	"AppliedManifestWorkEvictionGracePeriod": override,
+	"WorkStatusSyncInterval":                 override,
 	"InstallMode":                            override,
 	"HubKubeAPIServerConfig":                 mergeHubKubeAPIServerConfig,
 	"FeatureGates":                           mergeFeatureGates,
