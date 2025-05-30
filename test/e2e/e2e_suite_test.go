@@ -128,7 +128,7 @@ var _ = ginkgo.BeforeSuite(func() {
 })
 
 func createGlobalKlusterletConfig() {
-	ginkgo.By("Create KlusterletConfig", func() {
+	ginkgo.By("Create global KlusterletConfig, set work status sync interval", func() {
 		_, err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Create(context.TODO(),
 			&klusterletconfigv1alpha1.KlusterletConfig{
 				ObjectMeta: metav1.ObjectMeta{
