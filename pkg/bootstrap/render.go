@@ -346,6 +346,10 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 	// Set MCE reserved clusterclaims
 	setClusterClaimConfiguation(c.chartConfig, c.klusterletConfig)
 
+	if c.klusterletConfig != nil && c.klusterletConfig.Spec.WorkStatusSyncInterval != nil {
+		c.chartConfig.Klusterlet.WorkConfiguration.StatusSyncInterval = c.klusterletConfig.Spec.WorkStatusSyncInterval
+	}
+
 	crds, objects, err := chart.RenderKlusterletChart(c.chartConfig, c.chartConfig.Klusterlet.Namespace)
 	if err != nil {
 		return nil, nil, err
