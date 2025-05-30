@@ -403,6 +403,13 @@ spec:
                   - mirror
                   type: object
                 type: array
+              workStatusSyncInterval:
+                description: |-
+                  WorkStatusSyncInterval is the interval for the work agent to check the status of ManifestWorks.
+                  Larger value means less frequent status sync and less api calls to the managed cluster, vice versa.
+                  The value(x) should be: 5s <= x <= 1h.
+                pattern: ^([0-9]+(s|m|h))+$
+                type: string
             type: object
           status:
             description: Status defines the observed state of KlusterletConfig
