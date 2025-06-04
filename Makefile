@@ -3,16 +3,6 @@
 
 SHELL := /bin/bash
 
-export GIT_COMMIT      = $(shell git rev-parse --short HEAD)
-export GIT_REMOTE_URL  = $(shell git config --get remote.origin.url)
-export GITHUB_USER    := $(shell echo $(GITHUB_USER) | sed 's/@/%40/g')
-export GITHUB_TOKEN   ?=
-
-export ARCH       ?= $(shell uname -m)
-export ARCH_TYPE   = $(if $(patsubst x86_64,,$(ARCH)),$(ARCH),amd64)
-export BUILD_DATE  = $(shell date +%m/%d@%H:%M:%S)
-export VCS_REF     = $(if $(shell git status --porcelain),$(GIT_COMMIT)-$(BUILD_DATE),$(GIT_COMMIT))
-
 export CGO_ENABLED  = 1
 export GOFLAGS ?=
 export GO111MODULE := on
@@ -34,14 +24,7 @@ export DOCKER_FILE        = $(BUILD_DIR)/Dockerfile
 export DOCKER_IMAGE      ?= $(COMPONENT_NAME)
 export DOCKER_BUILDER    ?= docker
 
-# Only use git commands if it exists
-ifdef GIT
-GIT_COMMIT      = $(shell git rev-parse --short HEAD)
-GIT_REMOTE_URL  = $(shell git config --get remote.origin.url)
-VCS_REF     = $(if $(shell git status --porcelain),$(GIT_COMMIT)-$(BUILD_DATE),$(GIT_COMMIT))
-endif
-
-
+# Helm
 HELM_ARCHOS:=linux-amd64
 ifeq ($(GOHOSTOS),darwin)
 	ifeq ($(GOHOSTARCH),amd64)
@@ -88,17 +71,10 @@ test:
 build:
 	go build -o $(BUILD_OUTPUT_DIR)/manager ./cmd/manager
 
-## Builds controller binary with coverage
-.PHONY: build-coverage
-build-coverage:
-	go test -covermode=atomic -coverpkg=github.com/stolostron/managedcluster-import-controller/pkg/... \
-	-c -tags testrunmain ./cmd/manager -o $(BUILD_OUTPUT_DIR)/manager-coverage
-
 ## Builds controller image
 .PHONY: build-image
 build-image:
 	$(DOCKER_BUILDER) build -f $(DOCKER_FILE) . -t $(DOCKER_IMAGE)
-
 
 ## Builds controller image using buildx for amd64
 .PHONY: build-image-amd64
@@ -109,11 +85,6 @@ build-image-amd64:
 .PHONY: clean
 clean: clean-e2e-test
 	@rm -rf _output
-
-## Deploy the controller
-.PHONY: deploy
-deploy:
-	kubectl apply -k deploy/base
 
 ## Runs e2e test
 .PHONY: e2e-test
@@ -136,12 +107,6 @@ e2e-test-prow: ensure-helm
 	@build/setup-import-controller.sh enable-agent-registration
 	go test -c ./test/e2e -o _output/e2e.test
 	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="agent-registration" --ginkgo.timeout=2h
-
-# Update vendor
-.PHONY: vendor
-vendor:
-	go mod tidy -compat=1.18
-	go mod vendor
 
 ensure-helm:
 ifeq "" "$(wildcard $(HELM))"
