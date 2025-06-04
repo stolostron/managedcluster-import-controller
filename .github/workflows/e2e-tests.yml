@@ -7,10 +7,12 @@ on:
     branches: [main, release-*, backplane-*]
     paths-ignore:
       - ".tekton/**"
+      - "docs/**"
   pull_request:
     branches: [main, release-*, backplane-*]
     paths-ignore:
       - ".tekton/**"
+      - "docs/**"
 
 jobs:
   test:
