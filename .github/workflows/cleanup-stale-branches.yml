@@ -13,7 +13,7 @@ jobs:
       - name: Fetch all remote branches
         run: |
           git fetch --all
-          git branch -r | grep -vE 'main|master|HEAD|backplane-' | sed 's/origin\///' > branches.txt
+          git branch -r | grep 'konflux' | sed 's/origin\///' > branches.txt
 
       - name: Find and delete branches without open PRs
         env:
