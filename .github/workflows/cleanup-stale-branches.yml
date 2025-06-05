@@ -20,12 +20,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           while read branch; do
+            echo "Processing branch: $branch"
             # Check if the branch has any open pull requests
             pr_count=$(gh pr list --head "$branch" --state open --json number | jq 'length')
             if [ "$pr_count" -eq 0 ]; then
+              echo "No open PRs found for branch: $branch"
               echo "Deleting branch: $branch"
-              git push origin --delete "$branch"
+              gh api --method DELETE "repos/${{ github.repository }}/git/refs/heads/$branch"
+              echo "Successfully deleted branch: $branch"
             else
-              echo "Branch $branch has open PR(s), skipping."
+              echo "Branch $branch has $pr_count open PR(s), skipping deletion."
             fi
           done < branches.txt
