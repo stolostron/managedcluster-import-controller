@@ -1,0 +1,31 @@
+name: Cleanup Stale Branches
+
+on:
+  workflow_dispatch: # Allow manual trigger
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Fetch all remote branches
+        run: |
+          git fetch --all
+          git branch -r | grep -vE 'main|master|HEAD|backplane-' | sed 's/origin\///' > branches.txt
+
+      - name: Find and delete branches without open PRs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          while read branch; do
+            # Check if the branch has any open pull requests
+            pr_count=$(gh pr list --head "$branch" --state open --json number -q 'length(.)')
+            if [ "$pr_count" -eq 0 ]; then
+              echo "Deleting branch: $branch"
+              git push origin --delete "$branch"
+            else
+              echo "Branch $branch has open PR(s), skipping."
+            fi
+          done < branches.txt
