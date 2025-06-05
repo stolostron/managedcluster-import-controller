@@ -21,7 +21,7 @@ jobs:
         run: |
           while read branch; do
             # Check if the branch has any open pull requests
-            pr_count=$(gh pr list --head "$branch" --state open --json number -q 'length(.)')
+            pr_count=$(gh pr list --head "$branch" --state open --json number | jq 'length')
             if [ "$pr_count" -eq 0 ]; then
               echo "Deleting branch: $branch"
               git push origin --delete "$branch"
