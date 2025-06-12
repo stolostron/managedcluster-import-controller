@@ -242,9 +242,43 @@ func (r *ReconcileResourceCleanup) Cleanup(ctx context.Context, cluster *cluster
 	}
 
 	var errs []error
+	var hostingWorkNames []string
+	var klusterletHostingWorkName, kubeconfigHostingWorkName string
+	// the work deletion order for hosted cluster:
+	// 1. all addon works in hosted and hosting cluster ns
+	// 2. klusterlet work in hosting cluster ns
+	// 3. hosted kubeconfig work in hosting cluster ns
 	for _, manifestWork := range hostingManifestWorks.Items {
+		if manifestWork.Name == helpers.HostedKlusterletManifestWorkName(cluster.Name) {
+			klusterletHostingWorkName = manifestWork.Name
+			continue
+		}
+
+		if manifestWork.Name == helpers.HostedManagedKubeConfigManifestWorkName(cluster.Name) {
+			kubeconfigHostingWorkName = manifestWork.Name
+			continue
+		}
+
+		hostingWorkNames = append(hostingWorkNames, manifestWork.Name)
+	}
+
+	if len(hostingWorkNames) == 0 && len(works.Items) == 0 {
+		if klusterletHostingWorkName != "" {
+			return r.clientHolder.WorkClient.WorkV1().ManifestWorks(hostingCluster).
+				Delete(ctx, klusterletHostingWorkName, metav1.DeleteOptions{})
+		}
+
+		if kubeconfigHostingWorkName != "" {
+			return r.clientHolder.WorkClient.WorkV1().ManifestWorks(hostingCluster).
+				Delete(ctx, kubeconfigHostingWorkName, metav1.DeleteOptions{})
+		}
+
+		return nil
+	}
+
+	for _, workName := range hostingWorkNames {
 		if err = r.clientHolder.WorkClient.WorkV1().ManifestWorks(hostingCluster).
-			Delete(ctx, manifestWork.Name, metav1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
+			Delete(ctx, workName, metav1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
 			errs = append(errs, err)
 		}
 	}
