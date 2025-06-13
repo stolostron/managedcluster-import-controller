@@ -242,9 +242,26 @@ func (r *ReconcileResourceCleanup) Cleanup(ctx context.Context, cluster *cluster
 	}
 
 	var errs []error
+	var deleteHostingWorkNames []string
+	// klusterlet and hosted-kubeconfig manifestWorks should be deleted after the other works are gone.
 	for _, manifestWork := range hostingManifestWorks.Items {
+		if manifestWork.Name == helpers.HostedKlusterletManifestWorkName(cluster.Name) ||
+			manifestWork.Name == helpers.HostedManagedKubeConfigManifestWorkName(cluster.Name) {
+			continue
+		}
+		deleteHostingWorkNames = append(deleteHostingWorkNames, manifestWork.Name)
+	}
+
+	if len(deleteHostingWorkNames) == 0 && len(works.Items) == 0 {
+		deleteHostingWorkNames = []string{
+			helpers.HostedKlusterletManifestWorkName(cluster.Name),
+			helpers.HostedManagedKubeConfigManifestWorkName(cluster.Name),
+		}
+	}
+
+	for _, workName := range deleteHostingWorkNames {
 		if err = r.clientHolder.WorkClient.WorkV1().ManifestWorks(hostingCluster).
-			Delete(ctx, manifestWork.Name, metav1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
+			Delete(ctx, workName, metav1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
 			errs = append(errs, err)
 		}
 	}

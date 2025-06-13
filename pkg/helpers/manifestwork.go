@@ -212,3 +212,11 @@ func IsManifestWorksAvailable(ctx context.Context, client workclient.Interface,
 	}
 	return true, nil
 }
+
+func HostedKlusterletManifestWorkName(managedClusterName string) string {
+	return fmt.Sprintf("%s-%s", managedClusterName, constants.HostedKlusterletManifestworkSuffix)
+}
+
+func HostedManagedKubeConfigManifestWorkName(managedClusterName string) string {
+	return fmt.Sprintf("%s-%s", managedClusterName, constants.HostedManagedKubeconfigManifestworkSuffix)
+}
