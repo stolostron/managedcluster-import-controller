@@ -449,6 +449,132 @@ func TestReconcile(t *testing.T) {
 			},
 		},
 		{
+			name:    "hosted cluster is deleting and have klusterlet work and other work",
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}},
+			runtimeObjects: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
+							constants.HostingClusterNameAnnotation:   "hosting",
+						},
+						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
+						DeletionTimestamp: &now,
+					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: true,
+					},
+				},
+			},
+			kubeObjects: []runtime.Object{
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "hosting"}},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{ObjectMeta: metav1.ObjectMeta{Name: "work1", Namespace: "hosting",
+					Labels: map[string]string{constants.HostedClusterLabel: "test"}}},
+				&workv1.ManifestWork{ObjectMeta: metav1.ObjectMeta{Name: helpers.HostedKlusterletManifestWorkName("test"),
+					Namespace: "hosting", Labels: map[string]string{constants.HostedClusterLabel: "test"}}},
+				&workv1.ManifestWork{ObjectMeta: metav1.ObjectMeta{Name: helpers.HostedManagedKubeConfigManifestWorkName("test"),
+					Namespace: "hosting", Labels: map[string]string{constants.HostedClusterLabel: "test"}}},
+			},
+			requeue: true,
+			validateFunc: func(t *testing.T, clientHolder *helpers.ClientHolder) {
+				managedCluster := &clusterv1.ManagedCluster{}
+				if err := clientHolder.RuntimeClient.Get(context.TODO(),
+					types.NamespacedName{Name: "test"}, managedCluster); errors.IsNotFound(err) {
+					t.Errorf("the cluster should not be deleted")
+				}
+				works, _ := clientHolder.WorkClient.WorkV1().ManifestWorks("hosting").List(context.TODO(), metav1.ListOptions{})
+				if len(works.Items) != 2 {
+					t.Errorf("expected 2 works in hosting cluster ns,but got %v", len(works.Items))
+				}
+			},
+		},
+		{
+			name:    "hosted cluster is deleting and only have klusterlet and kubeconfig work",
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}},
+			runtimeObjects: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
+							constants.HostingClusterNameAnnotation:   "hosting",
+						},
+						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
+						DeletionTimestamp: &now,
+					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: true,
+					},
+				},
+			},
+			kubeObjects: []runtime.Object{
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "hosting"}},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{ObjectMeta: metav1.ObjectMeta{Name: helpers.HostedKlusterletManifestWorkName("test"),
+					Namespace: "hosting", Labels: map[string]string{constants.HostedClusterLabel: "test"}}},
+				&workv1.ManifestWork{ObjectMeta: metav1.ObjectMeta{Name: helpers.HostedManagedKubeConfigManifestWorkName("test"),
+					Namespace: "hosting", Labels: map[string]string{constants.HostedClusterLabel: "test"}}},
+			},
+			requeue: true,
+			validateFunc: func(t *testing.T, clientHolder *helpers.ClientHolder) {
+				managedCluster := &clusterv1.ManagedCluster{}
+				if err := clientHolder.RuntimeClient.Get(context.TODO(),
+					types.NamespacedName{Name: "test"}, managedCluster); errors.IsNotFound(err) {
+					t.Errorf("the cluster should not be deleted")
+				}
+				works, _ := clientHolder.WorkClient.WorkV1().ManifestWorks("hosting").List(context.TODO(), metav1.ListOptions{})
+				if len(works.Items) != 1 {
+					t.Errorf("expected no works in hosting cluster ns,but got %v", len(works.Items))
+				}
+			},
+		},
+		{
+			name:    "hosted cluster is deleting and only have klusterlet work",
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}},
+			runtimeObjects: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
+							constants.HostingClusterNameAnnotation:   "hosting",
+						},
+						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
+						DeletionTimestamp: &now,
+					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: true,
+					},
+				},
+			},
+			kubeObjects: []runtime.Object{
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "hosting"}},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{ObjectMeta: metav1.ObjectMeta{Name: helpers.HostedKlusterletManifestWorkName("test"),
+					Namespace: "hosting", Labels: map[string]string{constants.HostedClusterLabel: "test"}}},
+			},
+			requeue: false,
+			validateFunc: func(t *testing.T, clientHolder *helpers.ClientHolder) {
+				managedCluster := &clusterv1.ManagedCluster{}
+				if err := clientHolder.RuntimeClient.Get(context.TODO(),
+					types.NamespacedName{Name: "test"}, managedCluster); !errors.IsNotFound(err) {
+					t.Errorf("the cluster should be deleted")
+				}
+				works, _ := clientHolder.WorkClient.WorkV1().ManifestWorks("hosting").List(context.TODO(), metav1.ListOptions{})
+				if len(works.Items) != 0 {
+					t.Errorf("expected no works in hosting cluster ns,but got %v", len(works.Items))
+				}
+			},
+		},
+		{
 			name:    "hosted cluster is Unavailable",
 			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}},
 			runtimeObjects: []client.Object{

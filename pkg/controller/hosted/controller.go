@@ -299,7 +299,7 @@ func (r *ReconcileHosted) importCluster(ctx context.Context, managedCluster *clu
 
 func (r *ReconcileHosted) externalManagedKubeconfigCreated(
 	ctx context.Context, managedClusterName, hostingClusterName string) (bool, error) {
-	name := hostedKlusterletManifestWorkName(managedClusterName)
+	name := helpers.HostedKlusterletManifestWorkName(managedClusterName)
 	namespace := hostingClusterName
 	mw, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
@@ -361,7 +361,7 @@ func createHostingManifestWork(managedClusterName string,
 	return &workv1.ManifestWork{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      hostedKlusterletManifestWorkName(managedClusterName),
+			Name:      helpers.HostedKlusterletManifestWorkName(managedClusterName),
 			Namespace: manifestWorkNamespace,
 			Labels: map[string]string{
 				constants.HostedClusterLabel: managedClusterName,
@@ -457,7 +457,7 @@ func createManagedKubeconfigManifestWork(managedClusterName string, importSecret
 	mw := &workv1.ManifestWork{
 		TypeMeta: metav1.TypeMeta{},
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      hostedManagedKubeconfigManifestWorkName(managedClusterName),
+			Name:      helpers.HostedManagedKubeConfigManifestWorkName(managedClusterName),
 			Namespace: manifestWorkNamespace,
 			Labels: map[string]string{
 				constants.HostedClusterLabel: managedClusterName,
@@ -478,12 +478,4 @@ func createManagedKubeconfigManifestWork(managedClusterName string, importSecret
 	}
 
 	return mw, nil
-}
-
-func hostedKlusterletManifestWorkName(managedClusterName string) string {
-	return fmt.Sprintf("%s-%s", managedClusterName, constants.HostedKlusterletManifestworkSuffix)
-}
-
-func hostedManagedKubeconfigManifestWorkName(managedClusterName string) string {
-	return fmt.Sprintf("%s-%s", managedClusterName, constants.HostedManagedKubeconfigManifestworkSuffix)
 }
