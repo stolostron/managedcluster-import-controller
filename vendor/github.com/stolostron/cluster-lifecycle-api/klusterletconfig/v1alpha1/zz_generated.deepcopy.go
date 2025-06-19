@@ -6,6 +6,7 @@
 package v1alpha1
 
 import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 	v1 "open-cluster-management.io/api/operator/v1"
 )
@@ -184,6 +185,11 @@ func (in *KlusterletConfigSpec) DeepCopyInto(out *KlusterletConfigSpec) {
 	if in.ClusterClaimConfiguration != nil {
 		in, out := &in.ClusterClaimConfiguration, &out.ClusterClaimConfiguration
 		*out = new(ClusterClaimConfiguration)
+		**out = **in
+	}
+	if in.WorkStatusSyncInterval != nil {
+		in, out := &in.WorkStatusSyncInterval, &out.WorkStatusSyncInterval
+		*out = new(metav1.Duration)
 		**out = **in
 	}
 	return
