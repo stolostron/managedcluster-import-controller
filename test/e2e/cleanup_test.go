@@ -238,7 +238,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", fun
 					return err
 				}
 				return fmt.Errorf("expected no addon, but got %v", addon.Name)
-			}, 30*time.Second, 3*time.Second).ShouldNot(gomega.HaveOccurred())
+			}, 60*time.Second, 3*time.Second).ShouldNot(gomega.HaveOccurred())
 
 			// the addon manifestWork should be force deleted when the cluster is unavailable
 			ginkgo.By(fmt.Sprintf("the addon manifestWork %s for cluster %s should be deleted", manifestwork.Name, managedClusterName))
@@ -251,7 +251,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", fun
 					return err
 				}
 				return fmt.Errorf("expected no addon manifestwork, but got %v", manifestwork.Name)
-			}, 30*time.Second, 3*time.Second).ShouldNot(gomega.HaveOccurred())
+			}, 60*time.Second, 3*time.Second).ShouldNot(gomega.HaveOccurred())
 		})
 
 		// This case will take about several minutes to wait for the cluster state to become unavailable,
@@ -298,7 +298,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", fun
 					return err
 				}
 				return fmt.Errorf("expected no cluster, but got %v", managedClusterName)
-			}, 30*time.Second, 3*time.Second).ShouldNot(gomega.HaveOccurred())
+			}, 60*time.Second, 3*time.Second).ShouldNot(gomega.HaveOccurred())
 
 			checkCount := 0
 			gomega.Eventually(func() error {

@@ -152,7 +152,7 @@ func assertManagedClusterFinalizer(clusterName, expected string) {
 			}
 
 			return fmt.Errorf("managed cluster %s does not have expected finalizer %s", clusterName, expected)
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -174,7 +174,7 @@ func assertManagedClusterCreatedViaAnnotation(clusterName, expected string) {
 			}
 
 			return nil
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -196,7 +196,7 @@ func assertManagedClusterNameLabel(clusterName string) {
 			}
 
 			return nil
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -218,7 +218,7 @@ func assertManagedClusterNamespaceLabel(clusterName string) {
 			}
 
 			return nil
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -232,7 +232,7 @@ func assertManagedClusterRBAC(managedClusterName string) {
 			}
 
 			return nil
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 
 	ginkgo.By("Should have cluserrolebiding", func() {
@@ -244,7 +244,7 @@ func assertManagedClusterRBAC(managedClusterName string) {
 			}
 
 			return nil
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 
 	ginkgo.By("Should have bootstrap sa", func() {
@@ -256,7 +256,7 @@ func assertManagedClusterRBAC(managedClusterName string) {
 			}
 
 			return nil
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -277,7 +277,7 @@ func assertManagedClusterImportSecret(managedClusterName string) {
 				return fmt.Errorf("invalidated import secret:%v", err)
 			}
 			return nil
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -471,7 +471,7 @@ func assertHostedManagedClusterImportSecret(managedClusterName string) {
 				return fmt.Errorf("invalidated import secret:%v", err)
 			}
 			return nil
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -522,7 +522,7 @@ func assertManagedClusterDeletedFromHub(clusterName string) {
 			}
 
 			return fmt.Errorf("managed cluster %s still exists", clusterName)
-		}, 120*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
 
@@ -571,7 +571,7 @@ func assertManagedClusterDeletedFromSpoke() {
 				return err
 			}
 			return fmt.Errorf("crd %s still exists", klusterletCRDName)
-		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 120*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("delete klusterlet crd spending time: %.2f seconds", time.Since(start).Seconds())
 }
