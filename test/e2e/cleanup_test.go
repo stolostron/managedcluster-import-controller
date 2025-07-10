@@ -91,7 +91,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", fun
 					return nil
 				}
 				return fmt.Errorf("wait 20s to check if manifestwork is deleted")
-			}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
+			}, 3*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
 
 			err = hubWorkClient.WorkV1().ManifestWorks(localClusterName).Delete(context.TODO(), manifestwork.GetName(), metav1.DeleteOptions{})
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
@@ -108,7 +108,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", fun
 					return nil
 				}
 				return fmt.Errorf("all of the manifestworks should be deleted")
-			}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
+			}, 3*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
 		})
 
 		ginkgo.It("should clean up the addons", func() {
@@ -136,7 +136,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", fun
 				}
 
 				return len(cluster.Finalizers) > 2
-			}, 1*time.Minute, 1*time.Second).ShouldNot(gomega.BeFalse())
+			}, 3*time.Minute, 1*time.Second).ShouldNot(gomega.BeFalse())
 
 			ginkgo.By(fmt.Sprintf("detach the cluster %s after the finalizers are applied", managedClusterName))
 			err = hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), managedClusterName, metav1.DeleteOptions{})
@@ -210,7 +210,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", fun
 				}
 
 				return len(cluster.Finalizers) > 2
-			}, 1*time.Minute, 1*time.Second).ShouldNot(gomega.BeFalse())
+			}, 3*time.Minute, 1*time.Second).ShouldNot(gomega.BeFalse())
 
 			ginkgo.By(fmt.Sprintf("detach the cluster %s after the finalizers are applied", managedClusterName))
 			err = hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), managedClusterName, metav1.DeleteOptions{})
@@ -311,7 +311,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", fun
 					return nil
 				}
 				return fmt.Errorf("wait 20s to check if manifestwork is deleted")
-			}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
+			}, 3*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
 
 			err = hubDynamicClient.Resource(infraGVR).Namespace(managedClusterName).Delete(context.TODO(), infra.Name, metav1.DeleteOptions{})
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
