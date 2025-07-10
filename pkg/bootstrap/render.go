@@ -353,6 +353,12 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 				Mode:    operatorv1.FeatureGateModeTypeEnable,
 			})
 		registrationConfiguration.BootstrapKubeConfigs = b.klusterletconfig.Spec.BootstrapKubeConfigs
+
+		// Create a deep copy of LocalSecrets to avoid modifying the original klusterletconfig
+		if registrationConfiguration.BootstrapKubeConfigs.LocalSecrets != nil {
+			localSecretsCopy := *registrationConfiguration.BootstrapKubeConfigs.LocalSecrets
+			registrationConfiguration.BootstrapKubeConfigs.LocalSecrets = &localSecretsCopy
+		}
 		registrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets = append(
 			registrationConfiguration.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets, operatorv1.KubeConfigSecret{
 				Name: constants.DefaultBootstrapHubKubeConfigSecretName + "-current-hub",

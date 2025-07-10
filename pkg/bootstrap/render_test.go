@@ -638,7 +638,7 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
 					BootstrapKubeConfigs: operatorv1.BootstrapKubeConfigs{
 						Type: operatorv1.LocalSecrets,
-						LocalSecrets: operatorv1.LocalSecretsConfig{
+						LocalSecrets: &operatorv1.LocalSecretsConfig{
 							KubeConfigSecrets: []operatorv1.KubeConfigSecret{
 								{
 									Name: "bootstrapkubeconfig-hub1",
@@ -770,7 +770,7 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
 					BootstrapKubeConfigs: operatorv1.BootstrapKubeConfigs{
 						Type: operatorv1.LocalSecrets,
-						LocalSecrets: operatorv1.LocalSecretsConfig{
+						LocalSecrets: &operatorv1.LocalSecretsConfig{
 							KubeConfigSecrets: []operatorv1.KubeConfigSecret{
 								{
 									Name: "bootstrapkubeconfig-hub1",
