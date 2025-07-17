@@ -17,7 +17,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 )
 
-var _ = ginkgo.Describe("Adding node placement to the klusterlet", func() {
+var _ = ginkgo.Describe("Adding node placement to the klusterlet", ginkgo.Label("klusterletplacement"), func() {
 	var managedClusterName string
 
 	ginkgo.BeforeEach(func() {
