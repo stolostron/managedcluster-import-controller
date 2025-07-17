@@ -33,7 +33,6 @@ KIND_VERSION="v0.17.0"
 KIND="${WORK_DIR}/bin/kind"
 KUBE_VERSION="v1.29.0"
 
-sleep 100 # test only
 
 CLEAN_ARG=${1:-unclean}
 if [ "$CLEAN_ARG"x = "clean"x ]; then
