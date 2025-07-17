@@ -94,6 +94,48 @@ e2e-test: build-image ensure-helm
 	@build/setup-import-controller.sh
 	go test -c ./test/e2e -o _output/e2e.test
 	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="!agent-registration" --ginkgo.timeout=2h
+
+## Parallel e2e test groups - Optimized for ~20min per group
+.PHONY: e2e-test-basic
+e2e-test-basic: build-image ensure-helm
+	@build/setup-kind-clusters.sh
+	@build/setup-ocm.sh
+	@build/setup-import-controller.sh
+	go test -c ./test/e2e -o _output/e2e.test
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="(csr || manuallyimport || imageregistry)" --ginkgo.timeout=25m
+
+.PHONY: e2e-test-cluster-mgmt
+e2e-test-cluster-mgmt: build-image ensure-helm
+	@build/setup-kind-clusters.sh
+	@build/setup-ocm.sh
+	@build/setup-import-controller.sh
+	go test -c ./test/e2e -o _output/e2e.test
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="(managedcluster || selfmanagedcluster)" --ginkgo.timeout=25m
+
+.PHONY: e2e-test-klusterlet-config
+e2e-test-klusterlet-config: build-image ensure-helm
+	@build/setup-kind-clusters.sh
+	@build/setup-ocm.sh
+	@build/setup-import-controller.sh
+	go test -c ./test/e2e -o _output/e2e.test
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="(klusterletconfig || klusterletplacement)" --ginkgo.timeout=30m
+
+.PHONY: e2e-test-auto-import
+e2e-test-auto-import: build-image ensure-helm
+	@build/setup-kind-clusters.sh
+	@build/setup-ocm.sh
+	@build/setup-import-controller.sh
+	go test -c ./test/e2e -o _output/e2e.test
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="autoimport" --ginkgo.timeout=25m
+
+.PHONY: e2e-test-advanced
+e2e-test-advanced: build-image ensure-helm
+	@build/setup-kind-clusters.sh
+	@build/setup-ocm.sh
+	@build/setup-import-controller.sh
+	go test -c ./test/e2e -o _output/e2e.test
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="(hostedcluster || clusterdeployment || cleanup)" --ginkgo.timeout=30m
+
 ## Clean e2e test
 .PHONY: clean-e2e-test
 clean-e2e-test:

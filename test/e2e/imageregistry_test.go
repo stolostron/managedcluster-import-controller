@@ -18,7 +18,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 )
 
-var _ = ginkgo.Describe("Using customized image registry", func() {
+var _ = ginkgo.Describe("Using customized image registry", ginkgo.Label("imageregistry"), func() {
 	var (
 		managedClusterName string
 		pullSecretName     string

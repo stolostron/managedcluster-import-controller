@@ -22,7 +22,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 )
 
-var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", func() {
+var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", ginkgo.Label("autoimport"), func() {
 	var managedClusterName string
 
 	ginkgo.BeforeEach(func() {
