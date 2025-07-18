@@ -60,7 +60,7 @@ func (r *ReconcileResourceCleanup) Reconcile(ctx context.Context, request reconc
 	cluster := &clusterv1.ManagedCluster{}
 	err := r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: request.Name}, cluster)
 	if errors.IsNotFound(err) {
-		return reconcile.Result{}, r.orphanCleanup(ctx, request.Name)
+		return reconcile.Result{}, r.forceCleanup(ctx, request.Name)
 	}
 	if err != nil {
 		return reconcile.Result{}, err
@@ -78,7 +78,7 @@ func (r *ReconcileResourceCleanup) Reconcile(ctx context.Context, request reconc
 
 	if clusterNeedForceDelete(copyCluster) {
 		reqLogger.Info(fmt.Sprintf("cluster %s is unavailable or not accepted, start force cleanup.", copyCluster.Name))
-		if err = r.forceCleanup(ctx, copyCluster); err != nil {
+		if err = r.forceCleanup(ctx, copyCluster.Name); err != nil {
 			return reconcile.Result{}, err
 		}
 	} else {
@@ -132,70 +132,18 @@ func (r *ReconcileResourceCleanup) forceDeleteManifestWorks(
 
 }
 
-func (r *ReconcileResourceCleanup) forceDeleteHostingManifestWorks(ctx context.Context,
-	hostingCluster, hostedCluster string) error {
-	hostingWorksSelector := labels.SelectorFromSet(map[string]string{constants.HostedClusterLabel: hostedCluster})
-	hostingManifestWorks, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(hostingCluster).List(
-		ctx, metav1.ListOptions{LabelSelector: hostingWorksSelector.String()})
-	if err != nil || len(hostingManifestWorks.Items) == 0 {
-		return err
-	}
-
-	return helpers.ForceDeleteAllManifestWorks(ctx, r.clientHolder.WorkClient, r.recorder, hostingManifestWorks.Items)
-}
-
-func (r *ReconcileResourceCleanup) orphanCleanup(ctx context.Context, clusterName string) error {
+func (r *ReconcileResourceCleanup) forceCleanup(ctx context.Context, clusterName string) error {
 	var errs []error
-	_, err := r.clientHolder.KubeClient.CoreV1().Namespaces().Get(ctx, clusterName, metav1.GetOptions{})
-	if errors.IsNotFound(err) {
-		return nil
-	}
+	exists, err := r.namespaceExists(ctx, clusterName)
 	if err != nil {
 		return err
 	}
-	if err = helpers.ForceDeleteAllManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, clusterName, r.recorder); err != nil {
-		errs = append(errs, err)
-	}
-
-	if err = r.forceDeleteManifestWorks(ctx, clusterName); err != nil {
-		errs = append(errs, err)
-	}
-
-	if err = helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, clusterName, r.recorder); err != nil {
-		errs = append(errs, err)
-	}
-
-	return utilerrors.NewAggregate(errs)
-}
-
-func (r *ReconcileResourceCleanup) forceCleanup(ctx context.Context, cluster *clusterv1.ManagedCluster) error {
-	var errs []error
-	_, err := r.clientHolder.KubeClient.CoreV1().Namespaces().Get(ctx, cluster.Name, metav1.GetOptions{})
-	if errors.IsNotFound(err) {
+	if !exists {
 		return nil
 	}
-	if err != nil {
-		return err
-	}
-	if err = helpers.ForceDeleteAllManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, cluster.Name, r.recorder); err != nil {
-		errs = append(errs, err)
-	}
-
-	if err = r.forceDeleteManifestWorks(ctx, cluster.Name); err != nil {
-		errs = append(errs, err)
-	}
-
-	hostingCluster, _ := helpers.GetHostingCluster(cluster)
-	if helpers.IsHostedCluster(cluster) && hostingCluster != "" {
-		if err = r.forceDeleteHostingManifestWorks(ctx, hostingCluster, cluster.Name); err != nil {
-			errs = append(errs, err)
-		}
-	}
-
-	if err = helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, cluster.Name, r.recorder); err != nil {
-		errs = append(errs, err)
-	}
-
+	errs = appendIfErr(errs, helpers.ForceDeleteAllManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, clusterName, r.recorder))
+	errs = appendIfErr(errs, r.forceDeleteManifestWorks(ctx, clusterName))
+	errs = appendIfErr(errs, helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, clusterName, r.recorder))
 	return utilerrors.NewAggregate(errs)
 }
 
@@ -221,6 +169,7 @@ func (r *ReconcileResourceCleanup) Cleanup(ctx context.Context, cluster *cluster
 		if works.Items[0].DeletionTimestamp.IsZero() {
 			return nil
 		}
+
 		if err = helpers.ForceDeleteManifestWork(ctx, r.clientHolder.WorkClient, r.recorder,
 			cluster.Name, klusterletCRDWorkName); err != nil {
 			return err
@@ -342,10 +291,28 @@ func (r *ReconcileResourceCleanup) removeClusterFinalizers(ctx context.Context, 
 	return err
 }
 
+func (r *ReconcileResourceCleanup) namespaceExists(ctx context.Context, name string) (bool, error) {
+	_, err := r.clientHolder.KubeClient.CoreV1().Namespaces().Get(ctx, name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func clusterNeedForceDelete(cluster *clusterv1.ManagedCluster) bool {
 	// need to do force deletion when cluster is deleting but not accepted or not available
 	if !cluster.Spec.HubAcceptsClient {
 		return true
 	}
 	return helpers.IsClusterUnavailable(cluster)
+}
+
+func appendIfErr(errs []error, err error) []error {
+	if err != nil {
+		errs = append(errs, err)
+	}
+	return errs
 }
