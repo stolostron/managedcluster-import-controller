@@ -83,7 +83,7 @@ build-image-amd64:
 
 ## Clean build-harness and remove test files
 .PHONY: clean
-clean: clean-e2e-test
+clean:
 	@rm -rf _output
 
 ## Runs e2e test
@@ -94,10 +94,23 @@ e2e-test: build-image ensure-helm
 	@build/setup-import-controller.sh
 	go test -c ./test/e2e -o _output/e2e.test
 	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="!agent-registration" --ginkgo.timeout=2h
-## Clean e2e test
-.PHONY: clean-e2e-test
-clean-e2e-test:
-	@build/setup-kind-clusters.sh clean
+
+## Parallel e2e test groups - Optimized for ~20min per group
+.PHONY: e2e-test-import
+e2e-test-import: build-image ensure-helm
+	@build/setup-kind-clusters.sh with-managed
+	@build/setup-ocm.sh
+	@build/setup-import-controller.sh
+	go test -c ./test/e2e -o _output/e2e.test
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="(manuallyimport || autoimport || clusterdeployment)"
+
+.PHONY: e2e-test-cluster-mgmt
+e2e-test-cluster-mgmt: build-image ensure-helm
+	@build/setup-kind-clusters.sh with-managed
+	@build/setup-ocm.sh
+	@build/setup-import-controller.sh
+	go test -c ./test/e2e -o _output/e2e.test
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="(managedcluster || selfmanagedcluster || hostedcluster || csr || imageregistry || cleanup || klusterletplacement || klusterletconfig)"
 
 ## Run e2e test against Prow(an OCP cluster)
 .PHONY: e2e-test-prow

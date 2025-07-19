@@ -29,7 +29,7 @@ import (
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 )
 
-var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func() {
+var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", Label("klusterletconfig"), func() {
 	var managedClusterName string
 	var klusterletConfigName string
 	var tolerationSeconds int64 = 20

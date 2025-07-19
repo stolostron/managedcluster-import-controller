@@ -23,7 +23,7 @@ import (
 	workv1 "open-cluster-management.io/api/work/v1"
 )
 
-var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", func() {
+var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", ginkgo.Label("cleanup"), func() {
 	ginkgo.Context("Importing a self managed cluster and detach the cluster", func() {
 		var (
 			start    time.Time
