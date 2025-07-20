@@ -41,4 +41,4 @@ jobs:
       - if: ${{ failure() }}
         name: Setup tmate session after Tests Failed
         uses: mxschmitt/action-tmate@v3
-        timeout-minutes: 120 # 120 minutes timeout
+        timeout-minutes: 10 # 10 minutes timeout
