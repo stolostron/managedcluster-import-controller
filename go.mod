@@ -28,7 +28,7 @@ require (
 	k8s.io/component-base v0.32.4
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/utils v0.0.0-20241210054802-24370beab758
-	open-cluster-management.io/api v0.16.2-0.20250527062515-98a1d87193c1
+	open-cluster-management.io/api v1.0.1-0.20250722080758-779879f46835
 	sigs.k8s.io/controller-runtime v0.20.2
 )
 
@@ -39,7 +39,7 @@ require (
 	github.com/openshift/hypershift/api v0.0.0-20241022184855-1fa7be0211e4
 	github.com/sethvargo/go-password v0.2.0
 	github.com/stretchr/testify v1.10.0
-	open-cluster-management.io/ocm v0.16.1-0.20250527120941-4cbb12d5a262
+	open-cluster-management.io/ocm v1.0.1-0.20250724011102-334710ce0e60
 	sigs.k8s.io/cluster-api v1.9.3
 	sigs.k8s.io/yaml v1.4.0
 )
@@ -81,7 +81,7 @@ require (
 	github.com/golang/glog v1.2.4 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/btree v1.1.3 // indirect
-	github.com/google/gnostic-models v0.6.9-0.20230804172637-c7be7c783f49 // indirect
+	github.com/google/gnostic-models v0.6.9 // indirect
 	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/pprof v0.0.0-20250403155104-27863c87afa6 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -133,8 +133,8 @@ require (
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/xeipuuv/gojsonschema v1.2.0 // indirect
 	go.mongodb.org/mongo-driver v1.14.0 // indirect
-	go.opentelemetry.io/otel v1.28.0 // indirect
-	go.opentelemetry.io/otel/trace v1.28.0 // indirect
+	go.opentelemetry.io/otel v1.33.0 // indirect
+	go.opentelemetry.io/otel/trace v1.33.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.41.0 // indirect
@@ -143,7 +143,7 @@ require (
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
 	golang.org/x/term v0.34.0 // indirect
-	golang.org/x/time v0.7.0 // indirect
+	golang.org/x/time v0.9.0 // indirect
 	golang.org/x/tools v0.35.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/protobuf v1.36.5 // indirect
@@ -154,9 +154,10 @@ require (
 	gorm.io/gorm v1.24.5 // indirect
 	helm.sh/helm/v3 v3.17.4 // indirect
 	k8s.io/kube-aggregator v0.32.1 // indirect
-	k8s.io/kube-openapi v0.0.0-20241105132330-32ad38e42d3f // indirect
+	k8s.io/kube-openapi v0.0.0-20250318190949-c8a335a9a2ff // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect
 	sigs.k8s.io/kube-storage-version-migrator v0.0.6-0.20230721195810-5c8923c5ff96 // indirect
+	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.6.0 // indirect
 )
 
