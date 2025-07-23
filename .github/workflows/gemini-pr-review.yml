@@ -60,18 +60,15 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check Gemini API Key
-        id: check-api-key
+        if: ${{ secrets.GEMINI_API_KEY == '' }}
         run: |
-          if [ -z "${{ secrets.GEMINI_API_KEY }}" ]; then
-            echo "❌ GEMINI_API_KEY secret is not configured"
-            echo "Please configure the GEMINI_API_KEY secret in repository settings"
-            echo "See docs/gemini-pr-review.md for setup instructions"
-            exit 1
-          else
-            echo "✅ GEMINI_API_KEY secret is configured"
-          fi
+          echo "❌ GEMINI_API_KEY secret is not configured"
+          echo "Please configure the GEMINI_API_KEY secret in repository settings"
+          echo "See docs/gemini-pr-review.md for setup instructions"
+          exit 1
 
       - name: Run Gemini PR Review
+        if: ${{ secrets.GEMINI_API_KEY != '' }}
         uses: google-gemini/gemini-cli-action@main
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
