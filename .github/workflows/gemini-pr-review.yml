@@ -1,0 +1,106 @@
+# Copyright Contributors to the Open Cluster Management project
+
+name: Gemini PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main, release-*, backplane-*]
+    paths-ignore:
+      - ".tekton/**"
+      - "docs/**"
+      - "*.md"
+  issue_comment:
+    types: [created]
+
+jobs:
+  gemini-review:
+    # Only run on pull request events or when comment contains @gemini-cli /review
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request &&
+       contains(github.event.comment.body, '@gemini-cli /review') &&
+       (github.event.comment.author_association == 'OWNER' ||
+        github.event.comment.author_association == 'MEMBER' ||
+        github.event.comment.author_association == 'COLLABORATOR'))
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # For PR events, checkout the PR head
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          # Fetch full history for better context
+          fetch-depth: 0
+
+      - name: Get PR information
+        id: pr-info
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "pr_number=${{ github.event.pull_request.number }}" >> $GITHUB_OUTPUT
+            echo "base_sha=${{ github.event.pull_request.base.sha }}" >> $GITHUB_OUTPUT
+            echo "head_sha=${{ github.event.pull_request.head.sha }}" >> $GITHUB_OUTPUT
+          else
+            echo "pr_number=${{ github.event.issue.number }}" >> $GITHUB_OUTPUT
+            # Get PR details for comment events
+            pr_info=$(gh pr view ${{ github.event.issue.number }} --json baseRefOid,headRefOid)
+            echo "base_sha=$(echo $pr_info | jq -r '.baseRefOid')" >> $GITHUB_OUTPUT
+            echo "head_sha=$(echo $pr_info | jq -r '.headRefOid')" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check Gemini API Key
+        id: check-api-key
+        run: |
+          if [ -z "${{ secrets.GEMINI_API_KEY }}" ]; then
+            echo "❌ GEMINI_API_KEY secret is not configured"
+            echo "Please configure the GEMINI_API_KEY secret in repository settings"
+            echo "See docs/gemini-pr-review.md for setup instructions"
+            exit 1
+          else
+            echo "✅ GEMINI_API_KEY secret is configured"
+          fi
+
+      - name: Run Gemini PR Review
+        uses: google-gemini/gemini-cli-action@main
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        with:
+          prompt: |
+            You are an expert code reviewer for the managedcluster-import-controller project,
+            which is part of the Open Cluster Management (OCM) ecosystem. This controller handles
+            functionalities related to managed cluster resources, including:
+            - Installing klusterlet on clusters created by Hive
+            - Triggering remote deletion of klusterlet on managed clusters
+            - Managing cluster import and detach operations
+
+            Please review this pull request and provide constructive feedback focusing on:
+            1. **Code Quality**: Check for Go best practices, error handling, and code organization
+            2. **Security**: Look for potential security vulnerabilities or sensitive data exposure
+            3. **Performance**: Identify potential performance issues or inefficient operations
+            4. **Kubernetes Best Practices**: Ensure proper use of Kubernetes APIs and patterns
+            5. **OCM Integration**: Verify compatibility with OCM components and conventions
+            6. **Testing**: Suggest areas that need additional test coverage
+            7. **Documentation**: Check if changes require documentation updates
+
+            Focus on significant issues and provide specific, actionable suggestions.
+            Be constructive and helpful in your feedback.
+
+            Use the `gh` CLI to review the pull request #${{ steps.pr-info.outputs.pr_number }}.
+          settings_json: |
+            {
+              "sandbox": false,
+              "telemetry": {
+                "enabled": false
+              }
+            }
