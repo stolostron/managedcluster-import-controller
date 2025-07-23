@@ -5,7 +5,7 @@ name: Gemini PR Review
 on:
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [main, release-*, backplane-*]
+    branches: [main]
     paths-ignore:
       - ".tekton/**"
       - "docs/**"
