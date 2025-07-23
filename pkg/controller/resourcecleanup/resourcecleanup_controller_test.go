@@ -77,7 +77,7 @@ func TestReconcile(t *testing.T) {
 			},
 		},
 		{
-			name:    "default cluster is deleting and have klustereletCRD work",
+			name:    "default cluster is deleting and klustereletCRD work is not deleting and no finalizer",
 			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}},
 			runtimeObjects: []client.Object{
 				&clusterv1.ManagedCluster{
@@ -95,17 +95,101 @@ func TestReconcile(t *testing.T) {
 				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
 			},
 			works: []runtime.Object{
-				&workv1.ManifestWork{ObjectMeta: metav1.ObjectMeta{
-					Name:              "test-klusterlet-crds",
-					Namespace:         "test",
-					DeletionTimestamp: &now}},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: "test",
+					},
+				},
+			},
+			requeue: true,
+			validateFunc: func(t *testing.T, clientHolder *helpers.ClientHolder) {
+				managedCluster := &clusterv1.ManagedCluster{}
+				if err := clientHolder.RuntimeClient.Get(context.TODO(),
+					types.NamespacedName{Name: "test"}, managedCluster); errors.IsNotFound(err) {
+					t.Errorf("unexpected no cluster,but got error: %v", err)
+				}
+			},
+		},
+		{
+			name:    "default cluster is deleting and klustereletCRD work is deleting",
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}},
+			runtimeObjects: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "test",
+						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
+						DeletionTimestamp: &now,
+					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: true,
+					},
+				},
+			},
+			kubeObjects: []runtime.Object{
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "test-klusterlet-crds",
+						Namespace:         "test",
+						DeletionTimestamp: &now,
+						Finalizers:        []string{workv1.ManifestWorkFinalizer},
+					},
+				},
+			},
+			requeue: true,
+			validateFunc: func(t *testing.T, clientHolder *helpers.ClientHolder) {
+				managedCluster := &clusterv1.ManagedCluster{}
+				if err := clientHolder.RuntimeClient.Get(context.TODO(),
+					types.NamespacedName{Name: "test"}, managedCluster); errors.IsNotFound(err) {
+					t.Errorf("unexpected no cluster,but got error: %v", err)
+				}
+			},
+		},
+		{
+			name:    "default cluster is deleting and klustereletCRD work is deleting and have deleting condition",
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}},
+			runtimeObjects: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "test",
+						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
+						DeletionTimestamp: &now,
+					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: true,
+					},
+				},
+			},
+			kubeObjects: []runtime.Object{
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "test-klusterlet-crds",
+						Namespace:         "test",
+						DeletionTimestamp: &now,
+						Finalizers:        []string{workv1.ManifestWorkFinalizer},
+					},
+					Status: workv1.ManifestWorkStatus{
+						Conditions: []metav1.Condition{
+							metav1.Condition{
+								Type:   workv1.WorkDeleting,
+								Status: metav1.ConditionTrue,
+							},
+						},
+					},
+				},
 			},
 			requeue: false,
 			validateFunc: func(t *testing.T, clientHolder *helpers.ClientHolder) {
 				managedCluster := &clusterv1.ManagedCluster{}
 				if err := clientHolder.RuntimeClient.Get(context.TODO(),
 					types.NamespacedName{Name: "test"}, managedCluster); !errors.IsNotFound(err) {
-					t.Errorf("unexpected no cluster,but got error: %v", err)
+					t.Errorf("expected no cluster,but got error: %v", err)
 				}
 			},
 		},

@@ -106,6 +106,26 @@ func (FeatureGate) SwaggerDoc() map[string]string {
 	return map_FeatureGate
 }
 
+var map_GRPCConfig = map[string]string{
+	"":                       "GRPC represents the configuration for gRPC driver.",
+	"imagePullSpec":          "ImagePullSpec represents the desired image of the gRPC broker installed on hub.",
+	"endpointExposure":       "EndpointExposure represents the configuration for endpoint exposure.",
+	"autoApprovedIdentities": "AutoApprovedIdentities represent a list of approved arn patterns",
+}
+
+func (GRPCConfig) SwaggerDoc() map[string]string {
+	return map_GRPCConfig
+}
+
+var map_GRPCEndpointExposure = map[string]string{
+	"type":     "Type specifies how the gRPC endpoint is exposed. You may need to apply an object to expose the gRPC endpoint, for example: a route.",
+	"hostname": "Hostname points to a fixed hostname for serving agents' handshakes.",
+}
+
+func (GRPCEndpointExposure) SwaggerDoc() map[string]string {
+	return map_GRPCEndpointExposure
+}
+
 var map_GenerationStatus = map[string]string{
 	"":               "GenerationStatus keeps track of the generation for a given resource so that decisions about forced updates can be made. The definition matches the GenerationStatus defined in github.com/openshift/api/v1",
 	"group":          "group is the group of the resource that you're tracking",
@@ -130,6 +150,14 @@ func (HostedClusterManagerConfiguration) SwaggerDoc() map[string]string {
 	return map_HostedClusterManagerConfiguration
 }
 
+var map_HostnameConfig = map[string]string{
+	"": "HostnameConfig references a fixed hostname.",
+}
+
+func (HostnameConfig) SwaggerDoc() map[string]string {
+	return map_HostnameConfig
+}
+
 var map_NodePlacement = map[string]string{
 	"":             "NodePlacement describes node scheduling configuration for the pods.",
 	"nodeSelector": "NodeSelector defines which Nodes the Pods are scheduled on. The default is an empty list.",
@@ -144,6 +172,7 @@ var map_RegistrationDriverHub = map[string]string{
 	"authType": "Type of the authentication used by hub to initialize the Hub cluster. Possible values are csr and awsirsa.",
 	"csr":      "CSR represents the configuration for csr driver.",
 	"awsirsa":  "AwsIrsa represents the configuration for awsirsa driver.",
+	"grpc":     "GRPC represents the configuration for gRPC driver.",
 }
 
 func (RegistrationDriverHub) SwaggerDoc() map[string]string {
@@ -313,8 +342,8 @@ var map_RegistrationConfiguration = map[string]string{
 	"clientCertExpirationSeconds": "clientCertExpirationSeconds represents the seconds of a client certificate to expire. If it is not set or 0, the default duration seconds will be set by the hub cluster. If the value is larger than the max signing duration seconds set on the hub cluster, the max signing duration seconds will be set.",
 	"featureGates":                "FeatureGates represents the list of feature gates for registration If it is set empty, default feature gates will be used. If it is set, featuregate/Foo is an example of one item in FeatureGates:\n  1. If featuregate/Foo does not exist, registration-operator will discard it\n  2. If featuregate/Foo exists and is false by default. It is now possible to set featuregate/Foo=[false|true]\n  3. If featuregate/Foo exists and is true by default. If a cluster-admin upgrading from 1 to 2 wants to continue having featuregate/Foo=false,\n \the can set featuregate/Foo=false before upgrading. Let's say the cluster-admin wants featuregate/Foo=false.",
 	"clusterAnnotations":          "ClusterAnnotations is annotations with the reserve prefix \"agent.open-cluster-management.io\" set on ManagedCluster when creating only, other actors can update it afterwards.",
-	"kubeAPIQPS":                  "KubeAPIQPS indicates the maximum QPS while talking with apiserver of hub cluster from the spoke cluster. If it is set empty, use the default value: 50",
-	"kubeAPIBurst":                "KubeAPIBurst indicates the maximum burst of the throttle while talking with apiserver of hub cluster from the spoke cluster. If it is set empty, use the default value: 100",
+	"kubeAPIQPS":                  "KubeAPIQPS indicates the maximum QPS while talking with apiserver on the spoke cluster. If it is set empty, use the default value: 50",
+	"kubeAPIBurst":                "KubeAPIBurst indicates the maximum burst of the throttle while talking with apiserver on the spoke cluster. If it is set empty, use the default value: 100",
 	"bootstrapKubeConfigs":        "BootstrapKubeConfigs defines the ordered list of bootstrap kubeconfigs. The order decides which bootstrap kubeconfig to use first when rebootstrap.\n\nWhen the agent loses the connection to the current hub over HubConnectionTimeoutSeconds, or the managedcluster CR is set `hubAcceptsClient=false` on the hub, the controller marks the related bootstrap kubeconfig as \"failed\".\n\nA failed bootstrapkubeconfig won't be used for the duration specified by SkipFailedBootstrapKubeConfigSeconds. But if the user updates the content of a failed bootstrapkubeconfig, the \"failed\" mark will be cleared.",
 	"registrationDriver":          "This provides driver details required to register with hub",
 	"clusterClaimConfiguration":   "ClusterClaimConfiguration represents the configuration of ClusterClaim Effective only when the `ClusterClaim` feature gate is enabled.",
@@ -345,8 +374,10 @@ func (ServerURL) SwaggerDoc() map[string]string {
 
 var map_WorkAgentConfiguration = map[string]string{
 	"featureGates":                           "FeatureGates represents the list of feature gates for work If it is set empty, default feature gates will be used. If it is set, featuregate/Foo is an example of one item in FeatureGates:\n  1. If featuregate/Foo does not exist, registration-operator will discard it\n  2. If featuregate/Foo exists and is false by default. It is now possible to set featuregate/Foo=[false|true]\n  3. If featuregate/Foo exists and is true by default. If a cluster-admin upgrading from 1 to 2 wants to continue having featuregate/Foo=false,\n \the can set featuregate/Foo=false before upgrading. Let's say the cluster-admin wants featuregate/Foo=false.",
-	"kubeAPIQPS":                             "KubeAPIQPS indicates the maximum QPS while talking with apiserver of hub cluster from the spoke cluster. If it is set empty, use the default value: 50",
-	"kubeAPIBurst":                           "KubeAPIBurst indicates the maximum burst of the throttle while talking with apiserver of hub cluster from the spoke cluster. If it is set empty, use the default value: 100",
+	"kubeAPIQPS":                             "KubeAPIQPS indicates the maximum QPS while talking with apiserver on the spoke cluster. If it is set empty, use the default value: 50",
+	"kubeAPIBurst":                           "KubeAPIBurst indicates the maximum burst of the throttle while talking with apiserver on the spoke cluster. If it is set empty, use the default value: 100",
+	"hubKubeAPIQPS":                          "HubKubeAPIQPS indicates the maximum QPS while talking with apiserver on the hub cluster. If it is set empty, use the default value: 50",
+	"hubKubeAPIBurst":                        "HubKubeAPIBurst indicates the maximum burst of the throttle while talking with apiserver on the hub cluster. If it is set empty, use the default value: 100",
 	"appliedManifestWorkEvictionGracePeriod": "AppliedManifestWorkEvictionGracePeriod is the eviction grace period the work agent will wait before evicting the AppliedManifestWorks, whose corresponding ManifestWorks are missing on the hub cluster, from the managed cluster. If not present, the default value of the work agent will be used.",
 	"statusSyncInterval":                     "StatusSyncInterval is the interval for the work agent to check the status of ManifestWorks. Larger value means less frequent status sync and less api calls to the managed cluster, vice versa. The value(x) should be: 5s <= x <= 1h.",
 }
