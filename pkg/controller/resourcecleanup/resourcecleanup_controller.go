@@ -221,6 +221,9 @@ func (r *ReconcileResourceCleanup) Cleanup(ctx context.Context, cluster *cluster
 		if works.Items[0].DeletionTimestamp.IsZero() {
 			return nil
 		}
+		if works.Items[0].DeletionTimestamp.Add(60 * time.Second).After(time.Now()) {
+			return nil
+		}
 		if err = helpers.ForceDeleteManifestWork(ctx, r.clientHolder.WorkClient, r.recorder,
 			cluster.Name, klusterletCRDWorkName); err != nil {
 			return err
