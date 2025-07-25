@@ -72,6 +72,11 @@ func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, reque
 		return reconcile.Result{}, nil
 	}
 
+	// do not delete the ns if there is an annotation retain-namespace on the ns.
+	if _, ok := ns.Annotations[constants.AnnotationRemainNamespace]; ok {
+		return reconcile.Result{}, nil
+	}
+
 	if !ns.DeletionTimestamp.IsZero() {
 		return reconcile.Result{}, nil
 	}
