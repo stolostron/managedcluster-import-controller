@@ -16,6 +16,7 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	kevents "k8s.io/client-go/tools/events"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
@@ -218,9 +219,12 @@ func (r *ReconcileResourceCleanup) Cleanup(ctx context.Context, cluster *cluster
 	if len(works.Items) == 1 && works.Items[0].Name == klusterletCRDWorkName {
 		// the manifestWorks are deleted by registration controller.
 		// the agent may be orphaned if the CRD manifestWork is force deleted directly.
-		if works.Items[0].DeletionTimestamp.IsZero() {
+		// so the crd is deleting when the deleting condition of crd work is true
+		// and can force delete the crd work after the crd work is deleting.
+		if !meta.IsStatusConditionTrue(works.Items[0].Status.Conditions, workv1.WorkDeleting) {
 			return nil
 		}
+
 		if err = helpers.ForceDeleteManifestWork(ctx, r.clientHolder.WorkClient, r.recorder,
 			cluster.Name, klusterletCRDWorkName); err != nil {
 			return err
