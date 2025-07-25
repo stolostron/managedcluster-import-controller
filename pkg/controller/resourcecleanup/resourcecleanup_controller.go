@@ -133,7 +133,7 @@ func (r *ReconcileResourceCleanup) forceDeleteManifestWorks(
 
 }
 
-func (r *ReconcileResourceCleanup) forceDeleteHostingManifestWorks(ctx context.Context,
+func (r *ReconcileResourceCleanup) deleteHostingManifestWorks(ctx context.Context,
 	hostingCluster, hostedCluster string) error {
 	hostingWorksSelector := labels.SelectorFromSet(map[string]string{constants.HostedClusterLabel: hostedCluster})
 	hostingManifestWorks, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(hostingCluster).List(
@@ -142,60 +142,88 @@ func (r *ReconcileResourceCleanup) forceDeleteHostingManifestWorks(ctx context.C
 		return err
 	}
 
-	return helpers.ForceDeleteAllManifestWorks(ctx, r.clientHolder.WorkClient, r.recorder, hostingManifestWorks.Items)
+	var errs []error
+	var hostingWorkNames []string
+	var klusterletHostingWorkName, kubeconfigHostingWorkName string
+	// the work deletion order for hosted cluster:
+	// 1. all addon works in hosted and hosting cluster ns
+	// 2. klusterlet work in hosting cluster ns
+	// 3. hosted kubeconfig work in hosting cluster ns
+	for _, manifestWork := range hostingManifestWorks.Items {
+		if manifestWork.Name == helpers.HostedKlusterletManifestWorkName(hostedCluster) {
+			klusterletHostingWorkName = manifestWork.Name
+			continue
+		}
+
+		if manifestWork.Name == helpers.HostedManagedKubeConfigManifestWorkName(hostedCluster) {
+			kubeconfigHostingWorkName = manifestWork.Name
+			continue
+		}
+
+		hostingWorkNames = append(hostingWorkNames, manifestWork.Name)
+	}
+
+	if len(hostingWorkNames) == 0 {
+		if klusterletHostingWorkName != "" {
+			return r.clientHolder.WorkClient.WorkV1().ManifestWorks(hostingCluster).
+				Delete(ctx, klusterletHostingWorkName, metav1.DeleteOptions{})
+		}
+
+		if kubeconfigHostingWorkName != "" {
+			return r.clientHolder.WorkClient.WorkV1().ManifestWorks(hostingCluster).
+				Delete(ctx, kubeconfigHostingWorkName, metav1.DeleteOptions{})
+		}
+
+		return nil
+	}
+
+	for _, workName := range hostingWorkNames {
+		if err = r.clientHolder.WorkClient.WorkV1().ManifestWorks(hostingCluster).
+			Delete(ctx, workName, metav1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
+			errs = append(errs, err)
+		}
+	}
+	return utilerrors.NewAggregate(errs)
 }
 
 func (r *ReconcileResourceCleanup) orphanCleanup(ctx context.Context, clusterName string) error {
 	var errs []error
-	_, err := r.clientHolder.KubeClient.CoreV1().Namespaces().Get(ctx, clusterName, metav1.GetOptions{})
-	if errors.IsNotFound(err) {
-		return nil
-	}
+	exists, err := r.namespaceExists(ctx, clusterName)
 	if err != nil {
 		return err
 	}
-	if err = helpers.ForceDeleteAllManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, clusterName, r.recorder); err != nil {
-		errs = append(errs, err)
+	if !exists {
+		return nil
 	}
 
-	if err = r.forceDeleteManifestWorks(ctx, clusterName); err != nil {
-		errs = append(errs, err)
-	}
-
-	if err = helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, clusterName, r.recorder); err != nil {
-		errs = append(errs, err)
-	}
-
+	errs = appendIfErr(errs, helpers.ForceDeleteAllManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, clusterName, r.recorder))
+	errs = appendIfErr(errs, r.forceDeleteManifestWorks(ctx, clusterName))
+	errs = appendIfErr(errs, helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, clusterName, r.recorder))
 	return utilerrors.NewAggregate(errs)
 }
 
 func (r *ReconcileResourceCleanup) forceCleanup(ctx context.Context, cluster *clusterv1.ManagedCluster) error {
 	var errs []error
-	_, err := r.clientHolder.KubeClient.CoreV1().Namespaces().Get(ctx, cluster.Name, metav1.GetOptions{})
-	if errors.IsNotFound(err) {
-		return nil
-	}
+	exists, err := r.namespaceExists(ctx, cluster.Name)
 	if err != nil {
 		return err
 	}
-	if err = helpers.ForceDeleteAllManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, cluster.Name, r.recorder); err != nil {
-		errs = append(errs, err)
+	if !exists {
+		return nil
 	}
 
-	if err = r.forceDeleteManifestWorks(ctx, cluster.Name); err != nil {
-		errs = append(errs, err)
-	}
+	errs = appendIfErr(errs, helpers.ForceDeleteAllManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, cluster.Name, r.recorder))
+	errs = appendIfErr(errs, r.forceDeleteManifestWorks(ctx, cluster.Name))
 
+	// will not go to the cleanup process and go to forceCleanup directly when we delete an unavailable hosted cluster,
+	// so need to delete the works in hosting cluster.
+	// but do not need to force delete the works in hosting cluster because we assume the hosting cluster is always available.
 	hostingCluster, _ := helpers.GetHostingCluster(cluster)
 	if helpers.IsHostedCluster(cluster) && hostingCluster != "" {
-		if err = r.forceDeleteHostingManifestWorks(ctx, hostingCluster, cluster.Name); err != nil {
-			errs = append(errs, err)
-		}
+		errs = appendIfErr(errs, r.deleteHostingManifestWorks(ctx, hostingCluster, cluster.Name))
 	}
 
-	if err = helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, cluster.Name, r.recorder); err != nil {
-		errs = append(errs, err)
-	}
+	errs = appendIfErr(errs, helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, cluster.Name, r.recorder))
 
 	return utilerrors.NewAggregate(errs)
 }
@@ -236,57 +264,12 @@ func (r *ReconcileResourceCleanup) Cleanup(ctx context.Context, cluster *cluster
 		return nil
 	}
 
-	hostingWorksSelector := labels.SelectorFromSet(map[string]string{constants.HostedClusterLabel: cluster.Name})
-	hostingManifestWorks, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(hostingCluster).List(
-		ctx, metav1.ListOptions{
-			LabelSelector: hostingWorksSelector.String(),
-		})
-	if err != nil || len(hostingManifestWorks.Items) == 0 {
-		return err
-	}
-
-	var errs []error
-	var hostingWorkNames []string
-	var klusterletHostingWorkName, kubeconfigHostingWorkName string
-	// the work deletion order for hosted cluster:
-	// 1. all addon works in hosted and hosting cluster ns
-	// 2. klusterlet work in hosting cluster ns
-	// 3. hosted kubeconfig work in hosting cluster ns
-	for _, manifestWork := range hostingManifestWorks.Items {
-		if manifestWork.Name == helpers.HostedKlusterletManifestWorkName(cluster.Name) {
-			klusterletHostingWorkName = manifestWork.Name
-			continue
-		}
-
-		if manifestWork.Name == helpers.HostedManagedKubeConfigManifestWorkName(cluster.Name) {
-			kubeconfigHostingWorkName = manifestWork.Name
-			continue
-		}
-
-		hostingWorkNames = append(hostingWorkNames, manifestWork.Name)
-	}
-
-	if len(hostingWorkNames) == 0 && len(works.Items) == 0 {
-		if klusterletHostingWorkName != "" {
-			return r.clientHolder.WorkClient.WorkV1().ManifestWorks(hostingCluster).
-				Delete(ctx, klusterletHostingWorkName, metav1.DeleteOptions{})
-		}
-
-		if kubeconfigHostingWorkName != "" {
-			return r.clientHolder.WorkClient.WorkV1().ManifestWorks(hostingCluster).
-				Delete(ctx, kubeconfigHostingWorkName, metav1.DeleteOptions{})
-		}
-
+	// delete works in hosting cluster after there is no works in hosted cluster ns
+	if len(works.Items) > 0 {
 		return nil
 	}
 
-	for _, workName := range hostingWorkNames {
-		if err = r.clientHolder.WorkClient.WorkV1().ManifestWorks(hostingCluster).
-			Delete(ctx, workName, metav1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
-			errs = append(errs, err)
-		}
-	}
-	return utilerrors.NewAggregate(errs)
+	return r.deleteHostingManifestWorks(ctx, hostingCluster, cluster.Name)
 }
 
 func (r *ReconcileResourceCleanup) cleanupCompleted(ctx context.Context, cluster *clusterv1.ManagedCluster) (bool, error) {
@@ -346,10 +329,28 @@ func (r *ReconcileResourceCleanup) removeClusterFinalizers(ctx context.Context, 
 	return err
 }
 
+func (r *ReconcileResourceCleanup) namespaceExists(ctx context.Context, name string) (bool, error) {
+	_, err := r.clientHolder.KubeClient.CoreV1().Namespaces().Get(ctx, name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
 func clusterNeedForceDelete(cluster *clusterv1.ManagedCluster) bool {
 	// need to do force deletion when cluster is deleting but not accepted or not available
 	if !cluster.Spec.HubAcceptsClient {
 		return true
 	}
 	return helpers.IsClusterUnavailable(cluster)
+}
+
+func appendIfErr(errs []error, err error) []error {
+	if err != nil {
+		errs = append(errs, err)
+	}
+	return errs
 }
