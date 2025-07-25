@@ -52,5 +52,10 @@ current functionality of `managedcluster-import-controller`
 
 [Selective initilization of controllers](docs/selective_controller_init.md)
 
+[Gemini AI PR Review Setup](docs/gemini-pr-review.md)
 
+## AI-Powered Code Review
 
+This repository includes an AI-powered PR review system using Google's Gemini model. The system automatically reviews pull requests and provides intelligent feedback on code quality, security, performance, and OCM integration patterns.
+
+To enable this feature, configure the `GEMINI_API_KEY` secret in your repository settings. See the [setup guide](docs/gemini-pr-review.md) for detailed instructions.
