@@ -27,7 +27,6 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	crdv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -64,7 +63,6 @@ func init() {
 	testscheme.AddKnownTypes(operatorv1.GroupVersion, &operatorv1.Klusterlet{})
 	testscheme.AddKnownTypes(addonv1alpha1.GroupVersion, &addonv1alpha1.ManagedClusterAddOn{})
 	testscheme.AddKnownTypes(addonv1alpha1.GroupVersion, &addonv1alpha1.ManagedClusterAddOnList{})
-	testscheme.AddKnownTypes(crdv1beta1.SchemeGroupVersion, &crdv1beta1.CustomResourceDefinition{})
 	testscheme.AddKnownTypes(crdv1.SchemeGroupVersion, &crdv1.CustomResourceDefinition{})
 }
 
@@ -656,11 +654,6 @@ func TestApplyResources(t *testing.T) {
 						Name: "test_cluster",
 					},
 				},
-				&crdv1beta1.CustomResourceDefinition{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test_cluster",
-					},
-				},
 				&crdv1.CustomResourceDefinition{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test_cluster",
@@ -743,11 +736,6 @@ func TestApplyResources(t *testing.T) {
 				},
 			},
 			crds: []runtime.Object{
-				&crdv1beta1.CustomResourceDefinition{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test_cluster",
-					},
-				},
 				&crdv1.CustomResourceDefinition{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test_cluster",
@@ -829,14 +817,6 @@ func TestApplyResources(t *testing.T) {
 					},
 					Spec: operatorv1.KlusterletSpec{
 						Namespace: "test",
-					},
-				},
-				&crdv1beta1.CustomResourceDefinition{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test_cluster",
-					},
-					Spec: crdv1beta1.CustomResourceDefinitionSpec{
-						Version: "test",
 					},
 				},
 				&crdv1.CustomResourceDefinition{
@@ -949,11 +929,6 @@ func TestApplyResources(t *testing.T) {
 				},
 			},
 			crds: []runtime.Object{
-				&crdv1beta1.CustomResourceDefinition{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test_cluster",
-					},
-				},
 				&crdv1.CustomResourceDefinition{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test_cluster",
@@ -1023,11 +998,6 @@ func TestApplyResources(t *testing.T) {
 				},
 				deployment,
 				&operatorv1.Klusterlet{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test_cluster",
-					},
-				},
-				&crdv1beta1.CustomResourceDefinition{
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test_cluster",
 					},
@@ -1158,41 +1128,8 @@ func TestImportManagedClusterFromSecret(t *testing.T) {
 		apiGroupResources []*restmapper.APIGroupResources
 	}{
 		{
-			name: "only have crdv1beta1",
+			name: "have crdv1",
 			apiGroupResources: []*restmapper.APIGroupResources{
-				{
-					Group: metav1.APIGroup{
-						Name: "apiextensions.k8s.io",
-						Versions: []metav1.GroupVersionForDiscovery{
-							{Version: "v1beta1"},
-						},
-						PreferredVersion: metav1.GroupVersionForDiscovery{Version: "v1beta1"},
-					},
-					VersionedResources: map[string][]metav1.APIResource{
-						"v1beta1": {
-							{Name: "customresourcedefinitions", Namespaced: false, Kind: "CustomResourceDefinition"},
-						},
-					},
-				},
-			},
-		},
-		{
-			name: "have crdv1beta1 and crdv1",
-			apiGroupResources: []*restmapper.APIGroupResources{
-				{
-					Group: metav1.APIGroup{
-						Name: "apiextensions.k8s.io",
-						Versions: []metav1.GroupVersionForDiscovery{
-							{Version: "v1beta1"},
-						},
-						PreferredVersion: metav1.GroupVersionForDiscovery{Version: "v1beta1"},
-					},
-					VersionedResources: map[string][]metav1.APIResource{
-						"v1beta1": {
-							{Name: "customresourcedefinitions", Namespaced: false, Kind: "CustomResourceDefinition"},
-						},
-					},
-				},
 				{
 					Group: metav1.APIGroup{
 						Name: "apiextensions.k8s.io",

@@ -26,9 +26,7 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	crdv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	crdv1beta1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
-	apiextclientv1beta1 "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/typed/apiextensions/v1beta1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -88,7 +86,6 @@ func init() {
 	utilruntime.Must(appsv1.AddToScheme(genericScheme))
 	utilruntime.Must(corev1.AddToScheme(genericScheme))
 	utilruntime.Must(rbacv1.AddToScheme(genericScheme))
-	utilruntime.Must(crdv1beta1.AddToScheme(genericScheme))
 	utilruntime.Must(crdv1.AddToScheme(genericScheme))
 	utilruntime.Must(operatorv1.Install(genericScheme))
 	utilruntime.Must(addonv1alpha1.Install(genericScheme))
@@ -511,7 +508,7 @@ func ManifestsEqual(newManifests, oldManifests []workv1.Manifest) bool {
 }
 
 // ApplyResources apply resources, includes: serviceaccount, secret, deployment, clusterrole, clusterrolebinding,
-// crdv1beta1, crdv1, manifestwork and klusterlet
+// crdv1, manifestwork and klusterlet
 func ApplyResources(clientHolder *ClientHolder, recorder events.Recorder,
 	scheme *runtime.Scheme, owner metav1.Object, objs ...runtime.Object) (bool, error) {
 	changed := false
@@ -558,14 +555,6 @@ func ApplyResources(clientHolder *ClientHolder, recorder events.Recorder,
 		case *rbacv1.ClusterRoleBinding:
 			_, modified, err := resourceapply.ApplyClusterRoleBinding(context.TODO(),
 				clientHolder.KubeClient.RbacV1(), recorder, required)
-			errs = append(errs, err)
-			changed = changed || modified
-		case *crdv1beta1.CustomResourceDefinition:
-			_, modified, err := ApplyCustomResourceDefinitionV1Beta1(
-				clientHolder.APIExtensionsClient.ApiextensionsV1beta1(),
-				recorder,
-				required,
-			)
 			errs = append(errs, err)
 			changed = changed || modified
 		case *crdv1.CustomResourceDefinition:
@@ -1036,37 +1025,6 @@ func ValidateTolerations(tolerations []corev1.Toleration) error {
 	}
 
 	return utilerrors.NewAggregate(errs)
-}
-
-// In order to support ocp 311, copy this func from old library-go
-func ApplyCustomResourceDefinitionV1Beta1(client apiextclientv1beta1.CustomResourceDefinitionsGetter,
-	recorder events.Recorder,
-	required *crdv1beta1.CustomResourceDefinition) (*crdv1beta1.CustomResourceDefinition, bool, error) {
-	existing, err := client.CustomResourceDefinitions().Get(context.TODO(), required.Name, metav1.GetOptions{})
-	if errors.IsNotFound(err) {
-		actual, err := client.CustomResourceDefinitions().Create(context.TODO(), required, metav1.CreateOptions{})
-		reportEvent(recorder, required, "CustomResourceDefinition", "created")
-		return actual, true, err
-	}
-	if err != nil {
-		return nil, false, err
-	}
-
-	modified := resourcemerge.BoolPtr(false)
-	existingCopy := existing.DeepCopy()
-	resourcemerge.EnsureCustomResourceDefinitionV1Beta1(modified, existingCopy, *required)
-	if !*modified {
-		return existing, false, nil
-	}
-
-	if klog.V(4).Enabled() {
-		klog.Infof("CustomResourceDefinition %q changes: %s", existing.Name, resourceapply.JSONPatchNoError(existing, existingCopy))
-	}
-
-	actual, err := client.CustomResourceDefinitions().Update(context.TODO(), existingCopy, metav1.UpdateOptions{})
-	reportEvent(recorder, required, "CustomResourceDefinition", "updated")
-
-	return actual, true, err
 }
 
 func IsKubeVersionChanged(objectOld, objectNew runtime.Object) bool {
