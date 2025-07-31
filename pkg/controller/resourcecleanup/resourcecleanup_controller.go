@@ -215,10 +215,16 @@ func (r *ReconcileResourceCleanup) forceCleanup(ctx context.Context, cluster *cl
 	errs = appendIfErr(errs, r.forceDeleteManifestWorks(ctx, cluster.Name))
 
 	// will not go to the cleanup process and go to forceCleanup directly when we delete an unavailable hosted cluster,
-	// so need to delete the works in hosting cluster.
+	// so need to delete the works in hosting cluster if there is no addon since the hosting addon is not force deleted.
 	// but do not need to force delete the works in hosting cluster because we assume the hosting cluster is always available.
 	hostingCluster, _ := helpers.GetHostingCluster(cluster)
 	if helpers.IsHostedCluster(cluster) && hostingCluster != "" {
+		if addons, err := helpers.ListManagedClusterAddons(ctx,
+			r.clientHolder.RuntimeClient, cluster.Name); err != nil || len(addons.Items) != 0 {
+			appendIfErr(errs, err)
+			return utilerrors.NewAggregate(errs)
+		}
+
 		errs = appendIfErr(errs, r.deleteHostingManifestWorks(ctx, hostingCluster, cluster.Name))
 	}
 
