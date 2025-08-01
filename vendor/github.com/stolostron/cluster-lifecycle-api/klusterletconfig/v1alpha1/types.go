@@ -265,6 +265,8 @@ type ClusterClaimConfiguration struct {
 	// Maximum number of custom ClusterClaims allowed.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:default:=20
+	// +kubebuilder:validation:Minimum:=0
+	// +kubebuilder:validation:Maximum:=100
 	// +required
 	MaxCustomClusterClaims int32 `json:"maxCustomClusterClaims"`
 }
