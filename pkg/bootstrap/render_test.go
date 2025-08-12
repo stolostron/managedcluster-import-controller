@@ -942,6 +942,56 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "with customized workStatusSyncInterval",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+			},
+			defaultImagePullSecret: "test-image-pull-secret",
+			runtimeObjs: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-image-pull-secret",
+					},
+					Data: map[string][]byte{
+						corev1.DockerConfigJsonKey: []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeDockerConfigJson,
+				},
+			},
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeDefault,
+				"test", // cluster name
+				[]byte("bootstrap kubeconfig"),
+			).WithKlusterletConfig(&klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					WorkStatusSyncInterval: &metav1.Duration{Duration: 5 * time.Second},
+				},
+			}),
+			validateFunc: func(t *testing.T, objects, crds []runtime.Object) {
+				testinghelpers.ValidateObjectCount(t, objects, 10)
+				testinghelpers.ValidateCRDs(t, crds, 1)
+				testinghelpers.ValidateNamespace(t, objects[0], constants.DefaultKlusterletNamespace)
+				testinghelpers.ValidateKlusterlet(t, objects[7], operatorv1.InstallModeDefault,
+					"klusterlet", "test", constants.DefaultKlusterletNamespace)
+
+				klusterlet, _ := objects[7].(*operatorv1.Klusterlet)
+				if klusterlet.Spec.WorkConfiguration == nil {
+					t.Errorf("the klusterlet WorkConfiguration is not specified")
+				}
+				if klusterlet.Spec.WorkConfiguration.StatusSyncInterval == nil {
+					t.Errorf("the klusterlet StatusSyncInterval is not specified")
+				}
+				if klusterlet.Spec.WorkConfiguration.StatusSyncInterval.Duration != 5*time.Second {
+					t.Errorf("the expected StatusSyncInterval of klusterlet is %v, but got %v",
+						5*time.Second, klusterlet.Spec.WorkConfiguration.StatusSyncInterval.Duration)
+				}
+			},
+		},
 	}
 
 	for _, testcase := range testcases {

@@ -47,6 +47,7 @@ import (
 
 	klusterletconfigclient "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned"
 	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
+	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
@@ -122,7 +123,27 @@ var _ = ginkgo.BeforeSuite(func() {
 	gomega.Expect(err).Should(gomega.BeNil())
 	hubMapper, err = apiutil.NewDynamicRESTMapper(clusterCfg, httpclient)
 	gomega.Expect(err).Should(gomega.BeNil())
+
+	createGlobalKlusterletConfig()
 })
+
+func createGlobalKlusterletConfig() {
+	ginkgo.By("Create global KlusterletConfig, set work status sync interval", func() {
+		_, err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Create(context.TODO(),
+			&klusterletconfigv1alpha1.KlusterletConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: constants.GlobalKlusterletConfigName,
+				},
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					WorkStatusSyncInterval: &metav1.Duration{Duration: 5 * time.Second},
+				},
+			}, metav1.CreateOptions{})
+		// expect err is nil or is already exists
+		if !errors.IsAlreadyExists(err) {
+			gomega.Expect(err).Should(gomega.Succeed())
+		}
+	})
+}
 
 // asserters
 func assertManagedClusterImportSecretCreated(clusterName, createdVia string, mode ...operatorv1.InstallMode) {

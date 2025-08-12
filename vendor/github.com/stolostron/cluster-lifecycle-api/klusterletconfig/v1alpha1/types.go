@@ -100,6 +100,14 @@ type KlusterletConfigSpec struct {
 	// Effective only when the `ClusterClaim` feature gate is enabled.
 	// +optional
 	ClusterClaimConfiguration *ClusterClaimConfiguration `json:"clusterClaimConfiguration,omitempty"`
+
+	// WorkStatusSyncInterval is the interval for the work agent to check the status of ManifestWorks.
+	// Larger value means less frequent status sync and less api calls to the managed cluster, vice versa.
+	// The value(x) should be: 5s <= x <= 1h.
+	// +optional
+	// +kubebuilder:validation:Type=string
+	// +kubebuilder:validation:Pattern="^([0-9]+(s|m|h))+$"
+	WorkStatusSyncInterval *metav1.Duration `json:"workStatusSyncInterval,omitempty"`
 }
 
 // KlusterletConfigStatus defines the observed state of KlusterletConfig.
@@ -257,6 +265,8 @@ type ClusterClaimConfiguration struct {
 	// Maximum number of custom ClusterClaims allowed.
 	// +kubebuilder:validation:Required
 	// +kubebuilder:default:=20
+	// +kubebuilder:validation:Minimum:=0
+	// +kubebuilder:validation:Maximum:=100
 	// +required
 	MaxCustomClusterClaims int32 `json:"maxCustomClusterClaims"`
 }
