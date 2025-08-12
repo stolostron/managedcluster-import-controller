@@ -15,27 +15,25 @@ import (
 	"reflect"
 	"strings"
 
-	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
-	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
+	authv1 "k8s.io/api/authentication/v1"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apiserver/pkg/storage/names"
 	"k8s.io/client-go/kubernetes"
-	certutil "k8s.io/client-go/util/cert"
-	"k8s.io/klog/v2"
-	"k8s.io/utils/pointer"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-
-	corev1 "k8s.io/api/core/v1"
-
-	authv1 "k8s.io/api/authentication/v1"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	clientcmdlatest "k8s.io/client-go/tools/clientcmd/api/latest"
+	certutil "k8s.io/client-go/util/cert"
+	"k8s.io/klog/v2"
+	"k8s.io/utils/ptr"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
+	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 )
 
 const (
@@ -148,7 +146,7 @@ func RequestSAToken(ctx context.Context, kubeClient kubernetes.Interface, saName
 		saName,
 		&authv1.TokenRequest{
 			Spec: authv1.TokenRequestSpec{
-				ExpirationSeconds: pointer.Int64(tokenExpirationSeconds),
+				ExpirationSeconds: ptr.To(tokenExpirationSeconds),
 			},
 		},
 		metav1.CreateOptions{},

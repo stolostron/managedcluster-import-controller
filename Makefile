@@ -49,7 +49,7 @@ check: check-copyright lint
 check-copyright:
 	@build/check-copyright.sh
 
-GOLANGCI_LINT_VERSION = v1.63.4
+GOLANGCI_LINT_VERSION = v2.3.1
 TOOLS_DIR = $(PWD)/_output
 GOLANGCI_LINT = $(TOOLS_DIR)/golangci-lint
 

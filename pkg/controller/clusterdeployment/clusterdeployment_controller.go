@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	kevents "k8s.io/client-go/tools/events"
+	"k8s.io/utils/ptr"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -199,7 +200,7 @@ func (r *ReconcileClusterDeployment) setCreatedViaAnnotation(
 		return nil
 	}
 
-	modified := resourcemerge.BoolPtr(false)
+	modified := ptr.To(false)
 	if clusterDeployment.Spec.Platform.AgentBareMetal != nil {
 		resourcemerge.MergeMap(modified,
 			&cluster.Annotations, map[string]string{constants.CreatedViaAnnotation: constants.CreatedViaAI})
