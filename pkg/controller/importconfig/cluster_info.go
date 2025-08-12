@@ -16,6 +16,8 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apiserver/pkg/storage/names"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -78,14 +80,59 @@ func parseKubeConfigData(kubeConfigData []byte) (
 	return
 }
 
-func validateToken(token string, creation, expiration []byte) bool {
+// validateLegacyServiceAccountToken validates that a legacy serviceaccount token secret exists
+// and contains the expected token value
+func validateLegacyServiceAccountToken(ctx context.Context, kubeClient kubernetes.Interface,
+	saName, secretNamespace, expectedToken string) bool {
+	if len(expectedToken) == 0 {
+		return false
+	}
+
+	secrets, err := kubeClient.CoreV1().Secrets(secretNamespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		klog.Errorf("failed to list secrets for serviceaccount token validation: %v", err)
+		return false
+	}
+
+	// Find the serviceaccount token secret with the expected naming pattern
+	prefix := saName + "-token-"
+	if len(prefix) > names.MaxGeneratedNameLength {
+		prefix = prefix[:names.MaxGeneratedNameLength]
+	}
+
+	for _, secret := range secrets.Items {
+		if secret.Type != corev1.SecretTypeServiceAccountToken {
+			continue
+		}
+
+		if !strings.HasPrefix(secret.Name, prefix) {
+			continue
+		}
+
+		token, ok := secret.Data["token"]
+		if !ok || len(token) == 0 {
+			continue
+		}
+
+		// Check if the token in the secret matches the expected token
+		if string(token) == expectedToken {
+			return true
+		}
+	}
+
+	klog.Infof("serviceaccount token validation failed: no matching secret found for %s/%s", secretNamespace, saName)
+	return false
+}
+
+func validateTokenExpiration(token string, creation, expiration []byte) bool {
 	if len(token) == 0 {
 		// no token in the kubeconfig
 		return false
 	}
 
 	if len(expiration) == 0 {
-		// token is from the service account token secret
+		// token is from the service account token secret - no expiration to validate
+		// Additional secret existence validation will be done by the caller with proper context
 		return true
 	}
 	expirationTime, err := time.Parse(time.RFC3339, string(expiration))
@@ -146,7 +193,18 @@ func buildBootstrapKubeconfigData(ctx context.Context, clientHolder *helpers.Cli
 			// use the existing token if it is still valid
 			creation := importSecret.Data[constants.ImportSecretTokenCreation]
 			expiration := importSecret.Data[constants.ImportSecretTokenExpiration]
-			if valid := validateToken(tokenString, creation, expiration); valid {
+			valid := validateTokenExpiration(tokenString, creation, expiration)
+
+			// For legacy tokens (no expiration), additionally validate the serviceaccount secret exists
+			if valid && len(expiration) == 0 {
+				saName := helpers.GetBootstrapSAName(managedCluster.Name)
+				valid = validateLegacyServiceAccountToken(ctx, clientHolder.KubeClient, saName, managedCluster.Name, tokenString)
+				if !valid {
+					klog.Infof("legacy serviceaccount token validation failed for managed cluster %s", managedCluster.Name)
+				}
+			}
+
+			if valid {
 				tokenData = []byte(tokenString)
 				tokenCreation = creation
 				tokenExpiration = expiration
@@ -174,7 +232,7 @@ func buildBootstrapKubeconfigData(ctx context.Context, clientHolder *helpers.Cli
 			return nil, nil, nil, err
 		}
 
-		// reset the bootstrap kubeconfig to trigger the re since the token is updated
+		// reset the bootstrap kubeconfig to trigger the regeneration since the token is updated
 		bootstrapKubeconfigData = nil
 	}
 
