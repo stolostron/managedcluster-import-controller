@@ -254,7 +254,7 @@ func (r *ReconcileHosted) importCluster(ctx context.Context, managedCluster *clu
 	// if the auto import secret exists; create it on the hosting cluster by manifestwork
 	if autoImportSecret != nil {
 		manifestWork, err = createManagedKubeconfigManifestWork(
-			managedCluster.Name, autoImportSecret, hostingClusterName)
+			managedCluster.Name, autoImportSecret, hostingClusterName, hostingCluster)
 		if err != nil {
 			return reconcile.Result{},
 				helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
@@ -423,18 +423,29 @@ func hostedKlusterletCRName(managedClusterName string) string {
 }
 
 func createManagedKubeconfigManifestWork(managedClusterName string, importSecret *corev1.Secret,
-	manifestWorkNamespace string) (*workv1.ManifestWork, error) {
+	manifestWorkNamespace string, hostingCluster *clusterv1.ManagedCluster) (*workv1.ManifestWork, error) {
 	kubeconfig := importSecret.Data["kubeconfig"]
 	if len(kubeconfig) == 0 {
 		return nil, fmt.Errorf("import secret invalid, the field kubeconfig must exist in the secret for hosted mode")
 	}
 
+	// Check if the hosting cluster has the local-cluster label set to "true"
+	isLocalCluster := false
+	if hostingCluster != nil && hostingCluster.Labels != nil {
+		localClusterValue, exists := hostingCluster.Labels[constants.SelfManagedLabel]
+		if exists && localClusterValue == "true" {
+			isLocalCluster = true
+		}
+	}
+
 	config := struct {
 		KlusterletNamespace       string
 		ExternalManagedKubeconfig string
+		IsLocalCluster            bool
 	}{
 		KlusterletNamespace:       klusterletNamespace(managedClusterName),
 		ExternalManagedKubeconfig: base64.StdEncoding.EncodeToString(kubeconfig),
+		IsLocalCluster:            isLocalCluster,
 	}
 
 	template, err := manifestFiles.ReadFile(klusterletHostedExternalKubeconfig)
