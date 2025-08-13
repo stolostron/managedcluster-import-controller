@@ -15,6 +15,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/types"
 	kevents "k8s.io/client-go/tools/events"
+	"k8s.io/utils/ptr"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -93,7 +94,7 @@ func (r *ReconcileManagedCluster) Reconcile(ctx context.Context, request reconci
 		return reconcile.Result{}, err
 	}
 
-	modified := resourcemerge.BoolPtr(false)
+	modified := ptr.To(false)
 	// TODO: use one cluster label to filter the cluster ns.
 	// in ocm we use open-cluster-management.io/cluster-name label to filter cluster ns,
 	// but in acm we use cluster.open-cluster-management.io/managedCluster to filter cluster ns.
@@ -116,7 +117,7 @@ func (r *ReconcileManagedCluster) Reconcile(ctx context.Context, request reconci
 
 func (r *ReconcileManagedCluster) ensureManagedClusterMetaObj(ctx context.Context, managedCluster *clusterv1.ManagedCluster) error {
 	patch := client.MergeFrom(managedCluster.DeepCopy())
-	modified := resourcemerge.BoolPtr(false)
+	modified := ptr.To(false)
 	msgs := []string{}
 
 	// ensure the cluster name label, the value of this label should be cluster name

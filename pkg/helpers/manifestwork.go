@@ -9,7 +9,6 @@ import (
 	"fmt"
 
 	"github.com/openshift/library-go/pkg/operator/events"
-	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	rbacv1 "k8s.io/api/rbac/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -17,6 +16,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/utils/ptr"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -46,7 +46,7 @@ func AssertManifestWorkFinalizer(ctx context.Context, runtimeClient client.Clien
 
 	// there are manifest works in the managed cluster namespace, make sure the managed cluster has the manifest work finalizer
 	patch := client.MergeFrom(cluster.DeepCopy())
-	modified := resourcemerge.BoolPtr(false)
+	modified := ptr.To(false)
 	AddManagedClusterFinalizer(modified, cluster, constants.ManifestWorkFinalizer)
 	if !*modified {
 		return nil
