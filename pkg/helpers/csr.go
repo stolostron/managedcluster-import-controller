@@ -1,9 +1,13 @@
 package helpers
 
 import (
+	"fmt"
+
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	certificatesv1 "k8s.io/api/certificates/v1"
 )
+
+var BootstrapSASuffix = "bootstrap-sa"
 
 func GetClusterName(csr *certificatesv1.CertificateSigningRequest) (clusterName string) {
 	for label, v := range csr.GetObjectMeta().GetLabels() {
@@ -12,4 +16,12 @@ func GetClusterName(csr *certificatesv1.CertificateSigningRequest) (clusterName 
 		}
 	}
 	return clusterName
+}
+
+func GetBootstrapSAName(clusterName string) string {
+	bootstrapSAName := fmt.Sprintf("%s-%s", clusterName, BootstrapSASuffix)
+	if len(bootstrapSAName) > 63 {
+		return fmt.Sprintf("%s-%s", clusterName[:63-len("-"+BootstrapSASuffix)], BootstrapSASuffix)
+	}
+	return bootstrapSAName
 }

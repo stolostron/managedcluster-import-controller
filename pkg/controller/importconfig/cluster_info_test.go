@@ -478,17 +478,23 @@ func mockLegacyImportSecret(t *testing.T, server string, caData []byte, token st
 		return nil
 	}
 
-	config := &chart.KlusterletChartConfig{
-		CreateNamespace:        false,
-		Klusterlet:             chart.KlusterletConfig{Namespace: "test", Name: "klusterlet"},
-		BootstrapHubKubeConfig: string(boostrapConfigData),
-	}
-	_, objects, err := chart.RenderKlusterletChart(config, "test")
+	template, err := bootstrap.ManifestFiles.ReadFile("manifests/klusterlet/bootstrap_secret.yaml")
 	if err != nil {
 		t.Fatal(err)
+		return nil
 	}
+	config := bootstrap.KlusterletRenderConfig{
+		KlusterletNamespace: "test",
+		DefaultBootstrapKubeConfigSecret: bootstrap.BootstrapKubeConfigSecret{
+			Name:       "bootstrap-hub-kubeconfig",
+			KubeConfig: base64.StdEncoding.EncodeToString(boostrapConfigData),
+		},
+		InstallMode: string(operatorv1.InstallModeDefault),
+	}
+	raw := helpers.MustCreateAssetFromTemplate("bootstrap_secret", template, config)
 
-	importYAML := bootstrap.AggregateObjects(objects)
+	importYAML := new(bytes.Buffer)
+	importYAML.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, string(raw)))
 
 	// Legacy token - no expiration or creation data
 	return &corev1.Secret{
@@ -497,7 +503,7 @@ func mockLegacyImportSecret(t *testing.T, server string, caData []byte, token st
 			Namespace: "testcluster",
 		},
 		Data: map[string][]byte{
-			"import.yaml": importYAML,
+			"import.yaml": importYAML.Bytes(),
 			// Note: no "expiration" or "creation" keys - this makes it a legacy token
 		},
 	}
