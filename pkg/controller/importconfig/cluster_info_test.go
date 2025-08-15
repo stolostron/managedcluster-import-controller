@@ -270,6 +270,20 @@ func TestBuildBootstrapKubeconfigData(t *testing.T) {
 				token:     "fake-token",
 			},
 		},
+		{
+			name:       "legacy token exists but serviceaccount secret is missing",
+			clientObjs: []client.Object{testInfraConfigDNS, apiserverConfigWithCustomCA},
+			runtimeObjs: []runtime.Object{cm, secretCorrect,
+				mockLegacyImportSecret(t, "https://my-dns-name.com:6443", certData2, "legacy-token"),
+				// Note: no serviceaccount secret included - simulates it being deleted
+			},
+			want: &wantData{
+				serverURL: "https://my-dns-name.com:6443",
+				certData:  certData2,
+				token:     "fake-token", // Should generate new token since legacy validation fails
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -440,6 +454,61 @@ func mockImportSecret(t *testing.T, expirationTime time.Time, server string, caD
 	}
 }
 
+func mockLegacyImportSecret(t *testing.T, server string, caData []byte, token string) *corev1.Secret {
+	bootstrapConfig := clientcmdapi.Config{
+		Clusters: map[string]*clientcmdapi.Cluster{"default-cluster": {
+			Server:                   server,
+			InsecureSkipTLSVerify:    false,
+			CertificateAuthorityData: caData,
+		}},
+		AuthInfos: map[string]*clientcmdapi.AuthInfo{"default-auth": {
+			Token: token,
+		}},
+		Contexts: map[string]*clientcmdapi.Context{"default-context": {
+			Cluster:   "default-cluster",
+			AuthInfo:  "default-auth",
+			Namespace: "default",
+		}},
+		CurrentContext: "default-context",
+	}
+
+	boostrapConfigData, err := runtime.Encode(clientcmdlatest.Codec, &bootstrapConfig)
+	if err != nil {
+		t.Fatal(err)
+		return nil
+	}
+
+	template, err := bootstrap.ManifestFiles.ReadFile("manifests/klusterlet/bootstrap_secret.yaml")
+	if err != nil {
+		t.Fatal(err)
+		return nil
+	}
+	config := bootstrap.KlusterletRenderConfig{
+		KlusterletNamespace: "test",
+		DefaultBootstrapKubeConfigSecret: bootstrap.BootstrapKubeConfigSecret{
+			Name:       "bootstrap-hub-kubeconfig",
+			KubeConfig: base64.StdEncoding.EncodeToString(boostrapConfigData),
+		},
+		InstallMode: string(operatorv1.InstallModeDefault),
+	}
+	raw := helpers.MustCreateAssetFromTemplate("bootstrap_secret", template, config)
+
+	importYAML := new(bytes.Buffer)
+	importYAML.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, string(raw)))
+
+	// Legacy token - no expiration or creation data
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "testcluster-import",
+			Namespace: "testcluster",
+		},
+		Data: map[string][]byte{
+			"import.yaml": importYAML.Bytes(),
+			// Note: no "expiration" or "creation" keys - this makes it a legacy token
+		},
+	}
+}
+
 func mockImportSecretWithoutContent() *corev1.Secret {
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -455,7 +524,7 @@ func timeToString(time time.Time) []byte {
 	return timeStr
 }
 
-func TestValidateToken(t *testing.T) {
+func TestValidateTokenExpiration(t *testing.T) {
 	tests := []struct {
 		name                 string
 		token                string
@@ -528,8 +597,115 @@ func TestValidateToken(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if tt.expectedResult != validateToken(tt.token, tt.creation, tt.expiration) {
-				t.Errorf("validateToken() expected %v, got %v", tt.expectedResult, tt.expectedResult)
+			if tt.expectedResult != validateTokenExpiration(tt.token, tt.creation, tt.expiration) {
+				t.Errorf("validateTokenExpiration() expected %v, got %v", tt.expectedResult, tt.expectedResult)
+			}
+		})
+	}
+}
+
+func TestValidateLegacyServiceAccountToken(t *testing.T) {
+	tests := []struct {
+		name            string
+		saName          string
+		secretNamespace string
+		expectedToken   string
+		secrets         []runtime.Object
+		expectedResult  bool
+	}{
+		{
+			name:            "token matches existing serviceaccount secret",
+			saName:          "test-bootstrap-sa",
+			secretNamespace: "test-cluster",
+			expectedToken:   "valid-token-123",
+			secrets: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa-token-abc123",
+						Namespace: "test-cluster",
+					},
+					Type: corev1.SecretTypeServiceAccountToken,
+					Data: map[string][]byte{
+						"token": []byte("valid-token-123"),
+					},
+				},
+			},
+			expectedResult: true,
+		},
+		{
+			name:            "token doesn't match existing serviceaccount secret",
+			saName:          "test-bootstrap-sa",
+			secretNamespace: "test-cluster",
+			expectedToken:   "different-token-456",
+			secrets: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa-token-abc123",
+						Namespace: "test-cluster",
+					},
+					Type: corev1.SecretTypeServiceAccountToken,
+					Data: map[string][]byte{
+						"token": []byte("valid-token-123"),
+					},
+				},
+			},
+			expectedResult: false,
+		},
+		{
+			name:            "no serviceaccount secret exists",
+			saName:          "test-bootstrap-sa",
+			secretNamespace: "test-cluster",
+			expectedToken:   "any-token",
+			secrets:         []runtime.Object{},
+			expectedResult:  false,
+		},
+		{
+			name:            "serviceaccount secret exists but has no token data",
+			saName:          "test-bootstrap-sa",
+			secretNamespace: "test-cluster",
+			expectedToken:   "any-token",
+			secrets: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa-token-abc123",
+						Namespace: "test-cluster",
+					},
+					Type: corev1.SecretTypeServiceAccountToken,
+					Data: map[string][]byte{},
+				},
+			},
+			expectedResult: false,
+		},
+		{
+			name:            "wrong secret type",
+			saName:          "test-bootstrap-sa",
+			secretNamespace: "test-cluster",
+			expectedToken:   "any-token",
+			secrets: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa-token-abc123",
+						Namespace: "test-cluster",
+					},
+					Type: corev1.SecretTypeOpaque,
+					Data: map[string][]byte{
+						"token": []byte("any-token"),
+					},
+				},
+			},
+			expectedResult: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			fakeKubeClient := kubefake.NewSimpleClientset(tt.secrets...)
+
+			result := validateLegacyServiceAccountToken(ctx, fakeKubeClient, tt.saName, tt.secretNamespace, tt.expectedToken)
+
+			if result != tt.expectedResult {
+				t.Errorf("validateLegacyServiceAccountToken() = %v, expected %v", result, tt.expectedResult)
 			}
 		})
 	}
