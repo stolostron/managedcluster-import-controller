@@ -30,6 +30,15 @@ spec:
   - name: build-platforms
     value:
     - linux/x86_64
+    - linux/arm64
+    - linux/ppc64le
+    - linux/s390x
+  - name: send-slack-notification
+    value: "true"
+  - name: konflux-application-name
+    value: "release-mce-28"
+  - name: slack-member-id
+    value: "U01TX25RJ3B"
   - name: dockerfile
     value: build/Dockerfile.rhtap
   - name: path-context
