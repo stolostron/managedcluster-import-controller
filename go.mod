@@ -14,7 +14,7 @@ require (
 	github.com/onsi/gomega v1.38.0
 	github.com/openshift/api v0.0.0-20250710004639-926605d3338b
 	github.com/openshift/assisted-service/api v0.0.0
-	github.com/openshift/hive/apis v0.0.0-20250529232658-13b99a5eb2a2
+	github.com/openshift/hive/apis v0.0.0-20250820185956-bd9fd44f4921
 	github.com/openshift/library-go v0.0.0-20250711143941-47604345e7ea // https://github.com/openshift/library-go/tree/release-4.14
 	github.com/spf13/pflag v1.0.7
 	github.com/stolostron/cluster-lifecycle-api v0.0.0-20250731061842-278b42dcc7df
