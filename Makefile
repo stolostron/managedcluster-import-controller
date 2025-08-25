@@ -112,6 +112,7 @@ e2e-test-hosted: build-image ensure-helm
 	@build/setup-import-controller.sh
 	go test -c ./test/e2e -o _output/e2e.test
 	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="hosted" --ginkgo.timeout=1h
+
 ## Clean e2e test
 .PHONY: clean-e2e-test
 clean-e2e-test:
