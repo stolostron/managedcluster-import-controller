@@ -17,7 +17,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 )
 
-var _ = ginkgo.Describe("Importing a self managed cluster", func() {
+var _ = ginkgo.Describe("Importing a self managed cluster", ginkgo.Label("core"), func() {
 	ginkgo.Context("Importing a local-cluster", func() {
 		const localClusterName = "local-cluster"
 

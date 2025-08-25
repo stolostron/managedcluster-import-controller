@@ -23,7 +23,7 @@ import (
 	workv1 "open-cluster-management.io/api/work/v1"
 )
 
-var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", func() {
+var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", ginkgo.Label("cleanup"), func() {
 	ginkgo.Context("Importing a self managed cluster and detach the cluster", func() {
 		var (
 			start    time.Time
@@ -149,14 +149,13 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", fun
 			}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
 		})
 
-		// This case will take about several minutes to wait for the cluster state to become unavailable,
 		ginkgo.It("Should delete addons and manifestWorks by force", func() {
 			// apply a manifestWork
 			manifestwork := &workv1.ManifestWork{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "addon-helloworld-deploy",
 					Finalizers: []string{
-						"test-delete",
+						"test.open-cluster-management.io/test-delete",
 					},
 					Namespace: localClusterName,
 				},
@@ -202,64 +201,75 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", fun
 			err = hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), localClusterName, metav1.DeleteOptions{})
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			// there is addon manifestwork, so wait for the cluster to be unavailable
-			ginkgo.By(fmt.Sprintf("wait for the cluster %s to be unavailable", localClusterName))
-			gomega.Eventually(func() bool {
-				cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), localClusterName, metav1.GetOptions{})
-				if err != nil {
-					return errors.IsNotFound(err)
-				}
+			ginkgo.By(fmt.Sprintf("wait for the cluster %s to be unavailable", localClusterName), func() {
+				gomega.Eventually(func() bool {
+					cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), localClusterName, metav1.GetOptions{})
+					if err != nil {
+						return errors.IsNotFound(err)
+					}
 
-				return helpers.IsClusterUnavailable(cluster)
-			}, 10*time.Minute, 5*time.Second).ShouldNot(gomega.BeFalse())
+					return helpers.IsClusterUnavailable(cluster)
+				}, 3*time.Minute, 5*time.Second).ShouldNot(gomega.BeFalse())
+			})
 
-			// the addon and manifestWork should be deleted.
-			gomega.Eventually(func() error {
-				addons, err := addonClient.AddonV1alpha1().ManagedClusterAddOns(localClusterName).List(context.TODO(), metav1.ListOptions{})
-				if err != nil {
+			ginkgo.By("the addon should be deleted", func() {
+				gomega.Eventually(func() error {
+					addons, err := addonClient.AddonV1alpha1().ManagedClusterAddOns(localClusterName).List(context.TODO(), metav1.ListOptions{})
+					if err != nil {
+						if errors.IsNotFound(err) {
+							return nil
+						}
+						return err
+					}
+					if len(addons.Items) > 0 {
+						return fmt.Errorf("addons still exist: %v", addons.Items)
+					}
+					return nil
+				}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
+			})
+
+			ginkgo.By("the manifestworks should be deleted", func() {
+				gomega.Eventually(func() error {
+					allManifestWorks, err := hubWorkClient.WorkV1().ManifestWorks(localClusterName).List(context.TODO(), metav1.ListOptions{})
+					if err != nil {
+						if errors.IsNotFound(err) {
+							return nil
+						}
+						return err
+					}
+					if len(allManifestWorks.Items) > 0 {
+						return fmt.Errorf("manifestworks still exist: %v", allManifestWorks.Items)
+					}
+					return nil
+				}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
+			})
+
+			ginkgo.By("the managed cluster should be deleted", func() {
+				gomega.Eventually(func() error {
+					_, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), localClusterName, metav1.GetOptions{})
 					if errors.IsNotFound(err) {
 						return nil
 					}
+					if err == nil {
+						return fmt.Errorf("cluster still exists")
+					}
 					return err
-				}
-				if len(addons.Items) > 0 {
-					return fmt.Errorf("addons still exist: %v", addons.Items)
-				}
-				return nil
-			}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
-			gomega.Eventually(func() error {
-				allManifestWorks, err := hubWorkClient.WorkV1().ManifestWorks(localClusterName).List(context.TODO(), metav1.ListOptions{})
-				if err != nil {
+				}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
+			})
+
+			ginkgo.By("the managed cluster namespace should be deleted", func() {
+				gomega.Eventually(func() error {
+					_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), localClusterName, metav1.GetOptions{})
 					if errors.IsNotFound(err) {
 						return nil
 					}
+					if err == nil {
+						return fmt.Errorf("cluster namespace still exists")
+					}
 					return err
-				}
-				if len(allManifestWorks.Items) > 0 {
-					return fmt.Errorf("manifestworks still exist: %v", allManifestWorks.Items)
-				}
-				return nil
-			}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
+				}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
+			})
 
-			gomega.Eventually(func() error {
-				_, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), localClusterName, metav1.GetOptions{})
-				if errors.IsNotFound(err) {
-					return nil
-				}
-				if err == nil {
-					return fmt.Errorf("cluster still exists")
-				}
-				return err
-			}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
-			gomega.Eventually(func() error {
-				_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), localClusterName, metav1.GetOptions{})
-				if errors.IsNotFound(err) {
-					return nil
-				}
-				if err == nil {
-					return fmt.Errorf("cluster namespace still exists")
-				}
-				return err
-			}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
 		})
 
 		// This case will take about several minutes to wait for the cluster state to become unavailable,

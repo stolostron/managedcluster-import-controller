@@ -34,8 +34,8 @@ KIND="${WORK_DIR}/bin/kind"
 KUBE_VERSION="v1.29.0"
 
 
-CLEAN_ARG=${1:-unclean}
-if [ "$CLEAN_ARG"x = "clean"x ]; then
+MODE_ARG=${1:-dual}
+if [ "$MODE_ARG"x = "clean"x ]; then
   ${KIND} delete cluster --name ${CLUSTER_NAME}
   ${KIND} delete cluster --name ${CLUSTER_NAME_MANAGED}
   exit 0
@@ -75,19 +75,23 @@ status:
   apiServerURL: https://${cluster_ip}
 EOF
 
-# prepare another managed cluster for hosted mode testing
-echo "###### installing e2e test managed cluster"
-${KIND} delete cluster --name ${CLUSTER_NAME_MANAGED}
-${KIND} create cluster --image kindest/node:${KUBE_VERSION} --name ${CLUSTER_NAME_MANAGED}
-cluster_context_managed=$(${KUBECTL} config current-context)
-echo "managed cluster context is: ${cluster_context_managed}"
-# scale replicas to 1 to save resources
-${KUBECTL} --context="${cluster_context_managed}" -n kube-system scale --replicas=1 deployment/coredns
-
 # store kubeconfigs
 ${KIND} get kubeconfig --name=${CLUSTER_NAME} --internal >$E2E_KUBECONFIG
-${KIND} get kubeconfig --name=${CLUSTER_NAME_MANAGED} --internal >$E2E_MANAGED_KUBECONFIG
-${KIND} get kubeconfig --name=${CLUSTER_NAME_MANAGED} >$E2E_EXTERNAL_MANAGED_KUBECONFIG
+
+# Only create managed cluster for dual mode (hosted tests)
+if [ "$MODE_ARG"x = "dual"x ] || [ "$MODE_ARG"x = "unclean"x ]; then
+  # prepare another managed cluster for hosted mode testing
+  echo "###### installing e2e test managed cluster"
+  ${KIND} delete cluster --name ${CLUSTER_NAME_MANAGED}
+  ${KIND} create cluster --image kindest/node:${KUBE_VERSION} --name ${CLUSTER_NAME_MANAGED}
+  cluster_context_managed=$(${KUBECTL} config current-context)
+  echo "managed cluster context is: ${cluster_context_managed}"
+  # scale replicas to 1 to save resources
+  ${KUBECTL} --context="${cluster_context_managed}" -n kube-system scale --replicas=1 deployment/coredns
+  
+  ${KIND} get kubeconfig --name=${CLUSTER_NAME_MANAGED} --internal >$E2E_MANAGED_KUBECONFIG
+  ${KIND} get kubeconfig --name=${CLUSTER_NAME_MANAGED} >$E2E_EXTERNAL_MANAGED_KUBECONFIG
+fi
 
 # check back to the test cluster
 ${KUBECTL} config use-context "${cluster_context}"

@@ -129,10 +129,16 @@ subjects:
 EOF
 
 echo "###### prepare auto-import-secret for hosted cluster"
-${KUBECTL} delete secret e2e-managed-auto-import-secret -n open-cluster-management --ignore-not-found
-${KUBECTL} create secret generic e2e-managed-auto-import-secret --from-file=kubeconfig=$E2E_MANAGED_KUBECONFIG -n open-cluster-management
-${KUBECTL} delete secret e2e-managed-external-secret -n open-cluster-management --ignore-not-found
-${KUBECTL} create secret generic e2e-managed-external-secret --from-file=kubeconfig=$E2E_EXTERNAL_MANAGED_KUBECONFIG -n open-cluster-management
+# Only create managed cluster secrets if the kubeconfig files exist (dual cluster mode)
+if [ -f "$E2E_MANAGED_KUBECONFIG" ]; then
+  ${KUBECTL} delete secret e2e-managed-auto-import-secret -n open-cluster-management --ignore-not-found
+  ${KUBECTL} create secret generic e2e-managed-auto-import-secret --from-file=kubeconfig=$E2E_MANAGED_KUBECONFIG -n open-cluster-management
+fi
+
+if [ -f "$E2E_EXTERNAL_MANAGED_KUBECONFIG" ]; then
+  ${KUBECTL} delete secret e2e-managed-external-secret -n open-cluster-management --ignore-not-found
+  ${KUBECTL} create secret generic e2e-managed-external-secret --from-file=kubeconfig=$E2E_EXTERNAL_MANAGED_KUBECONFIG -n open-cluster-management
+fi
 
 AGENT_REGISTRATION_ARG=${1:-disable-agent-registration}
 if [ "$AGENT_REGISTRATION_ARG"x = "enable-agent-registration"x ]; then

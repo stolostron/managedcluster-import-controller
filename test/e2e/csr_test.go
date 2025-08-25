@@ -15,7 +15,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 )
 
-var _ = ginkgo.Describe("Invalid CSR", func() {
+var _ = ginkgo.Describe("Invalid CSR", ginkgo.Label("config"), func() {
 	ginkgo.It("Should not approve the CSR with wrong labels", func() {
 		csr := util.NewCSR(util.NewLable("open-cluster-management.io/cluster-name", "wrong"))
 		csrReq := hubKubeClient.CertificatesV1().CertificateSigningRequests()
