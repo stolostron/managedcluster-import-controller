@@ -111,7 +111,7 @@ e2e-test-misc: build-image ensure-helm
 	@build/setup-ocm.sh
 	@build/setup-import-controller.sh
 	go test -c ./test/e2e -o _output/e2e.test
-	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="(config || cleanup) && !agent-registration" --ginkgo.timeout=45m
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="!core && !hosted && !agent-registration" --ginkgo.timeout=45m
 
 ## Runs e2e test for hosted tests with dual clusters
 .PHONY: e2e-test-hosted
