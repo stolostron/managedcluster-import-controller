@@ -94,6 +94,24 @@ e2e-test: build-image ensure-helm
 	@build/setup-import-controller.sh
 	go test -c ./test/e2e -o _output/e2e.test
 	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="!agent-registration" --ginkgo.timeout=2h
+
+## Runs e2e test for standard (non-hosted) tests with single cluster
+.PHONY: e2e-test-standard
+e2e-test-standard: build-image ensure-helm
+	@build/setup-kind-clusters.sh single
+	@build/setup-ocm.sh
+	@build/setup-import-controller.sh
+	go test -c ./test/e2e -o _output/e2e.test
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="!agent-registration && !hosted" --ginkgo.timeout=1h
+
+## Runs e2e test for hosted tests with dual clusters
+.PHONY: e2e-test-hosted
+e2e-test-hosted: build-image ensure-helm
+	@build/setup-kind-clusters.sh
+	@build/setup-ocm.sh
+	@build/setup-import-controller.sh
+	go test -c ./test/e2e -o _output/e2e.test
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="hosted" --ginkgo.timeout=1h
 ## Clean e2e test
 .PHONY: clean-e2e-test
 clean-e2e-test:

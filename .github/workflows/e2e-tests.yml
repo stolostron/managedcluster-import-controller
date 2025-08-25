@@ -15,7 +15,7 @@ on:
       - "docs/**"
 
 jobs:
-  test:
+  e2e-standard:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,8 +31,31 @@ jobs:
           version: "v1.24.0" # default is latest stable
         id: install
 
-      - name: E2E Tests
-        run: OCM_VERSION=${{ github.base_ref }} make e2e-test
+      - name: E2E Tests (Non-Hosted)
+        run: OCM_VERSION=${{ github.base_ref }} make e2e-test-standard
+
+      - if: ${{ failure() }}
+        name: Logs after Tests Failed
+        run: kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=-1
+
+  e2e-hosted:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Set up kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: "v1.24.0" # default is latest stable
+        id: install
+
+      - name: E2E Tests (Hosted)
+        run: OCM_VERSION=${{ github.base_ref }} make e2e-test-hosted
 
       - if: ${{ failure() }}
         name: Logs after Tests Failed
