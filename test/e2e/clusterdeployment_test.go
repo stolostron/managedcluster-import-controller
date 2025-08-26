@@ -19,7 +19,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 )
 
-var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", func() {
+var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", ginkgo.Label("core"), func() {
 	var managedClusterName string
 
 	ginkgo.BeforeEach(func() {

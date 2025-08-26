@@ -16,7 +16,7 @@ import (
 )
 
 // ginkgo.Serial promise specs not run in parallel
-var _ = ginkgo.Describe("Importing a managed cluster manually", func() {
+var _ = ginkgo.Describe("Importing a managed cluster manually", ginkgo.Label("core"), func() {
 	var managedClusterName string
 
 	ginkgo.BeforeEach(func() {
