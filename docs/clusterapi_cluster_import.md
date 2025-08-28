@@ -71,6 +71,7 @@ metadata:
   name: cluster-info
   namespace: kube-public
 ```
+**Note:** Do not include `certificate-authority-data` in the kubeconfig if the hub is running on a ROSA-HCP cluster.
 - create the configmap on the hub cluster.
 ```shell
 kubectl apply -f cm.yaml
