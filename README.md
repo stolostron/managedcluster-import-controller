@@ -5,6 +5,8 @@
 
 # managedcluster import controller
 
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/stolostron/managedcluster-import-controller)
+
 ManagedCluster import controller supports import, detach of ManagedCluster for ACM.
 
 ## Community, discussion, contribution, and support
