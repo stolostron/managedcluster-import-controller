@@ -1429,7 +1429,7 @@ spec:
                                   remediation:
                                     description: |-
                                       remediation controls the strategy of remediating unhealthy machines
-                                      and how remediating operations should occur during the lifecycle of the dependant MachineSets.
+                                      and how remediating operations should occur during the lifecycle of the dependent MachineSets.
                                     properties:
                                       maxInFlight:
                                         anyOf:

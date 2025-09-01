@@ -71,7 +71,7 @@ var _ = ginkgo.Describe("Importing a self managed cluster", ginkgo.Label("core")
 		})
 
 		ginkgo.It("Should not recover the agent once joined if auto-import strategy is ImportOnly", func() {
-			ginkgo.By(fmt.Sprintf("Should import the managed cluster %s sucessfully", localClusterName), func() {
+			ginkgo.By(fmt.Sprintf("Should import the managed cluster %s successfully", localClusterName), func() {
 				assertManagedClusterImportSecretApplied(localClusterName)
 				assertManagedClusterAvailable(localClusterName)
 			})
@@ -109,7 +109,7 @@ var _ = ginkgo.Describe("Importing a self managed cluster", ginkgo.Label("core")
 		})
 
 		ginkgo.It("Should trigger auto-import with immediate-import annotation", func() {
-			ginkgo.By(fmt.Sprintf("Should import the managed cluster %s sucessfully", localClusterName), func() {
+			ginkgo.By(fmt.Sprintf("Should import the managed cluster %s successfully", localClusterName), func() {
 				assertManagedClusterAvailable(localClusterName)
 			})
 
