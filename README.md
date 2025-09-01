@@ -46,13 +46,13 @@ current functionality of `managedcluster-import-controller`
 
 [Manual importing of an existing cluster](docs/managedcluster_manual_import.md)
 
-[Detatching a managed cluster from Multicloud Manager](docs/detatch_managed_cluster.md)
+[Detaching a managed cluster from Multicloud Manager](docs/detach_managed_cluster.md)
 
 [Importing an Hive provisioned OpenShift cluster](docs/hive_cluster_import.md)
 
 [Updating Klusterlet on a managed cluster](docs/remote_klusterlet_update.md)
 
-[Selective initilization of controllers](docs/selective_controller_init.md)
+[Selective initialization of controllers](docs/selective_controller_init.md)
 
 
 
