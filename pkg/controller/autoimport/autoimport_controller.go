@@ -32,14 +32,14 @@ var log = logf.Log.WithName(ControllerName)
 
 // ReconcileAutoImport reconciles the managed cluster auto import secret to import the managed cluster
 type ReconcileAutoImport struct {
-	client                   client.Client
-	kubeClient               kubernetes.Interface
-	informerHolder           *source.InformerHolder
-	recorder                 events.Recorder
-	mcRecorder               kevents.EventRecorder
-	importHelper             *helpers.ImportHelper
-	rosaKubeConfigGetters    map[string]*helpers.RosaKubeConfigGetter
-	autoImportStrategyGetter helpers.AutoImportStrategyGetterFunc
+	client                 client.Client
+	kubeClient             kubernetes.Interface
+	informerHolder         *source.InformerHolder
+	recorder               events.Recorder
+	mcRecorder             kevents.EventRecorder
+	importHelper           *helpers.ImportHelper
+	rosaKubeConfigGetters  map[string]*helpers.RosaKubeConfigGetter
+	importControllerConfig *helpers.ImportControllerConfig
 }
 
 func NewReconcileAutoImport(
@@ -48,17 +48,17 @@ func NewReconcileAutoImport(
 	informerHolder *source.InformerHolder,
 	recorder events.Recorder,
 	mcRecorder kevents.EventRecorder,
-	autoImportStrategyGetter helpers.AutoImportStrategyGetterFunc,
+	autoImportStrategyGetter *helpers.ImportControllerConfig,
 ) *ReconcileAutoImport {
 	return &ReconcileAutoImport{
-		client:                   client,
-		kubeClient:               kubeClient,
-		informerHolder:           informerHolder,
-		recorder:                 recorder,
-		mcRecorder:               mcRecorder,
-		importHelper:             helpers.NewImportHelper(informerHolder, recorder, log),
-		rosaKubeConfigGetters:    make(map[string]*helpers.RosaKubeConfigGetter),
-		autoImportStrategyGetter: autoImportStrategyGetter,
+		client:                 client,
+		kubeClient:             kubeClient,
+		informerHolder:         informerHolder,
+		recorder:               recorder,
+		mcRecorder:             mcRecorder,
+		importHelper:           helpers.NewImportHelper(informerHolder, recorder, log),
+		rosaKubeConfigGetters:  make(map[string]*helpers.RosaKubeConfigGetter),
+		importControllerConfig: autoImportStrategyGetter,
 	}
 }
 
@@ -103,7 +103,7 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	}
 
 	immediateImport := helpers.IsImmediateImport(managedCluster.Annotations)
-	autoImportStrategy, err := r.autoImportStrategyGetter()
+	autoImportStrategy, err := r.importControllerConfig.GetAutoImportStrategy()
 	if err != nil {
 		return reconcile.Result{}, err
 	}

@@ -31,6 +31,7 @@ type ReconcileImportConfig struct {
 	klusterletconfigLister listerklusterletconfigv1alpha1.KlusterletConfigLister
 	scheme                 *runtime.Scheme
 	recorder               events.Recorder
+	importControllerConfig *helpers.ImportControllerConfig
 }
 
 // blank assignment to verify that ReconcileImportConfig implements reconcile.Reconciler
@@ -86,7 +87,7 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 	}
 
 	// rebuild the import secret and save it if it is modified
-	importSecret, err := buildImportSecret(ctx, r.clientHolder, managedCluster, mode, mergedKlusterletConfig,
+	importSecret, configSecret, err := buildImportSecret(ctx, r.clientHolder, managedCluster, mode, mergedKlusterletConfig,
 		bootstrapKubeconfigData, tokenCreation, tokenExpiration)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -94,6 +95,15 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 
 	if _, err := helpers.ApplyResources(
 		r.clientHolder, r.recorder, r.scheme, managedCluster, importSecret); err != nil {
+		return reconcile.Result{}, err
+	}
+
+	generateConfigSecret, err := r.importControllerConfig.GenerateImportConfig()
+	if err != nil || !generateConfigSecret {
+		return reconcile.Result{}, err
+	}
+	if _, err := helpers.ApplyResources(
+		r.clientHolder, r.recorder, r.scheme, managedCluster, configSecret); err != nil {
 		return reconcile.Result{}, err
 	}
 

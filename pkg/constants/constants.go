@@ -196,3 +196,11 @@ const (
 	// If a managed cluster is from the agent-registration, the username of the CSR will be this
 	AgentRegistrationBootstrapUser = "system:serviceaccount:multicluster-engine:agent-registration-bootstrap"
 )
+
+const (
+	// ClusterImportConfigSecretName is the secret name of cluster import config which includes
+	// the values.yaml of klusterlet helm chart
+	ClusterImportConfigSecretName = "cluster-import-config"
+	// ValuesYamlKey is the key of values.yaml context in the data of the secret cluster-import-config
+	ValuesYamlKey = "values.yaml"
+)

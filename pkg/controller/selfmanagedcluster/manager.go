@@ -133,7 +133,7 @@ func Add(ctx context.Context,
 			mgr.GetRESTMapper(),
 			helpers.NewEventRecorder(clientHolder.KubeClient, ControllerName),
 			mcRecorder,
-			helpers.AutoImportStrategyGetter(componentNamespace, informerHolder.ControllerConfigLister, log),
+			helpers.NewImportControllerConfig(componentNamespace, informerHolder.ControllerConfigLister, log),
 		))
 	return err
 }

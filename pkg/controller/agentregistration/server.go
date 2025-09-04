@@ -50,7 +50,7 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 			operatorv1.InstallModeDefault,
 			"dummy",
 			nil)
-		_, crdContent, err := config.Generate(ctx, clientHolder)
+		_, crdContent, _, err := config.Generate(ctx, clientHolder)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
@@ -130,7 +130,7 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 			klusterletClusterAnnotations[apiconstants.AnnotationKlusterletConfig] = klusterletconfigName
 		}
 
-		content, _, err := bootstrap.NewKlusterletManifestsConfig(
+		content, _, _, err := bootstrap.NewKlusterletManifestsConfig(
 			operatorv1.InstallModeDefault,
 			clusterID,
 			bootstrapkubeconfig).

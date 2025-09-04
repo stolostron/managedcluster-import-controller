@@ -372,12 +372,7 @@ func TestReconcile(t *testing.T) {
 				},
 				eventstesting.NewTestingEventRecorder(t),
 				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
-				func() (strategy string, err error) {
-					if len(c.autoImportStrategy) > 0 {
-						return c.autoImportStrategy, nil
-					}
-					return constants.DefaultAutoImportStrategy, nil
-				},
+				helpers.FakeNewImportControllerConfig("test", c.autoImportStrategy, ""),
 			)
 
 			_, err := r.Reconcile(context.TODO(), reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}})
