@@ -414,6 +414,7 @@ func TestReconcile(t *testing.T) {
 			}
 
 			ctx := context.TODO()
+
 			r := NewReconcileLocalCluster(
 				&helpers.ClientHolder{
 					KubeClient:          kubeClient,
@@ -430,12 +431,7 @@ func TestReconcile(t *testing.T) {
 				restmapper.NewDiscoveryRESTMapper(apiGroupResources),
 				eventstesting.NewTestingEventRecorder(t),
 				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
-				func() (strategy string, err error) {
-					if len(c.autoImportStrategy) > 0 {
-						return c.autoImportStrategy, nil
-					}
-					return constants.DefaultAutoImportStrategy, nil
-				},
+				helpers.FakeNewImportControllerConfig("test", c.autoImportStrategy, ""),
 			)
 
 			_, err := r.Reconcile(context.TODO(), reconcile.Request{

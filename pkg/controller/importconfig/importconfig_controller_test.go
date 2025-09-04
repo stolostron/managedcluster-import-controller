@@ -70,12 +70,13 @@ func TestReconcile(t *testing.T) {
 
 	testKlusterletNamespace := "open-cluster-management-agent-test"
 	cases := []struct {
-		name             string
-		clientObjs       []runtimeclient.Object
-		runtimeObjs      []runtime.Object
-		klusterletconfig *klusterletconfigv1alpha1.KlusterletConfig
-		request          reconcile.Request
-		validateFunc     func(t *testing.T, client runtimeclient.Client, kubeClient kubernetes.Interface)
+		name               string
+		clientObjs         []runtimeclient.Object
+		runtimeObjs        []runtime.Object
+		klusterletconfig   *klusterletconfigv1alpha1.KlusterletConfig
+		importConfigSecret string
+		request            reconcile.Request
+		validateFunc       func(t *testing.T, client runtimeclient.Client, kubeClient kubernetes.Interface)
 	}{
 		{
 			name:        "no clusters",
@@ -157,6 +158,7 @@ func TestReconcile(t *testing.T) {
 					Name: "test",
 				},
 			},
+			importConfigSecret: "true",
 			validateFunc: func(t *testing.T, client runtimeclient.Client, kubeClient kubernetes.Interface) {
 				importSecret, err := kubeClient.CoreV1().Secrets("test").Get(context.TODO(), "test-import", metav1.GetOptions{})
 				if err != nil {
@@ -195,6 +197,15 @@ func TestReconcile(t *testing.T) {
 					if data := secret.Data["kubeconfig"]; string(data) == "" {
 						t.Errorf("expected bootstrap secret data %v, but got empty", string(data))
 					}
+				}
+
+				importConfigSecret, err := kubeClient.CoreV1().Secrets("test").Get(context.TODO(), constants.ClusterImportConfigSecretName, metav1.GetOptions{})
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+
+				if data, ok := importConfigSecret.Data[constants.ValuesYamlKey]; !ok || len(data) == 0 {
+					t.Errorf("the %s is required", constants.ValuesYamlKey)
 				}
 			},
 		},
@@ -1031,6 +1042,7 @@ func TestReconcile(t *testing.T) {
 				scheme:                 testscheme,
 				klusterletconfigLister: klusterletconfigLister,
 				recorder:               eventstesting.NewTestingEventRecorder(t),
+				importControllerConfig: helpers.FakeNewImportControllerConfig("test", "", c.importConfigSecret),
 			}
 
 			_, err := r.Reconcile(context.TODO(), c.request)

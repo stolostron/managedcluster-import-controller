@@ -44,39 +44,6 @@ subjects:
 run `kubectl apply -f` to apply the above yaml content to create the clusterrolebinding.
 
 
-## Create cluster-info configmap
-
-- Get the CA bundle from the hub cluster
-```shell
-kubectl get cm -n kube-public kube-root-ca.crt -o yaml | yq '.data."ca.crt"' | base64
-```
-- build the configmap
-```shell
-apiVersion: v1
-data:
-  kubeconfig: |
-    apiVersion: v1
-    clusters:
-    - cluster:
-        server: {APIServer address}
-        certificate-authority-data: {CA data obtained from the last step}
-        name: ""
-    contexts: null
-    current-context: ""
-    kind: Config
-    preferences: {}
-    users: null
-kind: ConfigMap
-metadata:
-  name: cluster-info
-  namespace: kube-public
-```
-**Note:** Do not include `certificate-authority-data` in the kubeconfig if the hub is running on a ROSA-HCP cluster.
-- create the configmap on the hub cluster.
-```shell
-kubectl apply -f cm.yaml
-```
-
 ## Create the CAPI cluster and the managedCluster
 
 The name of the managedcluster MUST be the same as CAPI cluster's name and namespace. e.g.

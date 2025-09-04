@@ -408,6 +408,14 @@ func ValidateImportSecret(importSecret *corev1.Secret) error {
 	return nil
 }
 
+// ValidateClusterImportConfigSecret validate cluster import config secret
+func ValidateClusterImportConfigSecret(importConfigSecret *corev1.Secret) error {
+	if data, ok := importConfigSecret.Data[constants.ValuesYamlKey]; !ok || len(data) == 0 {
+		return fmt.Errorf("the %s is required", constants.ValuesYamlKey)
+	}
+	return nil
+}
+
 // ImportManagedClusterFromSecret use managed cluster client to import managed cluster from import-secret
 func ImportManagedClusterFromSecret(client *ClientHolder, restMapper meta.RESTMapper, recorder events.Recorder,
 	importSecret *corev1.Secret) (bool, error) {
