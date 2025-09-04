@@ -27,13 +27,13 @@ var log = logf.Log.WithName(ControllerName)
 
 // ReconcileLocalCluster reconciles the import secret of a self managed cluster to import the managed cluster
 type ReconcileLocalCluster struct {
-	clientHolder             *helpers.ClientHolder
-	restMapper               meta.RESTMapper
-	informerHolder           *source.InformerHolder
-	recorder                 events.Recorder
-	mcRecorder               kevents.EventRecorder
-	importHelper             *helpers.ImportHelper
-	autoImportStrategyGetter helpers.AutoImportStrategyGetterFunc
+	clientHolder           *helpers.ClientHolder
+	restMapper             meta.RESTMapper
+	informerHolder         *source.InformerHolder
+	recorder               events.Recorder
+	mcRecorder             kevents.EventRecorder
+	importHelper           *helpers.ImportHelper
+	importControllerConfig *helpers.ImportControllerConfig
 }
 
 func NewReconcileLocalCluster(
@@ -42,7 +42,7 @@ func NewReconcileLocalCluster(
 	restMapper meta.RESTMapper,
 	recorder events.Recorder,
 	mcRecorder kevents.EventRecorder,
-	autoImportStrategyGetter helpers.AutoImportStrategyGetterFunc,
+	importControllerConfig *helpers.ImportControllerConfig,
 ) *ReconcileLocalCluster {
 
 	return &ReconcileLocalCluster{
@@ -56,7 +56,7 @@ func NewReconcileLocalCluster(
 				return reconcile.Result{}, clientHolder, restMapper, nil
 			},
 		),
-		autoImportStrategyGetter: autoImportStrategyGetter,
+		importControllerConfig: importControllerConfig,
 	}
 }
 
@@ -109,7 +109,7 @@ func (r *ReconcileLocalCluster) Reconcile(ctx context.Context, request reconcile
 	}
 
 	immediateImport := helpers.IsImmediateImport(managedCluster.Annotations)
-	autoImportStrategy, err := r.autoImportStrategyGetter()
+	autoImportStrategy, err := r.importControllerConfig.GetAutoImportStrategy()
 	if err != nil {
 		return reconcile.Result{}, err
 	}

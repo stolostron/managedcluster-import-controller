@@ -32,13 +32,13 @@ var log = logf.Log.WithName(ControllerName)
 // ReconcileClusterDeployment reconciles the clusterdeployment that is in the managed cluster namespace
 // to import the managed cluster
 type ReconcileClusterDeployment struct {
-	client                   client.Client
-	kubeClient               kubernetes.Interface
-	informerHolder           *source.InformerHolder
-	recorder                 events.Recorder
-	mcRecorder               kevents.EventRecorder
-	importHelper             *helpers.ImportHelper
-	autoImportStrategyGetter helpers.AutoImportStrategyGetterFunc
+	client                 client.Client
+	kubeClient             kubernetes.Interface
+	informerHolder         *source.InformerHolder
+	recorder               events.Recorder
+	mcRecorder             kevents.EventRecorder
+	importHelper           *helpers.ImportHelper
+	importControllerConfig *helpers.ImportControllerConfig
 }
 
 func NewReconcileClusterDeployment(
@@ -47,7 +47,7 @@ func NewReconcileClusterDeployment(
 	informerHolder *source.InformerHolder,
 	recorder events.Recorder,
 	mcRecorder kevents.EventRecorder,
-	autoImportStrategyGetter helpers.AutoImportStrategyGetterFunc,
+	importControllerConfig *helpers.ImportControllerConfig,
 ) *ReconcileClusterDeployment {
 
 	return &ReconcileClusterDeployment{
@@ -58,7 +58,7 @@ func NewReconcileClusterDeployment(
 		mcRecorder:     mcRecorder,
 		importHelper: helpers.NewImportHelper(informerHolder, recorder, log).
 			WithGenerateClientHolderFunc(helpers.GenerateImportClientFromKubeConfigSecret),
-		autoImportStrategyGetter: autoImportStrategyGetter,
+		importControllerConfig: importControllerConfig,
 	}
 }
 
@@ -118,7 +118,7 @@ func (r *ReconcileClusterDeployment) Reconcile(
 	}
 
 	immediateImport := helpers.IsImmediateImport(managedCluster.Annotations)
-	autoImportStrategy, err := r.autoImportStrategyGetter()
+	autoImportStrategy, err := r.importControllerConfig.GetAutoImportStrategy()
 	if err != nil {
 		return reconcile.Result{}, err
 	}

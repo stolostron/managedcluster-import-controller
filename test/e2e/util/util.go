@@ -864,3 +864,32 @@ func RemoveImportSecret(kubeClient kubernetes.Interface, clusterName string) err
 	}
 	return err
 }
+
+func SetClusterImportConfig(kubeClient kubernetes.Interface) error {
+	namespace := os.Getenv("POD_NAMESPACE")
+	if len(namespace) == 0 {
+		namespace = ocmNamespace
+	}
+
+	cm, err := kubeClient.CoreV1().ConfigMaps(namespace).Get(context.TODO(), constants.ControllerConfigConfigMapName, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		_, err := kubeClient.CoreV1().ConfigMaps(namespace).Create(context.TODO(), &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      constants.ControllerConfigConfigMapName,
+				Namespace: namespace,
+			},
+			Data: map[string]string{
+				"clusterImportConfig": "true",
+			},
+		}, metav1.CreateOptions{})
+		return err
+	}
+	if err != nil {
+		return err
+	}
+
+	cm.Data["clusterImportConfig"] = "true"
+
+	_, err = kubeClient.CoreV1().ConfigMaps(namespace).Update(context.TODO(), cm, metav1.UpdateOptions{})
+	return err
+}

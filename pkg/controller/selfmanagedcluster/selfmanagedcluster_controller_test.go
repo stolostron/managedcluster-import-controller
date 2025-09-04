@@ -8,21 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
-
-	operatorfake "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
-	workfake "open-cluster-management.io/api/client/work/clientset/versioned/fake"
-	workinformers "open-cluster-management.io/api/client/work/informers/externalversions"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	operatorv1 "open-cluster-management.io/api/operator/v1"
-	workv1 "open-cluster-management.io/api/work/v1"
-
-	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
-
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsfake "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset/fake"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -33,9 +24,15 @@ import (
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/restmapper"
-
+	operatorfake "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
+	workfake "open-cluster-management.io/api/client/work/clientset/versioned/fake"
+	workinformers "open-cluster-management.io/api/client/work/informers/externalversions"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -414,6 +411,7 @@ func TestReconcile(t *testing.T) {
 			}
 
 			ctx := context.TODO()
+			importConfigLister := testinghelpers.FakeImportControllerConfigLister("test", c.autoImportStrategy, "")
 			r := NewReconcileLocalCluster(
 				&helpers.ClientHolder{
 					KubeClient:          kubeClient,
@@ -430,12 +428,8 @@ func TestReconcile(t *testing.T) {
 				restmapper.NewDiscoveryRESTMapper(apiGroupResources),
 				eventstesting.NewTestingEventRecorder(t),
 				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
-				func() (strategy string, err error) {
-					if len(c.autoImportStrategy) > 0 {
-						return c.autoImportStrategy, nil
-					}
-					return constants.DefaultAutoImportStrategy, nil
-				},
+				helpers.NewImportControllerConfig("test", importConfigLister,
+					logf.Log.WithName("fake-import-controller-config")),
 			)
 
 			_, err := r.Reconcile(context.TODO(), reconcile.Request{

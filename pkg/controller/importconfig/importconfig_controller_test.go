@@ -9,23 +9,18 @@ import (
 	"testing"
 	"time"
 
+	configv1 "github.com/openshift/api/config/v1"
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
+	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
+	fakeklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned/fake"
+	klusterletconfiginformerv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/informers/externalversions/klusterletconfig/v1alpha1"
+	listerklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/listers/klusterletconfig/v1alpha1"
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
+	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
-
-	fakeklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned/fake"
-	klusterletconfiginformerv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/informers/externalversions/klusterletconfig/v1alpha1"
-	listerklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/listers/klusterletconfig/v1alpha1"
-	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
-
-	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
-
-	configv1 "github.com/openshift/api/config/v1"
-	hivev1 "github.com/openshift/hive/apis/hive/v1"
-	operatorv1 "open-cluster-management.io/api/operator/v1"
-
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -34,12 +29,12 @@ import (
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/tools/cache"
-
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 )
 
 var testscheme = scheme.Scheme
@@ -70,12 +65,13 @@ func TestReconcile(t *testing.T) {
 
 	testKlusterletNamespace := "open-cluster-management-agent-test"
 	cases := []struct {
-		name             string
-		clientObjs       []runtimeclient.Object
-		runtimeObjs      []runtime.Object
-		klusterletconfig *klusterletconfigv1alpha1.KlusterletConfig
-		request          reconcile.Request
-		validateFunc     func(t *testing.T, client runtimeclient.Client, kubeClient kubernetes.Interface)
+		name               string
+		clientObjs         []runtimeclient.Object
+		runtimeObjs        []runtime.Object
+		klusterletconfig   *klusterletconfigv1alpha1.KlusterletConfig
+		importConfigSecret string
+		request            reconcile.Request
+		validateFunc       func(t *testing.T, client runtimeclient.Client, kubeClient kubernetes.Interface)
 	}{
 		{
 			name:        "no clusters",
@@ -157,6 +153,7 @@ func TestReconcile(t *testing.T) {
 					Name: "test",
 				},
 			},
+			importConfigSecret: "true",
 			validateFunc: func(t *testing.T, client runtimeclient.Client, kubeClient kubernetes.Interface) {
 				importSecret, err := kubeClient.CoreV1().Secrets("test").Get(context.TODO(), "test-import", metav1.GetOptions{})
 				if err != nil {
@@ -195,6 +192,15 @@ func TestReconcile(t *testing.T) {
 					if data := secret.Data["kubeconfig"]; string(data) == "" {
 						t.Errorf("expected bootstrap secret data %v, but got empty", string(data))
 					}
+				}
+
+				importConfigSecret, err := kubeClient.CoreV1().Secrets("test").Get(context.TODO(), constants.ClusterImportConfigSecretName, metav1.GetOptions{})
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+
+				if data, ok := importConfigSecret.Data[constants.ValuesYamlKey]; !ok || len(data) == 0 {
+					t.Errorf("the %s is required", constants.ValuesYamlKey)
 				}
 			},
 		},
@@ -1026,11 +1032,15 @@ func TestReconcile(t *testing.T) {
 				ImageRegistryClient: imageregistry.NewClient(kubeClient),
 			}
 
+			importConfigLister := testinghelpers.FakeImportControllerConfigLister("test", "", c.importConfigSecret)
+
 			r := &ReconcileImportConfig{
 				clientHolder:           clientHolder,
 				scheme:                 testscheme,
 				klusterletconfigLister: klusterletconfigLister,
 				recorder:               eventstesting.NewTestingEventRecorder(t),
+				importControllerConfig: helpers.NewImportControllerConfig("test", importConfigLister,
+					logf.Log.WithName("fake-import-controller-config")),
 			}
 
 			_, err := r.Reconcile(context.TODO(), c.request)

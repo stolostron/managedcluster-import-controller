@@ -2233,3 +2233,90 @@ func TestIsImmediateImport(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateClusterImportConfigSecret(t *testing.T) {
+	cases := []struct {
+		name        string
+		secret      *corev1.Secret
+		expectedErr string
+	}{
+		{
+			name: "valid secret with values.yaml",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster-import-config",
+					Namespace: "test-cluster",
+				},
+				Data: map[string][]byte{
+					constants.ValuesYamlKey: []byte("test: value"),
+				},
+			},
+		},
+		{
+			name: "secret missing values.yaml key",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster-import-config",
+					Namespace: "test-cluster",
+				},
+				Data: map[string][]byte{
+					"other-key": []byte("some data"),
+				},
+			},
+			expectedErr: "the values.yaml is required",
+		},
+		{
+			name: "secret with empty values.yaml",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster-import-config",
+					Namespace: "test-cluster",
+				},
+				Data: map[string][]byte{
+					constants.ValuesYamlKey: []byte(""),
+				},
+			},
+			expectedErr: "the values.yaml is required",
+		},
+		{
+			name: "secret with nil values.yaml",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster-import-config",
+					Namespace: "test-cluster",
+				},
+				Data: map[string][]byte{
+					constants.ValuesYamlKey: nil,
+				},
+			},
+			expectedErr: "the values.yaml is required",
+		},
+		{
+			name: "secret with no data",
+			secret: &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "cluster-import-config",
+					Namespace: "test-cluster",
+				},
+			},
+			expectedErr: "the values.yaml is required",
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			err := ValidateClusterImportConfigSecret(c.secret)
+			if c.expectedErr == "" {
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+			} else {
+				if err == nil {
+					t.Errorf("expected error %s, but got nil", c.expectedErr)
+				} else if err.Error() != c.expectedErr {
+					t.Errorf("expected error %s, but got %s", c.expectedErr, err.Error())
+				}
+			}
+		})
+	}
+}

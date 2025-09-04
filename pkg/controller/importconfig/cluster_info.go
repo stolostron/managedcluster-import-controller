@@ -261,15 +261,15 @@ func isSelfManaged(managedCluster *clusterv1.ManagedCluster) bool {
 
 func buildImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, managedCluster *clusterv1.ManagedCluster,
 	mode operatorv1.InstallMode, klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig,
-	bootstrapKubeconfigData, tokenCreation, tokenExpiration []byte) (*corev1.Secret, error) {
-	var yamlcontent, crdsYAML []byte
+	bootstrapKubeconfigData, tokenCreation, tokenExpiration []byte) (*corev1.Secret, *corev1.Secret, error) {
+	var yamlcontent, crdsYAML, valuesYAML []byte
 	var secretAnnotations map[string]string
 	var err error
 	switch mode {
 	case operatorv1.InstallModeDefault, operatorv1.InstallModeSingleton:
 		supportPriorityClass, err := helpers.SupportPriorityClass(managedCluster)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		var priorityClassName string
 		if supportPriorityClass {
@@ -282,13 +282,13 @@ func buildImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, 
 			WithManagedCluster(managedCluster).
 			WithKlusterletConfig(klusterletConfig).
 			WithPriorityClassName(priorityClassName)
-		yamlcontent, crdsYAML, err = config.Generate(ctx, clientHolder)
+		yamlcontent, crdsYAML, valuesYAML, err = config.Generate(ctx, clientHolder)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 	case operatorv1.InstallModeHosted, operatorv1.InstallModeSingletonHosted:
-		yamlcontent, _, err = bootstrap.NewKlusterletManifestsConfig(
+		yamlcontent, _, valuesYAML, err = bootstrap.NewKlusterletManifestsConfig(
 			mode,
 			managedCluster.Name,
 			bootstrapKubeconfigData).
@@ -300,14 +300,14 @@ func buildImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, 
 			WithKlusterletConfig(klusterletConfig).
 			Generate(ctx, clientHolder)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 
 		secretAnnotations = map[string]string{
 			constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 		}
 	default:
-		return nil, fmt.Errorf("klusterlet deploy mode %s not supported", mode)
+		return nil, nil, fmt.Errorf("klusterlet deploy mode %s not supported", mode)
 	}
 
 	// generate import secret
@@ -327,11 +327,26 @@ func buildImportSecret(ctx context.Context, clientHolder *helpers.ClientHolder, 
 		},
 	}
 
+	valuesSecret := &corev1.Secret{
+		TypeMeta: metav1.TypeMeta{},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      constants.ClusterImportConfigSecretName,
+			Namespace: managedCluster.Name,
+			Labels: map[string]string{
+				constants.ClusterImportSecretLabel: "",
+			},
+		},
+		Data: map[string][]byte{
+			constants.ValuesYamlKey: valuesYAML,
+		},
+	}
+
 	if len(tokenCreation) != 0 {
 		importSecret.Data[constants.ImportSecretTokenCreation] = tokenCreation
 	}
 	if len(tokenExpiration) != 0 {
 		importSecret.Data[constants.ImportSecretTokenExpiration] = tokenExpiration
 	}
-	return importSecret, nil
+
+	return importSecret, valuesSecret, nil
 }

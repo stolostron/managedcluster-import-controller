@@ -22,8 +22,10 @@ import (
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	v1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
+	"open-cluster-management.io/ocm/pkg/operator/helpers/chart"
 	runtimeclient "sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/yaml"
 )
 
 func init() {
@@ -1004,7 +1006,7 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				RuntimeClient:       fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testcase.clientObjs...).Build(),
 				ImageRegistryClient: imageregistry.NewClient(kubeClient),
 			}
-			manifestsBytes, crdBytes, err := testcase.config.Generate(context.Background(), clientHolder)
+			manifestsBytes, crdBytes, valuesBytes, err := testcase.config.Generate(context.Background(), clientHolder)
 			if err != nil {
 				t.Fatalf("%s Failed to generate klusterlet manifests: %v", testcase.name, err)
 			}
@@ -1019,6 +1021,13 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				objs = append(objs, helpers.MustCreateObject(yaml))
 			}
 			testcase.validateFunc(t, objs, crdObjs)
+
+			klusterletChartConfig := &chart.KlusterletChartConfig{}
+			err = yaml.Unmarshal(valuesBytes, klusterletChartConfig)
+			if err != nil {
+				t.Fatalf("%s Failed to unmarshal values: %v", testcase.name, err)
+			}
 		})
 	}
+
 }

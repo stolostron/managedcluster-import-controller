@@ -18,6 +18,9 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/informers"
+	kubefake "k8s.io/client-go/kubernetes/fake"
+	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -371,4 +374,28 @@ func (b *managedClusterBuilder) Build() *clusterv1.ManagedCluster {
 		}
 	}
 	return mc
+}
+
+func FakeImportControllerConfigLister(componentNamespace string,
+	autoImportStrategy, clusterImportConfig string) corev1listers.ConfigMapLister {
+	if len(autoImportStrategy) == 0 {
+		autoImportStrategy = constants.DefaultAutoImportStrategy
+	}
+	configMap := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "import-controller-config",
+			Namespace: componentNamespace,
+		},
+		Data: map[string]string{
+			"autoImportStrategy":  autoImportStrategy,
+			"clusterImportConfig": clusterImportConfig,
+		},
+	}
+
+	kubeClient := kubefake.NewSimpleClientset(configMap)
+	kubeInformerFactory := informers.NewSharedInformerFactory(kubeClient, 10*time.Minute)
+	configmapInformer := kubeInformerFactory.Core().V1().ConfigMaps().Informer()
+	_ = configmapInformer.GetStore().Add(configMap)
+
+	return kubeInformerFactory.Core().V1().ConfigMaps().Lister()
 }

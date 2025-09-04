@@ -1252,3 +1252,23 @@ func assertAgentLeaderElection() {
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
 }
+
+func assertClusterImportConfigSecret(managedClusterName string) {
+	start := time.Now()
+	defer func() {
+		util.Logf("assert managed cluster import secret spending time: %.2f seconds", time.Since(start).Seconds())
+	}()
+	ginkgo.By("Should create the cluster import config secret", func() {
+		gomega.Eventually(func() error {
+			secret, err := hubKubeClient.CoreV1().Secrets(managedClusterName).Get(context.TODO(), constants.ClusterImportConfigSecretName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+
+			if err := helpers.ValidateClusterImportConfigSecret(secret); err != nil {
+				return fmt.Errorf("invalidated cluster import config secret:%v", err)
+			}
+			return nil
+		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
+	})
+}
