@@ -33,10 +33,6 @@ spec:
         - linux/arm64
         - linux/ppc64le
         - linux/s390x
-    - name: dockerfile
-      value: cmd/Dockerfile.rhtap
-    - name: path-context
-      value: .
     - name: send-slack-notification
       value: "true"
     - name: konflux-application-name
