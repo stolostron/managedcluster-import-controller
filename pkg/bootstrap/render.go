@@ -159,9 +159,9 @@ func (c *KlusterletManifestsConfig) WithPriorityClassName(priorityClassName stri
 	return c
 }
 
-// Generate returns the rendered klusterlet manifests in bytes. return manifests, crd, error.
+// Generate returns the rendered klusterlet manifests in bytes. return manifests, crd, values, error.
 func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
-	clientHolder *helpers.ClientHolder) ([]byte, []byte, error) {
+	clientHolder *helpers.ClientHolder) ([]byte, []byte, []byte, error) {
 	installMode := c.chartConfig.Klusterlet.Mode
 	clusterName := c.chartConfig.Klusterlet.ClusterName
 
@@ -183,7 +183,7 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 			appliedManifestWorkEvictionGracePeriod = c.klusterletConfig.Spec.AppliedManifestWorkEvictionGracePeriod
 		}
 	default:
-		return nil, nil, fmt.Errorf("invalid install mode: %s", installMode)
+		return nil, nil, nil, fmt.Errorf("invalid install mode: %s", installMode)
 	}
 
 	c.chartConfig.NoOperator = installNoOperator(installMode, c.klusterletConfig)
@@ -196,7 +196,7 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 	// Images override
 	klusterletAgentImages, err := getKlusterletAgentImages(kcRegistries, managedClusterAnnotations)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	c.chartConfig.Images.Overrides.OperatorImage = klusterletAgentImages[constants.RegistrationOperatorImageEnvVarName]
 	c.chartConfig.Images.Overrides.RegistrationImage = klusterletAgentImages[constants.RegistrationImageEnvVarName]
@@ -209,11 +209,11 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 	} else {
 		nodeSelector, err = helpers.GetNodeSelectorFromManagedClusterAnnotations(managedClusterAnnotations)
 		if err != nil {
-			return nil, nil, fmt.Errorf("get nodeSelector for cluster %s failed: %v", clusterName, err)
+			return nil, nil, nil, fmt.Errorf("get nodeSelector for cluster %s failed: %v", clusterName, err)
 		}
 	}
 	if err := helpers.ValidateNodeSelector(nodeSelector); err != nil {
-		return nil, nil, fmt.Errorf("invalid nodeSelector annotation %v", err)
+		return nil, nil, nil, fmt.Errorf("invalid nodeSelector annotation %v", err)
 	}
 	c.chartConfig.NodeSelector = nodeSelector
 	c.chartConfig.Klusterlet.NodePlacement.NodeSelector = nodeSelector
@@ -225,11 +225,11 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 	} else {
 		tolerations, err = helpers.GetTolerationsFromManagedClusterAnnotations(managedClusterAnnotations)
 		if err != nil {
-			return nil, nil, fmt.Errorf("get tolerations for cluster %s failed: %v", clusterName, err)
+			return nil, nil, nil, fmt.Errorf("get tolerations for cluster %s failed: %v", clusterName, err)
 		}
 	}
 	if err := helpers.ValidateTolerations(tolerations); err != nil {
-		return nil, nil, fmt.Errorf("invalid tolerations annotation %v", err)
+		return nil, nil, nil, fmt.Errorf("invalid tolerations annotation %v", err)
 	}
 	c.chartConfig.Tolerations = tolerations
 	c.chartConfig.Klusterlet.NodePlacement.Tolerations = tolerations
@@ -245,7 +245,7 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 	if appliedManifestWorkEvictionGracePeriod != "" {
 		appliedManifestWorkEvictionGracePeriodTimeDuration, err := time.ParseDuration(appliedManifestWorkEvictionGracePeriod)
 		if err != nil {
-			return nil, nil, fmt.Errorf("parse appliedManifestWorkEvictionGracePeriod %s failed: %v",
+			return nil, nil, nil, fmt.Errorf("parse appliedManifestWorkEvictionGracePeriod %s failed: %v",
 				appliedManifestWorkEvictionGracePeriod, err)
 		}
 		workAgentConfiguration.AppliedManifestWorkEvictionGracePeriod = &metav1.Duration{
@@ -258,14 +258,14 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 	if c.chartConfig.Images.ImageCredentials.CreateImageCredentials {
 		imagePullSecret, err := getImagePullSecret(ctx, clientHolder, kcImagePullSecret, managedClusterAnnotations)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 
 		if imagePullSecret == nil {
-			return nil, nil, fmt.Errorf("imagePullSecret is nil")
+			return nil, nil, nil, fmt.Errorf("imagePullSecret is nil")
 		}
 		if len(imagePullSecret.Data[corev1.DockerConfigJsonKey]) == 0 {
-			return nil, nil, fmt.Errorf("imagePullSecret.Data is empty")
+			return nil, nil, nil, fmt.Errorf("imagePullSecret.Data is empty")
 		}
 
 		c.chartConfig.Images.ImageCredentials.DockerConfigJson = string(imagePullSecret.Data[corev1.DockerConfigJsonKey])
@@ -297,7 +297,7 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 		c.klusterletConfig.Spec.MultipleHubsConfig != nil &&
 		c.klusterletConfig.Spec.MultipleHubsConfig.BootstrapKubeConfigs.Type == operatorv1.LocalSecrets {
 		if c.klusterletConfig.Spec.MultipleHubsConfig.BootstrapKubeConfigs.LocalSecrets == nil {
-			return nil, nil, fmt.Errorf("local secrets should be set")
+			return nil, nil, nil, fmt.Errorf("local secrets should be set")
 		}
 
 		// If MultipleHubs feature is not set in featureGates field, set it to enable.
@@ -329,7 +329,7 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 		bootstrapKubeConfigSecrets, err := convertKubeConfigSecrets(ctx,
 			c.klusterletConfig.Spec.MultipleHubsConfig.BootstrapKubeConfigs.LocalSecrets.KubeConfigSecrets, clientHolder.KubeClient)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, nil, err
 		}
 
 		// Only append the current hub KubeConfigSecret if the strategy is IncludeCurrentHub
@@ -350,24 +350,29 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 		c.chartConfig.Klusterlet.WorkConfiguration.StatusSyncInterval = c.klusterletConfig.Spec.WorkStatusSyncInterval
 	}
 
+	valuesBytes, err := yaml.Marshal(c.chartConfig)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("failed to marshal chart config: %w", err)
+	}
+
 	crds, objects, err := chart.RenderKlusterletChart(c.chartConfig, c.chartConfig.Klusterlet.Namespace)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	crdBytes := AggregateObjects(crds)
 	manifestsBytes := AggregateObjects(objects)
 
 	if c.chartConfig.NoOperator {
-		return manifestsBytes, nil, nil
+		return manifestsBytes, nil, valuesBytes, nil
 	}
 
 	additionalManifestsBytes, err := filesToTemplateBytes(additionalClusterRoleFiles, c.chartConfig)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	manifestsBytes = append(manifestsBytes, additionalManifestsBytes...)
-	return manifestsBytes, crdBytes, nil
+	return manifestsBytes, crdBytes, valuesBytes, nil
 }
 
 func setClusterClaimConfiguation(cc *chart.KlusterletChartConfig, kc *klusterletconfigv1alpha1.KlusterletConfig) {

@@ -141,7 +141,7 @@ func Add(ctx context.Context,
 			informerHolder,
 			helpers.NewEventRecorder(clientHolder.KubeClient, ControllerName),
 			mcRecorder,
-			helpers.AutoImportStrategyGetter(componentNamespace, informerHolder.ControllerConfigLister, log),
+			helpers.NewImportControllerConfig(componentNamespace, informerHolder.ControllerConfigLister, log),
 		))
 
 	return err

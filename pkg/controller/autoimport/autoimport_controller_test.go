@@ -8,13 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
-
-	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,6 +31,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
@@ -652,6 +652,7 @@ func TestReconcile(t *testing.T) {
 			}
 
 			ctx := context.TODO()
+			importConfigLister := testinghelpers.FakeImportControllerConfigLister("test", c.autoImportStrategy, "")
 			r := NewReconcileAutoImport(
 				fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.objs...).WithStatusSubresource(c.objs...).Build(),
 				kubeClient,
@@ -662,12 +663,8 @@ func TestReconcile(t *testing.T) {
 				},
 				eventstesting.NewTestingEventRecorder(t),
 				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
-				func() (strategy string, err error) {
-					if len(c.autoImportStrategy) > 0 {
-						return c.autoImportStrategy, nil
-					}
-					return constants.DefaultAutoImportStrategy, nil
-				},
+				helpers.NewImportControllerConfig("test", importConfigLister,
+					logf.Log.WithName("fake-import-controller-config")),
 			)
 
 			req := reconcile.Request{NamespacedName: types.NamespacedName{Name: managedClusterName}}

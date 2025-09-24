@@ -66,7 +66,7 @@ func AddToManager(ctx context.Context,
 		},
 		{
 			importconfig.ControllerName,
-			func() error { return importconfig.Add(ctx, manager, clientHolder, informerHolder) },
+			func() error { return importconfig.Add(ctx, manager, clientHolder, informerHolder, componentNamespace) },
 		},
 		{
 			manifestwork.ControllerName,

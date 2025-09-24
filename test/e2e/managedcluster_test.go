@@ -6,6 +6,7 @@ package e2e
 import (
 	"context"
 	"fmt"
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"time"
 
 	"github.com/onsi/ginkgo/v2"
@@ -24,6 +25,10 @@ var _ = ginkgo.Describe("Importing a managed cluster manually", ginkgo.Label("co
 
 		ginkgo.By(fmt.Sprintf("Create managed cluster %s", managedClusterName), func() {
 			_, err := util.CreateManagedCluster(hubClusterClient, managedClusterName)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		})
+		ginkgo.By(fmt.Sprintf("enable cluster import config secret in cluster %s", managedClusterName), func() {
+			err := util.SetClusterImportConfig(hubKubeClient)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 		})
 	})
@@ -116,6 +121,17 @@ var _ = ginkgo.Describe("Importing a managed cluster manually", ginkgo.Label("co
 		})
 
 		ginkgo.By("Recover after delete", func() { assertManagedClusterImportSecret(managedClusterName) })
+	})
+
+	ginkgo.It("Should recover the cluster import config secret of the managed cluster", ginkgo.Serial, func() {
+		assertClusterImportConfigSecret(managedClusterName)
+
+		ginkgo.By(fmt.Sprintf("Remove the cluster import config secret %s", managedClusterName), func() {
+			err := hubKubeClient.CoreV1().Secrets(managedClusterName).Delete(context.TODO(), constants.ClusterImportConfigSecretName, metav1.DeleteOptions{})
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		})
+
+		ginkgo.By("Recover after delete", func() { assertClusterImportConfigSecret(managedClusterName) })
 	})
 
 })

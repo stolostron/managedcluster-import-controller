@@ -1,12 +1,16 @@
 [comment]: # ( Copyright Contributors to the Open Cluster Management project )
 
-# Auto importing of a ClusterAPI provisioned cluster
+# Auto Importing ClusterAPI Provisioned Clusters
 
-## Prereq
+This document describes how to automatically import clusters provisioned through ClusterAPI into ACM/MCE.
 
-These are one time configurations.
+## Prerequisites
 
-### Enable the ClusterImporter feature gates on the ClusterManager
+The following configurations are required and should be performed once on your hub cluster.
+
+### 1. Enable the ClusterImporter Feature Gate
+
+Enable the ClusterImporter feature gate on the ClusterManager to allow automatic import functionality:
 
 ```yaml
 apiVersion: operator.open-cluster-management.io/v1
@@ -18,14 +22,40 @@ spec:
     featureGates:
     - feature: ClusterImporter
       mode: Enable
-    - feature: ManagedClusterAutoApproval
-      mode: Enable
-    autoApproveUsers:
-    - system:serviceaccount:multicluster-engine:agent-registration-bootstrap
 ```
-run `kubectl apply -f` to apply the above yaml content to ClusterManager.
 
-### Bind the CAPI manager permission to the import controller
+Apply this configuration:
+```bash
+kubectl apply -f <filename>.yaml
+```
+
+### 2. Enable Cluster Import Config Secret Creation
+
+Configure the import controller to create cluster import configuration secrets:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: import-controller-config
+  namespace: multicluster-engine
+data:
+  clusterImportConfig: "true"
+```
+
+**If the ConfigMap doesn't exist:**
+```bash
+kubectl apply -f <filename>.yaml
+```
+
+**If the ConfigMap already exists:**
+```bash
+kubectl patch configmap import-controller-config -n multicluster-engine --type merge -p '{"data":{"clusterImportConfig":"true"}}'
+```
+
+### 3. Grant CAPI Manager Permissions
+
+Bind the ClusterAPI manager permissions to the import controller service account:
 
 ```yaml
 apiVersion: rbac.authorization.k8s.io/v1
@@ -35,57 +65,33 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: capi-operator-manager-role
+  name: capi-manager-role
 subjects:
 - kind: ServiceAccount
   name: registration-controller-sa
   namespace: open-cluster-management-hub
 ```
-run `kubectl apply -f` to apply the above yaml content to create the clusterrolebinding.
 
-
-## Create cluster-info configmap
-
-- Get the CA bundle from the hub cluster
-```shell
-kubectl get cm -n kube-public kube-root-ca.crt -o yaml | yq '.data."ca.crt"' | base64
-```
-- build the configmap
-```shell
-apiVersion: v1
-data:
-  kubeconfig: |
-    apiVersion: v1
-    clusters:
-    - cluster:
-        server: {APIServer address}
-        certificate-authority-data: {CA data obtained from the last step}
-        name: ""
-    contexts: null
-    current-context: ""
-    kind: Config
-    preferences: {}
-    users: null
-kind: ConfigMap
-metadata:
-  name: cluster-info
-  namespace: kube-public
-```
-**Note:** Do not include `certificate-authority-data` in the kubeconfig if the hub is running on a ROSA-HCP cluster.
-- create the configmap on the hub cluster.
-```shell
-kubectl apply -f cm.yaml
+Apply this configuration:
+```bash
+kubectl apply -f <filename>.yaml
 ```
 
-## Create the CAPI cluster and the managedCluster
 
-The name of the managedcluster MUST be the same as CAPI cluster's name and namespace. e.g.
+## Create the ClusterAPI Cluster
 
+Create your ClusterAPI cluster following the standard ClusterAPI documentation:
+
+- **ClusterAPI Installer Documentation**: [cluster-api-installer repository](https://github.com/stolostron/cluster-api-installer/tree/main/doc)
+- **Official ClusterAPI Documentation**: [cluster-api.sigs.k8s.io](https://cluster-api.sigs.k8s.io/)
+
+### ROSA Cluster example
 ```yaml
+apiVersion: cluster.x-k8s.io/v1beta1
 kind: Cluster
 metadata:
   name: capi-rosa-cluster
-  namespace: capi-rosa-cluster
+  namespace: capi-rosa-cluster #  Must be the same with the cluster name
 spec:
   clusterNetwork:
     pods:
@@ -99,12 +105,26 @@ spec:
     apiVersion: infrastructure.cluster.x-k8s.io/v1beta2
     kind: ROSACluster
     name: capi-rosa-cluster
----
+```
+
+> **Note**: The ClusterAPI cluster's name and the namespace should be the same. 
+
+## Create the ManagedCluster
+
+To enable automatic import, create a ManagedCluster resource with the **same name and namespace** as your ClusterAPI cluster.
+
+
+```yaml
 apiVersion: cluster.open-cluster-management.io/v1
 kind: ManagedCluster
 metadata:
-  name: capi-rosa-cluster
+  name: capi-rosa-cluster  # Must be the same with the  ClusterAPI cluster name
 spec:
   hubAcceptsClient: true
 ```
-The managedCluster will be auto-imported when the CAPI cluster is provisioned.
+
+Apply the configuration:
+```bash
+kubectl apply -f <filename>.yaml
+```
+

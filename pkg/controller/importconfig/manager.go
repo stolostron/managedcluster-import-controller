@@ -35,7 +35,8 @@ const ControllerName = "importconfig-controller"
 func Add(ctx context.Context,
 	mgr manager.Manager,
 	clientHolder *helpers.ClientHolder,
-	informerHolder *source.InformerHolder) error {
+	informerHolder *source.InformerHolder,
+	componentNamespace string) error {
 
 	// All bootstrap kubeconfigs should created in the same pod namespace
 	podNS := os.Getenv(constants.PodNamespaceEnvVarName)
@@ -183,6 +184,7 @@ func Add(ctx context.Context,
 			klusterletconfigLister: informerHolder.KlusterletConfigLister,
 			scheme:                 mgr.GetScheme(),
 			recorder:               helpers.NewEventRecorder(clientHolder.KubeClient, ControllerName),
+			importControllerConfig: helpers.NewImportControllerConfig(componentNamespace, informerHolder.ControllerConfigLister, log),
 		})
 	return err
 }
