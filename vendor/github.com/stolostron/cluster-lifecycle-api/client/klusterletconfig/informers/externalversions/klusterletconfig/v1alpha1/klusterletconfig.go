@@ -45,13 +45,25 @@ func NewFilteredKlusterletConfigInformer(client versioned.Interface, resyncPerio
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.ConfigV1alpha1().KlusterletConfigs().List(context.TODO(), options)
+				return client.ConfigV1alpha1().KlusterletConfigs().List(context.Background(), options)
 			},
 			WatchFunc: func(options v1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
 					tweakListOptions(&options)
 				}
-				return client.ConfigV1alpha1().KlusterletConfigs().Watch(context.TODO(), options)
+				return client.ConfigV1alpha1().KlusterletConfigs().Watch(context.Background(), options)
+			},
+			ListWithContextFunc: func(ctx context.Context, options v1.ListOptions) (runtime.Object, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.ConfigV1alpha1().KlusterletConfigs().List(ctx, options)
+			},
+			WatchFuncWithContext: func(ctx context.Context, options v1.ListOptions) (watch.Interface, error) {
+				if tweakListOptions != nil {
+					tweakListOptions(&options)
+				}
+				return client.ConfigV1alpha1().KlusterletConfigs().Watch(ctx, options)
 			},
 		},
 		&clusterlifecycleapiklusterletconfigv1alpha1.KlusterletConfig{},

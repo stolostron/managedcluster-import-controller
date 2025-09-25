@@ -18,7 +18,6 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apiserver/pkg/storage/names"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/klog/v2"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
@@ -49,35 +48,6 @@ func extractBootstrapKubeConfigDataFromImportSecret(importSecret *corev1.Secret)
 	}
 
 	return nil
-}
-
-func parseKubeConfigData(kubeConfigData []byte) (
-	kubeAPIServer, proxyURL, ca string, caData []byte, token string, ctxClusterName string, err error) {
-
-	config, err := clientcmd.Load(kubeConfigData)
-	if err != nil {
-		// kubeconfig data is invalid
-		return "", "", "", nil, "", "", err
-	}
-
-	context := config.Contexts[config.CurrentContext]
-	if context == nil {
-		return "", "", "", nil, "", "", fmt.Errorf("failed to get current context")
-	}
-
-	if cluster, ok := config.Clusters[context.Cluster]; ok {
-		ctxClusterName = context.Cluster
-		kubeAPIServer = cluster.Server
-		ca = cluster.CertificateAuthority
-		caData = cluster.CertificateAuthorityData
-		proxyURL = cluster.ProxyURL
-	}
-
-	if authInfo, ok := config.AuthInfos["default-auth"]; ok {
-		token = authInfo.Token
-	}
-
-	return
 }
 
 // validateLegacyServiceAccountToken validates that a legacy serviceaccount token secret exists
@@ -186,7 +156,7 @@ func buildBootstrapKubeconfigData(ctx context.Context, clientHolder *helpers.Cli
 
 	// check if the bootstrap kubeconfig and token in the import secret are still valid
 	if kubeconfigData := extractBootstrapKubeConfigDataFromImportSecret(importSecret); len(kubeconfigData) > 0 {
-		kubeAPIServer, proxyURL, ca, caData, tokenString, ctxClusterName, err := parseKubeConfigData(kubeconfigData)
+		kubeAPIServer, proxyURL, ca, caData, tokenString, ctxClusterName, err := helpers.ParseKubeConfigData(kubeconfigData)
 		if err != nil {
 			klog.Infof("failed to parse the bootstrap hub kubeconfig in the import.yaml. Recreation is required: %v", err)
 		} else {

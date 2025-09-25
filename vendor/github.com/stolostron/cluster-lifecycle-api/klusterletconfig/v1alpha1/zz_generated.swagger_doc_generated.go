@@ -81,6 +81,7 @@ var map_KlusterletConfigSpec = map[string]string{
 	"featureGates":                           "FeatureGates is the list of feature gate for the klusterlet agent. If it is set empty, default feature gates will be used.",
 	"clusterClaimConfiguration":              "ClusterClaimConfiguration represents the configuration of ClusterClaim Effective only when the `ClusterClaim` feature gate is enabled.",
 	"workStatusSyncInterval":                 "WorkStatusSyncInterval is the interval for the work agent to check the status of ManifestWorks. Larger value means less frequent status sync and less api calls to the managed cluster, vice versa. The value(x) should be: 5s <= x <= 1h.",
+	"registrationDriver":                     "This provides driver details required to register with hub",
 }
 
 func (KlusterletConfigSpec) SwaggerDoc() map[string]string {
