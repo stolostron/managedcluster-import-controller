@@ -9,6 +9,11 @@ import (
 
 var BootstrapSASuffix = "bootstrap-sa"
 
+const (
+	GRPCSAName   = "grpc-server-sa"
+	HubNamespace = "open-cluster-management-hub"
+)
+
 func GetClusterName(csr *certificatesv1.CertificateSigningRequest) (clusterName string) {
 	for label, v := range csr.GetObjectMeta().GetLabels() {
 		if label == constants.CSRClusterNameLabel {

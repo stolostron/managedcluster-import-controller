@@ -108,6 +108,10 @@ type KlusterletConfigSpec struct {
 	// +kubebuilder:validation:Type=string
 	// +kubebuilder:validation:Pattern="^([0-9]+(s|m|h))+$"
 	WorkStatusSyncInterval *metav1.Duration `json:"workStatusSyncInterval,omitempty"`
+
+	// This provides driver details required to register with hub
+	// +optional
+	RegistrationDriver *operatorv1.RegistrationDriver `json:"registrationDriver,omitempty"`
 }
 
 // KlusterletConfigStatus defines the observed state of KlusterletConfig.

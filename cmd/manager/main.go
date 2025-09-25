@@ -49,6 +49,7 @@ import (
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 
+	routeclient "github.com/openshift/client-go/route/clientset/versioned"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/fields"
@@ -193,6 +194,13 @@ func main() {
 		return
 	}
 
+	routeClient, err := routeclient.NewForConfig(cfg)
+	if err != nil {
+		setupLog.Error(err, "failed to create route client")
+		exitCode = 1
+		return
+	}
+
 	// get component namespace
 	componentNamespace, err := helpers.GetComponentNamespace()
 	if err != nil {
@@ -314,6 +322,7 @@ func main() {
 		RuntimeClient:       mgr.GetClient(),
 		RuntimeAPIReader:    mgr.GetAPIReader(),
 		ImageRegistryClient: imageregistry.NewClient(kubeClient),
+		RouteV1Client:       routeClient,
 		WorkClient:          workClient,
 	}
 

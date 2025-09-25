@@ -40,7 +40,8 @@ func getApprovalType(csr *certificatesv1.CertificateSigningRequest) string {
 }
 
 func validUsername(csr *certificatesv1.CertificateSigningRequest, clusterName string) bool {
-	return csr.Spec.Username == fmt.Sprintf(userNameSignature, clusterName, helpers.GetBootstrapSAName(clusterName))
+	return csr.Spec.Username == fmt.Sprintf(userNameSignature, clusterName, helpers.GetBootstrapSAName(clusterName)) ||
+		csr.Spec.Username == fmt.Sprintf(userNameSignature, helpers.HubNamespace, helpers.GRPCSAName)
 }
 
 // isValidUnapprovedBootstrapCSR checks if the CSR:

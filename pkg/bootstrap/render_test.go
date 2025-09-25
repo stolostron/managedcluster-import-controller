@@ -3,12 +3,15 @@ package bootstrap
 import (
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	apifeature "open-cluster-management.io/api/feature"
 
+	routev1 "github.com/openshift/api/route/v1"
+	routefake "github.com/openshift/client-go/route/clientset/versioned/fake"
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
@@ -43,6 +46,8 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 		clientObjs             []runtimeclient.Object
 		runtimeObjs            []runtime.Object
 		config                 *KlusterletManifestsConfig
+		expectError            bool
+		errorMessage           string
 		validateFunc           func(t *testing.T, objects, crds []runtime.Object)
 	}{
 		{
@@ -994,19 +999,177 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "with GRPC registration driver",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+			},
+			defaultImagePullSecret: "test-image-pull-secret",
+			runtimeObjs: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-image-pull-secret",
+						Namespace: "multicluster-engine", // Put secret in the correct namespace for GRPC tests
+					},
+					Data: map[string][]byte{
+						corev1.DockerConfigJsonKey: []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeDockerConfigJson,
+				},
+				&routev1.Route{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      grpcRouteName,
+						Namespace: helpers.HubNamespace,
+					},
+					Spec: routev1.RouteSpec{
+						Host: "grpc-server.apps.example.com",
+					},
+				},
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      grpcCAConfigmap,
+						Namespace: helpers.HubNamespace,
+					},
+					Data: map[string]string{
+						"ca-bundle.crt": "-----BEGIN CERTIFICATE-----\nMIIDtest\n-----END CERTIFICATE-----",
+					},
+				},
+			},
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeDefault,
+				"test", // cluster name
+				[]byte("apiVersion: v1\nkind: Config\nclusters:\n- cluster:\n    server: https://api.example.com:6443\n  name: test\ncontexts:\n- context:\n    cluster: test\n    user: test\n  name: test\ncurrent-context: test\nusers:\n- name: test\n  user:\n    token: test-token-123"),
+			).WithKlusterletConfig(&klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					RegistrationDriver: &operatorv1.RegistrationDriver{
+						AuthType: "grpc",
+					},
+				},
+			}),
+			validateFunc: func(t *testing.T, objects, crds []runtime.Object) {
+				testinghelpers.ValidateObjectCount(t, objects, 10)
+				testinghelpers.ValidateCRDs(t, crds, 1)
+				testinghelpers.ValidateNamespace(t, objects[0], constants.DefaultKlusterletNamespace)
+				testinghelpers.ValidateKlusterlet(t, objects[7], operatorv1.InstallModeDefault,
+					"klusterlet", "test", constants.DefaultKlusterletNamespace)
+
+				klusterlet, _ := objects[7].(*operatorv1.Klusterlet)
+				if klusterlet.Spec.RegistrationConfiguration.RegistrationDriver.AuthType != "grpc" {
+					t.Errorf("the klusterlet registration driver auth type should be grpc, but got %s",
+						klusterlet.Spec.RegistrationConfiguration.RegistrationDriver.AuthType)
+				}
+			},
+		},
+		{
+			name: "with GRPC registration driver but route not found",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+			},
+			defaultImagePullSecret: "test-image-pull-secret",
+			runtimeObjs: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-image-pull-secret",
+						Namespace: "multicluster-engine", // Put secret in the correct namespace for GRPC tests
+					},
+					Data: map[string][]byte{
+						corev1.DockerConfigJsonKey: []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeDockerConfigJson,
+				},
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      grpcCAConfigmap,
+						Namespace: helpers.HubNamespace,
+					},
+					Data: map[string]string{
+						"ca-bundle.crt": "-----BEGIN CERTIFICATE-----\nMIIDtest\n-----END CERTIFICATE-----",
+					},
+				},
+			},
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeDefault,
+				"test", // cluster name
+				[]byte("apiVersion: v1\nkind: Config\nclusters:\n- cluster:\n    server: https://api.example.com:6443\n  name: test\ncontexts:\n- context:\n    cluster: test\n    user: test\n  name: test\ncurrent-context: test\nusers:\n- name: test\n  user:\n    token: test-token-123"),
+			).WithKlusterletConfig(&klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					RegistrationDriver: &operatorv1.RegistrationDriver{
+						AuthType: "grpc",
+					},
+				},
+			}),
+			expectError:  true,
+			errorMessage: "failed to get GRPC config yaml:",
+			validateFunc: func(t *testing.T, objects, crds []runtime.Object) {
+				// Should not be called for error cases
+			},
+		},
 	}
 
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
 			os.Setenv(constants.DefaultImagePullSecretEnvVarName, testcase.defaultImagePullSecret)
 
-			kubeClient := kubefake.NewSimpleClientset(testcase.runtimeObjs...)
+			// Set POD_NAMESPACE only for GRPC tests
+			if strings.Contains(testcase.name, "GRPC") {
+				os.Setenv(constants.PodNamespaceEnvVarName, "multicluster-engine")
+			}
+
+			// Separate route objects from Kubernetes objects for GRPC tests
+			var routes []runtime.Object
+			var kubeObjs []runtime.Object
+			hasRoutes := false
+			for _, obj := range testcase.runtimeObjs {
+				if route, ok := obj.(*routev1.Route); ok {
+					routes = append(routes, route)
+					hasRoutes = true
+				} else {
+					kubeObjs = append(kubeObjs, obj)
+				}
+			}
+
+			// Use original objects if no routes, otherwise use separated objects
+			var kubeClient *kubefake.Clientset
+			if hasRoutes {
+				kubeClient = kubefake.NewSimpleClientset(kubeObjs...)
+			} else {
+				kubeClient = kubefake.NewSimpleClientset(testcase.runtimeObjs...)
+			}
+
 			clientHolder := &helpers.ClientHolder{
 				KubeClient:          kubeClient,
 				RuntimeClient:       fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testcase.clientObjs...).Build(),
 				ImageRegistryClient: imageregistry.NewClient(kubeClient),
 			}
+
+			// Add route client for GRPC tests (both success and error cases)
+			if hasRoutes || strings.Contains(testcase.name, "GRPC") {
+				if hasRoutes {
+					clientHolder.RouteV1Client = routefake.NewSimpleClientset(routes...)
+				} else {
+					clientHolder.RouteV1Client = routefake.NewSimpleClientset()
+				}
+			}
+
 			manifestsBytes, crdBytes, valuesBytes, err := testcase.config.Generate(context.Background(), clientHolder)
+			if testcase.expectError {
+				if err == nil {
+					t.Errorf("%s: expected error but got none", testcase.name)
+					return
+				}
+				if !strings.Contains(err.Error(), testcase.errorMessage) {
+					t.Errorf("%s: expected error message to contain %q, but got %v", testcase.name, testcase.errorMessage, err)
+				}
+				return
+			}
 			if err != nil {
 				t.Fatalf("%s Failed to generate klusterlet manifests: %v", testcase.name, err)
 			}
@@ -1020,7 +1183,9 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 			for _, yaml := range helpers.SplitYamls(manifestsBytes) {
 				objs = append(objs, helpers.MustCreateObject(yaml))
 			}
-			testcase.validateFunc(t, objs, crdObjs)
+			if testcase.validateFunc != nil {
+				testcase.validateFunc(t, objs, crdObjs)
+			}
 
 			klusterletChartConfig := &chart.KlusterletChartConfig{}
 			err = yaml.Unmarshal(valuesBytes, klusterletChartConfig)
@@ -1030,4 +1195,194 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 		})
 	}
 
+}
+
+func TestBuildGRPCConfigData(t *testing.T) {
+	testcases := []struct {
+		name               string
+		token              string
+		route              *routev1.Route
+		createRoute        bool
+		expectedGRPCConfig string
+		expectError        bool
+		errorMessage       string
+	}{
+		{
+			name:        "with customized GRPCConfig and token",
+			token:       "test-token",
+			createRoute: true,
+			route: &routev1.Route{
+				TypeMeta: metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      grpcRouteName,
+					Namespace: helpers.HubNamespace,
+				},
+				Spec: routev1.RouteSpec{
+					Host: "grpc.config.com",
+				},
+			},
+			expectedGRPCConfig: "caData: Y2FEYXRh\nkeepAliveConfig: {}\ntoken: test-token\nurl: grpc.config.com\n",
+		},
+		{
+			name:        "with customized GRPCConfig without token",
+			token:       "",
+			createRoute: true,
+			route: &routev1.Route{
+				TypeMeta: metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      grpcRouteName,
+					Namespace: helpers.HubNamespace,
+				},
+				Spec: routev1.RouteSpec{
+					Host: "grpc.example.com",
+				},
+			},
+			expectedGRPCConfig: "caData: Y2FEYXRh\nkeepAliveConfig: {}\ntoken: \"\"\nurl: grpc.example.com\n",
+		},
+		{
+			name:        "route with empty host",
+			token:       "test-token",
+			createRoute: true,
+			route: &routev1.Route{
+				TypeMeta: metav1.TypeMeta{},
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      grpcRouteName,
+					Namespace: helpers.HubNamespace,
+				},
+				Spec: routev1.RouteSpec{
+					Host: "",
+				},
+			},
+			expectError:  true,
+			errorMessage: "grpc-server route has no host specified",
+		},
+		{
+			name:         "route not found",
+			token:        "test-token",
+			createRoute:  false,
+			expectError:  true,
+			errorMessage: "failed to get grpc-server route",
+		},
+	}
+
+	for _, testcase := range testcases {
+		t.Run(testcase.name, func(t *testing.T) {
+			var routeClient *routefake.Clientset
+			if testcase.createRoute {
+				routeClient = routefake.NewSimpleClientset(testcase.route)
+			} else {
+				routeClient = routefake.NewSimpleClientset()
+			}
+
+			clientHolder := &helpers.ClientHolder{RouteV1Client: routeClient}
+
+			grpcConfigData, err := buildGRPCConfigData(context.TODO(), clientHolder, testcase.token, []byte("caData"))
+			if testcase.expectError {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				} else if !strings.Contains(err.Error(), testcase.errorMessage) {
+					t.Errorf("expected error message to contain %q, but got %v", testcase.errorMessage, err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("failed to build grpc config data: %v", err)
+				}
+				if grpcConfigData != testcase.expectedGRPCConfig {
+					t.Errorf("expected grpc config data to be %q, but got %q", testcase.expectedGRPCConfig, grpcConfigData)
+				}
+			}
+		})
+	}
+}
+
+func TestGetGRCPCaBundleFromConfigMap(t *testing.T) {
+	testcases := []struct {
+		name            string
+		createConfigMap bool
+		configMap       *corev1.ConfigMap
+		expectedData    string
+		expectError     bool
+		errorMessage    string
+	}{
+		{
+			name:            "successful ca bundle retrieval",
+			createConfigMap: true,
+			configMap: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      grpcCAConfigmap,
+					Namespace: helpers.HubNamespace,
+				},
+				Data: map[string]string{
+					"ca-bundle.crt": "-----BEGIN CERTIFICATE-----\nMIIDtest\n-----END CERTIFICATE-----",
+				},
+			},
+			expectedData: "-----BEGIN CERTIFICATE-----\nMIIDtest\n-----END CERTIFICATE-----",
+		},
+		{
+			name:            "configmap not found",
+			createConfigMap: false,
+			expectError:     true,
+			errorMessage:    "failed to get ca-bundle-configmap from hub namespace",
+		},
+		{
+			name:            "ca-bundle.crt key missing",
+			createConfigMap: true,
+			configMap: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      grpcCAConfigmap,
+					Namespace: helpers.HubNamespace,
+				},
+				Data: map[string]string{
+					"other-key": "some-value",
+				},
+			},
+			expectError:  true,
+			errorMessage: "ca-bundle.crt key not found in configmap ca-bundle-configmap",
+		},
+		{
+			name:            "empty ca bundle data",
+			createConfigMap: true,
+			configMap: &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      grpcCAConfigmap,
+					Namespace: helpers.HubNamespace,
+				},
+				Data: map[string]string{
+					"ca-bundle.crt": "",
+				},
+			},
+			expectedData: "",
+		},
+	}
+
+	for _, testcase := range testcases {
+		t.Run(testcase.name, func(t *testing.T) {
+			var kubeClient *kubefake.Clientset
+			if testcase.createConfigMap {
+				kubeClient = kubefake.NewSimpleClientset(testcase.configMap)
+			} else {
+				kubeClient = kubefake.NewSimpleClientset()
+			}
+
+			clientHolder := &helpers.ClientHolder{
+				KubeClient: kubeClient,
+			}
+
+			caBundleData, err := GetGRCPCaBundleFromConfigMap(context.Background(), clientHolder)
+			if testcase.expectError {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				} else if !strings.Contains(err.Error(), testcase.errorMessage) {
+					t.Errorf("expected error message to contain %q, but got %v", testcase.errorMessage, err)
+				}
+			} else {
+				if err != nil {
+					t.Errorf("failed to get ca bundle from configmap: %v", err)
+				}
+				if string(caBundleData) != testcase.expectedData {
+					t.Errorf("expected ca bundle data to be %q, but got %q", testcase.expectedData, string(caBundleData))
+				}
+			}
+		})
+	}
 }
