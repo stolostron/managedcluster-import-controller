@@ -60,6 +60,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/Masterminds/sprig/v3"
+	routeclient "github.com/openshift/client-go/route/clientset/versioned"
 	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/features"
@@ -102,6 +103,7 @@ type ClientHolder struct {
 	RuntimeAPIReader    client.Reader
 	ImageRegistryClient imageregistry.Interface
 	WorkClient          workclient.Interface
+	RouteV1Client       routeclient.Interface
 }
 
 // GetMaxConcurrentReconciles get the max concurrent reconciles from MAX_CONCURRENT_RECONCILES env,
@@ -226,6 +228,11 @@ func buildImportClient(config *clientcmdapi.Config) (reconcile.Result, *ClientHo
 		return reconcile.Result{}, nil, nil, err
 	}
 
+	routeClient, err := routeclient.NewForConfig(clientConfig)
+	if err != nil {
+		return reconcile.Result{}, nil, nil, err
+	}
+
 	httpclient, err := rest.HTTPClientFor(clientConfig)
 	if err != nil {
 		return reconcile.Result{}, nil, nil, err
@@ -240,6 +247,7 @@ func buildImportClient(config *clientcmdapi.Config) (reconcile.Result, *ClientHo
 		APIExtensionsClient: apiExtensionsClient,
 		OperatorClient:      operatorClient,
 		RuntimeClient:       runtimeClient,
+		RouteV1Client:       routeClient,
 	}, mapper, nil
 }
 
@@ -404,14 +412,6 @@ func UpdateManagedClusterImportCondition(client client.Client, managedCluster *c
 func ValidateImportSecret(importSecret *corev1.Secret) error {
 	if data, ok := importSecret.Data[constants.ImportSecretImportYamlKey]; !ok || len(data) == 0 {
 		return fmt.Errorf("the %s is required", constants.ImportSecretImportYamlKey)
-	}
-	return nil
-}
-
-// ValidateClusterImportConfigSecret validate cluster import config secret
-func ValidateClusterImportConfigSecret(importConfigSecret *corev1.Secret) error {
-	if data, ok := importConfigSecret.Data[constants.ValuesYamlKey]; !ok || len(data) == 0 {
-		return fmt.Errorf("the %s is required", constants.ValuesYamlKey)
 	}
 	return nil
 }
@@ -1131,4 +1131,50 @@ func IsImmediateImport(annotations map[string]string) bool {
 	}
 
 	return false
+}
+
+func ParseKubeConfigData(kubeConfigData []byte) (
+	kubeAPIServer, proxyURL, ca string, caData []byte, token string, ctxClusterName string, err error) {
+
+	config, err := clientcmd.Load(kubeConfigData)
+	if err != nil {
+		// kubeconfig data is invalid
+		return "", "", "", nil, "", "", err
+	}
+
+	context := config.Contexts[config.CurrentContext]
+	if context == nil {
+		return "", "", "", nil, "", "", fmt.Errorf("failed to get current context")
+	}
+
+	if cluster, ok := config.Clusters[context.Cluster]; ok {
+		ctxClusterName = context.Cluster
+		kubeAPIServer = cluster.Server
+		ca = cluster.CertificateAuthority
+		caData = cluster.CertificateAuthorityData
+		proxyURL = cluster.ProxyURL
+	}
+
+	if authInfo, ok := config.AuthInfos["default-auth"]; ok {
+		token = authInfo.Token
+	}
+
+	return
+}
+
+func ValidateClusterImportConfigSecret(secret *corev1.Secret) error {
+	if secret == nil {
+		return fmt.Errorf("secret is nil")
+	}
+
+	valuesYaml, exists := secret.Data[constants.ValuesYamlKey]
+	if !exists {
+		return fmt.Errorf("the values.yaml is required")
+	}
+
+	if len(valuesYaml) == 0 {
+		return fmt.Errorf("the values.yaml is required")
+	}
+
+	return nil
 }

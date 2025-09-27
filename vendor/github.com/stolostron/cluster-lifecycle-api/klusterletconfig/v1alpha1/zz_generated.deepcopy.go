@@ -192,6 +192,11 @@ func (in *KlusterletConfigSpec) DeepCopyInto(out *KlusterletConfigSpec) {
 		*out = new(metav1.Duration)
 		**out = **in
 	}
+	if in.RegistrationDriver != nil {
+		in, out := &in.RegistrationDriver, &out.RegistrationDriver
+		*out = new(v1.RegistrationDriver)
+		(*in).DeepCopyInto(*out)
+	}
 	return
 }
 
