@@ -30,6 +30,8 @@ import (
 	apifeature "open-cluster-management.io/api/feature"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 	"open-cluster-management.io/ocm/pkg/operator/helpers/chart"
+	"open-cluster-management.io/sdk-go/pkg/cloudevents/generic/options/cert"
+	"open-cluster-management.io/sdk-go/pkg/cloudevents/generic/options/grpc"
 	"sigs.k8s.io/yaml"
 )
 
@@ -51,6 +53,11 @@ var reservedClusterClaimSuffixes = []string{
 	"openshift.io",
 	"open-cluster-management.io",
 }
+
+const (
+	grpcRouteName   = "grpc-server"
+	grpcCAConfigmap = "ca-bundle-configmap"
+)
 
 type BootstrapKubeConfigSecret struct {
 	Name       string
@@ -346,6 +353,26 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 	// Set MCE reserved clusterclaims
 	setClusterClaimConfiguation(c.chartConfig, c.klusterletConfig)
 
+	if c.klusterletConfig != nil && c.klusterletConfig.Spec.RegistrationDriver != nil {
+		c.chartConfig.Klusterlet.RegistrationConfiguration.RegistrationDriver = *c.klusterletConfig.Spec.RegistrationDriver
+
+		if helpers.DeployOnOCP && c.klusterletConfig.Spec.RegistrationDriver.AuthType == "grpc" {
+			// TODO: support MultiHubBootstrapHubKubeConfigs here
+			_, _, _, _, tokenString, _, err := helpers.ParseKubeConfigData([]byte(c.chartConfig.BootstrapHubKubeConfig))
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("failed to parse bootstrap kubeconfig: %w", err)
+			}
+			caData, err := GetGRCPCaBundleFromConfigMap(ctx, clientHolder)
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("failed to get ca from hub ns: %w", err)
+			}
+			c.chartConfig.GRPCConfig, err = buildGRPCConfigData(ctx, clientHolder, tokenString, caData)
+			if err != nil {
+				return nil, nil, nil, fmt.Errorf("failed to get GRPC config yaml: %w", err)
+			}
+		}
+	}
+
 	if c.klusterletConfig != nil && c.klusterletConfig.Spec.WorkStatusSyncInterval != nil {
 		c.chartConfig.Klusterlet.WorkConfiguration.StatusSyncInterval = c.klusterletConfig.Spec.WorkStatusSyncInterval
 	}
@@ -584,4 +611,46 @@ func imageOverride(source, mirror, imageName string) string {
 
 	trimSegment := strings.TrimPrefix(imageName, source)
 	return fmt.Sprintf("%s%s", mirror, trimSegment)
+}
+
+func buildGRPCConfigData(ctx context.Context, clientHolder *helpers.ClientHolder, token string, caData []byte) (string, error) {
+	route, err := clientHolder.RouteV1Client.RouteV1().Routes(helpers.HubNamespace).
+		Get(ctx, grpcRouteName, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("failed to get grpc-server route: %w", err)
+	}
+
+	if route.Spec.Host == "" {
+		return "", fmt.Errorf("grpc-server route has no host specified")
+	}
+
+	config := grpc.GRPCConfig{
+		CertConfig: cert.CertConfig{
+			CAData: caData,
+		},
+		URL:   route.Spec.Host,
+		Token: token,
+	}
+
+	data, err := yaml.Marshal(config)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal GRPC server configuration. %v", err)
+	}
+
+	return string(data), nil
+}
+
+func GetGRCPCaBundleFromConfigMap(ctx context.Context, clientHolder *helpers.ClientHolder) ([]byte, error) {
+	configMap, err := clientHolder.KubeClient.CoreV1().ConfigMaps(helpers.HubNamespace).
+		Get(ctx, grpcCAConfigmap, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ca-bundle-configmap from hub namespace: %w", err)
+	}
+
+	caBundleData, exists := configMap.Data["ca-bundle.crt"]
+	if !exists {
+		return nil, fmt.Errorf("ca-bundle.crt key not found in configmap ca-bundle-configmap")
+	}
+
+	return []byte(caBundleData), nil
 }

@@ -2320,3 +2320,225 @@ func TestValidateClusterImportConfigSecret(t *testing.T) {
 		})
 	}
 }
+
+func TestParseKubeConfigData(t *testing.T) {
+	testCases := []struct {
+		name                    string
+		kubeConfigData          []byte
+		expectedKubeAPIServer   string
+		expectedProxyURL        string
+		expectedCA              string
+		expectedCAData          []byte
+		expectedToken           string
+		expectedCtxClusterName  string
+		expectError             bool
+		expectedErrorMessage    string
+	}{
+		{
+			name: "valid kubeconfig with all fields",
+			kubeConfigData: []byte(`apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://api.example.com:6443
+    certificate-authority: /path/to/ca.crt
+    certificate-authority-data: Y2EgZGF0YQ==
+    proxy-url: https://proxy.example.com:8080
+  name: test-cluster
+contexts:
+- context:
+    cluster: test-cluster
+    user: test-user
+  name: test-context
+current-context: test-context
+users:
+- name: test-user
+  user:
+    token: test-token
+`),
+			expectedKubeAPIServer:  "https://api.example.com:6443",
+			expectedProxyURL:       "https://proxy.example.com:8080",
+			expectedCA:             "/path/to/ca.crt",
+			expectedCAData:         []byte("ca data"),
+			expectedToken:          "",
+			expectedCtxClusterName: "test-cluster",
+			expectError:            false,
+		},
+		{
+			name: "valid kubeconfig with default-auth user",
+			kubeConfigData: []byte(`apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://kubernetes.default.svc:443
+    certificate-authority: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+  name: default-cluster
+contexts:
+- context:
+    cluster: default-cluster
+    user: default-auth
+  name: default-context
+current-context: default-context
+users:
+- name: default-auth
+  user:
+    token: service-account-token
+`),
+			expectedKubeAPIServer:  "https://kubernetes.default.svc:443",
+			expectedProxyURL:       "",
+			expectedCA:             "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+			expectedCAData:         nil,
+			expectedToken:          "service-account-token",
+			expectedCtxClusterName: "default-cluster",
+			expectError:            false,
+		},
+		{
+			name: "minimal valid kubeconfig",
+			kubeConfigData: []byte(`apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://simple.example.com
+  name: simple-cluster
+contexts:
+- context:
+    cluster: simple-cluster
+    user: simple-user
+  name: simple-context
+current-context: simple-context
+users:
+- name: simple-user
+  user: {}
+`),
+			expectedKubeAPIServer:  "https://simple.example.com",
+			expectedProxyURL:       "",
+			expectedCA:             "",
+			expectedCAData:         nil,
+			expectedToken:          "",
+			expectedCtxClusterName: "simple-cluster",
+			expectError:            false,
+		},
+		{
+			name:                 "invalid kubeconfig data",
+			kubeConfigData:       []byte("invalid yaml content"),
+			expectError:          true,
+			expectedErrorMessage: "",
+		},
+		{
+			name: "kubeconfig with no current-context",
+			kubeConfigData: []byte(`apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://api.example.com:6443
+  name: test-cluster
+contexts:
+- context:
+    cluster: test-cluster
+    user: test-user
+  name: test-context
+users:
+- name: test-user
+  user:
+    token: test-token
+`),
+			expectError:          true,
+			expectedErrorMessage: "failed to get current context",
+		},
+		{
+			name: "kubeconfig with invalid current-context",
+			kubeConfigData: []byte(`apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://api.example.com:6443
+  name: test-cluster
+contexts:
+- context:
+    cluster: test-cluster
+    user: test-user
+  name: test-context
+current-context: non-existent-context
+users:
+- name: test-user
+  user:
+    token: test-token
+`),
+			expectError:          true,
+			expectedErrorMessage: "failed to get current context",
+		},
+		{
+			name: "kubeconfig with missing cluster",
+			kubeConfigData: []byte(`apiVersion: v1
+kind: Config
+clusters: []
+contexts:
+- context:
+    cluster: missing-cluster
+    user: test-user
+  name: test-context
+current-context: test-context
+users:
+- name: test-user
+  user:
+    token: test-token
+`),
+			expectedKubeAPIServer:  "",
+			expectedProxyURL:       "",
+			expectedCA:             "",
+			expectedCAData:         nil,
+			expectedToken:          "",
+			expectedCtxClusterName: "",
+			expectError:            false,
+		},
+		{
+			name:           "empty kubeconfig data",
+			kubeConfigData: []byte(""),
+			expectError:    true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			kubeAPIServer, proxyURL, ca, caData, token, ctxClusterName, err := ParseKubeConfigData(tc.kubeConfigData)
+
+			if tc.expectError {
+				if err == nil {
+					t.Errorf("expected error but got none")
+				} else if tc.expectedErrorMessage != "" && err.Error() != tc.expectedErrorMessage {
+					t.Errorf("expected error message %q, but got %q", tc.expectedErrorMessage, err.Error())
+				}
+				return
+			}
+
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+				return
+			}
+
+			if kubeAPIServer != tc.expectedKubeAPIServer {
+				t.Errorf("expected kubeAPIServer %q, but got %q", tc.expectedKubeAPIServer, kubeAPIServer)
+			}
+
+			if proxyURL != tc.expectedProxyURL {
+				t.Errorf("expected proxyURL %q, but got %q", tc.expectedProxyURL, proxyURL)
+			}
+
+			if ca != tc.expectedCA {
+				t.Errorf("expected ca %q, but got %q", tc.expectedCA, ca)
+			}
+
+			if !reflect.DeepEqual(caData, tc.expectedCAData) {
+				t.Errorf("expected caData %v, but got %v", tc.expectedCAData, caData)
+			}
+
+			if token != tc.expectedToken {
+				t.Errorf("expected token %q, but got %q", tc.expectedToken, token)
+			}
+
+			if ctxClusterName != tc.expectedCtxClusterName {
+				t.Errorf("expected ctxClusterName %q, but got %q", tc.expectedCtxClusterName, ctxClusterName)
+			}
+		})
+	}
+}
