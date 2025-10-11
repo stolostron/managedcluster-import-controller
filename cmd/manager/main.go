@@ -99,6 +99,8 @@ func main() {
 		}
 	}
 
+	fmt.Print("test")
+
 	pflag.StringVar(&leaderElectionNamespace, "leader-election-namespace", "", "required when the process is not running in cluster")
 	pflag.BoolVar(&helpers.DeployOnOCP, "deploy-on-ocp", true, "used to deploy the controller on OCP or not")
 
