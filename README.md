@@ -17,6 +17,7 @@ Check the [Run functional test](docs/functional_test.md) for how to run function
 
 ------
 
+
 ## Getting Started
 
 This is a guide on how to build and deploy klusterlet addon controller from code.
@@ -51,6 +52,3 @@ current functionality of `managedcluster-import-controller`
 [Updating Klusterlet on a managed cluster](docs/remote_klusterlet_update.md)
 
 [Selective initilization of controllers](docs/selective_controller_init.md)
-
-
-
