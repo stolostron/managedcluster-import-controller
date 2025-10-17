@@ -700,7 +700,7 @@ gorm.io/gorm/clause
 gorm.io/gorm/logger
 gorm.io/gorm/schema
 gorm.io/gorm/utils
-# helm.sh/helm/v3 v3.17.3
+# helm.sh/helm/v3 v3.17.4
 ## explicit; go 1.23.0
 helm.sh/helm/v3/internal/sympath
 helm.sh/helm/v3/internal/version
