@@ -534,6 +534,21 @@ func GetProxySettings(klusterletConfig *klusterletconfigv1alpha1.KlusterletConfi
 
 	if klusterletConfig.Spec.HubKubeAPIServerConfig != nil &&
 		len(klusterletConfig.Spec.HubKubeAPIServerConfig.ProxyURL) > 0 {
+
+		// Handle the case where two KlusterletConfigs are merged:
+		// one contains proxy settings in Spec.HubKubeAPIServerProxyConfig,
+		// and the other contains configurations in Spec.HubKubeAPIServerConfig.
+		// In this scenario, the value of
+		// klusterletConfig.Spec.HubKubeAPIServerProxyConfig.HTTPSProxy
+		// is copied to Spec.HubKubeAPIServerConfig.ProxyURL during merging,
+		// but the CA bundle from the proxy config also needs to be appended
+		// to the final CA bundle of the bootstrap hub kubeconfig.
+		if klusterletConfig.Spec.HubKubeAPIServerConfig.ProxyURL ==
+			klusterletConfig.Spec.HubKubeAPIServerProxyConfig.HTTPSProxy {
+			return klusterletConfig.Spec.HubKubeAPIServerConfig.ProxyURL,
+				klusterletConfig.Spec.HubKubeAPIServerProxyConfig.CABundle
+		}
+
 		// the TrustedCABundles configured in the HubKubeAPIServerConfig is already added by the getKubeAPIServerCAData
 		return klusterletConfig.Spec.HubKubeAPIServerConfig.ProxyURL, nil
 	}

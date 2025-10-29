@@ -89,6 +89,31 @@ func MergeKlusterletConfigs(klusterletconfigs ...*klusterletconfigv1alpha1.Klust
 		}
 	}
 
+	// If HubKubeAPIServerConfig is present, migrate deprecated fields into it
+	// Only migrate if the corresponding field in HubKubeAPIServerConfig is not set
+	if merged.HubKubeAPIServerConfig != nil {
+		// Migrate HubKubeAPIServerURL if not already set
+		if len(merged.HubKubeAPIServerConfig.URL) == 0 && len(merged.HubKubeAPIServerURL) > 0 {
+			merged.HubKubeAPIServerConfig.URL = merged.HubKubeAPIServerURL
+		}
+
+		// Migrate HubKubeAPIServerProxyConfig to ProxyURL if not already set
+		// Prefer HTTPSProxy over HTTPProxy
+		if len(merged.HubKubeAPIServerConfig.ProxyURL) == 0 {
+			if len(merged.HubKubeAPIServerProxyConfig.HTTPSProxy) > 0 {
+				merged.HubKubeAPIServerConfig.ProxyURL = merged.HubKubeAPIServerProxyConfig.HTTPSProxy
+			} else if len(merged.HubKubeAPIServerProxyConfig.HTTPProxy) > 0 {
+				merged.HubKubeAPIServerConfig.ProxyURL = merged.HubKubeAPIServerProxyConfig.HTTPProxy
+			}
+		}
+
+		// Note: HubKubeAPIServerCABundle migration is aborted because:
+		// - HubKubeAPIServerCABundle contains raw CA bundle bytes ([]byte)
+		// - HubKubeAPIServerConfig.TrustedCABundles requires a ConfigMap reference
+		// - We cannot automatically create a ConfigMap from the raw bytes during merge
+		// - The deprecated field will remain set for consumers to handle the migration manually
+	}
+
 	return &klusterletconfigv1alpha1.KlusterletConfig{
 		Spec: *merged,
 	}, nil

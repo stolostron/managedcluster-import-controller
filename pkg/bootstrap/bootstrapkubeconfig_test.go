@@ -1118,6 +1118,53 @@ func TestGetProxySettings(t *testing.T) {
 			proxyURL:    "https://127.0.0.1:3129",
 			proxyCAData: []byte("fake-ca-cert"),
 		},
+		{
+			name: "merged config - ProxyURL equals HTTPSProxy with CA bundle",
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
+						ProxyURL: "https://127.0.0.1:3129",
+					},
+					HubKubeAPIServerProxyConfig: klusterletconfigv1alpha1.KubeAPIServerProxyConfig{
+						HTTPSProxy: "https://127.0.0.1:3129",
+						CABundle:   []byte("merged-ca-cert"),
+					},
+				},
+			},
+			proxyURL:    "https://127.0.0.1:3129",
+			proxyCAData: []byte("merged-ca-cert"),
+		},
+		{
+			name: "merged config - ProxyURL does not equal HTTPSProxy",
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
+						ProxyURL: "https://127.0.0.1:3130",
+					},
+					HubKubeAPIServerProxyConfig: klusterletconfigv1alpha1.KubeAPIServerProxyConfig{
+						HTTPSProxy: "https://127.0.0.1:3129",
+						CABundle:   []byte("merged-ca-cert"),
+					},
+				},
+			},
+			proxyURL:    "https://127.0.0.1:3130",
+			proxyCAData: nil,
+		},
+		{
+			name: "merged config - ProxyURL equals HTTPSProxy without CA bundle",
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
+						ProxyURL: "https://127.0.0.1:3129",
+					},
+					HubKubeAPIServerProxyConfig: klusterletconfigv1alpha1.KubeAPIServerProxyConfig{
+						HTTPSProxy: "https://127.0.0.1:3129",
+					},
+				},
+			},
+			proxyURL:    "https://127.0.0.1:3129",
+			proxyCAData: nil,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
