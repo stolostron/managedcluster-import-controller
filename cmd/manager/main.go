@@ -96,6 +96,7 @@ func init() {
 }
 
 func main() {
+	fmt.Println("Test: managedcluster-import-controller is starting...")
 	var leaderElectionNamespace = ""
 	var enablePprof = false
 	if enablePprofEnv, exists := os.LookupEnv("ENABLE_PPROF"); exists {
