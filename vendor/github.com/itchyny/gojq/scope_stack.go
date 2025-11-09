@@ -17,13 +17,9 @@ func newScopeStack() *scopeStack {
 
 func (s *scopeStack) push(v scope) {
 	b := scopeBlock{v, s.index}
-	i := s.index + 1
-	if i <= s.limit {
-		i = s.limit + 1
-	}
-	s.index = i
-	if i < len(s.data) {
-		s.data[i] = b
+	s.index = max(s.index, s.limit) + 1
+	if s.index < len(s.data) {
+		s.data[s.index] = b
 	} else {
 		s.data = append(s.data, b)
 	}
@@ -39,11 +35,12 @@ func (s *scopeStack) empty() bool {
 	return s.index < 0
 }
 
-func (s *scopeStack) save(index, limit *int) {
-	*index, *limit = s.index, s.limit
+func (s *scopeStack) save() (index, limit int) {
+	index, limit = s.index, s.limit
 	if s.index > s.limit {
 		s.limit = s.index
 	}
+	return
 }
 
 func (s *scopeStack) restore(index, limit int) {
