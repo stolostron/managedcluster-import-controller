@@ -17,6 +17,7 @@ import (
 
 	"github.com/go-openapi/jsonpointer"
 	"github.com/mohae/deepcopy"
+	"github.com/woodsbury/decimal128"
 )
 
 const (
@@ -81,6 +82,7 @@ func (s SchemaRefs) JSONLookup(token string) (any, error) {
 // See https://github.com/OAI/OpenAPI-Specification/blob/main/versions/3.0.3.md#schema-object
 type Schema struct {
 	Extensions map[string]any `json:"-" yaml:"-"`
+	Origin     *Origin        `json:"__origin__,omitempty" yaml:"__origin__,omitempty"`
 
 	OneOf        SchemaRefs    `json:"oneOf,omitempty" yaml:"oneOf,omitempty"`
 	AnyOf        SchemaRefs    `json:"anyOf,omitempty" yaml:"anyOf,omitempty"`
@@ -244,7 +246,7 @@ func (addProps *AdditionalProperties) UnmarshalJSON(data []byte) error {
 			addProps.Schema = &SchemaRef{Value: &Schema{}}
 		} else {
 			buf := new(bytes.Buffer)
-			json.NewEncoder(buf).Encode(y)
+			_ = json.NewEncoder(buf).Encode(y)
 			if err := json.NewDecoder(buf).Decode(&addProps.Schema); err != nil {
 				return err
 			}
@@ -411,6 +413,7 @@ func (schema *Schema) UnmarshalJSON(data []byte) error {
 	}
 	_ = json.Unmarshal(data, &x.Extensions)
 
+	delete(x.Extensions, originKey)
 	delete(x.Extensions, "oneOf")
 	delete(x.Extensions, "anyOf")
 	delete(x.Extensions, "allOf")
@@ -835,12 +838,12 @@ func (schema *Schema) WithMaxProperties(i int64) *Schema {
 }
 
 func (schema *Schema) WithAnyAdditionalProperties() *Schema {
-	schema.AdditionalProperties = AdditionalProperties{Has: BoolPtr(true)}
+	schema.AdditionalProperties = AdditionalProperties{Has: Ptr(true)}
 	return schema
 }
 
 func (schema *Schema) WithoutAdditionalProperties() *Schema {
-	schema.AdditionalProperties = AdditionalProperties{Has: BoolPtr(false)}
+	schema.AdditionalProperties = AdditionalProperties{Has: Ptr(false)}
 	return schema
 }
 
@@ -1426,6 +1429,7 @@ func (schema *Schema) visitXOFOperations(settings *schemaValidationSettings, val
 		visitedAnyOf = true
 	}
 
+	validationErrors := multiErrorForAllOf{}
 	for _, item := range schema.AllOf {
 		v := item.Value
 		if v == nil {
@@ -1435,16 +1439,19 @@ func (schema *Schema) visitXOFOperations(settings *schemaValidationSettings, val
 			if settings.failfast {
 				return errSchema, false
 			}
-			return &SchemaError{
-				Value:                 value,
-				Schema:                schema,
-				SchemaField:           "allOf",
-				Reason:                `doesn't match all schemas from "allOf"`,
-				Origin:                err,
-				customizeMessageError: settings.customizeMessageError,
-			}, false
+			validationErrors = append(validationErrors, err)
 		}
 		visitedAllOf = true
+	}
+	if len(validationErrors) > 0 {
+		return &SchemaError{
+			Value:                 value,
+			Schema:                schema,
+			SchemaField:           "allOf",
+			Reason:                `doesn't match all schemas from "allOf"`,
+			Origin:                fmt.Errorf("doesn't match schema due to: %w", validationErrors),
+			customizeMessageError: settings.customizeMessageError,
+		}, false
 	}
 
 	run = !((visitedOneOf || visitedAnyOf || visitedAllOf) && value == nil)
@@ -1641,7 +1648,10 @@ func (schema *Schema) visitJSONNumber(settings *schemaValidationSettings, value 
 	if v := schema.MultipleOf; v != nil {
 		// "A numeric instance is valid only if division by this keyword's
 		//    value results in an integer."
-		if bigFloat := big.NewFloat(value / *v); !bigFloat.IsInt() {
+		numParsed, _ := decimal128.Parse(fmt.Sprintf("%.10f", value))
+		denParsed, _ := decimal128.Parse(fmt.Sprintf("%.10f", *v))
+		_, remainder := numParsed.QuoRem(denParsed)
+		if !remainder.IsZero() {
 			if settings.failfast {
 				return errSchema
 			}
@@ -2243,4 +2253,10 @@ func RegisterArrayUniqueItemsChecker(fn SliceUniqueItemsChecker) {
 
 func unsupportedFormat(format string) error {
 	return fmt.Errorf("unsupported 'format' value %q", format)
+}
+
+// UnmarshalJSON sets Schemas to a copy of data.
+func (schemas *Schemas) UnmarshalJSON(data []byte) (err error) {
+	*schemas, _, err = unmarshalStringMapP[SchemaRef](data)
+	return
 }
