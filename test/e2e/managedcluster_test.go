@@ -1,6 +1,8 @@
 // Copyright (c) Red Hat, Inc.
 // Copyright Contributors to the Open Cluster Management project
 
+// Trigger e2e run
+
 package e2e
 
 import (
