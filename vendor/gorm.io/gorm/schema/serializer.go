@@ -1,12 +1,14 @@
 package schema
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"database/sql/driver"
+	"encoding/gob"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"strings"
 	"sync"
@@ -32,6 +34,7 @@ func GetSerializer(name string) (serializer SerializerInterface, ok bool) {
 func init() {
 	RegisterSerializer("json", JSONSerializer{})
 	RegisterSerializer("unixtime", UnixSecondSerializer{})
+	RegisterSerializer("gob", GobSerializer{})
 }
 
 // Serializer field value serializer
@@ -68,8 +71,7 @@ type SerializerValuerInterface interface {
 }
 
 // JSONSerializer json serializer
-type JSONSerializer struct {
-}
+type JSONSerializer struct{}
 
 // Scan implements serializer interface
 func (JSONSerializer) Scan(ctx context.Context, field *Field, dst reflect.Value, dbValue interface{}) (err error) {
@@ -83,10 +85,15 @@ func (JSONSerializer) Scan(ctx context.Context, field *Field, dst reflect.Value,
 		case string:
 			bytes = []byte(v)
 		default:
-			return errors.New(fmt.Sprint("Failed to unmarshal JSONB value:", dbValue))
+			bytes, err = json.Marshal(v)
+			if err != nil {
+				return err
+			}
 		}
 
-		err = json.Unmarshal(bytes, fieldValue.Interface())
+		if len(bytes) > 0 {
+			err = json.Unmarshal(bytes, fieldValue.Interface())
+		}
 	}
 
 	field.ReflectValueOf(ctx, dst).Set(fieldValue.Elem())
@@ -96,18 +103,23 @@ func (JSONSerializer) Scan(ctx context.Context, field *Field, dst reflect.Value,
 // Value implements serializer interface
 func (JSONSerializer) Value(ctx context.Context, field *Field, dst reflect.Value, fieldValue interface{}) (interface{}, error) {
 	result, err := json.Marshal(fieldValue)
+	if string(result) == "null" {
+		if field.TagSettings["NOT NULL"] != "" {
+			return "", nil
+		}
+		return nil, err
+	}
 	return string(result), err
 }
 
 // UnixSecondSerializer json serializer
-type UnixSecondSerializer struct {
-}
+type UnixSecondSerializer struct{}
 
 // Scan implements serializer interface
 func (UnixSecondSerializer) Scan(ctx context.Context, field *Field, dst reflect.Value, dbValue interface{}) (err error) {
 	t := sql.NullTime{}
-	if err = t.Scan(dbValue); err == nil {
-		err = field.Set(ctx, dst, t.Time)
+	if err = t.Scan(dbValue); err == nil && t.Valid {
+		err = field.Set(ctx, dst, t.Time.Unix())
 	}
 
 	return
@@ -115,11 +127,63 @@ func (UnixSecondSerializer) Scan(ctx context.Context, field *Field, dst reflect.
 
 // Value implements serializer interface
 func (UnixSecondSerializer) Value(ctx context.Context, field *Field, dst reflect.Value, fieldValue interface{}) (result interface{}, err error) {
-	switch v := fieldValue.(type) {
-	case int64, int, uint, uint64, int32, uint32, int16, uint16:
-		result = time.Unix(reflect.ValueOf(v).Int(), 0)
+	rv := reflect.ValueOf(fieldValue)
+	switch fieldValue.(type) {
+	case int, int8, int16, int32, int64:
+		result = time.Unix(rv.Int(), 0).UTC()
+	case uint, uint8, uint16, uint32, uint64:
+		if uv := rv.Uint(); uv > math.MaxInt64 {
+			err = fmt.Errorf("integer overflow conversion uint64(%d) -> int64", uv)
+		} else {
+			result = time.Unix(int64(uv), 0).UTC() //nolint:gosec
+		}
+	case *int, *int8, *int16, *int32, *int64:
+		if rv.IsZero() {
+			return nil, nil
+		}
+		result = time.Unix(rv.Elem().Int(), 0).UTC()
+	case *uint, *uint8, *uint16, *uint32, *uint64:
+		if rv.IsZero() {
+			return nil, nil
+		}
+		if uv := rv.Elem().Uint(); uv > math.MaxInt64 {
+			err = fmt.Errorf("integer overflow conversion uint64(%d) -> int64", uv)
+		} else {
+			result = time.Unix(int64(uv), 0).UTC() //nolint:gosec
+		}
 	default:
-		err = fmt.Errorf("invalid field type %#v for UnixSecondSerializer, only int, uint supported", v)
+		err = fmt.Errorf("invalid field type %#v for UnixSecondSerializer, only int, uint supported", fieldValue)
 	}
 	return
+}
+
+// GobSerializer gob serializer
+type GobSerializer struct{}
+
+// Scan implements serializer interface
+func (GobSerializer) Scan(ctx context.Context, field *Field, dst reflect.Value, dbValue interface{}) (err error) {
+	fieldValue := reflect.New(field.FieldType)
+
+	if dbValue != nil {
+		var bytesValue []byte
+		switch v := dbValue.(type) {
+		case []byte:
+			bytesValue = v
+		default:
+			return fmt.Errorf("failed to unmarshal gob value: %#v", dbValue)
+		}
+		if len(bytesValue) > 0 {
+			decoder := gob.NewDecoder(bytes.NewBuffer(bytesValue))
+			err = decoder.Decode(fieldValue.Interface())
+		}
+	}
+	field.ReflectValueOf(ctx, dst).Set(fieldValue.Elem())
+	return
+}
+
+// Value implements serializer interface
+func (GobSerializer) Value(ctx context.Context, field *Field, dst reflect.Value, fieldValue interface{}) (interface{}, error) {
+	buf := new(bytes.Buffer)
+	err := gob.NewEncoder(buf).Encode(fieldValue)
+	return buf.Bytes(), err
 }
