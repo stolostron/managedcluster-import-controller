@@ -96,6 +96,9 @@ func init() {
 }
 
 func main() {
+	// Test CI for backplane-2.10 branch
+	fmt.Println("Testing CI pipeline for backplane-2.10 branch")
+
 	var leaderElectionNamespace = ""
 	var enablePprof = false
 	if enablePprofEnv, exists := os.LookupEnv("ENABLE_PPROF"); exists {
