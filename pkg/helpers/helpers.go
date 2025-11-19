@@ -46,6 +46,7 @@ import (
 	kevents "k8s.io/client-go/tools/events"
 	certutil "k8s.io/client-go/util/cert"
 	"k8s.io/klog/v2"
+	"k8s.io/utils/clock"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterscheme "open-cluster-management.io/api/client/cluster/clientset/versioned/scheme"
 	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
@@ -741,7 +742,7 @@ func NewEventRecorder(kubeClient kubernetes.Interface, controllerName string) ev
 	}
 
 	options := events.RecommendedClusterSingletonCorrelatorOptions()
-	return events.NewKubeRecorderWithOptions(kubeClient.CoreV1().Events(namespace), options, controllerName, controllerRef)
+	return events.NewKubeRecorderWithOptions(kubeClient.CoreV1().Events(namespace), options, controllerName, controllerRef, clock.RealClock{})
 }
 
 func NewManagedClusterEventRecorder(ctx context.Context,
@@ -941,10 +942,10 @@ func ValidateNodeSelector(nodeSelector map[string]string) error {
 	errs := []error{}
 	for key, val := range nodeSelector {
 		if errMsgs := validation.IsQualifiedName(key); len(errMsgs) != 0 {
-			errs = append(errs, fmt.Errorf(strings.Join(errMsgs, ";")))
+			errs = append(errs, fmt.Errorf("%s", strings.Join(errMsgs, ";")))
 		}
 		if errMsgs := validation.IsValidLabelValue(val); len(errMsgs) != 0 {
-			errs = append(errs, fmt.Errorf(strings.Join(errMsgs, ";")))
+			errs = append(errs, fmt.Errorf("%s", strings.Join(errMsgs, ";")))
 		}
 	}
 	return utilerrors.NewAggregate(errs)
@@ -957,7 +958,7 @@ func ValidateTolerations(tolerations []corev1.Toleration) error {
 		// validate the toleration key
 		if len(toleration.Key) > 0 {
 			if errMsgs := validation.IsQualifiedName(toleration.Key); len(errMsgs) != 0 {
-				errs = append(errs, fmt.Errorf(strings.Join(errMsgs, ";")))
+				errs = append(errs, fmt.Errorf("%s", strings.Join(errMsgs, ";")))
 			}
 		}
 
@@ -978,7 +979,7 @@ func ValidateTolerations(tolerations []corev1.Toleration) error {
 		// empty operator means Equal
 		case corev1.TolerationOpEqual, "":
 			if errMsgs := validation.IsValidLabelValue(toleration.Value); len(errMsgs) != 0 {
-				errs = append(errs, fmt.Errorf(strings.Join(errMsgs, ";")))
+				errs = append(errs, fmt.Errorf("%s", strings.Join(errMsgs, ";")))
 			}
 		case corev1.TolerationOpExists:
 			if len(toleration.Value) > 0 {
