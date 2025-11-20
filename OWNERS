@@ -1,14 +1,14 @@
 reviewers:
-- xuezhaojun
-- zhujian7
 - zhiweiyin318
 - elgnay
 - skeeey
 - qiujian16
 approvers:
-- xuezhaojun
-- zhujian7
 - zhiweiyin318
 - elgnay
 - skeeey
 - qiujian16
+# Temporary approvers for Konflux migration to facilitate release repo prow configuration updates
+# These will be removed after the migration is complete
+- xuezhaojun
+- zhujian7
