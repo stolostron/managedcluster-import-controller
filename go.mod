@@ -1,6 +1,6 @@
 module github.com/stolostron/managedcluster-import-controller
 
-go 1.23.6
+go 1.24.0
 
 // TODO: @xuezhaojun need to switch to the official flightctl lib once it's ready.
 replace github.com/flightctl/flightctl/lib => github.com/xuezhaojun/flightctl/lib v0.0.0-20241125124411-7eec33f53a61
@@ -14,15 +14,15 @@ require (
 	github.com/onsi/gomega v1.36.3
 	github.com/openshift/api v0.0.0-20250313134101-8a7efbfb5316
 	github.com/openshift/assisted-service/api v0.0.0
-	github.com/openshift/hive/apis v0.0.0-20250529232658-13b99a5eb2a2
+	github.com/openshift/hive/apis v0.0.0-20251125223338-67352652fb30
 	github.com/openshift/library-go v0.0.0-20250228164547-bad2d1bf3a37 // https://github.com/openshift/library-go/tree/release-4.14
 	github.com/spf13/pflag v1.0.6
 	github.com/stolostron/cluster-lifecycle-api v0.0.0-20250521101300-d1731ad54b6d
 	go.uber.org/zap v1.27.0
-	golang.org/x/text v0.28.0
-	k8s.io/api v0.32.4
+	golang.org/x/text v0.31.0
+	k8s.io/api v0.33.3
 	k8s.io/apiextensions-apiserver v0.32.2
-	k8s.io/apimachinery v0.32.4
+	k8s.io/apimachinery v0.33.3
 	k8s.io/apiserver v0.32.3
 	k8s.io/client-go v0.32.4
 	k8s.io/component-base v0.32.4
@@ -82,7 +82,6 @@ require (
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/btree v1.1.3 // indirect
 	github.com/google/gnostic-models v0.6.9 // indirect
-	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/pprof v0.0.0-20250403155104-27863c87afa6 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/gorilla/css v1.0.0 // indirect
@@ -137,14 +136,14 @@ require (
 	go.opentelemetry.io/otel/trace v1.33.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.41.0 // indirect
-	golang.org/x/net v0.43.0 // indirect
+	golang.org/x/crypto v0.44.0 // indirect
+	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/oauth2 v0.28.0 // indirect
-	golang.org/x/sync v0.16.0 // indirect
-	golang.org/x/sys v0.35.0 // indirect
-	golang.org/x/term v0.34.0 // indirect
+	golang.org/x/sync v0.18.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/term v0.37.0 // indirect
 	golang.org/x/time v0.9.0 // indirect
-	golang.org/x/tools v0.35.0 // indirect
+	golang.org/x/tools v0.38.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/protobuf v1.36.5 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect

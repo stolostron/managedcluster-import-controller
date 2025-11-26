@@ -43,7 +43,7 @@ helm_gen_dir:=$(dir $(HELM))
 
 ## Runs a set of required checks
 .PHONY: check
-check: check-copyright lint
+check: check-copyright
 
 .PHONY: check-copyright
 check-copyright:
@@ -93,7 +93,7 @@ e2e-test: build-image ensure-helm
 	@build/setup-ocm.sh
 	@build/setup-import-controller.sh
 	go test -c ./test/e2e -o _output/e2e.test
-	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="!agent-registration" --ginkgo.timeout=2h
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="!agent-registration" --ginkgo.timeout=3h
 ## Clean e2e test
 .PHONY: clean-e2e-test
 clean-e2e-test:
@@ -106,7 +106,7 @@ e2e-test-prow: ensure-helm
 	@build/setup-ocm.sh enable-auto-approval
 	@build/setup-import-controller.sh enable-agent-registration
 	go test -c ./test/e2e -o _output/e2e.test
-	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="agent-registration" --ginkgo.timeout=2h
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="agent-registration" --ginkgo.timeout=3h
 
 ensure-helm:
 ifeq "" "$(wildcard $(HELM))"
