@@ -1,14 +1,13 @@
 # Copyright Contributors to the Open Cluster Management project
 
-FROM brew.registry.redhat.io/rh-osbs/openshift-golang-builder:rhel_8_1.23 AS builder
+FROM brew.registry.redhat.io/rh-osbs/openshift-golang-builder:rhel_8_1.24 AS builder
 
 ENV REMOTE_SOURCE='.'
 ENV REMOTE_SOURCE_DIR='/remote-source'
 
 COPY $REMOTE_SOURCE $REMOTE_SOURCE_DIR/app/
 WORKDIR $REMOTE_SOURCE_DIR/app
-
-RUN go build -mod=readonly -o $REMOTE_SOURCE_DIR/app/manager ./cmd/manager
+RUN BUILD_OUTPUT_DIR=${REMOTE_SOURCE_DIR}/app make build
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 LABEL \
