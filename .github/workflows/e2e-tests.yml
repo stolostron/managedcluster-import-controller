@@ -8,11 +8,13 @@ on:
     paths-ignore:
       - ".tekton/**"
       - "docs/**"
+      - "build/Dockerfile.rhtap"
   pull_request:
     branches: [main, release-*, backplane-*]
     paths-ignore:
       - ".tekton/**"
       - "docs/**"
+      - "build/Dockerfile.rhtap"
 
 jobs:
   e2e-core:
@@ -39,6 +41,8 @@ jobs:
         run: kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=-1
 
   e2e-misc:
+    # Run after e2e-core to avoid resource contention
+    needs: e2e-core
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -62,6 +66,8 @@ jobs:
         run: kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=-1
 
   e2e-hosted:
+    # Run after e2e-misc to avoid resource contention
+    needs: e2e-misc
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -83,4 +89,3 @@ jobs:
       - if: ${{ failure() }}
         name: Logs after Tests Failed
         run: kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=-1
-
