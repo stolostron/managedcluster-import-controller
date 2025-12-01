@@ -38,6 +38,11 @@ jobs:
         name: Logs after Tests Failed
         run: kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=-1
 
+      - if: ${{ failure() }}
+        name: Setup tmate session for debugging
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: 30
+
   e2e-misc:
     runs-on: ubuntu-latest
     steps:
@@ -61,6 +66,11 @@ jobs:
         name: Logs after Tests Failed
         run: kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=-1
 
+      - if: ${{ failure() }}
+        name: Setup tmate session for debugging
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: 30
+
   e2e-hosted:
     runs-on: ubuntu-latest
     steps:
@@ -83,4 +93,9 @@ jobs:
       - if: ${{ failure() }}
         name: Logs after Tests Failed
         run: kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=-1
+
+      - if: ${{ failure() }}
+        name: Setup tmate session for debugging
+        uses: mxschmitt/action-tmate@v3
+        timeout-minutes: 30
 
