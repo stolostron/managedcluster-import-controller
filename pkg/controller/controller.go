@@ -38,16 +38,13 @@ func AddToManager(ctx context.Context,
 	clientHolder *helpers.ClientHolder,
 	informerHolder *source.InformerHolder,
 	componentNamespace string,
-	enableFlightCtl bool,
 	flightctlManager *flightctl.FlightCtlManager,
 	mcRecorder kevents.EventRecorder) error {
 
-	extraCSRApprovalConditions := []func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error){}
-	if enableFlightCtl {
-		// Case 1: If flightctl is enabled, and a csr is from a flightctl device, approve it.
-		extraCSRApprovalConditions = append(extraCSRApprovalConditions, func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error) {
+	extraCSRApprovalConditions := []func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error){
+		func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error) {
 			return flightctlManager.IsManagedClusterAFlightctlDevice(ctx, helpers.GetClusterName(csr))
-		})
+		},
 	}
 
 	AddToManagerFuncs := []struct {
@@ -113,19 +110,12 @@ func AddToManager(ctx context.Context,
 				return resourcecleanup.Add(ctx, manager, clientHolder, mcRecorder)
 			},
 		},
-	}
-
-	if enableFlightCtl {
-		// If flightctl is enabled, add a managedcluster controller to set hubAcceptsClient to true if the managed cluster is a flightctl device.
-		AddToManagerFuncs = append(AddToManagerFuncs, struct {
-			ControllerName string
-			Add            func() error
-		}{
+		{
 			flightctl.ManagedClusterControllerName,
 			func() error {
 				return flightctl.AddManagedClusterController(ctx, manager, flightctlManager, clientHolder)
 			},
-		})
+		},
 	}
 
 	for _, f := range AddToManagerFuncs {
