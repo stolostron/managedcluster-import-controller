@@ -108,12 +108,7 @@ func main() {
 	}
 
 	var clusterIngressDomain string
-	var enableFlightCtl = false
-	var flightctlServer string
 	pflag.StringVar(&clusterIngressDomain, "cluster-ingress-domain", "", "the ingress domain of the cluster")
-	pflag.BoolVar(&enableFlightCtl, "enable-flightctl", false, "enable flightctl")
-	pflag.StringVar(&flightctlServer, "flightctl-server", "", "the server address of the flightctl")
-
 	pflag.StringVar(&leaderElectionNamespace, "leader-election-namespace", "", "required when the process is not running in cluster")
 	pflag.BoolVar(&helpers.DeployOnOCP, "deploy-on-ocp", true, "used to deploy the controller on OCP or not")
 	pflag.Float32Var(&QPS, "kube-api-qps", 50, "QPS indicates the maximum QPS to the master from this client")
@@ -340,7 +335,7 @@ func main() {
 		},
 	)
 	serviceLister := serviceInformerF.Core().V1().Services().Lister()
-	flightctlManager := flightctl.NewFlightCtlManager(clientHolder, serviceLister, clusterIngressDomain, flightctlServer)
+	flightctlManager := flightctl.NewFlightCtlManager(clientHolder, serviceLister, clusterIngressDomain)
 
 	setupLog.Info("Registering Controllers")
 	if err := controller.AddToManager(
@@ -363,7 +358,6 @@ func main() {
 			ManagedClusterInformer:   managedclusterInformer,
 		},
 		componentNamespace,
-		enableFlightCtl,
 		flightctlManager,
 		mcRecorder,
 	); err != nil {
@@ -386,6 +380,7 @@ func main() {
 	hostedWorksInformerF.WaitForCacheSync(ctx.Done())
 	klusterletconfigInformerF.WaitForCacheSync(ctx.Done())
 	managedclusterInformerF.WaitForCacheSync(ctx.Done())
+	go flightctlManager.StartReconcileFlightCtlResources(ctx)
 
 	// Start the agent-registratioin server
 	if features.DefaultMutableFeatureGate.Enabled(features.AgentRegistration) {
@@ -395,10 +390,6 @@ func main() {
 				setupLog.Error(err, "failed to start agent registration server")
 			}
 		}()
-	}
-
-	if enableFlightCtl {
-		go flightctlManager.StartReconcileFlightCtlResources(ctx)
 	}
 
 	if enablePprof {

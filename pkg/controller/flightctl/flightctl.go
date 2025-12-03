@@ -29,27 +29,22 @@ const (
 //go:embed manifests
 var FlightCtlManifestFiles embed.FS
 
-// 1. flightctl-agent-registration <-> flightctl-agent-registration: used in the flightctl Repository,
+// flightctl-agent-registration <-> flightctl-agent-registration: used in the flightctl Repository,
 // will be delivered to the flightctl-agent in managed cluster side.
-// 2. managedcluster-import-controller-v2 <-> flightctl-client: used for import-controller to access
-// the flightctl-api service on the hub side.
 var files = []string{
-	"manifests/clusterrole.yml",
 	"manifests/clusterrolebinding_agentregistration.yml",
-	"manifests/clusterrolebinding_flightctl.yml",
 	"manifests/serviceaccount.yml",
 }
 
 func NewFlightCtlManager(clientHolder *helpers.ClientHolder, serviceLister v1.ServiceLister,
-	clusterIngressDomain string, flightctlServer string) *FlightCtlManager {
-	return &FlightCtlManager{
+	clusterIngressDomain string) *FlightCtlManager {
+	fcm := &FlightCtlManager{
 		agentRegistrationServer: "https://agent-registration-multicluster-engine." + clusterIngressDomain,
 		clientHolder:            clientHolder,
 		recorder:                helpers.NewEventRecorder(clientHolder.KubeClient, "FlightCtl"),
 		serviceLister:           serviceLister,
-		flightctlServer:         flightctlServer,
-		flightctlClient:         &flightctlClientImpl{flightctlServer: flightctlServer},
 	}
+	return fcm
 }
 
 type FlightCtlManager struct {
@@ -57,8 +52,9 @@ type FlightCtlManager struct {
 	serviceLister v1.ServiceLister
 	recorder      events.Recorder
 
-	flightctlClient         flightctlClient
-	flightctlServer         string
+	flightctlClient flightctlClient
+	flightctlServer string
+
 	agentRegistrationServer string
 }
 
@@ -70,6 +66,16 @@ type FlightCtlManager struct {
 func (f *FlightCtlManager) StartReconcileFlightCtlResources(ctx context.Context) {
 	// Helper function to apply resources and record errors
 	applyFunc := func(ctx context.Context) (bool, error) {
+		// First, check if flightctl is enabled, if not, skip the reconciliation.
+		if enabled, err := f.isFlightCtlEnabled(); err != nil {
+			f.recorder.Event("FlightCtlCheckFailed",
+				fmt.Sprintf("Failed to check if FlightCtl is enabled: %v", err))
+			return false, nil
+		} else if !enabled {
+			f.recorder.Event("FlightCtlDisabled", "FlightCtl is not enabled, skipping resource reconciliation")
+			return true, nil
+		}
+
 		if err := f.ensureFlightCtlServer(); err != nil {
 			f.recorder.Event("FlightCtlServerFailed",
 				fmt.Sprintf("Failed to ensure FlightCtl server: %v", err))
@@ -197,6 +203,13 @@ func (f *FlightCtlManager) applyRepository(ctx context.Context) error {
 }
 
 func (f *FlightCtlManager) IsManagedClusterAFlightctlDevice(ctx context.Context, managedClusterName string) (bool, error) {
+	// First, check if flightctl is enabled
+	if enabled, err := f.isFlightCtlEnabled(); err != nil {
+		return false, err
+	} else if !enabled {
+		return false, nil
+	}
+
 	flightctlClientToken, err := f.getFlightCtlClientToken()
 	if err != nil {
 		return false, err
@@ -215,6 +228,11 @@ func (f *FlightCtlManager) IsManagedClusterAFlightctlDevice(ctx context.Context,
 		return false, fmt.Errorf("failed to get device %s, status code: %d", managedClusterName, response.HTTPResponse.StatusCode)
 	}
 
+	return true, nil
+}
+
+// TODO: @xuezhaojun, need to cache the flightctl server address after first ensure.
+func (f *FlightCtlManager) isFlightCtlEnabled() (bool, error) {
 	return true, nil
 }
 
