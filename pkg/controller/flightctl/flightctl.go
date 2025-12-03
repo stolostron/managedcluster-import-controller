@@ -29,14 +29,10 @@ const (
 //go:embed manifests
 var FlightCtlManifestFiles embed.FS
 
-// 1. flightctl-agent-registration <-> flightctl-agent-registration: used in the flightctl Repository,
+// flightctl-agent-registration <-> flightctl-agent-registration: used in the flightctl Repository,
 // will be delivered to the flightctl-agent in managed cluster side.
-// 2. managedcluster-import-controller-v2 <-> flightctl-client: used for import-controller to access
-// the flightctl-api service on the hub side.
 var files = []string{
-	"manifests/clusterrole.yml",
 	"manifests/clusterrolebinding_agentregistration.yml",
-	"manifests/clusterrolebinding_flightctl.yml",
 	"manifests/serviceaccount.yml",
 }
 
