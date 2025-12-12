@@ -49,17 +49,17 @@ check: check-copyright lint
 check-copyright:
 	@build/check-copyright.sh
 
+GOLANGCI_LINT_VERSION = v1.62.2
+TOOLS_DIR = $(PWD)/_output
+GOLANGCI_LINT = $(TOOLS_DIR)/golangci-lint
+
 .PHONY: lint
-lint:
-	build/run-lint-check.sh
+lint: $(GOLANGCI_LINT)
+	$(GOLANGCI_LINT) run --timeout=5m ./...
 
-## Runs unit tests
-.PHONY: test
-test:
-	@build/run-unit-tests.sh
-
-## Builds controller binary
-.PHONY: build
+$(GOLANGCI_LINT):
+	@mkdir -p $(TOOLS_DIR)
+	@GOBIN=$(TOOLS_DIR) go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 build:
 	go build -o $(BUILD_OUTPUT_DIR)/manager ./cmd/manager
 
