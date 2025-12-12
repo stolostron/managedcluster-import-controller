@@ -115,8 +115,10 @@ func main() {
 	// The FlightCtl server address is now determined automatically.
 	var flightctlServer string
 	pflag.StringVar(&clusterIngressDomain, "cluster-ingress-domain", "", "the ingress domain of the cluster")
-	pflag.BoolVar(&enableFlightCtl, "enable-flightctl", false, "DEPRECATED: enable flightctl (now auto-detected)")
-	pflag.StringVar(&flightctlServer, "flightctl-server", "", "DEPRECATED: the server address of the flightctl (now auto-detected)")
+	pflag.BoolVar(&enableFlightCtl, "enable-flightctl", false, "enable flightctl")
+	pflag.StringVar(&flightctlServer, "flightctl-server", "", "the server address of the flightctl")
+	pflag.CommandLine.MarkDeprecated("enable-flightctl", "this flag is deprecated and will be removed in a future release. FlightCtl enablement is now determined automatically.")
+	pflag.CommandLine.MarkDeprecated("flightctl-server", "this flag is deprecated and will be removed in a future release. The FlightCtl server address is now determined automatically.")
 	// Silence unused variable warnings for deprecated flags
 	_ = enableFlightCtl
 	_ = flightctlServer
@@ -337,16 +339,7 @@ func main() {
 	mcRecorder := helpers.NewManagedClusterEventRecorder(ctx, clientHolder.KubeClient)
 
 	// Init flightctlManager
-	serviceInformerF := informers.NewFilteredSharedInformerFactory(
-		kubeClient,
-		10*time.Minute,
-		metav1.NamespaceAll, func(listOptions *metav1.ListOptions) {
-			listOptions.FieldSelector = fields.OneTermEqualSelector("metadata.name",
-				flightctl.FlightCtlServerServiceName).String()
-		},
-	)
-	serviceLister := serviceInformerF.Core().V1().Services().Lister()
-	flightctlManager := flightctl.NewFlightCtlManager(clientHolder, serviceLister, clusterIngressDomain)
+	flightctlManager := flightctl.NewFlightCtlManager(clientHolder, clusterIngressDomain)
 
 	setupLog.Info("Registering Controllers")
 	if err := controller.AddToManager(
@@ -384,7 +377,6 @@ func main() {
 	hostedWorksInformerF.Start(ctx.Done())
 	klusterletconfigInformerF.Start(ctx.Done())
 	managedclusterInformerF.Start(ctx.Done())
-	serviceInformerF.Start(ctx.Done())
 	importSecertInformerF.WaitForCacheSync(ctx.Done())
 	autoimportSecretInformerF.WaitForCacheSync(ctx.Done())
 	klusterletWorksInformerF.WaitForCacheSync(ctx.Done())
