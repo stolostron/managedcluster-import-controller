@@ -17,14 +17,11 @@ import (
 	authenticationv1 "k8s.io/api/authentication/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
-	v1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/utils/ptr"
 )
 
 const (
-	FlightCtlServerServiceName  = "flightctl-api"
 	FlightCtlDiscoveryConfigMap = "flightctl-discovery"
 )
 
@@ -38,21 +35,19 @@ var files = []string{
 	"manifests/serviceaccount.yml",
 }
 
-func NewFlightCtlManager(clientHolder *helpers.ClientHolder, serviceLister v1.ServiceLister,
+func NewFlightCtlManager(clientHolder *helpers.ClientHolder,
 	clusterIngressDomain string) *FlightCtlManager {
 	fcm := &FlightCtlManager{
 		agentRegistrationServer: "https://agent-registration-multicluster-engine." + clusterIngressDomain,
 		clientHolder:            clientHolder,
 		recorder:                helpers.NewEventRecorder(clientHolder.KubeClient, "FlightCtl"),
-		serviceLister:           serviceLister,
 	}
 	return fcm
 }
 
 type FlightCtlManager struct {
-	clientHolder  *helpers.ClientHolder
-	serviceLister v1.ServiceLister
-	recorder      events.Recorder
+	clientHolder *helpers.ClientHolder
+	recorder     events.Recorder
 
 	flightctlClient flightctlClient
 	flightctlServer string
@@ -114,43 +109,30 @@ func (f *FlightCtlManager) StartReconcileFlightCtlResources(ctx context.Context)
 }
 
 // ensureFlightCtlServer sets the flightctl server address if not already set.
-// It first tries to get the apiEndpoint from the flightctl-discovery ConfigMap.
-// If not found, it falls back to listing services to find the flightctl-api service.
+// It gets the apiEndpoint from the flightctl-discovery ConfigMap.
 func (f *FlightCtlManager) ensureFlightCtlServer() error {
 	if f.flightctlServer != "" {
 		return nil
 	}
 
-	// First, try to get the apiEndpoint from the ConfigMap
 	namespace := os.Getenv("POD_NAMESPACE")
 	cm, err := f.clientHolder.KubeClient.CoreV1().ConfigMaps(namespace).Get(
 		context.Background(),
 		FlightCtlDiscoveryConfigMap,
 		metav1.GetOptions{},
 	)
-	if err == nil {
-		if apiEndpoint, ok := cm.Data["apiEndpoint"]; ok && apiEndpoint != "" {
-			f.flightctlServer = apiEndpoint
-			f.flightctlClient = &flightctlClientImpl{flightctlServer: f.flightctlServer}
-			return nil
-		}
-	}
-
-	// Fallback: list all services to find the flightctl-api service
-	services, err := f.serviceLister.List(labels.Everything())
 	if err != nil {
-		return fmt.Errorf("failed to list services: %v", err)
+		return fmt.Errorf("failed to get %s configmap: %v", FlightCtlDiscoveryConfigMap, err)
 	}
 
-	for _, service := range services {
-		if service.Name == FlightCtlServerServiceName {
-			f.flightctlServer = fmt.Sprintf("https://%s.%s.svc:3443", FlightCtlServerServiceName, service.Namespace)
-			f.flightctlClient = &flightctlClientImpl{flightctlServer: f.flightctlServer}
-			return nil
-		}
+	apiEndpoint, ok := cm.Data["apiEndpoint"]
+	if !ok || apiEndpoint == "" {
+		return fmt.Errorf("apiEndpoint not found or empty in %s configmap", FlightCtlDiscoveryConfigMap)
 	}
 
-	return fmt.Errorf("flightctl-api service not found")
+	f.flightctlServer = apiEndpoint
+	f.flightctlClient = &flightctlClientImpl{flightctlServer: f.flightctlServer}
+	return nil
 }
 
 func (f *FlightCtlManager) applyKuberentesResources(_ context.Context) error {
