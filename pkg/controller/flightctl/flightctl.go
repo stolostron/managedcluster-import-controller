@@ -256,24 +256,30 @@ func (f *FlightCtlManager) isFlightCtlEnabledAndHealthy() error {
 		return fmt.Errorf("namespace not found in flightctl-discovery configmap")
 	}
 
-	// Get the CA certificate from flightctl-ca-bundle Secret
+	// Get the CA secret name from the ConfigMap
+	caSecretName, ok := cm.Data["caSecretName"]
+	if !ok || caSecretName == "" {
+		return fmt.Errorf("caSecretName not found in flightctl-discovery configmap")
+	}
+
+	// Get the CA certificate from the specified Secret
 	caSecret, err := f.clientHolder.KubeClient.CoreV1().Secrets(flightctlNamespace).Get(
 		context.Background(),
-		"flightctl-ca-bundle",
+		caSecretName,
 		metav1.GetOptions{},
 	)
 	if err != nil {
-		return fmt.Errorf("failed to get flightctl-ca-bundle secret: %v", err)
+		return fmt.Errorf("failed to get %s secret: %v", caSecretName, err)
 	}
 
-	caCert, ok := caSecret.Data["ca.crt"]
+	caCert, ok := caSecret.Data["ca-bundle.crt"]
 	if !ok {
-		return fmt.Errorf("ca.crt not found in flightctl-ca-bundle secret")
+		return fmt.Errorf("ca-bundle.crt not found in %s secret", caSecretName)
 	}
 
 	caCertPool := x509.NewCertPool()
 	if !caCertPool.AppendCertsFromPEM(caCert) {
-		return fmt.Errorf("failed to parse CA certificate from flightctl-ca-bundle")
+		return fmt.Errorf("failed to parse CA certificate from %s secret", caSecretName)
 	}
 
 	// Perform health check with custom CA
