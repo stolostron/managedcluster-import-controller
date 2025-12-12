@@ -2,6 +2,8 @@ package flightctl
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"embed"
 	"encoding/base64"
 	"fmt"
@@ -248,8 +250,41 @@ func (f *FlightCtlManager) isFlightCtlEnabledAndHealthy() error {
 		return fmt.Errorf("healthEndpoint not found in flightctl-discovery configmap")
 	}
 
-	// Perform health check
-	client := &http.Client{Timeout: 10 * time.Second}
+	// Get the flightctl namespace from the ConfigMap
+	flightctlNamespace, ok := cm.Data["namespace"]
+	if !ok || flightctlNamespace == "" {
+		return fmt.Errorf("namespace not found in flightctl-discovery configmap")
+	}
+
+	// Get the CA certificate from flightctl-ca-bundle Secret
+	caSecret, err := f.clientHolder.KubeClient.CoreV1().Secrets(flightctlNamespace).Get(
+		context.Background(),
+		"flightctl-ca-bundle",
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to get flightctl-ca-bundle secret: %v", err)
+	}
+
+	caCert, ok := caSecret.Data["ca.crt"]
+	if !ok {
+		return fmt.Errorf("ca.crt not found in flightctl-ca-bundle secret")
+	}
+
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(caCert) {
+		return fmt.Errorf("failed to parse CA certificate from flightctl-ca-bundle")
+	}
+
+	// Perform health check with custom CA
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs: caCertPool,
+			},
+		},
+	}
 	resp, err := client.Get(healthEndpoint)
 	if err != nil {
 		return fmt.Errorf("failed to perform health check: %v", err)
