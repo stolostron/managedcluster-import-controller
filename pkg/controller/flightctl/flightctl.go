@@ -287,7 +287,8 @@ func (f *FlightCtlManager) isFlightCtlEnabledAndHealthy() error {
 		Timeout: 10 * time.Second,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
-				RootCAs: caCertPool,
+				RootCAs:    caCertPool,
+				MinVersion: tls.VersionTLS12,
 			},
 		},
 	}
