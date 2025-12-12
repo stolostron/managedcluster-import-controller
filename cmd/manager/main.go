@@ -117,8 +117,10 @@ func main() {
 	pflag.StringVar(&clusterIngressDomain, "cluster-ingress-domain", "", "the ingress domain of the cluster")
 	pflag.BoolVar(&enableFlightCtl, "enable-flightctl", false, "enable flightctl")
 	pflag.StringVar(&flightctlServer, "flightctl-server", "", "the server address of the flightctl")
-	pflag.CommandLine.MarkDeprecated("enable-flightctl", "this flag is deprecated and will be removed in a future release. FlightCtl enablement is now determined automatically.")
-	pflag.CommandLine.MarkDeprecated("flightctl-server", "this flag is deprecated and will be removed in a future release. The FlightCtl server address is now determined automatically.")
+	_ = pflag.CommandLine.MarkDeprecated("enable-flightctl",
+		"deprecated: FlightCtl enablement is now determined automatically")
+	_ = pflag.CommandLine.MarkDeprecated("flightctl-server",
+		"deprecated: FlightCtl server address is now determined automatically")
 	// Silence unused variable warnings for deprecated flags
 	_ = enableFlightCtl
 	_ = flightctlServer
