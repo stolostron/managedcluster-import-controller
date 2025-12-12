@@ -19,7 +19,6 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"gopkg.in/yaml.v2"
 
-	"open-cluster-management.io/sdk-go/pkg/cloudevents/generic/options"
 	"open-cluster-management.io/sdk-go/pkg/cloudevents/generic/options/cert"
 	"open-cluster-management.io/sdk-go/pkg/cloudevents/generic/options/grpc/protocol"
 )
@@ -114,6 +113,8 @@ func (d *GRPCDialer) Close() error {
 // GRPCOptions holds the options that are used to build gRPC client.
 type GRPCOptions struct {
 	Dialer *GRPCDialer
+
+	ServerHealthinessTimeout *time.Duration
 }
 
 // GRPCConfig holds the information needed to build connect to gRPC server as a given user.
@@ -130,6 +131,10 @@ type GRPCConfig struct {
 
 	// keepalive options
 	KeepAliveConfig KeepAliveConfig `json:"keepAliveConfig,omitempty" yaml:"keepAliveConfig,omitempty"`
+
+	// serverHealthinessTimeout is the max duration that client will reconnect if no server healthiness status is
+	// received in this duration, if it is not set, client will not reconnect when health message is received
+	ServerHealthinessTimeout *time.Duration `json:"serverHealthinessTimeout,omitempty" yaml:"serverHealthinessTimeout,omitempty"`
 }
 
 // KeepAliveConfig holds the keepalive options for the gRPC client.
@@ -241,6 +246,7 @@ func BuildGRPCOptionsFromFlags(configPath string) (*GRPCOptions, error) {
 		}
 	}
 
+	options.ServerHealthinessTimeout = config.ServerHealthinessTimeout
 	return options, nil
 }
 
@@ -248,11 +254,13 @@ func NewGRPCOptions() *GRPCOptions {
 	return &GRPCOptions{}
 }
 
-func (o *GRPCOptions) GetCloudEventsProtocol(ctx context.Context, errorHandler func(error), clientOpts ...protocol.Option) (options.CloudEventsProtocol, error) {
+func (o *GRPCOptions) GetCloudEventsProtocol(ctx context.Context, errorHandler func(error), clientOpts ...protocol.Option) (*protocol.Protocol, error) {
 	conn, err := o.Dialer.Dial()
 	if err != nil {
 		return nil, err
 	}
+
+	logger := klog.FromContext(ctx)
 
 	// Periodically (every 100ms) check the connection status and reconnect if necessary.
 	go func() {
@@ -260,7 +268,7 @@ func (o *GRPCOptions) GetCloudEventsProtocol(ctx context.Context, errorHandler f
 		for {
 			if !conn.WaitForStateChange(ctx, state) {
 				// the ctx is closed, stop this watch
-				klog.Infof("Stop watch grpc connection state")
+				logger.Info("Stop watch grpc connection state")
 				return
 			}
 
@@ -278,7 +286,7 @@ func (o *GRPCOptions) GetCloudEventsProtocol(ctx context.Context, errorHandler f
 				if newState != connectivity.Shutdown {
 					// don't close the connection if it's already shutdown
 					if err := conn.Close(); err != nil {
-						klog.Errorf("failed to close gRPC connection, %v", err)
+						logger.Error(err, "failed to close gRPC connection")
 					}
 				}
 				return // exit the goroutine as the error handler function will handle the reconnection.
