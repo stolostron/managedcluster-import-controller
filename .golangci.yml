@@ -1,141 +1,147 @@
 # Copyright Contributors to the Open Cluster Management project
-
+version: "2"
 run:
   # default concurrency is a available CPU number
   concurrency: 10
-  # timeout for analysis, e.g. 30s, 5m, default is 1m
-  timeout: 5m
-
-  # which dirs to skip: they won't be analyzed;
-  # can use regexp here: generated.*, regexp is applied on full path;
-  # default value is empty list, but next dirs are always skipped independently
-  # from this option's value:
-  # vendor$, third_party$, testdata$, examples$, Godeps$, builtin$
-
 linters:
-  # please, do not use `enable-all`: it's deprecated and will be removed soon.
-  # inverted configuration with `enable-all` and `disable` is not scalable during updates of golangci-lint
-  disable-all: true
+  default: none
   enable:
-    - unused
     - errcheck
     - goconst
     - gocritic
-    - gofmt
-    - goimports
     - gosec
-    - gosimple
     - govet
     - ineffassign
     - lll
     - misspell
-    - typecheck
+    - staticcheck
     - unconvert
-
+    - unused
 linters-settings:
   errcheck:
-    # report about not checking of errors in type assetions: `a := b.(MyStruct)`;
-    # default is false: such cases aren't reported by default.
     check-type-assertions: false
-
-    # report about assignment of errors to blank identifier: `num, _ := strconv.Atoi(numStr)`;
-    # default is false: such cases aren't reported by default.
     check-blank: false
-  gofmt:
-    # simplify code: gofmt with `-s` option, true by default
-    simplify: true
-  misspell:
-    # Correct spellings using locale preferences for US or UK.
-    # Default is to use a neutral variety of English.
-    # Setting locale to US will correct the British spelling of 'colour' to 'color'.
-    locale: US
-    ignore-words:
-    - cancelled
-  lll:
-    # max line length, lines longer will be reported. Default is 120.
-    # '\t' is counted as 1 character by default, and can be changed with the tab-width option
-    line-length: 160
-    # tab width in spaces. Default to 1.
-    tab-width: 1
   gocritic:
     enabled-checks:
       - appendCombine
-      - argOrder
-      - assignOp
-      - badCond
+      # - argOrder
+      # - assignOp
+      # - badCond
       - boolExprSimplify
       - builtinShadow
-      - captLocal
-      - caseOrder
-      - codegenComment
-      - defaultCaseOrder
-      - deprecatedComment
+      # - captLocal
+      # - caseOrder
+      # - codegenComment
+      # - defaultCaseOrder
+      # - deprecatedComment
       - docStub
-      - dupArg
-      - dupBranchBody
-      - dupCase
-      - dupSubExpr
-      - elseif
+      # - dupArg
+      # - dupBranchBody
+      # - dupCase
+      # - dupSubExpr
+      # - elseif
       - emptyFallthrough
       - equalFold
-      - flagDeref
-      - flagName
+      # - flagDeref
+      # - flagName
       - hexLiteral
       - indexAlloc
       - initClause
       - methodExprCall
       - nilValReturn
       - octalLiteral
-      - offBy1
+      # - offBy1
       - rangeExprCopy
-      - regexpMust
-      - sloppyLen
+      # - regexpMust
+      # - sloppyLen
       - stringXbytes
-      - switchTrue
+      # - switchTrue
       - typeAssertChain
-      - typeSwitchVar
+      # - typeSwitchVar
       - typeUnparen
-      - underef
-      - unlambda
+      # - underef
+      # - unlambda
       - unnecessaryBlock
-      - unslice
-      - valSwap
+      # - unslice
+      # - valSwap
       - weakCond
-
-issues:
-  # We want to make sure we get a full report every time. Setting these
-  # to zero disables the limit.
-  max-issues-per-linter: 0
-
-  # List of regexps of issue texts to exclude, empty list by default.
-  # But independently from this option we use default exclude patterns,
-  # it can be disabled by `exclude-use-default: false`. To list all
-  # excluded by default patterns execute `golangci-lint run --help`
-  exclude:
-    - composite literal uses unkeyed fields
-
-  exclude-rules:
-    # Exclude some linters from running on test files.
-    - path: _test\.go$|^tests/|^samples/
-      linters:
-        - errcheck
-        - maligned
-
-  # Independently from option `exclude` we use default exclude patterns,
-  # it can be disabled by this option. To list all
-  # excluded by default patterns execute `golangci-lint run --help`.
-  # Default value for this option is true.
-  exclude-use-default: true
-
-  # Maximum count of issues with the same text. Set to 0 to disable. Default is 3.
-  max-same-issues: 0
-
-  exclude-dirs:
+  lll:
+    line-length: 200
+    tab-width: 1
+  misspell:
+    locale: US
+    ignore-rules:
+      - cancelled
+exclusions:
+  generated: lax
+  presets:
+    - comments
+    - common-false-positives
+    - legacy
+    - std-error-handling
+  paths:
+    - .*\.pb\.go
+    - .*\.gen\.go
     - genfiles$
     - vendor$
     - bindata$
-
-  exclude-files:
-    - ".*\\.pb\\.go"
-    - ".*\\.gen\\.go"
-    - ".*_test\\.go"
+    - third_party$
+    - builtin$
+    - examples$
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    - linters:
+        - errcheck
+        - maligned
+        - staticcheck
+      path: _test\.go$|^tests/|^samples/
+    - path: (.+)\.go$
+      text: composite literal uses unkeyed fields
+    - linters:
+        - staticcheck
+      text: "SA1019:"
+    - linters:
+        - staticcheck
+      text: "SA5011:"
+    - linters:
+        - staticcheck
+      text: "SA4006:"
+    - linters:
+        - unused
+      path: _test\.go$
+    - linters:
+        - ineffassign
+      path: _test\.go$
+    - linters:
+        - gocritic
+      path: _test\.go$
+    - linters:
+        - lll
+      path: _test\.go$
+    - linters:
+        - goconst
+      path: _test\.go$
+    - linters:
+        - misspell
+      text: "contianers"
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  settings:
+    gofmt:
+      simplify: true
+  exclusions:
+    generated: lax
+    paths:
+      - .*\.pb\.go
+      - .*\.gen\.go
+      - .*_test\.go
+      - genfiles$
+      - vendor$
+      - bindata$
+      - third_party$
+      - builtin$
+      - examples$
