@@ -25,7 +25,7 @@ export XDG_CACHE_HOME="${cache_dir}"
 
 export KUBEBUILDER_ASSETS="${repo_dir}/_output/kubebuilder/bin"
 
-k8s_version="1.23.1"
+k8s_version="1.30.0"
 kubebuilder="kubebuilder-tools-${k8s_version}-${GOHOSTOS}-${GOHOSTARCH}.tar.gz"
 kubebuilder_path="${repo_dir}/_output/${kubebuilder}"
 
@@ -37,7 +37,9 @@ if [ ! -d "${KUBEBUILDER_ASSETS}" ]; then
 fi
 
 echo "Running unit test in $pkg_dir"
-go test -cover -covermode=atomic -coverprofile=${coverage_dir}/cover.out ${pkg_dir}
+# Workaround for Go 1.25.0 build cache regression with CGO_ENABLED=1
+# See: https://github.com/golang/go/issues/69566
+GOCACHE=off go test -cover -covermode=atomic -coverprofile=${coverage_dir}/cover.out ${pkg_dir}
 
 COVERAGE=$(go tool cover -func=_output/unit/coverage/cover.out | grep "total:" | awk '{ print $3 }')
 echo "-------------------------------------------------------------------------"
