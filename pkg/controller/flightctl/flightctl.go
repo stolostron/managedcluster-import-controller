@@ -2,6 +2,8 @@ package flightctl
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"embed"
 	"encoding/base64"
 	"fmt"
@@ -15,50 +17,43 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	authenticationv1 "k8s.io/api/authentication/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/util/wait"
-	v1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/utils/ptr"
 )
 
 const (
-	FlightCtlServerServiceName = "flightctl-api"
+	FlightCtlDiscoveryConfigMap = "flightctl-discovery"
 )
 
 //go:embed manifests
 var FlightCtlManifestFiles embed.FS
 
-// 1. flightctl-agent-registration <-> flightctl-agent-registration: used in the flightctl Repository,
+// flightctl-agent-registration <-> flightctl-agent-registration: used in the flightctl Repository,
 // will be delivered to the flightctl-agent in managed cluster side.
-// 2. managedcluster-import-controller-v2 <-> flightctl-client: used for import-controller to access
-// the flightctl-api service on the hub side.
 var files = []string{
-	"manifests/clusterrole.yml",
 	"manifests/clusterrolebinding_agentregistration.yml",
-	"manifests/clusterrolebinding_flightctl.yml",
 	"manifests/serviceaccount.yml",
 }
 
-func NewFlightCtlManager(clientHolder *helpers.ClientHolder, serviceLister v1.ServiceLister,
-	clusterIngressDomain string, flightctlServer string) *FlightCtlManager {
-	return &FlightCtlManager{
+func NewFlightCtlManager(clientHolder *helpers.ClientHolder,
+	clusterIngressDomain string) *FlightCtlManager {
+	fcm := &FlightCtlManager{
 		agentRegistrationServer: "https://agent-registration-multicluster-engine." + clusterIngressDomain,
 		clientHolder:            clientHolder,
 		recorder:                helpers.NewEventRecorder(clientHolder.KubeClient, "FlightCtl"),
-		serviceLister:           serviceLister,
-		flightctlServer:         flightctlServer,
-		flightctlClient:         &flightctlClientImpl{flightctlServer: flightctlServer},
 	}
+	return fcm
 }
 
 type FlightCtlManager struct {
-	clientHolder  *helpers.ClientHolder
-	serviceLister v1.ServiceLister
-	recorder      events.Recorder
+	clientHolder *helpers.ClientHolder
+	recorder     events.Recorder
 
-	flightctlClient         flightctlClient
-	flightctlServer         string
+	flightctlClient flightctlClient
+	flightctlServer string
+
 	agentRegistrationServer string
 }
 
@@ -70,6 +65,13 @@ type FlightCtlManager struct {
 func (f *FlightCtlManager) StartReconcileFlightCtlResources(ctx context.Context) {
 	// Helper function to apply resources and record errors
 	applyFunc := func(ctx context.Context) (bool, error) {
+		// First, check if flightctl is enabled and healthy, if not, skip the reconciliation.
+		if err := f.isFlightCtlEnabledAndHealthy(); err != nil {
+			f.recorder.Event("FlightCtlDegraded",
+				fmt.Sprintf("FlightCtl is not enabled or healthy, skipping resource reconciliation: %v", err))
+			return false, nil
+		}
+
 		if err := f.ensureFlightCtlServer(); err != nil {
 			f.recorder.Event("FlightCtlServerFailed",
 				fmt.Sprintf("Failed to ensure FlightCtl server: %v", err))
@@ -108,30 +110,31 @@ func (f *FlightCtlManager) StartReconcileFlightCtlResources(ctx context.Context)
 	}, 24*time.Hour, ctx.Done())
 }
 
-// If the flightctl server is not set, then:
-// 1. list all services in the cluster scope, find the one with name "flightctl-api", and set the server to the cluster IP of the service.
-// 2. if not found, return an error.
-// TODO: @xuezhaojun, this is a temporary solution, because in this release, `flightctl-server` is not pass by installer, will remove
-// this ensureFlightCtlServer() after `flightctl-server` is passed by installer.
+// ensureFlightCtlServer sets the flightctl server address if not already set.
+// It gets the apiEndpoint from the flightctl-discovery ConfigMap.
 func (f *FlightCtlManager) ensureFlightCtlServer() error {
 	if f.flightctlServer != "" {
 		return nil
 	}
 
-	services, err := f.serviceLister.List(labels.Everything())
+	namespace := os.Getenv("POD_NAMESPACE")
+	cm, err := f.clientHolder.KubeClient.CoreV1().ConfigMaps(namespace).Get(
+		context.Background(),
+		FlightCtlDiscoveryConfigMap,
+		metav1.GetOptions{},
+	)
 	if err != nil {
-		return fmt.Errorf("failed to list services: %v", err)
+		return fmt.Errorf("failed to get %s configmap: %v", FlightCtlDiscoveryConfigMap, err)
 	}
 
-	for _, service := range services {
-		if service.Name == FlightCtlServerServiceName {
-			f.flightctlServer = fmt.Sprintf("https://%s.%s.svc:3443", FlightCtlServerServiceName, service.Namespace)
-			f.flightctlClient = &flightctlClientImpl{flightctlServer: f.flightctlServer}
-			return nil
-		}
+	apiEndpoint, ok := cm.Data["apiEndpoint"]
+	if !ok || apiEndpoint == "" {
+		return fmt.Errorf("apiEndpoint not found or empty in %s configmap", FlightCtlDiscoveryConfigMap)
 	}
 
-	return fmt.Errorf("flightctl-api service not found")
+	f.flightctlServer = apiEndpoint
+	f.flightctlClient = &flightctlClientImpl{flightctlServer: f.flightctlServer}
+	return nil
 }
 
 func (f *FlightCtlManager) applyKuberentesResources(_ context.Context) error {
@@ -197,6 +200,11 @@ func (f *FlightCtlManager) applyRepository(ctx context.Context) error {
 }
 
 func (f *FlightCtlManager) IsManagedClusterAFlightctlDevice(ctx context.Context, managedClusterName string) (bool, error) {
+	// First, check if flightctl is enabled and healthy.
+	if err := f.isFlightCtlEnabledAndHealthy(); err != nil {
+		return false, nil
+	}
+
 	flightctlClientToken, err := f.getFlightCtlClientToken()
 	if err != nil {
 		return false, err
@@ -216,6 +224,85 @@ func (f *FlightCtlManager) IsManagedClusterAFlightctlDevice(ctx context.Context,
 	}
 
 	return true, nil
+}
+
+// isFlightCtlEnabledAndHealthy checks if FlightCtl is enabled and healthy by:
+// 1. Verifying the existence of the flightctl-discovery ConfigMap in the current namespace.
+// 2. Performing a health check against the healthEndpoint specified in the ConfigMap.
+// Returns nil if FlightCtl is enabled and healthy, otherwise returns an error.
+func (f *FlightCtlManager) isFlightCtlEnabledAndHealthy() error {
+	namespace := os.Getenv("POD_NAMESPACE")
+	cm, err := f.clientHolder.KubeClient.CoreV1().ConfigMaps(namespace).Get(
+		context.Background(),
+		FlightCtlDiscoveryConfigMap,
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return fmt.Errorf("flightctl is not enabled: %s configmap not found", FlightCtlDiscoveryConfigMap)
+		}
+		return fmt.Errorf("failed to get flightctl-discovery configmap: %v", err)
+	}
+
+	// Get the health endpoint from the ConfigMap
+	healthEndpoint, ok := cm.Data["healthEndpoint"]
+	if !ok || healthEndpoint == "" {
+		return fmt.Errorf("healthEndpoint not found in flightctl-discovery configmap")
+	}
+
+	// Get the flightctl namespace from the ConfigMap
+	flightctlNamespace, ok := cm.Data["namespace"]
+	if !ok || flightctlNamespace == "" {
+		return fmt.Errorf("namespace not found in flightctl-discovery configmap")
+	}
+
+	// Get the CA secret name from the ConfigMap
+	caSecretName, ok := cm.Data["caSecretName"]
+	if !ok || caSecretName == "" {
+		return fmt.Errorf("caSecretName not found in flightctl-discovery configmap")
+	}
+
+	// Get the CA certificate from the specified Secret
+	caSecret, err := f.clientHolder.KubeClient.CoreV1().Secrets(flightctlNamespace).Get(
+		context.Background(),
+		caSecretName,
+		metav1.GetOptions{},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to get %s secret: %v", caSecretName, err)
+	}
+
+	caCert, ok := caSecret.Data["ca-bundle.crt"]
+	if !ok {
+		return fmt.Errorf("ca-bundle.crt not found in %s secret", caSecretName)
+	}
+
+	caCertPool := x509.NewCertPool()
+	if !caCertPool.AppendCertsFromPEM(caCert) {
+		return fmt.Errorf("failed to parse CA certificate from %s secret", caSecretName)
+	}
+
+	// Perform health check with custom CA
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				RootCAs:    caCertPool,
+				MinVersion: tls.VersionTLS12,
+			},
+		},
+	}
+	resp, err := client.Get(healthEndpoint)
+	if err != nil {
+		return fmt.Errorf("failed to perform health check: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("flightctl health check failed with status code: %d", resp.StatusCode)
+	}
+
+	return nil
 }
 
 // getFlightCtlAgentRegistrationServiceAccountToken creates a token for the flightctl-agent-registration service account.
