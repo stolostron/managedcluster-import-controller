@@ -1,6 +1,6 @@
 module github.com/stolostron/managedcluster-import-controller
 
-go 1.24.0
+go 1.25.0
 
 // TODO: @xuezhaojun need to switch to the official flightctl lib once it's ready.
 replace github.com/flightctl/flightctl/lib => github.com/xuezhaojun/flightctl/lib v0.0.0-20241125124411-7eec33f53a61
