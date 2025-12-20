@@ -1,0 +1,146 @@
+name: Post
+
+on:
+  push:
+    paths-ignore:
+      - 'solutions/**'
+      - 'assets/**'
+      - 'troubleshooting/**'
+      - ".github/ISSUE_TEMPLATE/*"
+    branches:
+      - main
+  workflow_dispatch: {}
+
+env:
+  # Common versions
+  GO_VERSION: '1.24'
+  GO_REQUIRED_MIN_VERSION: ''
+
+permissions:
+  contents: read
+  id-token: write
+  attestations: write
+
+jobs:
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v5
+      - name: install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: unit
+        run: make test
+      - name: report coverage
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_UPLOAD_TOKEN }}
+          files: ./coverage.out
+          flags: unit
+          name: unit
+          verbose: true
+          fail_ci_if_error: true
+  images:
+    name: images
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [ amd64, arm64 ]
+        image-name: [ registration-operator, registration, work, placement, addon-manager ]
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v5
+      - name: install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: install imagebuilder
+        run: go install github.com/openshift/imagebuilder/cmd/imagebuilder@v1.2.3
+      - name: pull base image
+        run: docker pull registry.access.redhat.com/ubi9/ubi-minimal:latest --platform=linux/${{ matrix.arch }}
+      - name: images
+        run: |
+          IMAGE_TAG=latest-${{ matrix.arch }} \
+          IMAGE_REGISTRY=quay.io/open-cluster-management \
+          IMAGE_BUILD_EXTRA_FLAGS="--build-arg OS=linux --build-arg ARCH=${{ matrix.arch }}" \
+            make image-${{ matrix.image-name }}
+      - name: push
+        run: |
+          echo ${{ secrets.DOCKER_PASSWORD }} | docker login quay.io --username ${{ secrets.DOCKER_USER }} --password-stdin
+          docker push quay.io/open-cluster-management/${{ matrix.image-name }}:latest-${{ matrix.arch }}
+          image_digest=$(docker inspect --format='{{index .RepoDigests 0}}' "quay.io/open-cluster-management/${{ matrix.image-name }}:latest-${{ matrix.arch }}" | cut -d'@' -f2)
+          echo "IMAGE_DIGEST=${image_digest}" >> $GITHUB_ENV
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: quay.io/open-cluster-management/${{ matrix.image-name }}:latest-${{ matrix.arch }}
+          format: 'spdx-json'
+          output-file: 'sbom.spdx.json'
+      - name: Attest
+        uses: actions/attest-sbom@v3
+        id: attest
+        with:
+          subject-name: quay.io/open-cluster-management/${{ matrix.image-name }}
+          subject-digest: ${{ env.IMAGE_DIGEST }}
+          sbom-path: 'sbom.spdx.json'
+          push-to-registry: false
+  image-manifest:
+    name: image manifest
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image-name: [ registration-operator, registration, work, placement, addon-manager ]
+    needs: [ images ]
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v5
+      # Step to install Skopeo
+      - name: Install Skopeo and jq
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y skopeo jq
+      - name: create
+        run: |
+          echo ${{ secrets.DOCKER_PASSWORD }} | docker login quay.io --username ${{ secrets.DOCKER_USER }} --password-stdin
+          docker manifest create quay.io/open-cluster-management/${{ matrix.image-name }}:latest \
+            quay.io/open-cluster-management/${{ matrix.image-name }}:latest-amd64 \
+            quay.io/open-cluster-management/${{ matrix.image-name }}:latest-arm64
+      - name: annotate
+        run: |
+          docker manifest annotate quay.io/open-cluster-management/${{ matrix.image-name }}:latest \
+            quay.io/open-cluster-management/${{ matrix.image-name }}:latest-amd64 --arch amd64
+          docker manifest annotate quay.io/open-cluster-management/${{ matrix.image-name }}:latest \
+            quay.io/open-cluster-management/${{ matrix.image-name }}:latest-arm64 --arch arm64
+      - name: push
+        run: |
+          docker manifest push quay.io/open-cluster-management/${{ matrix.image-name }}:latest
+          image_digest_latest=$(skopeo inspect docker://quay.io/open-cluster-management/${{ matrix.image-name }}:latest | jq -r '.Digest')
+          echo "IMAGE_DIGEST_LATEST=${image_digest_latest}" >> $GITHUB_ENV
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: quay.io/open-cluster-management/${{ matrix.image-name }}:latest
+          format: 'spdx-json'
+          output-file: 'sbom.spdx.json'
+      - name: Attest
+        uses: actions/attest-sbom@v3
+        id: attest
+        with:
+          subject-name: quay.io/open-cluster-management/${{ matrix.image-name }}
+          subject-digest: ${{ env.IMAGE_DIGEST_LATEST }}
+          sbom-path: 'sbom.spdx.json'
+          push-to-registry: false
+  trigger-clusteradm-e2e:
+    needs: [ images, image-manifest ]
+    name: trigger clusteradm e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: peter-evans/repository-dispatch@v3
+        with:
+          token: ${{ secrets.OCM_BOT_PAT }}
+          repository: open-cluster-management-io/clusteradm
+          event-type: ocm_changes
+          client-payload: '{"ref": "${{ github.ref }}", "sha": "${{ github.sha }}"}'

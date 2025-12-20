@@ -1,0 +1,90 @@
+---
+# Source: klusterlet/templates/operator.yaml
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: klusterlet
+  namespace: open-cluster-management
+  labels:
+    app: klusterlet
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: klusterlet
+  template:
+    metadata:
+      annotations:
+        target.workload.openshift.io/management: '{"effect": "PreferredDuringScheduling"}'
+      labels:
+        app: klusterlet
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - klusterlet
+              topologyKey: failure-domain.beta.kubernetes.io/zone
+            weight: 70
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - klusterlet
+              topologyKey: kubernetes.io/hostname
+            weight: 30
+      serviceAccountName: klusterlet
+      securityContext:
+        runAsNonRoot: true
+      containers:
+      - name: klusterlet
+        image:  "quay.io/open-cluster-management/registration-operator:latest"
+        imagePullPolicy: IfNotPresent
+        args:
+          - "/registration-operator"
+          - "klusterlet"
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+          privileged: false
+          readOnlyRootFilesystem: true
+          runAsNonRoot: true
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            scheme: HTTPS
+            port: 8443
+          initialDelaySeconds: 2
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            scheme: HTTPS
+            port: 8443
+          initialDelaySeconds: 2
+        resources:
+          limits:
+            memory: 2Gi
+          requests:
+            cpu: 2m
+            memory: 16Mi
+        volumeMounts:
+        - name: tmpdir
+          mountPath: /tmp
+      volumes:
+      - name: tmpdir
+        emptyDir: { }

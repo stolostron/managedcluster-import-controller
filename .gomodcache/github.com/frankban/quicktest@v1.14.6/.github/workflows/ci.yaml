@@ -1,0 +1,25 @@
+name: CI
+on: [push, pull_request]
+
+jobs:
+  build_test:
+    name: Build and Test
+    strategy:
+      matrix:
+        go: ['1.13', '1.14', '1.15', '1.16', '1.17', '1.18', '1.19', '1.20']
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: actions/setup-go@v4
+      with:
+        go-version: ${{ matrix.go }}
+    - uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ubuntu-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ubuntu-go-
+    - name: Test
+      run: go test -mod readonly -race ./...
+    - name: Test Verbose
+      run: go test -mod readonly -race -v ./...

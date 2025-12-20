@@ -1,0 +1,18 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: open-cluster-management:{{ .ClusterManagerName }}-clusterprofile:controller
+  labels:
+    {{ if gt (len .Labels) 0 }}
+    {{ range $key, $value := .Labels }}
+    "{{ $key }}": "{{ $value }}"
+    {{ end }}
+    {{ end }}
+rules:
+# Allow hub to manage clusterprofile
+- apiGroups: ["multicluster.x-k8s.io"]
+  resources: ["clusterprofiles"]
+  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+- apiGroups: ["multicluster.x-k8s.io"]
+  resources: ["clusterprofiles/status"]
+  verbs: ["update", "patch"]

@@ -1,0 +1,134 @@
+{
+  "components": {
+    "parameters": {
+      "parameters_number": {
+        "in": "query",
+        "name": "someNumber",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "responses": {
+      "400": {
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        },
+        "description": "400 Bad Request"
+      }
+    },
+    "schemas": {
+      "components_Bar": {
+        "example": "bar",
+        "type": "string"
+      },
+      "components_Cat": {
+        "properties": {
+          "cat": {
+            "$ref": "#/components/schemas/components_Cat"
+          }
+        },
+        "type": "object"
+      },
+      "components_Foo": {
+        "properties": {
+          "bar": {
+            "$ref": "#/components/schemas/components_Bar"
+          }
+        },
+        "type": "object"
+      },
+      "components_Foo_Foo2": {
+        "properties": {
+          "foo": {
+            "$ref": "#/components/schemas/components_Foo"
+          }
+        },
+        "type": "object"
+      },
+      "Bar": {
+        "example": "bar",
+        "type": "string"
+      },
+      "Error":{
+        "title":"ErrorDetails",
+        "type":"object"
+      },
+      "Foo": {
+        "properties": {
+          "bar": {
+            "$ref": "#/components/schemas/components_Bar"
+          }
+        },
+        "type": "object"
+      },
+      "Foo2": {
+        "properties": {
+          "foo": {
+            "$ref": "#/components/schemas/components_Foo"
+          }
+        },
+        "type": "object"
+      },
+      "Cat": {
+        "properties": {
+          "cat": {
+            "$ref": "#/components/schemas/components_Cat"
+          }
+        },
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "title": "Recursive refs example",
+    "version": "1.0"
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/double-ref-foo": {
+      "get": {
+        "description": "Reference response with double reference.",
+        "responses": {
+          "400": {
+            "$ref": "#/components/responses/400"
+          }
+        },
+        "summary": "Double ref response"
+      }
+    },
+    "/foo": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "foo2": {
+                      "$ref": "#/components/schemas/components_Foo_Foo2"
+                    }
+                  },
+                  "type": "object"
+                }
+              }
+            },
+            "description": "OK"
+          },
+          "400": {
+            "$ref": "#/components/responses/400"
+          }
+        }
+      },
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/parameters_number"
+        }
+      ]
+    }
+  }
+}

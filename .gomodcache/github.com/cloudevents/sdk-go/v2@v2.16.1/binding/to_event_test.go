@@ -1,0 +1,211 @@
+/*
+ Copyright 2021 The CloudEvents Authors
+ SPDX-License-Identifier: Apache-2.0
+*/
+
+package binding_test
+
+import (
+	"context"
+	"io"
+	nethttp "net/http"
+	"strings"
+	"testing"
+
+	"github.com/cloudevents/sdk-go/v2/protocol/http"
+	"github.com/stretchr/testify/require"
+
+	"github.com/cloudevents/sdk-go/v2/binding"
+	"github.com/cloudevents/sdk-go/v2/binding/spec"
+	. "github.com/cloudevents/sdk-go/v2/binding/test"
+	"github.com/cloudevents/sdk-go/v2/event"
+	. "github.com/cloudevents/sdk-go/v2/test"
+)
+
+type toEventTestCase struct {
+	name    string
+	message binding.Message
+	event   event.Event
+	want    event.Event
+}
+
+func TestToEvent_success(t *testing.T) {
+	EachEvent(t, Events(), func(t *testing.T, v event.Event) {
+		testCases := []toEventTestCase{
+			{
+				name:    "From mock structured/" + TestNameOf(v),
+				message: MustCreateMockStructuredMessage(t, v),
+				want:    v,
+			},
+			{
+				name:    "From mock binary/" + TestNameOf(v),
+				message: MustCreateMockBinaryMessage(v),
+				want:    v,
+			},
+			{
+				name:  "From event/" + TestNameOf(v),
+				event: v,
+				want:  v,
+			},
+		}
+		for _, tt := range testCases {
+			tt := tt // Don't use range variable in Run() scope
+			t.Run(tt.name, func(t *testing.T) {
+				var inputMessage binding.Message
+				if tt.message != nil {
+					inputMessage = tt.message
+				} else {
+					e := tt.event.Clone()
+					inputMessage = binding.ToMessage(&e)
+				}
+				got, err := binding.ToEvent(context.Background(), inputMessage)
+				require.NoError(t, err)
+				AssertEventEquals(t, ConvertEventExtensionsToString(t, tt.want), ConvertEventExtensionsToString(t, *got))
+			})
+		}
+	})
+}
+
+func TestToEvent_bad_spec_version_binary(t *testing.T) {
+	inputEvent := FullEvent()
+
+	inputMessage := MustCreateMockBinaryMessage(inputEvent)
+	// Injecting bad spec version
+	inputMessage.(*MockBinaryMessage).Metadata[spec.VS.Version(inputEvent.SpecVersion()).AttributeFromKind(spec.SpecVersion)] = "0.1.1"
+
+	got, err := binding.ToEvent(context.Background(), inputMessage)
+	require.Nil(t, got)
+	require.EqualError(t, err, "unrecognized event version 0.1.1")
+}
+
+func TestToEvent_success_wrapped_event_message(t *testing.T) {
+	inputEvent := FullEvent()
+
+	cloned := inputEvent.Clone()
+	inputMessage := binding.WithFinish(binding.ToMessage(&cloned), func(err error) {})
+
+	got, err := binding.ToEvent(context.Background(), inputMessage)
+	require.NoError(t, err)
+	require.NotNil(t, got)
+	AssertEventEquals(t, *got, inputEvent)
+
+}
+
+func TestToEvent_unknown(t *testing.T) {
+	got, err := binding.ToEvent(context.Background(), UnknownMessage)
+	require.Nil(t, got)
+	require.Equal(t, binding.ErrUnknownEncoding, err)
+}
+
+func TestToEvent_wrapped_unknown(t *testing.T) {
+	got, err := binding.ToEvent(context.Background(), binding.WithFinish(UnknownMessage, func(err error) {}))
+	require.Nil(t, got)
+	require.Equal(t, binding.ErrUnknownEncoding, err)
+}
+
+func TestToEvent_transformers_applied_once(t *testing.T) {
+	EachEvent(t, Events(), func(t *testing.T, v event.Event) {
+		testCases := []toEventTestCase{
+			{
+				name:    "From mock structured/" + TestNameOf(v),
+				message: MustCreateMockStructuredMessage(t, v),
+				want:    v,
+			},
+			{
+				name:    "From mock binary/" + TestNameOf(v),
+				message: MustCreateMockBinaryMessage(v),
+				want:    v,
+			},
+			{
+				name:  "From event/" + TestNameOf(v),
+				event: v,
+				want:  v,
+			},
+		}
+
+		for _, tt := range testCases {
+			t.Run("With one Transformer "+tt.name, func(t *testing.T) {
+				var inputMessage binding.Message
+				if tt.message != nil {
+					inputMessage = tt.message
+				} else {
+					e := tt.event.Clone()
+					inputMessage = binding.ToMessage(&e)
+				}
+
+				transformer := MockTransformer{}
+
+				got, err := binding.ToEvent(context.Background(), inputMessage, &transformer)
+				require.NoError(t, err)
+				AssertEventEquals(t, ConvertEventExtensionsToString(t, tt.want), ConvertEventExtensionsToString(t, *got))
+
+				AssertTransformerInvokedOneTime(t, &transformer)
+			})
+			t.Run("With two Transformers "+tt.name, func(t *testing.T) {
+				var inputMessage binding.Message
+				if tt.message != nil {
+					inputMessage = tt.message
+				} else {
+					e := tt.event.Clone()
+					inputMessage = binding.ToMessage(&e)
+				}
+
+				transformer1 := MockTransformer{}
+				transformer2 := MockTransformer{}
+
+				got, err := binding.ToEvent(context.Background(), inputMessage, &transformer1, &transformer2)
+				require.NoError(t, err)
+				AssertEventEquals(t, ConvertEventExtensionsToString(t, tt.want), ConvertEventExtensionsToString(t, *got))
+
+				AssertTransformerInvokedOneTime(t, &transformer1)
+				AssertTransformerInvokedOneTime(t, &transformer2)
+			})
+		}
+	})
+}
+
+func TestToEvents(t *testing.T) {
+	fixture := map[string]struct {
+		contentType string
+		jsn         string
+		expected    func(*testing.T, []event.Event, error)
+	}{
+		"valid event": {
+			jsn: `[{"data":"foo","datacontenttype":"application/json","id":"id","source":"source","specversion":"1.0","type":"type"}]`,
+			expected: func(t *testing.T, list []event.Event, err error) {
+				require.NoError(t, err)
+				require.Len(t, list, 1)
+				require.Equal(t, "id", list[0].ID())
+			},
+		},
+		"invalid event": {
+			jsn: `[{"data":"foo","datacontenttype":"application/json","specversion":"0.1","type":"type"}]`,
+			expected: func(t *testing.T, _ []event.Event, err error) {
+				require.ErrorContains(t, err, "specversion: unknown value")
+			},
+		},
+		"bad content type": {
+			jsn:         `[{"data":"foo","datacontenttype":"application/json","id":"id","source":"source","specversion":"1.0","type":"type"}]`,
+			contentType: event.ApplicationJSON,
+			expected: func(t *testing.T, _ []event.Event, err error) {
+				require.ErrorContains(t, err, "cannot convert message to batched events")
+			},
+		},
+	}
+
+	for k, v := range fixture {
+		t.Run(k, func(t *testing.T) {
+			header := nethttp.Header{}
+			if len(v.contentType) == 0 {
+				header.Set(http.ContentType, event.ApplicationCloudEventsBatchJSON)
+			} else {
+				header.Set(http.ContentType, v.contentType)
+			}
+
+			buf := io.NopCloser(strings.NewReader(v.jsn))
+			msg := http.NewMessage(header, buf)
+			list, err := binding.ToEvents(context.Background(), msg, msg.BodyReader)
+			v.expected(t, list, err)
+		})
+	}
+}

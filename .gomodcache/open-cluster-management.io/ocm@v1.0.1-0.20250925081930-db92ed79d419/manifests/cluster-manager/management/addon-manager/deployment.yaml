@@ -1,0 +1,123 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ .ClusterManagerName }}-addon-manager-controller
+  namespace: {{ .ClusterManagerNamespace }}
+  labels:
+    app: {{ .ClusterManagerName }}-addon-manager-controller
+    {{ if gt (len .Labels) 0 }}
+    {{ range $key, $value := .Labels }}
+    "{{ $key }}": "{{ $value }}"
+    {{ end }}
+    {{ end }}
+spec:
+  replicas: {{ .Replica }}
+  selector:
+    matchLabels:
+      app: clustermanager-addon-manager-controller
+  template:
+    metadata:
+      labels:
+        app: clustermanager-addon-manager-controller
+        {{ if gt (len .Labels) 0 }}
+        {{ range $key, $value := .Labels }}
+        "{{ $key }}": "{{ $value }}"
+        {{ end }}
+        {{ end }}
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 70
+            podAffinityTerm:
+              topologyKey: failure-domain.beta.kubernetes.io/zone
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - clustermanager-addon-manager-controller
+          - weight: 30
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - clustermanager-addon-manager-controller
+      {{- if .ImagePullSecret }}
+      imagePullSecrets:
+      - name: {{ .ImagePullSecret }}
+      {{- end }}
+      {{ if not .HostedMode }}
+      serviceAccountName: addon-manager-controller-sa
+      {{ end }}
+      containers:
+      - name: addon-manager-controller
+        image: {{ .AddOnManagerImage }}
+        args:
+          - "/addon"
+          - "manager"
+          {{ if .HostedMode }}
+          - "--kubeconfig=/var/run/secrets/hub/kubeconfig"
+          {{ end }}
+        env:
+          - name: POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: true
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            scheme: HTTPS
+            port: 8443
+          initialDelaySeconds: 2
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            scheme: HTTPS
+            port: 8443
+          initialDelaySeconds: 2
+        {{- if or (eq .ResourceRequirementResourceType "Default") (eq .ResourceRequirementResourceType "") }}
+        resources:
+          requests:
+            cpu: 2m
+            memory: 16Mi
+        {{- end }}
+        {{- if eq .ResourceRequirementResourceType "BestEffort" }}
+        resources: {}
+        {{- end }}
+        {{- if eq .ResourceRequirementResourceType "ResourceRequirement" }}
+        resources:
+          {{ .ResourceRequirements | indent 10 }}
+        {{- end }}
+        volumeMounts:
+        - name: tmpdir
+          mountPath: /tmp
+      {{ if .HostedMode }}
+        - mountPath: /var/run/secrets/hub
+          name: kubeconfig
+          readOnly: true    
+      {{ end }}
+      volumes:
+      - name: tmpdir
+        emptyDir: { }
+      {{ if .HostedMode }}
+      - name: kubeconfig
+        secret:
+          secretName: addon-manager-controller-sa-kubeconfig
+      {{ end }}

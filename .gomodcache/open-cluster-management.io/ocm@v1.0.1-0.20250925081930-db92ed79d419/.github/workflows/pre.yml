@@ -1,0 +1,86 @@
+name: Pre
+
+on:
+  workflow_dispatch: {}
+  pull_request:
+    paths-ignore:
+      - 'solutions/**'
+      - 'assets/**'
+      - 'troubleshooting/**'
+      - ".github/ISSUE_TEMPLATE/*"
+    branches:
+      - main
+      - release-*
+
+env:
+  GO_VERSION: '1.24'
+  GO_REQUIRED_MIN_VERSION: ''
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v5
+      - name: install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: verify
+        run: make verify
+      - name: verify-deps
+        run: make verify-deps
+      - name: verify-fmt-imports
+        run: make verify-fmt-imports
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v5
+      - name: install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: build
+        run: make build
+
+  unit:
+    name: unit
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v5
+      - name: install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: unit
+        run: make test
+      - name: report coverage
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_UPLOAD_TOKEN }}
+          files: ./coverage.out
+          flags: unit
+          name: unit
+          verbose: true
+          fail_ci_if_error: false
+
+  integration:
+    name: integration
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v5
+      - name: install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: integration
+        run: make test-integration

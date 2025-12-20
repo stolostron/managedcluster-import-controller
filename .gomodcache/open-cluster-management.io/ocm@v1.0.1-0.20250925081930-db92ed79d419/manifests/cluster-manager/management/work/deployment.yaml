@@ -1,0 +1,142 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .ClusterManagerName }}-work-controller
+  namespace: {{ .ClusterManagerNamespace }}
+  labels:
+    app: {{ .ClusterManagerName }}-work-controller
+    {{ if gt (len .Labels) 0 }}
+    {{ range $key, $value := .Labels }}
+    "{{ $key }}": "{{ $value }}"
+    {{ end }}
+    {{ end }}
+spec:
+  replicas:  {{ .Replica }}
+  selector:
+    matchLabels:
+      app: {{ .ClusterManagerName }}-work-controller
+  template:
+    metadata:
+      labels:
+        app: {{ .ClusterManagerName }}-work-controller
+        {{ if gt (len .Labels) 0 }}
+        {{ range $key, $value := .Labels }}
+        "{{ $key }}": "{{ $value }}"
+        {{ end }}
+        {{ end }}
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 70
+            podAffinityTerm:
+              topologyKey: failure-domain.beta.kubernetes.io/zone
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ .ClusterManagerName }}-work-controller
+          - weight: 30
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - {{ .ClusterManagerName }}-work-controller
+      {{- if .ImagePullSecret }}
+      imagePullSecrets:
+      - name: {{ .ImagePullSecret }}
+      {{- end }}
+      {{ if not .HostedMode }}
+      serviceAccountName: work-controller-sa
+      {{ end }}
+      containers:
+      - name: {{ .ClusterManagerName }}-work-controller
+        image:  {{ .WorkImage }}
+        imagePullPolicy: IfNotPresent
+        args:
+          - "/work"
+          - "manager"
+          {{ if gt (len .WorkFeatureGates) 0 }}
+          {{range .WorkFeatureGates}}
+          - {{ . }}
+          {{ end }}
+          {{ end }}
+          {{ if .CloudEventsDriverEnabled }}
+          - "--work-driver={{ .WorkDriver }}"
+          {{ if ne .WorkDriver "kube" }}
+          - "--cloudevents-client-id=work-controller-$(POD_NAME)"
+          - "--work-driver-config=/var/run/secrets/work/config.yaml"
+          {{ end }}
+          {{ end }}
+          {{ if .HostedMode }}
+          - "--kubeconfig=/var/run/secrets/hub/kubeconfig"
+          {{ end }}
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: true
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            scheme: HTTPS
+            port: 8443
+          initialDelaySeconds: 2
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            scheme: HTTPS
+            port: 8443
+          initialDelaySeconds: 2
+        {{- if or (eq .ResourceRequirementResourceType "Default") (eq .ResourceRequirementResourceType "") }}
+        resources:
+          requests:
+            cpu: 2m
+            memory: 16Mi
+        {{- end }}
+        {{- if eq .ResourceRequirementResourceType "BestEffort" }}
+        resources: {}
+        {{- end }}
+        {{- if eq .ResourceRequirementResourceType "ResourceRequirement" }}
+        resources:
+          {{ .ResourceRequirements | indent 10 }}
+        {{- end }}
+        volumeMounts:
+        - name: tmpdir
+          mountPath: /tmp
+        {{ if .HostedMode }}
+        - mountPath: /var/run/secrets/hub
+          name: kubeconfig
+          readOnly: true
+        {{ end }}
+        {{ if and .CloudEventsDriverEnabled (ne .WorkDriver "kube") }}
+        - mountPath: /var/run/secrets/work
+          name: workdriverconfig
+          readOnly: true
+        {{ end }}
+      volumes:
+      - name: tmpdir
+        emptyDir: { }
+      {{ if .HostedMode }}
+      - name: kubeconfig
+        secret:
+          secretName: work-controller-sa-kubeconfig
+      {{ end }}
+      {{ if and .CloudEventsDriverEnabled (ne .WorkDriver "kube") }}
+      - name: workdriverconfig
+        secret:
+          secretName: work-driver-config
+      {{ end }}

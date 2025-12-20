@@ -1,0 +1,4 @@
+GitPython
+semver
+PyYAML>=6.0
+requests

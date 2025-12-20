@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hive-controllers
+  namespace: hive
+  labels:
+    control-plane: controller-manager
+    controller-tools.k8s.io: "1.0"
+spec:
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      controller-tools.k8s.io: "1.0"
+  replicas: 1
+  revisionHistoryLimit: 4
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+        controller-tools.k8s.io: "1.0"
+    spec:
+      serviceAccountName: hive-controllers
+      volumes:
+      - name: kubectl-cache
+        emptyDir: {}
+      - name: tmp
+        emptyDir: {}
+      containers:
+      # By default we will use the latest CI images published from hive master:
+      - image: registry.ci.openshift.org/openshift/hive-v4.0:hive
+        imagePullPolicy: Always
+        name: manager
+        resources:
+          requests:
+            cpu: 50m
+            memory: 512Mi
+        command:
+          - /opt/services/manager
+        envFrom:
+          - configMapRef:
+              name: hive-controllers-config
+        volumeMounts:
+        - name: kubectl-cache
+          mountPath: /var/cache/kubectl
+        - name: tmp
+          mountPath: /tmp
+        env:
+        - name: POD_NAME
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: CLI_CACHE_DIR
+          value: /var/cache/kubectl
+        - name: HIVE_NS
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: TMPDIR
+          value: /tmp
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8080
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+      terminationGracePeriodSeconds: 10

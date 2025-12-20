@@ -1,0 +1,53 @@
+name: Benchmark
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Declare default permissions as read only.
+permissions: read-all
+
+env:
+  DEFAULT_GO_VERSION: "~1.24.0"
+jobs:
+  benchmark:
+    name: Benchmarks
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/setup-go@f111f3307d8850f501ac008e886eec1fd1932a34 # v5
+        with:
+          go-version: ${{ env.DEFAULT_GO_VERSION }}
+          check-latest: true
+          cache-dependency-path: "**/go.sum"
+      - name: Run benchmarks
+        run: make benchmark | tee output.txt
+      - name: Download previous benchmark data
+        uses: actions/cache/restore@d4323d4df104b026a6aa633fdb11d772146be0bf # v4
+        with:
+          path: ./benchmarks
+          # `github.event.before` means the commit before the push (i.e. the previous commit).
+          # So we can fetch the exact benchmark data from the previous commit.
+          key: ${{ runner.os }}-benchmark-${{ github.event.before }}
+      - name: Store benchmarks result
+        uses: benchmark-action/github-action-benchmark@d48d326b4ca9ba73ca0cd0d59f108f9e02a381c7 # v1.20.4
+        with:
+          name: Benchmarks
+          tool: 'go'
+          output-file-path: output.txt
+          external-data-json-path: ./benchmarks/data.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          gh-pages-branch: benchmarks
+          fail-on-alert: true
+          alert-threshold: "400%"
+          # Add benchmark summary to GitHub workflow run report
+          summary-always: true
+      - name: Save benchmark data
+        uses: actions/cache/save@d4323d4df104b026a6aa633fdb11d772146be0bf # v4
+        # The cache will be saved even if a step fails.
+        if: always()
+        with:
+          path: ./benchmarks
+          # Use the current commit SHA as the cache key.
+          key: ${{ runner.os }}-benchmark-${{ github.sha }}

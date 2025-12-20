@@ -1,0 +1,374 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: install-log-regexes
+  namespace: hive
+data:
+  regexes: |
+    # AWS Specific:
+    - name: AWSInsufficientCapacity
+      searchRegexStrings:
+      - "Error: .*InsufficientInstanceCapacity.* Our system will be working on provisioning additional capacity"
+      installFailingReason: AWSInsufficientCapacity
+      installFailingMessage: AWS currently does not have sufficient capacity to provision the requested EC2 instances in the specified Availability Zone. Please try again later or in a different Availability Zone.
+    - name: AWSEC2QuotaExceeded
+      searchRegexStrings:
+      - "failed to generate asset.*Platform Quota Check.*MissingQuota.*ec2"
+      installFailingReason: AWSEC2QuotaExceeded
+      installFailingMessage: AWS EC2 Quota Exceeded
+    - name: AWSNATGatewayLimitExceeded
+      searchRegexStrings:
+      - "NatGatewayLimitExceeded"
+      installFailingReason: AWSNATGatewayLimitExceeded
+      installFailingMessage: AWS NAT gateway limit exceeded
+    - name: AWSVPCLimitExceeded
+      searchRegexStrings:
+      - "VpcLimitExceeded"
+      installFailingReason: AWSVPCLimitExceeded
+      installFailingMessage: AWS VPC limit exceeded
+    - name: S3BucketsLimitExceeded
+      searchRegexStrings:
+       - "TooManyBuckets"
+      installFailingReason: S3BucketsLimitExceeded
+      installFailingMessage: S3 Buckets Limit Exceeded
+    - name: LoadBalancerLimitExceeded
+      searchRegexStrings:
+      - "TooManyLoadBalancers: Exceeded quota of account"
+      installFailingReason: LoadBalancerLimitExceeded
+      installFailingMessage: AWS Load Balancer Limit Exceeded
+    - name: EIPAddressLimitExceeded
+      searchRegexStrings:
+      - "EIP: AddressLimitExceeded"
+      installFailingReason: EIPAddressLimitExceeded
+      installFailingMessage: EIP Address limit exceeded
+    - name: AWSSubnetInsufficientIPSpace
+      searchRegexStrings:
+      - "InvalidSubnet: Not enough IP space available in"
+      installFailingReason: AWSSubnetInsufficientIPSpace
+      installFailingMessage: Insufficient IP space available in subnet
+    - name: AWSIAMRoleTagLimitExceeded
+      searchRegexStrings:
+      - "could not tag \".*\" instance role: LimitExceeded: The number of tags has reached the maximum limit"
+      installFailingReason: AWSIAMRoleTagLimitExceeded
+      installFailingMessage: AWS IAM Role exceeds the maximum number of tags allowed (50)
+    - name: AWSSubnetTagLimitExceeded
+      searchRegexStrings:
+      - "could not add tags to subnets: TagLimitExceeded"
+      installFailingReason: AWSSubnetTagLimitExceeded
+      installFailingMessage: AWS Subnet exceeds the maximum number of tags allowed (50)
+    - name: MissingPublicSubnetForZone
+      searchRegexStrings:
+      - "No public subnet provided for zone"
+      installFailingReason: MissingPublicSubnetForZone
+      installFailingMessage: No public subnet provided for at least one zone
+    - name: PrivateSubnetInMultipleZones
+      searchRegexStrings:
+      - "private subnet .* is also in zone"
+      installFailingReason: PrivateSubnetInMultipleZones
+      installFailingMessage: Same private subnet used in multiple zones
+    - name: InvalidInstallConfigSubnet
+      searchRegexStrings:
+      - "CIDR range start.*is outside of the specified machine networks"
+      installFailingReason: InvalidInstallConfigSubnet
+      installFailingMessage: Invalid subnet in install config. Subnet's CIDR range start is outside of the specified machine networks
+    # https://bugzilla.redhat.com/show_bug.cgi?id=1844320
+    - name: AWSUnableToFindMatchingRouteTable
+      searchRegexStrings:
+      - "Error: Unable to find matching route for Route Table"
+      installFailingReason: AWSUnableToFindMatchingRouteTable
+      installFailingMessage: Unable to find matching route for route table
+    - name: DNSAlreadyExists
+      searchRegexStrings:
+      - "aws_route53_record.*Error building changeset:.*Tried to create resource record set.*but it already exists"
+      installFailingReason: DNSAlreadyExists
+      installFailingMessage: DNS record already exists
+    - name: PendingVerification
+      searchRegexStrings:
+      - "PendingVerification: Your request for accessing resources in this region is being validated"
+      installFailingReason: PendingVerification
+      installFailingMessage: Account pending verification for region
+    - name: NoMatchingRoute53Zone
+      searchRegexStrings:
+      - "data.aws_route53_zone.public: no matching Route53Zone found"
+      installFailingReason: NoMatchingRoute53Zone
+      installFailingMessage: No matching Route53Zone found
+    - name: TooManyRoute53Zones
+      searchRegexStrings:
+      - "error creating Route53 Hosted Zone: TooManyHostedZones: Limits Exceeded"
+      installFailingReason: TooManyRoute53Zones
+      installFailingMessage: Route53 hosted zone limit exceeded
+    - name: MultipleRoute53ZonesFound
+      searchRegexStrings:
+        - "Error: multiple Route53Zone found"
+      installFailingReason: MultipleRoute53ZonesFound
+      installFailingMessage: Multiple Route53 zones found
+    - name: DefaultEbsKmsKeyInsufficientPermissions
+      searchRegexStrings:
+        - "Client.InternalError: Client error on launch"
+        - "Client.InvalidKMSKey.InvalidState: The KMS key provided is in an incorrect state"
+      installFailingReason: DefaultEbsKmsKeyInsufficientPermissions
+      installFailingMessage: Default KMS key for EBS encryption has insufficient permissions to launch EC2 instances
+    - name: SimulatorThrottling
+      searchRegexStrings:
+      - "validate AWS credentials: checking install permissions: error simulating policy: Throttling: Rate exceeded"
+      installFailingReason: AWSAPIRateLimitExceeded
+      installFailingMessage: AWS API rate limit exceeded while simulating policy
+    - name: S3AccessControlListNotSupported
+      searchRegexStrings:
+      - "error creating S3 bucket ACL for.*AccessControlListNotSupported: The bucket does not allow ACLs"
+      installFailingReason: S3AccessControlListNotSupported
+      installFailingMessage: S3AccessControlListNotSupported
+    - name: GeneralThrottling
+      searchRegexStrings:
+      - "Throttling: Rate exceeded"
+      installFailingReason: AWSAPIRateLimitExceeded
+      installFailingMessage: AWS API rate limit exceeded
+    # This issue is caused by AWS throttling the CreateHostedZone request. The terraform provider is not properly
+    # handling the throttling response and gets stuck in a state where it does not retry the request. Eventually,
+    # the terraform provider times out claiming that it is waiting for the hosted zone to be INSYNC.
+    - name: AWSRoute53Timeout
+      searchRegexStrings:
+      - "error waiting for Route53 Hosted Zone .* creation: timeout while waiting for state to become 'INSYNC'"
+      installFailingReason: AWSRoute53Timeout
+      installFailingMessage: AWS Route53 timeout while waiting for INSYNC. This is usually caused by Route53 rate limiting.
+    - name: InvalidCredentials
+      searchRegexStrings:
+      - "InvalidClientTokenId: The security token included in the request is invalid."
+      installFailingReason: InvalidCredentials
+      installFailingMessage: Credentials are invalid
+    - name: InvalidAWSTags
+      searchRegexStrings:
+      - "platform\\.aws\\.userTags.*: Invalid value:.*value contains invalid characters"
+      installFailingReason: InvalidAWSTags
+      installFailingMessage: You have specified an invalid AWS tag value. Verify that your tags meet AWS requirements and try again.
+    - name: ErrorDeletingIAMRole
+      searchRegexStrings:
+        - "Error deleting IAM Role .* DeleteConflict: Cannot delete entity, must detach all policies first."
+      installFailingReason: ErrorDeletingIAMRole
+      installFailingMessage: The cluster installer was not able to delete the roles it used during the installation. Ensure that no policies are added to new roles by default and try again.
+    - name: AWSSubnetDoesNotExist
+      searchRegexStrings:
+      - "The subnet ID .* does not exist"
+      installFailingReason: AWSSubnetDoesNotExist
+      installFailingMessage: AWS Subnet Does Not Exist
+    # iam:CreateServiceLinkedRole is a super powerful permission that we don't give to STS clusters. We require it's done as a one-time prereq.
+    # This is the error we see when the prereq step was missed.
+    - name: NATGatewayFailed
+      searchRegexStrings:
+      - "Error waiting for NAT Gateway (.*) to become available"
+      installFailingReason: NATGatewayFailed
+      installFailingMessage: Error waiting for NAT Gateway to become available.
+    - name: AWSAccessDeniedSLR
+      searchRegexStrings:
+      - "Error creating network Load Balancer: AccessDenied.*iam:CreateServiceLinkedRole"
+      installFailingReason: AWSAccessDeniedSLR
+      installFailingMessage: Missing prerequisite service role for load balancer
+    - name: AWSInsufficientPermissions
+      searchRegexStrings:
+      - "current credentials insufficient for performing cluster installation"
+      - "UnauthorizedOperation: You are not authorized to perform this operation. Encoded authorization failure message"
+      installFailingReason: AWSInsufficientPermissions
+      installFailingMessage: AWS credentials are insufficient for performing cluster installation
+    - name: AWSDeniedBySCP
+      searchRegexStrings:
+      - "AccessDenied: .* with an explicit deny in a service control policy"
+      - "UnauthorizedOperation: .* with an explicit deny in a service control policy"
+      installFailingReason: AWSDeniedBySCP
+      installFailingMessage: "A service control policy (SCP) is too restrictive for performing cluster installation"
+    - name: VcpuLimitExceeded
+      searchRegexStrings:
+      - "VcpuLimitExceeded"
+      installFailingReason: VcpuLimitExceeded
+      installFailingMessage: The install requires more vCPU capacity than your current vCPU limit
+    - name: Gp3VolumeLimitExceeded
+      searchRegexStrings:
+      - "VolumeLimitExceeded: You have exceeded your maximum gp3 storage limit"
+      installFailingReason: Gp3VolumeLimitExceeded
+      installFailingMessage: "The installation failed due to insufficient gp3 storage quota in the region (QuotaCode L-7A658B76)"
+    - name: UserInitiatedShutdown
+      searchRegexStrings:
+      - "Error waiting for instance .* to become ready .* User initiated shutdown"
+      installFailingReason: UserInitiatedShutdown
+      installFailingMessage: User initiated shutdown of instances as the install was running
+    # openshift-installer intermittent failure on AWS with Error: Provider produced inconsistent result after apply
+    - name: InconsistentTerraformResult
+      searchRegexStrings:
+      - "Error: Provider produced inconsistent result after apply"
+      installFailingReason: InconsistentTerraformResult
+      installFailingMessage: Inconsistent result after Terraform apply
+    - name: AWSVPCDoesNotExist
+      searchRegexStrings:
+      - "The vpc ID .* does not exist"
+      installFailingReason: AWSVPCDoesNotExist
+      installFailingMessage: The AWS VPC does not exist
+    - name: TargetGroupNotFound
+    # https://bugzilla.redhat.com/show_bug.cgi?id=1898265
+      searchRegexStrings:
+      - "TargetGroupNotFound"
+      installFailingReason: TargetGroupNotFound
+      installFailingMessage: Target Group cannot be found
+    - name: ErrorCreatingNetworkLoadBalancer
+      searchRegexStrings:
+      - "Error creating network Load Balancer: InternalFailure: "
+      installFailingReason: ErrorCreatingNetworkLoadBalancer
+      installFailingMessage: AWS network load balancer creation encountered an error during cluster installation
+    - name: TerraformFailedToDeleteResources
+      searchRegexStrings:
+        - "terraform destroy: failed to destroy using Terraform"
+        - "terraform destroy: failed doing terraform destroy"
+      installFailingReason: InstallerFailedToDestroyResources
+      installFailingMessage: The installer failed to destroy installation resources
+    - name: AWSAccountBlocked
+      searchRegexStrings:
+        - "Blocked: This account is currently blocked and not recognized as a valid account."
+      installFailingReason: AWSAccountIsBlocked
+      installFailingMessage: "AWS account is currently blocked and not recognized as a valid account. Please contact aws-verification@amazon.com if you have questions."
+
+
+    # GCP Specific
+    - name: GCPInvalidProjectID
+      searchRegexStrings:
+      - "platform.gcp.project.* invalid project ID"
+      installFailingReason: GCPInvalidProjectID
+      installFailingMessage: Invalid GCP project ID
+    - name: GCPInstanceTypeNotFound
+      searchRegexStrings:
+      - "platform.gcp.type: Invalid value:.* instance type.* not found]"
+      installFailingReason: GCPInstanceTypeNotFound
+      installFailingMessage: GCP instance type not found
+    - name: GCPPreconditionFailed
+      searchRegexStrings:
+      - "googleapi: Error 412"
+      installFailingReason: GCPPreconditionFailed
+      installFailingMessage: GCP Precondition Failed
+    - name: GCPQuotaSSDTotalGBExceeded
+      searchRegexStrings:
+      - "Quota \'SSD_TOTAL_GB\' exceeded"
+      installFailingReason: GCPQuotaSSDTotalGBExceeded
+      installFailingMessage: GCP quota SSD_TOTAL_GB exceeded
+    - name: GCPComputeQuota
+      searchRegexStrings:
+      - "compute\\.googleapis\\.com/cpus is not available in [a-z0-9-]* because the required number of resources \\([0-9]*\\) is more than"
+      installFailingReason: GCPComputeQuotaExceeded
+      installFailingMessage: GCP CPUs quota exceeded
+    - name: GCPServiceAccountQuota
+      searchRegexStrings:
+      - "iam\\.googleapis\\.com/quota/service-account-count is not available in global because the required number of resources \\([0-9]*\\) is more than remaining quota"
+      installFailingReason: GCPServiceAccountQuotaExceeded
+      installFailingMessage: GCP Service Account quota exceeded
+
+
+    # Bare Metal
+    - name: LibvirtSSHKeyPermissionDenied
+      searchRegexStrings:
+      - "platform.baremetal.libvirtURI: Internal error: could not connect to libvirt: virError.Code=38, Domain=7, Message=.Cannot recv data: Permission denied"
+      installFailingReason: LibvirtSSHKeyPermissionDenied
+      installFailingMessage: "Permission denied connecting to libvirt host, check SSH key configuration and pass phrase"
+    - name: LibvirtConnectionFailed
+      searchRegexStrings:
+      - "could not connect to libvirt"
+      installFailingReason: LibvirtConnectionFailed
+      installFailingMessage: "Could not connect to libvirt host"
+
+
+    # Proxy-enabled clusters
+    - name: ProxyTimeout
+      searchRegexStrings:
+      - "error pinging docker registry .+ proxyconnect tcp: dial tcp [^ ]+: i/o timeout"
+      - "error pinging docker registry .+ proxyconnect tcp: dial tcp [^ ]+: connect: connection refused"
+      - "error pinging docker registry .+ proxyconnect tcp: dial tcp [^ ]+: connect: no route to host"
+      installFailingReason: ProxyTimeout
+      installFailingMessage: The cluster is installing via a proxy, however the proxy server is refusing or timing out connections. Verify that the proxy is running and would be accessible from the cluster's private subnet(s).
+    - name: ProxyInvalidCABundle
+      searchRegexStrings:
+      - "error pinging docker registry .+ proxyconnect tcp: x509: certificate signed by unknown authority"
+      installFailingReason: ProxyInvalidCABundle
+      installFailingMessage: The cluster is installing via a proxy, but does not trust the signing certificate the proxy is presenting. Verify that the Certificate Authority certificate(s) to verify proxy communications have been supplied at installation time.
+
+
+    # Generic OpenShift Install
+
+    - name: KubeAPIWaitTimeout
+      searchRegexStrings:
+      - "waiting for Kubernetes API: context deadline exceeded"
+      installFailingReason: KubeAPIWaitTimeout
+      installFailingMessage: Timeout waiting for the Kubernetes API to begin responding
+    - name: KubeAPIWaitFailed
+      searchRegexStrings:
+      - "Failed waiting for Kubernetes API. This error usually happens when there is a problem on the bootstrap host that prevents creating a temporary control plane"
+      installFailingReason: KubeAPIWaitFailed
+      installFailingMessage: Failed waiting for Kubernetes API. This error usually happens when there is a problem on the bootstrap host that prevents creating a temporary control plane
+    - name: BootstrapFailed
+      searchRegexStrings:
+      - "Failed to wait for bootstrapping to complete. This error usually happens when there is a problem with control plane hosts that prevents the control plane operators from creating the control plane."
+      installFailingReason: BootstrapFailed
+      installFailingMessage: Failed to wait for bootstrapping to complete. This error usually happens when there is a problem with control plane hosts that prevents the control plane operators from creating the control plane. Verify the networking configuration and account permissions and try again.
+    - name: GenericBootstrapFailed
+      searchRegexStrings:
+      - "Bootstrap failed to complete"
+      installFailingReason: GenericBootstrapFailed
+      installFailingMessage: Installation Bootstrap failed to complete. Verify the networking configuration and account permissions and try again.
+    - name: MonitoringOperatorStillUpdating
+      searchRegexStrings:
+      - "failed to initialize the cluster: Cluster operator monitoring is still updating"
+      installFailingReason: MonitoringOperatorStillUpdating
+      installFailingMessage: Timeout waiting for the monitoring operator to become ready
+    - name: NoWorkerNodesReady
+      searchRegexStrings:
+      - "Got 0 worker nodes, \\d+ master nodes.*none are schedulable or ready for ingress pods"
+      installFailingReason: NoWorkerNodesReady
+      installFailingMessage: 0 worker nodes have joined the cluster
+    - name: IngressOperatorDegraded 
+      searchRegexStrings:
+      - "Cluster operator ingress Degraded is True"
+      installFailingReason: IngressOperatorDegraded
+      installFailingMessage: Timeout waiting for the ingress operator to become ready
+    - name: AuthenticationOperatorDegraded
+      searchRegexStrings:
+      - "Cluster operator authentication Degraded is True"
+      installFailingReason: AuthenticationOperatorDegraded
+      installFailingMessage: Timeout waiting for the authentication operator to become ready
+    - name: GeneralOperatorDegraded
+      searchRegexStrings:
+      - "Cluster operator.*Degraded is True"
+      installFailingReason: GeneralOperatorDegraded
+      installFailingMessage: Timeout waiting for an operator to become ready
+    - name: GeneralClusterOperatorsStillUpdating
+      searchRegexStrings:
+      - "failed to initialize the cluster: Some cluster operators are still updating:"
+      installFailingReason: GeneralClusterOperatorsStillUpdating
+      installFailingMessage: Timeout waiting for all cluster operators to become ready
+    - name: InstallConfigNetworkAuthFail
+      searchRegexStrings:
+      - "failed to create install config: failed to create a network client: Authentication failed"
+      installFailingReason: InstallConfigNetworkAuthFail
+      installFailingMessage: Authentication failure attempting to create a network client - check credentials and certificates
+    - name: InstallConfigNetworkBadCACert
+      searchRegexStrings:
+      - "failed to create install config: failed to create a network client: Error parsing CA Cert from"
+      installFailingReason: InstallConfigNetworkBadCACert
+      installFailingMessage: Failure attempting to create a network client - invalid CA certificate
+
+    # Keep these at the bottom so that they're only hit if nothing above matches.
+    # We don't want to show these to users unless it's a last resort. It's barely better than "unknown error".
+    # These are clues to SRE that they need to add more specific regexps to this file.
+    - name: FallbackQuotaExceeded
+      searchRegexStrings:
+      - "Quota '[A-Z_]*' exceeded"
+      installFailingReason: FallbackQuotaExceeded
+      installFailingMessage: Unknown quota exceeded - couldn't parse a specific resource type
+    - name: FallbackResourceLimitExceeded
+      searchRegexStrings:
+      - "LimitExceeded"
+      installFailingReason: FallbackResourceLimitExceeded
+      installFailingMessage: Unknown resource limit exceeded - couldn't parse a specific resource type
+    - name: FallbackInvalidInstallConfig
+      searchRegexStrings:
+      - "failed to load asset \\\"Install Config\\\""
+      installFailingReason: FallbackInvalidInstallConfig
+      installFailingMessage: Unknown error - installer failed to load install config
+    - name: FallbackInstancesFailedToBecomeReady
+      searchRegexStrings:
+      - "Error waiting for instance .* to become ready"
+      installFailingReason: FallbackInstancesFailedToBecomeReady
+      installFailingMessage: Unknown error - instances failed to become ready

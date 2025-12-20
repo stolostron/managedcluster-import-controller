@@ -1,0 +1,13 @@
+// Copyright 2020 The Go Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style
+// license that can be found in the LICENSE file.
+
+//go:build go1.18 && !(bad || worse)
+//want +1 `.build line is no longer needed`
+// +build go1.18
+//want +1 `.build line is no longer needed`
+// +build !bad
+//want +1 `.build line is no longer needed`
+// +build !worse
+
+package a

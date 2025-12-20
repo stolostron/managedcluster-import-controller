@@ -1,0 +1,73 @@
+# hive-admin is a role intended for hive administrators who need to be able to debug
+# cluster installations, and modify hive configuration.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: hive-reader
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-view: "true"
+rules:
+- apiGroups:
+  - batch
+  resources:
+  - jobs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - pods/log
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - hive.openshift.io
+  resources:
+  - clusterdeployments
+  - clusterprovisions
+  - dnszones
+  - machinepools
+  - selectorsyncidentityproviders
+  - selectorsyncsets
+  - syncidentityproviders
+  - syncsets
+  - syncsetinstances
+  - clusterdeprovisions
+  - clusterdeploymentcustomizations
+  # TODO: remove once v1alpha1 compat removed
+  - clusterdeprovisionrequests
+  - clusterstates
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - hive.openshift.io
+  resources:
+  - clusterimagesets
+  - hiveconfigs
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - hiveinternal.openshift.io
+  resources:
+  - clustersyncs
+  - clustersyncleases
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - apiextensions.k8s.io
+  resources:
+  - customresourcedefinitions
+  verbs:
+  - get
+  - list
+  - watch

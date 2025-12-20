@@ -1,0 +1,91 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  # For searchability:
+  # hive-clustersync
+  # hive-machinepool
+  name: hive- {{- .ControllerName}}
+  namespace: hive
+  labels:
+    control-plane: {{.ControllerName}}
+    controller-tools.k8s.io: "1.0"
+spec:
+  selector:
+    matchLabels:
+      control-plane: {{.ControllerName}}
+      controller-tools.k8s.io: "1.0"
+  template:
+    metadata:
+      labels:
+        control-plane: {{.ControllerName}}
+        controller-tools.k8s.io: "1.0"
+    spec:
+      topologySpreadConstraints: # this forces the pods to be on separate nodes.
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            control-plane: {{.ControllerName}}
+            controller-tools.k8s.io: "1.0"
+      serviceAccount: hive-controllers
+      serviceAccountName: hive-controllers
+      containers:
+      - name: {{.ControllerName}}
+        resources:
+          requests:
+            cpu: 50m
+            memory: 512Mi
+        command:
+        - "/opt/services/manager"
+        args:
+        - "--controllers"
+        - "{{.ControllerName}}"
+        envFrom:
+        - configMapRef:
+            name: hive-controllers-config
+        env:
+        - name: HIVE_NS
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.namespace
+        # For searchability:
+        # HIVE_CLUSTERSYNC_POD_NAME
+        # HIVE_MACHINEPOOL_POD_NAME
+        - name: HIVE_ {{- toUpper .ControllerName -}} _POD_NAME
+          valueFrom:
+            fieldRef:
+              apiVersion: v1
+              fieldPath: metadata.name
+        - name: HIVE_SKIP_LEADER_ELECTION
+          value: "true"
+        - name: TMPDIR
+          value: /tmp
+        volumeMounts:
+        - name: tmp
+          mountPath: /tmp
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+        livenessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /healthz
+            port: 8080
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+        readinessProbe:
+          failureThreshold: 3
+          httpGet:
+            path: /readyz
+            port: 8080
+            scheme: HTTP
+          periodSeconds: 10
+          successThreshold: 1
+          timeoutSeconds: 1
+      volumes:
+      - name: tmp
+        emptyDir: {}

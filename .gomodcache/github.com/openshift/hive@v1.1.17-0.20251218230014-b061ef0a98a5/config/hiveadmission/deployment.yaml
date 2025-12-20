@@ -1,0 +1,67 @@
+---
+# to create the namespace-reservation-server
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: hive
+  name: hiveadmission
+  labels:
+    app: hiveadmission
+    hiveadmission: "true"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: hiveadmission
+      hiveadmission: "true"
+  updateStrategy:
+    rollingUpdate:
+      maxUnavailable: 1
+    type: RollingUpdate
+  template:
+    metadata:
+      name: hiveadmission
+      labels:
+        app: hiveadmission
+        hiveadmission: "true"
+    spec:
+      serviceAccountName: hiveadmission
+      containers:
+      - name: hiveadmission
+        image: registry.ci.openshift.org/openshift/hive-v4.0:hive
+        imagePullPolicy: Always
+        command:
+        - "/opt/services/hiveadmission"
+        - "--secure-port=9443"
+        - "--audit-log-path=-"
+        - "--tls-cert-file=/var/serving-cert/tls.crt"
+        - "--tls-private-key-file=/var/serving-cert/tls.key"
+        ports:
+        - containerPort: 9443
+          protocol: TCP
+        envFrom:
+        - configMapRef:
+            name: hive-feature-gates
+        env:
+        - name: TMPDIR
+          value: /tmp
+        volumeMounts:
+        - mountPath: /var/serving-cert
+          name: serving-cert
+        - name: tmp
+          mountPath: /tmp
+        securityContext:
+          privileged: false
+          readOnlyRootFilesystem: true
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 9443
+            scheme: HTTPS
+      volumes:
+      - name: serving-cert
+        secret:
+          defaultMode: 420
+          secretName: hiveadmission-serving-cert
+      - name: tmp
+        emptyDir: {}

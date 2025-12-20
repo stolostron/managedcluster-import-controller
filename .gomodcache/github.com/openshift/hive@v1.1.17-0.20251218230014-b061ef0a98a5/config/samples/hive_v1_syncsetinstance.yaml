@@ -1,0 +1,7 @@
+apiVersion: hive.openshift.io/v1
+kind: SyncSetInstance
+metadata:
+  name: syncsetinstance-sample
+spec:
+  # Add fields here
+  foo: bar

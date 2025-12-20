@@ -1,0 +1,48 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: prometheus-config
+  namespace: hive
+data:
+  prometheus.yml: |+
+    global:
+      scrape_interval:     15s
+    scrape_configs:
+
+      - job_name: 'prometheus'
+        scrape_interval: 5s
+        static_configs:
+          - targets: ['localhost:9090']
+
+      - job_name: 'hive-controllers'
+        kubernetes_sd_configs:
+          - role: endpoints
+        relabel_configs:
+          - source_labels:
+              - __meta_kubernetes_namespace
+              - __meta_kubernetes_endpoints_name
+              - __meta_kubernetes_endpoint_port_name
+            action: keep
+            regex: hive;hive-controllers;metrics
+
+      - job_name: 'hive-clustersync'
+        kubernetes_sd_configs:
+          - role: endpoints
+        relabel_configs:
+          - source_labels:
+              - __meta_kubernetes_namespace
+              - __meta_kubernetes_endpoints_name
+              - __meta_kubernetes_endpoint_port_name
+            action: keep
+            regex: hive;hive-clustersync;metrics
+
+      - job_name: 'hive-operator'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels:
+              - __meta_kubernetes_namespace
+              - __meta_kubernetes_pod_container_name
+              - __meta_kubernetes_pod_container_port_name
+            action: keep
+            regex: hive;hive-operator;metrics

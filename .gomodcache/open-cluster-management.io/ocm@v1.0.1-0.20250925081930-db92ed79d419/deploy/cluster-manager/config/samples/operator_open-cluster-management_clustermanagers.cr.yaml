@@ -1,0 +1,15 @@
+apiVersion: operator.open-cluster-management.io/v1
+kind: ClusterManager
+metadata:
+  name: cluster-manager
+spec:
+  registrationImagePullSpec: quay.io/open-cluster-management/registration:latest
+  workImagePullSpec: quay.io/open-cluster-management/work:latest
+  placementImagePullSpec: quay.io/open-cluster-management/placement:latest
+  addOnManagerImagePullSpec: quay.io/open-cluster-management/addon-manager:latest
+  deployOption:
+    mode: Default
+  registrationConfiguration:
+    featureGates:
+    - feature: DefaultClusterSet
+      mode: Enable

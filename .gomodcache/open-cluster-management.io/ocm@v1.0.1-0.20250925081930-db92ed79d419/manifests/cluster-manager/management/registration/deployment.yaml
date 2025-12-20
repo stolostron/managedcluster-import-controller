@@ -1,0 +1,166 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ .ClusterManagerName }}-registration-controller
+  namespace: {{ .ClusterManagerNamespace }}
+  labels:
+    app: {{ .ClusterManagerName }}-registration-controller
+    {{ if gt (len .Labels) 0 }}
+    {{ range $key, $value := .Labels }}
+    "{{ $key }}": "{{ $value }}"
+    {{ end }}
+    {{ end }}
+spec:
+  replicas: {{ .Replica }}
+  selector:
+    matchLabels:
+      app: clustermanager-registration-controller
+  template:
+    metadata:
+      labels:
+        app: clustermanager-registration-controller
+        {{ if gt (len .Labels) 0 }}
+        {{ range $key, $value := .Labels }}
+        "{{$key}}": "{{$value}}"
+        {{ end }}
+        {{ end }}
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 70
+            podAffinityTerm:
+              topologyKey: failure-domain.beta.kubernetes.io/zone
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - clustermanager-registration-controller
+          - weight: 30
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - clustermanager-registration-controller
+      {{- if .ImagePullSecret }}
+      imagePullSecrets:
+      - name: {{ .ImagePullSecret }}
+      {{- end }}
+      {{ if not .HostedMode }}
+      serviceAccountName: registration-controller-sa
+      {{ end }}
+      containers:
+      - name: hub-registration-controller
+        image: {{ .RegistrationImage }}
+        args:
+          - "/registration"
+          - "controller"
+          {{ if gt (len .RegistrationFeatureGates) 0 }}
+          {{range .RegistrationFeatureGates}}
+          - {{ . }}
+          {{ end }}
+          {{ end }}
+          {{if .AutoApproveUsers}}
+          - "--cluster-auto-approval-users={{ .AutoApproveUsers }}"
+          {{end}}
+          {{if .ClusterImporterEnabled}}
+          - "--agent-image={{ .AgentImage }}"
+          - "--bootstrap-serviceaccount={{ .OperatorNamespace }}/agent-registration-bootstrap"
+          {{end}}
+          {{ if .HostedMode }}
+          - "--kubeconfig=/var/run/secrets/hub/kubeconfig"
+          {{ end }}
+          {{if .HubClusterArn}}
+          - "--hub-cluster-arn={{ .HubClusterArn }}"
+          {{end}}
+          {{if .EnabledRegistrationDrivers}}
+          - "--enabled-registration-drivers={{ .EnabledRegistrationDrivers }}"
+          {{end}}
+          {{ if .AutoApprovedCSRUsers }}
+          - "--auto-approved-csr-users={{ .AutoApprovedCSRUsers }}"
+          {{ end }}
+           {{ if .AutoApprovedARNPatterns }}
+          - "--auto-approved-arn-patterns={{ .AutoApprovedARNPatterns }}"
+          {{ end }}
+          {{ if .LabelsString }}
+          - "--labels={{ .LabelsString }}"
+          {{ end }}
+          {{if .AwsResourceTags}}
+          - "--aws-resource-tags={{ .AwsResourceTags }}"
+          {{end}}
+          {{if .GRPCAuthEnabled}}
+          - "--grpc-ca-file=/var/run/secrets/hub/grpc/certs/tls.crt"
+          - "--grpc-key-file=/var/run/secrets/hub/grpc/certs/tls.key"
+          {{end}}
+          {{ if .GRPCAutoApprovedUsers }}
+          - "--auto-approved-grpc-users={{ .GRPCAutoApprovedUsers }}"
+          {{ end }}
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: true
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            scheme: HTTPS
+            port: 8443
+          initialDelaySeconds: 2
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            scheme: HTTPS
+            port: 8443
+          initialDelaySeconds: 2
+        {{- if or (eq .ResourceRequirementResourceType "Default") (eq .ResourceRequirementResourceType "") }}
+        resources:
+          requests:
+            cpu: 2m
+            memory: 16Mi
+        {{- end }}
+        {{- if eq .ResourceRequirementResourceType "BestEffort" }}
+        resources: {}
+        {{- end }}
+        {{- if eq .ResourceRequirementResourceType "ResourceRequirement" }}
+        resources:
+          {{ .ResourceRequirements | indent 10 }}
+        {{- end }}
+        volumeMounts:
+        - name: tmpdir
+          mountPath: /tmp
+      {{ if .HostedMode }}
+        - mountPath: /var/run/secrets/hub
+          name: kubeconfig
+          readOnly: true
+      {{ end }}
+      {{ if .GRPCAuthEnabled }}
+        - mountPath: /var/run/secrets/hub/grpc/certs
+          name: grpc-server-singer
+          readOnly: true
+      {{ end }}
+      volumes:
+      - name: tmpdir
+        emptyDir: { }
+      {{ if .HostedMode }}
+      - name: kubeconfig
+        secret:
+          secretName: registration-controller-sa-kubeconfig
+      {{ end }}
+      {{ if .GRPCAuthEnabled }}
+      - name: grpc-server-singer
+        secret:
+          secretName: signer-secret
+      {{ end }}

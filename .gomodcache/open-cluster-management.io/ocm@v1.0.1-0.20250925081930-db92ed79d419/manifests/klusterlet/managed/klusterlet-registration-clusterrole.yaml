@@ -1,0 +1,30 @@
+# Mandatory ClusterRole permission for registartion agent
+# Registartion agent can not run without these permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: open-cluster-management:{{ .KlusterletName }}-registration:agent
+  labels:
+    {{ if gt (len .Labels) 0 }}
+    {{ range $key, $value := .Labels }}
+    "{{ $key }}": "{{ $value }}"
+    {{ end }}
+    {{ end }}
+rules:
+# Allow agent to get/list/watch nodes
+# list nodes to calculates the capacity and allocatable resources of the managed cluster
+- apiGroups: [""]
+  resources: ["nodes"]
+  verbs: ["get", "list", "watch"]
+# Allow agent to create/get/list/update/watch/patch namespaces
+- apiGroups: [""]
+  resources: ["namespaces"]
+  verbs: ["create", "get", "list", "update", "watch", "patch"]
+# Allow agent to list clusterclaims
+- apiGroups: ["cluster.open-cluster-management.io"]
+  resources: ["clusterclaims"]
+  verbs: ["get", "list", "watch"]
+  # Allow agent to list clusterproperties
+- apiGroups: ["about.k8s.io"]
+  resources: ["clusterproperties"]
+  verbs: ["get", "list", "watch"]

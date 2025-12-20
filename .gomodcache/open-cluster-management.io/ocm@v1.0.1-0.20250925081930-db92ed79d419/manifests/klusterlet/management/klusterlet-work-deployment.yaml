@@ -1,0 +1,192 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: {{ .KlusterletName }}-work-agent
+  namespace: {{ .AgentNamespace }}
+  labels:
+    app: klusterlet-manifestwork-agent
+    {{ if gt (len .Labels) 0 }}
+    {{ range $key, $value := .Labels }}
+    "{{ $key }}": "{{ $value }}"
+    {{ end }}
+    {{ end }}
+spec:
+  replicas: {{ .Replica }}
+  selector:
+    matchLabels:
+      app: klusterlet-manifestwork-agent
+  template:
+    metadata:
+      annotations:
+        target.workload.openshift.io/management: '{"effect": "PreferredDuringScheduling"}'
+      labels:
+        app: klusterlet-manifestwork-agent
+        {{ if gt (len .Labels) 0 }}
+        {{ range $key, $value := .Labels }}
+        "{{ $key }}": "{{ $value }}"
+        {{ end }}
+        {{ end }}
+    spec:
+      {{if .HubApiServerHostAlias }}
+      hostAliases:
+      - ip: {{ .HubApiServerHostAlias.IP }}
+        hostnames:
+        - {{ .HubApiServerHostAlias.Hostname }}
+      {{end}}
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 70
+            podAffinityTerm:
+              topologyKey: failure-domain.beta.kubernetes.io/zone
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - klusterlet-manifestwork-agent
+          - weight: 30
+            podAffinityTerm:
+              topologyKey: kubernetes.io/hostname
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - klusterlet-manifestwork-agent
+      serviceAccountName: {{ .KlusterletName }}-work-sa
+      containers:
+      - name: klusterlet-manifestwork-agent
+        image: {{ .WorkImage }}
+        args:
+          - "/work"
+          - "agent"
+          - "--spoke-cluster-name={{ .ClusterName }}"
+          {{if eq .RegistrationDriver.AuthType "grpc"}}
+          - "--workload-source-driver=grpc"
+          - "--workload-source-config=/spoke/hub-kubeconfig/config.yaml"
+          - "--cloudevents-client-id={{ .ClusterName }}-work-agent"
+          {{else}}
+          - "--workload-source-driver=kube"
+          - "--workload-source-config=/spoke/hub-kubeconfig/kubeconfig"
+          {{end}}
+          - "--agent-id={{ .AgentID }}"
+          {{ if gt (len .WorkFeatureGates) 0 }}
+          {{range .WorkFeatureGates}}
+          - {{ . }}
+          {{ end }}
+          {{ end }}
+          {{if eq .InstallMode "Hosted"}}
+          - "--spoke-kubeconfig=/spoke/config/kubeconfig"
+          - "--terminate-on-files=/spoke/config/kubeconfig"
+          {{end}}
+          - "--terminate-on-files=/spoke/hub-kubeconfig/kubeconfig"
+          {{if .WorkStatusSyncInterval}}
+          - "--status-sync-interval={{ .WorkStatusSyncInterval }}"
+          {{else if eq .Replica 1}}
+          - "--status-sync-interval=60s"
+          {{end}}
+          {{if gt .WorkKubeAPIQPS 0.0}}
+          - "--kube-api-qps={{ .WorkKubeAPIQPS }}"
+          {{end}}
+          {{if gt .WorkKubeAPIBurst 0}}
+          - "--kube-api-burst={{ .WorkKubeAPIBurst }}"
+          {{end}}
+          {{if gt .WorkHubKubeAPIQPS 0.0}}
+          - "--hub-kube-api-qps={{ .WorkHubKubeAPIQPS }}"
+          {{end}}
+          {{if gt .WorkHubKubeAPIBurst 0}}
+          - "--hub-kube-api-burst={{ .WorkHubKubeAPIBurst }}"
+          {{end}}
+          {{if .AppliedManifestWorkEvictionGracePeriod}}
+          - "--appliedmanifestwork-eviction-grace-period={{ .AppliedManifestWorkEvictionGracePeriod }}"
+          {{end}}
+        env:
+          - name: POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+              - ALL
+          privileged: false
+          runAsNonRoot: true
+          readOnlyRootFilesystem: true
+        volumeMounts:
+        - name: hub-kubeconfig-secret
+          mountPath: "/spoke/hub-kubeconfig"
+          readOnly: true
+        - name: tmpdir
+          mountPath: /tmp
+        {{if eq .RegistrationDriver.AuthType "awsirsa"}}
+        - name: dot-aws
+          mountPath: /.aws
+        - name: awscli
+          mountPath: "/awscli"
+        {{end}}
+        {{if eq .InstallMode "Hosted"}}
+        - name: spoke-kubeconfig-secret
+          mountPath: "/spoke/config"
+          readOnly: true
+        {{end}}
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            scheme: HTTPS
+            port: 8443
+          initialDelaySeconds: 2
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            scheme: HTTPS
+            port: 8443
+          initialDelaySeconds: 2
+        {{- if or (eq .ResourceRequirementResourceType "Default") (eq .ResourceRequirementResourceType "") }}
+        resources:
+          requests:
+            cpu: 2m
+            memory: 16Mi
+        {{- end }}
+        {{- if eq .ResourceRequirementResourceType "BestEffort" }}
+        resources: {}
+        {{- end }}
+        {{- if eq .ResourceRequirementResourceType "ResourceRequirement" }}
+        resources:
+          {{ .ResourceRequirements | indent 10 }}
+        {{- end }}
+      {{if eq .RegistrationDriver.AuthType "awsirsa"}}
+      initContainers:
+        - command:
+            - cp
+            - -vr
+            - /usr/local/aws-cli/v2/current/dist
+            - /awscli
+          image: amazon/aws-cli:latest
+          name: load-awscli
+          volumeMounts:
+            - mountPath: /awscli
+              name: awscli
+      {{end}}
+      {{- if .PriorityClassName }}
+      priorityClassName: "{{ .PriorityClassName }}"
+      {{- end }}
+      volumes:
+      - name: hub-kubeconfig-secret
+        secret:
+          secretName: {{ .HubKubeConfigSecret }}
+      - name: tmpdir
+        emptyDir: { }
+      {{if eq .RegistrationDriver.AuthType "awsirsa"}}
+      - name: dot-aws
+        emptyDir: { }
+      - name: awscli
+        emptyDir: { }
+      {{end}}
+      {{if eq .InstallMode "Hosted"}}
+      - name: spoke-kubeconfig-secret
+        secret:
+          secretName: {{ .ExternalManagedKubeConfigWorkSecret }}
+      {{end}}
