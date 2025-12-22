@@ -110,7 +110,6 @@ func main() {
 	pflag.Parse()
 
 	logs.InitLogs()
-	defer logs.FlushLogs()
 
 	ctrl.SetLogger(zap.New(func(o *zap.Options) {
 		o.Development = true
@@ -125,42 +124,49 @@ func main() {
 	cfg, err := ctrl.GetConfig()
 	if err != nil {
 		setupLog.Error(err, "failed to get kube config")
+		logs.FlushLogs()
 		os.Exit(1)
 	}
 
 	kubeClient, err := kubernetes.NewForConfig(cfg)
 	if err != nil {
 		setupLog.Error(err, "failed to create kube client")
+		logs.FlushLogs()
 		os.Exit(1)
 	}
 
 	apiExtensionsClient, err := apiextensionsclient.NewForConfig(cfg)
 	if err != nil {
 		setupLog.Error(err, "failed to create api extensions client")
+		logs.FlushLogs()
 		os.Exit(1)
 	}
 
 	operatorClient, err := operatorclient.NewForConfig(cfg)
 	if err != nil {
 		setupLog.Error(err, "failed to create registration operator client")
+		logs.FlushLogs()
 		os.Exit(1)
 	}
 
 	workClient, err := workclient.NewForConfig(cfg)
 	if err != nil {
 		setupLog.Error(err, "failed to create work client")
+		logs.FlushLogs()
 		os.Exit(1)
 	}
 
 	klusterletconfigClient, err := klusterletconfigclient.NewForConfig(cfg)
 	if err != nil {
 		setupLog.Error(err, "failed to create klusterletconfig client")
+		logs.FlushLogs()
 		os.Exit(1)
 	}
 
 	managedclusterClient, err := clusterclient.NewForConfig(cfg)
 	if err != nil {
 		setupLog.Error(err, "failed to create managedcluster client")
+		logs.FlushLogs()
 		os.Exit(1)
 	}
 
@@ -228,6 +234,7 @@ func main() {
 		},
 	); err != nil {
 		setupLog.Error(err, "failed to add indexers to klusterletconfig informer")
+		logs.FlushLogs()
 		os.Exit(1)
 	}
 	klusterletconfigLister := klusterletconfigInformerF.Config().V1alpha1().KlusterletConfigs().Lister()
@@ -242,6 +249,7 @@ func main() {
 		},
 	); err != nil {
 		setupLog.Error(err, "failed to add indexers to managedcluster informer")
+		logs.FlushLogs()
 		os.Exit(1)
 	}
 
@@ -257,6 +265,7 @@ func main() {
 	})
 	if err != nil {
 		setupLog.Error(err, "failed to create manager")
+		logs.FlushLogs()
 		os.Exit(1)
 	}
 
@@ -295,6 +304,7 @@ func main() {
 		mcRecorder,
 	); err != nil {
 		setupLog.Error(err, "failed to register controller")
+		logs.FlushLogs()
 		os.Exit(1)
 	}
 
@@ -342,6 +352,7 @@ func main() {
 	setupLog.Info("Starting Controller Manager")
 	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "failed to start manager")
+		logs.FlushLogs()
 		os.Exit(1)
 	}
 }

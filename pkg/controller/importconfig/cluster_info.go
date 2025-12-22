@@ -75,8 +75,7 @@ func extractBootstrapKubeConfigDataFromImportSecret(importSecret *corev1.Secret)
 
 	for _, yaml := range helpers.SplitYamls(importYaml) {
 		obj := helpers.MustCreateObject(yaml)
-		switch secret := obj.(type) {
-		case *corev1.Secret:
+		if secret, ok := obj.(*corev1.Secret); ok {
 			if secret.Name == constants.DefaultBootstrapHubKubeConfigSecretName {
 				return secret.Data["kubeconfig"]
 			}
