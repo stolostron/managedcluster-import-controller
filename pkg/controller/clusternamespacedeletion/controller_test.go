@@ -11,6 +11,7 @@ import (
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
 	asv1beta1 "github.com/openshift/assisted-service/api/v1beta1"
+	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	hyperv1beta1 "github.com/openshift/hypershift/api/hypershift/v1beta1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	clustercontroller "github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
@@ -146,6 +147,12 @@ var _ = ginkgo.Describe("cluster namespace deletion controller", func() {
 			err := runtimeClient.Create(context.TODO(), addon)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
+			// Wait for addon to exist in the cache
+			gomega.Eventually(func() error {
+				createdAddon := &addonv1alpha1.ManagedClusterAddOn{}
+				return runtimeClient.Get(context.TODO(), types.NamespacedName{Name: addon.Name, Namespace: addon.Namespace}, createdAddon)
+			}, timeout, interval).ShouldNot(gomega.HaveOccurred())
+
 			ginkgo.By("delete cluster")
 			err = runtimeClient.Delete(context.TODO(), cluster)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
@@ -226,8 +233,9 @@ var _ = ginkgo.Describe("cluster namespace deletion controller", func() {
 
 			// Wait for clusterDeployment to exist, otherwise this may fail occasionally in the local environment
 			gomega.Eventually(func() error {
-				_, err := util.GetClusterDeployment(hubDynamicClient, cluster.Name)
-				return err
+				// Use the runtime client to ensure the cache is updated
+				cd := &hivev1.ClusterDeployment{}
+				return runtimeClient.Get(context.TODO(), types.NamespacedName{Name: cluster.Name, Namespace: cluster.Name}, cd)
 			}, timeout, interval).ShouldNot(gomega.HaveOccurred())
 
 			ginkgo.By("delete cluster")
@@ -312,6 +320,12 @@ var _ = ginkgo.Describe("cluster namespace deletion controller", func() {
 			}
 			err := runtimeClient.Create(context.TODO(), infra)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+
+			// Wait for infraenv to exist in the cache
+			gomega.Eventually(func() error {
+				createdInfra := &asv1beta1.InfraEnv{}
+				return runtimeClient.Get(context.TODO(), types.NamespacedName{Name: infra.Name, Namespace: infra.Namespace}, createdInfra)
+			}, timeout, interval).ShouldNot(gomega.HaveOccurred())
 
 			ginkgo.By("delete cluster")
 			err = runtimeClient.Delete(context.TODO(), cluster)
