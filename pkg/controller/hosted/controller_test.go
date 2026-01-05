@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/informers"
 	kubefake "k8s.io/client-go/kubernetes/fake"
@@ -42,8 +43,8 @@ var (
 
 func init() {
 	testscheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
-	testscheme.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.ManagedClusterAddOnList{})
-	testscheme.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.ManagedClusterAddOn{})
+	testscheme.AddKnownTypes(schema.GroupVersion{Group: v1alpha1.GroupVersion.Group, Version: v1alpha1.GroupVersion.Version}, &v1alpha1.ManagedClusterAddOnList{})
+	testscheme.AddKnownTypes(schema.GroupVersion{Group: v1alpha1.GroupVersion.Group, Version: v1alpha1.GroupVersion.Version}, &v1alpha1.ManagedClusterAddOn{})
 }
 
 func TestReconcile(t *testing.T) {

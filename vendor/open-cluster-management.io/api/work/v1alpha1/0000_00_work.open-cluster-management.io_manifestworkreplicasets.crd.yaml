@@ -741,7 +741,7 @@ spec:
                       description: Summary totals of resulting ManifestWorks for the
                         placement
                       properties:
-                        Applied:
+                        applied:
                           description: 'Applied is the number of ManifestWorks with
                             condition Applied: true'
                           type: integer
@@ -751,11 +751,19 @@ spec:
                           type: integer
                         degraded:
                           type: integer
+                        desiredTotal:
+                          description: DesiredTotal is the number of ManifestWorks
+                            that will be created by the ManifestWorkReplicaSet.
+                          type: integer
                         progressing:
                           type: integer
                         total:
                           description: Total number of ManifestWorks managed by the
                             ManifestWorkReplicaSet
+                          type: integer
+                        updated:
+                          description: Updated is the number of clusters with updated
+                            revision applied.
                           type: integer
                       type: object
                   type: object
@@ -763,7 +771,7 @@ spec:
               summary:
                 description: Summary totals of resulting ManifestWorks for all placements
                 properties:
-                  Applied:
+                  applied:
                     description: 'Applied is the number of ManifestWorks with condition
                       Applied: true'
                     type: integer
@@ -773,10 +781,18 @@ spec:
                     type: integer
                   degraded:
                     type: integer
+                  desiredTotal:
+                    description: DesiredTotal is the number of ManifestWorks that
+                      will be created by the ManifestWorkReplicaSet.
+                    type: integer
                   progressing:
                     type: integer
                   total:
                     description: Total number of ManifestWorks managed by the ManifestWorkReplicaSet
+                    type: integer
+                  updated:
+                    description: Updated is the number of clusters with updated revision
+                      applied.
                     type: integer
                 type: object
             type: object

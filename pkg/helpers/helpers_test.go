@@ -32,6 +32,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -59,10 +60,10 @@ import (
 var testscheme = scheme.Scheme
 
 func init() {
-	testscheme.AddKnownTypes(clusterv1.GroupVersion, &clusterv1.ManagedCluster{})
-	testscheme.AddKnownTypes(operatorv1.GroupVersion, &operatorv1.Klusterlet{})
-	testscheme.AddKnownTypes(addonv1alpha1.GroupVersion, &addonv1alpha1.ManagedClusterAddOn{})
-	testscheme.AddKnownTypes(addonv1alpha1.GroupVersion, &addonv1alpha1.ManagedClusterAddOnList{})
+	testscheme.AddKnownTypes(schema.GroupVersion{Group: clusterv1.GroupVersion.Group, Version: clusterv1.GroupVersion.Version}, &clusterv1.ManagedCluster{})
+	testscheme.AddKnownTypes(schema.GroupVersion{Group: operatorv1.GroupVersion.Group, Version: operatorv1.GroupVersion.Version}, &operatorv1.Klusterlet{})
+	testscheme.AddKnownTypes(schema.GroupVersion{Group: addonv1alpha1.GroupVersion.Group, Version: addonv1alpha1.GroupVersion.Version}, &addonv1alpha1.ManagedClusterAddOn{})
+	testscheme.AddKnownTypes(schema.GroupVersion{Group: addonv1alpha1.GroupVersion.Group, Version: addonv1alpha1.GroupVersion.Version}, &addonv1alpha1.ManagedClusterAddOnList{})
 	testscheme.AddKnownTypes(crdv1.SchemeGroupVersion, &crdv1.CustomResourceDefinition{})
 }
 
