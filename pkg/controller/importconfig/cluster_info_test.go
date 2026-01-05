@@ -411,7 +411,7 @@ func mockImportSecret(t *testing.T, expirationTime time.Time, server string, caD
 		Klusterlet:             chart.KlusterletConfig{Namespace: "test", Name: "klusterlet"},
 		BootstrapHubKubeConfig: string(boostrapConfigData),
 	}
-	_, objects, err := chart.RenderKlusterletChart(config, "test")
+	_, objects, err := chart.RenderKlusterletChart(context.TODO(), config, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -472,7 +472,7 @@ func mockLegacyImportSecret(t *testing.T, server string, caData []byte, token st
 		Klusterlet:             chart.KlusterletConfig{Namespace: "test", Name: "klusterlet"},
 		BootstrapHubKubeConfig: string(boostrapConfigData),
 	}
-	_, objects, err := chart.RenderKlusterletChart(config, "test")
+	_, objects, err := chart.RenderKlusterletChart(context.TODO(), config, "test")
 	if err != nil {
 		t.Fatal(err)
 	}

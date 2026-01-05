@@ -12,6 +12,7 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events/eventstesting"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
@@ -32,10 +33,10 @@ var (
 func init() {
 	testscheme.AddKnownTypes(clusterv1.SchemeGroupVersion, &clusterv1.ManagedCluster{})
 	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &hivev1.ClusterDeployment{})
-	testscheme.AddKnownTypes(asv1beta1.GroupVersion, &asv1beta1.InfraEnvList{})
-	testscheme.AddKnownTypes(asv1beta1.GroupVersion, &asv1beta1.InfraEnv{})
-	testscheme.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.ManagedClusterAddOnList{})
-	testscheme.AddKnownTypes(v1alpha1.GroupVersion, &v1alpha1.ManagedClusterAddOn{})
+	testscheme.AddKnownTypes(schema.GroupVersion{Group: asv1beta1.GroupVersion.Group, Version: asv1beta1.GroupVersion.Version}, &asv1beta1.InfraEnvList{})
+	testscheme.AddKnownTypes(schema.GroupVersion{Group: asv1beta1.GroupVersion.Group, Version: asv1beta1.GroupVersion.Version}, &asv1beta1.InfraEnv{})
+	testscheme.AddKnownTypes(schema.GroupVersion{Group: v1alpha1.GroupVersion.Group, Version: v1alpha1.GroupVersion.Version}, &v1alpha1.ManagedClusterAddOnList{})
+	testscheme.AddKnownTypes(schema.GroupVersion{Group: v1alpha1.GroupVersion.Group, Version: v1alpha1.GroupVersion.Version}, &v1alpha1.ManagedClusterAddOn{})
 }
 
 func TestReconcile(t *testing.T) {

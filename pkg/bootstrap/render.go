@@ -382,7 +382,7 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 		return nil, nil, nil, fmt.Errorf("failed to marshal chart config: %w", err)
 	}
 
-	crds, objects, err := chart.RenderKlusterletChart(c.chartConfig, c.chartConfig.Klusterlet.Namespace)
+	crds, objects, err := chart.RenderKlusterletChart(ctx, c.chartConfig, c.chartConfig.Klusterlet.Namespace)
 	if err != nil {
 		return nil, nil, nil, err
 	}
