@@ -15,7 +15,7 @@ require (
 	github.com/onsi/gomega v1.38.3
 	github.com/openshift/api v0.0.0-20251125174858-5cf710f68a92
 	github.com/openshift/assisted-service/api v0.0.0
-	github.com/openshift/hive/apis v0.0.0-20251117181851-acea5e9196a2
+	github.com/openshift/hive/apis v0.0.0-20260112204344-c8e217da439f
 	github.com/openshift/library-go v0.0.0-20251120164824-14a789e09884 // https://github.com/openshift/library-go/tree/release-4.14
 	github.com/spf13/pflag v1.0.10
 	github.com/stolostron/cluster-lifecycle-api v0.0.0-20251028083736-64a17b44b598
@@ -36,7 +36,6 @@ require (
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
-	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/openshift-online/ocm-sdk-go v0.1.392
 	github.com/openshift/client-go v0.0.0-20251125141819-b6281947c285
 	github.com/openshift/hypershift/api v0.0.0-20241022184855-1fa7be0211e4
@@ -82,6 +81,7 @@ require (
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/glog v1.2.5 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/btree v1.1.3 // indirect
