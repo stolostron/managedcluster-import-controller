@@ -44,6 +44,7 @@ jobs:
         timeout-minutes: 30
 
   e2e-misc:
+    needs: e2e-core
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -72,6 +73,7 @@ jobs:
         timeout-minutes: 30
 
   e2e-hosted:
+    needs: e2e-misc
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
