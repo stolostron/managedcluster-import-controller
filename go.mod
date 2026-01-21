@@ -63,7 +63,7 @@ require (
 	github.com/evanphx/json-patch/v5 v5.9.11 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
-	github.com/getkin/kin-openapi v0.128.0 // indirect
+	github.com/getkin/kin-openapi v0.131.0 // indirect
 	github.com/go-chi/chi v1.5.5 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/analysis v0.23.0 // indirect
@@ -87,7 +87,6 @@ require (
 	github.com/gorilla/css v1.0.0 // indirect
 	github.com/huandu/xstrings v1.5.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
-	github.com/invopop/yaml v0.3.1 // indirect
 	github.com/itchyny/gojq v0.12.7 // indirect
 	github.com/itchyny/timefmt-go v0.1.3 // indirect
 	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
@@ -112,6 +111,8 @@ require (
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/oapi-codegen/runtime v1.1.1 // indirect
+	github.com/oasdiff/yaml v0.0.0-20250309154309-f31be36b4037 // indirect
+	github.com/oasdiff/yaml3 v0.0.0-20250309153720-d2182401db90 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
 	github.com/openshift/assisted-service/models v0.0.0 // indirect
 	github.com/openshift/client-go v0.0.0-20250125113824-8e1f0b8fa9a7 // indirect
