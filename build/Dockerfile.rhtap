@@ -12,6 +12,7 @@ RUN BUILD_OUTPUT_DIR=${REMOTE_SOURCE_DIR}/app make build
 FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
 LABEL \
       name="multicluster-engine/managedcluster-import-controller-rhel9" \
+      cpe="cpe:/a:redhat:multicluster_engine:2.10::el9" \
       summary="managedcluster-import-controller" \
       description="managedcluster-import-controller" \
       io.k8s.description="managedcluster-import-controller" \
