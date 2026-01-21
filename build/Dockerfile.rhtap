@@ -18,7 +18,8 @@ LABEL \
       io.k8s.description="managedcluster-import-controller" \
       io.k8s.display-name="managedcluster-import-controller" \
       com.redhat.component="multicluster-engine-managedcluster-import-controller-container" \
-      io.openshift.tags="data,images"
+      io.openshift.tags="data,images" \
+      cpe="cpe:/a:redhat:multicluster_engine:2.7::el9"
 
 ENV REMOTE_SOURCE_DIR='/remote-source'
 
