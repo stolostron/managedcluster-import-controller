@@ -8,7 +8,7 @@ replace github.com/flightctl/flightctl/lib => github.com/xuezhaojun/flightctl/li
 require (
 	cloud.google.com/go/compute/metadata v0.9.0 // indirect
 	github.com/flightctl/flightctl/lib v0.0.0
-	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
+	github.com/ghodss/yaml v1.0.1-0.20220118164431-d8423dcdf344
 	github.com/go-logr/logr v1.4.3
 	github.com/google/go-cmp v0.7.0
 	github.com/onsi/ginkgo/v2 v2.27.3
@@ -36,7 +36,6 @@ require (
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
-	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/openshift-online/ocm-sdk-go v0.1.392
 	github.com/openshift/client-go v0.0.0-20251125141819-b6281947c285
 	github.com/openshift/hypershift/api v0.0.0-20241022184855-1fa7be0211e4
@@ -82,6 +81,7 @@ require (
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/glog v1.2.5 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/btree v1.1.3 // indirect
