@@ -11,14 +11,14 @@ require (
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-logr/logr v1.4.3
 	github.com/google/go-cmp v0.7.0
-	github.com/onsi/ginkgo/v2 v2.27.3
-	github.com/onsi/gomega v1.38.3
+	github.com/onsi/ginkgo/v2 v2.27.5
+	github.com/onsi/gomega v1.39.0
 	github.com/openshift/api v0.0.0-20251125174858-5cf710f68a92
 	github.com/openshift/assisted-service/api v0.0.0
 	github.com/openshift/hive/apis v0.0.0-20251117181851-acea5e9196a2
 	github.com/openshift/library-go v0.0.0-20251120164824-14a789e09884 // https://github.com/openshift/library-go/tree/release-4.14
 	github.com/spf13/pflag v1.0.10
-	github.com/stolostron/cluster-lifecycle-api v0.0.0-20251028083736-64a17b44b598
+	github.com/stolostron/cluster-lifecycle-api v0.0.0-20260127012434-eb438725d35e
 	go.uber.org/zap v1.27.0
 	golang.org/x/text v0.31.0
 	k8s.io/api v0.34.3
@@ -29,20 +29,19 @@ require (
 	k8s.io/component-base v0.34.3
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/utils v0.0.0-20250604170112-4c0f3b243397
-	open-cluster-management.io/api v1.1.1-0.20251222023835-510285203ee6
-	open-cluster-management.io/sdk-go v1.1.1-0.20251218093423-de3e6c682fd0
+	open-cluster-management.io/api v1.2.0
+	open-cluster-management.io/sdk-go v1.1.1-0.20260127092137-c07e0fafa331
 	sigs.k8s.io/controller-runtime v0.22.4
 )
 
 require (
 	github.com/Masterminds/sprig/v3 v3.3.0
-	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/openshift-online/ocm-sdk-go v0.1.392
 	github.com/openshift/client-go v0.0.0-20251125141819-b6281947c285
 	github.com/openshift/hypershift/api v0.0.0-20241022184855-1fa7be0211e4
 	github.com/sethvargo/go-password v0.2.0
 	github.com/stretchr/testify v1.11.1
-	open-cluster-management.io/ocm v1.1.1-0.20260105015925-754b91ffcce3
+	open-cluster-management.io/ocm v1.1.1-0.20260127102632-8fd640694e9c
 	sigs.k8s.io/cluster-api v1.9.3
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -72,16 +71,17 @@ require (
 	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/analysis v0.23.0 // indirect
 	github.com/go-openapi/errors v0.22.0 // indirect
-	github.com/go-openapi/jsonpointer v0.21.0 // indirect
+	github.com/go-openapi/jsonpointer v0.21.1 // indirect
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
 	github.com/go-openapi/loads v0.22.0 // indirect
 	github.com/go-openapi/spec v0.21.0 // indirect
 	github.com/go-openapi/strfmt v0.23.0 // indirect
-	github.com/go-openapi/swag v0.23.0 // indirect
+	github.com/go-openapi/swag v0.23.1 // indirect
 	github.com/go-openapi/validate v0.24.0 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/glog v1.2.5 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/btree v1.1.3 // indirect
@@ -105,7 +105,7 @@ require (
 	github.com/jinzhu/now v1.1.4 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
-	github.com/mailru/easyjson v0.7.7 // indirect
+	github.com/mailru/easyjson v0.9.0 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.25 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
@@ -157,7 +157,7 @@ require (
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/gorm v1.24.5 // indirect
-	helm.sh/helm/v3 v3.19.4 // indirect
+	helm.sh/helm/v3 v3.19.5 // indirect
 	k8s.io/kube-aggregator v0.34.3 // indirect
 	k8s.io/kube-openapi v0.0.0-20250710124328-f3f2b991d03b // indirect
 	sigs.k8s.io/json v0.0.0-20241014173422-cfa47c3a1cc8 // indirect

@@ -1000,7 +1000,7 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 			},
 		},
 		{
-			name: "with GRPC registration driver",
+			name: "with GRPC registration driver and token add-on driver",
 			clientObjs: []runtimeclient.Object{
 				&corev1.Namespace{
 					ObjectMeta: metav1.ObjectMeta{
@@ -1048,6 +1048,12 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 					RegistrationDriver: &operatorv1.RegistrationDriver{
 						AuthType: "grpc",
 					},
+					AddOnKubeClientRegistrationDriver: &operatorv1.AddOnRegistrationDriver{
+						AuthType: "token",
+						Token: &operatorv1.TokenConfig{
+							ExpirationSeconds: 6000,
+						},
+					},
 				},
 			}),
 			validateFunc: func(t *testing.T, objects, crds []runtime.Object) {
@@ -1061,6 +1067,24 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				if klusterlet.Spec.RegistrationConfiguration.RegistrationDriver.AuthType != "grpc" {
 					t.Errorf("the klusterlet registration driver auth type should be grpc, but got %s",
 						klusterlet.Spec.RegistrationConfiguration.RegistrationDriver.AuthType)
+				}
+
+				if klusterlet.Spec.RegistrationConfiguration.AddOnKubeClientRegistrationDriver == nil {
+					t.Errorf("the klusterlet add-on registration driver should be set, but got nil")
+				}
+
+				if klusterlet.Spec.RegistrationConfiguration.AddOnKubeClientRegistrationDriver.AuthType != "token" {
+					t.Errorf("the klusterlet add-on registration driver auth type should be token, but got %s",
+						klusterlet.Spec.RegistrationConfiguration.AddOnKubeClientRegistrationDriver.AuthType)
+				}
+
+				if klusterlet.Spec.RegistrationConfiguration.AddOnKubeClientRegistrationDriver.Token == nil {
+					t.Errorf("the token option of the klusterlet add-on registration driver should be set, but got nil")
+				}
+
+				if klusterlet.Spec.RegistrationConfiguration.AddOnKubeClientRegistrationDriver.Token.ExpirationSeconds != 6000 {
+					t.Errorf("the token ExpirationSeconds of the klusterlet add-on registration driver should be 6000, but got %v",
+						klusterlet.Spec.RegistrationConfiguration.AddOnKubeClientRegistrationDriver.Token.ExpirationSeconds)
 				}
 			},
 		},

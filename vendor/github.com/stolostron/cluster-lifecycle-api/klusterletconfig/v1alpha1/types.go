@@ -112,6 +112,10 @@ type KlusterletConfigSpec struct {
 	// This provides driver details required to register with hub
 	// +optional
 	RegistrationDriver *operatorv1.RegistrationDriver `json:"registrationDriver,omitempty"`
+
+	// This provides driver details required to register add-ons with hub for kubeClient type
+	// +optional
+	AddOnKubeClientRegistrationDriver *operatorv1.AddOnRegistrationDriver `json:"addOnKubeClientRegistrationDriver,omitempty"`
 }
 
 // KlusterletConfigStatus defines the observed state of KlusterletConfig.

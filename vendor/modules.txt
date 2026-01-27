@@ -116,7 +116,7 @@ github.com/go-openapi/analysis/internal/flatten/sortref
 # github.com/go-openapi/errors v0.22.0
 ## explicit; go 1.20
 github.com/go-openapi/errors
-# github.com/go-openapi/jsonpointer v0.21.0
+# github.com/go-openapi/jsonpointer v0.21.1
 ## explicit; go 1.20
 github.com/go-openapi/jsonpointer
 # github.com/go-openapi/jsonreference v0.21.0
@@ -132,7 +132,7 @@ github.com/go-openapi/spec
 # github.com/go-openapi/strfmt v0.23.0
 ## explicit; go 1.20
 github.com/go-openapi/strfmt
-# github.com/go-openapi/swag v0.23.0
+# github.com/go-openapi/swag v0.23.1
 ## explicit; go 1.20
 github.com/go-openapi/swag
 # github.com/go-openapi/validate v0.24.0
@@ -246,8 +246,8 @@ github.com/josharian/intern
 # github.com/json-iterator/go v1.1.12
 ## explicit; go 1.12
 github.com/json-iterator/go
-# github.com/mailru/easyjson v0.7.7
-## explicit; go 1.12
+# github.com/mailru/easyjson v0.9.0
+## explicit; go 1.20
 github.com/mailru/easyjson/buffer
 github.com/mailru/easyjson/jlexer
 github.com/mailru/easyjson/jwriter
@@ -289,7 +289,7 @@ github.com/oasdiff/yaml3
 # github.com/oklog/ulid v1.3.1
 ## explicit
 github.com/oklog/ulid
-# github.com/onsi/ginkgo/v2 v2.27.3
+# github.com/onsi/ginkgo/v2 v2.27.5
 ## explicit; go 1.23.0
 github.com/onsi/ginkgo/v2
 github.com/onsi/ginkgo/v2/config
@@ -314,7 +314,7 @@ github.com/onsi/ginkgo/v2/internal/reporters
 github.com/onsi/ginkgo/v2/internal/testingtproxy
 github.com/onsi/ginkgo/v2/reporters
 github.com/onsi/ginkgo/v2/types
-# github.com/onsi/gomega v1.38.3
+# github.com/onsi/gomega v1.39.0
 ## explicit; go 1.23.0
 github.com/onsi/gomega
 github.com/onsi/gomega/format
@@ -540,8 +540,8 @@ github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.10
 ## explicit; go 1.12
 github.com/spf13/pflag
-# github.com/stolostron/cluster-lifecycle-api v0.0.0-20251028083736-64a17b44b598
-## explicit; go 1.24.0
+# github.com/stolostron/cluster-lifecycle-api v0.0.0-20260127012434-eb438725d35e
+## explicit; go 1.25.0
 github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned
 github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned/fake
 github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned/scheme
@@ -833,7 +833,7 @@ gorm.io/gorm/clause
 gorm.io/gorm/logger
 gorm.io/gorm/schema
 gorm.io/gorm/utils
-# helm.sh/helm/v3 v3.19.4
+# helm.sh/helm/v3 v3.19.5
 ## explicit; go 1.24.0
 helm.sh/helm/v3/internal/sympath
 helm.sh/helm/v3/internal/version
@@ -1379,7 +1379,7 @@ k8s.io/utils/lru
 k8s.io/utils/net
 k8s.io/utils/ptr
 k8s.io/utils/trace
-# open-cluster-management.io/api v1.1.1-0.20251222023835-510285203ee6
+# open-cluster-management.io/api v1.2.0
 ## explicit; go 1.25.0
 open-cluster-management.io/api/addon/v1alpha1
 open-cluster-management.io/api/addon/v1beta1
@@ -1431,12 +1431,12 @@ open-cluster-management.io/api/feature
 open-cluster-management.io/api/operator/v1
 open-cluster-management.io/api/work/v1
 open-cluster-management.io/api/work/v1alpha1
-# open-cluster-management.io/ocm v1.1.1-0.20260105015925-754b91ffcce3
+# open-cluster-management.io/ocm v1.1.1-0.20260127102632-8fd640694e9c
 ## explicit; go 1.25.0
 open-cluster-management.io/ocm/deploy/cluster-manager/chart
 open-cluster-management.io/ocm/deploy/klusterlet/chart
 open-cluster-management.io/ocm/pkg/operator/helpers/chart
-# open-cluster-management.io/sdk-go v1.1.1-0.20251218093423-de3e6c682fd0
+# open-cluster-management.io/sdk-go v1.1.1-0.20260127092137-c07e0fafa331
 ## explicit; go 1.25.0
 open-cluster-management.io/sdk-go/pkg/cloudevents/generic/options
 open-cluster-management.io/sdk-go/pkg/cloudevents/generic/options/cert
