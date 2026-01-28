@@ -41,7 +41,7 @@ require (
 	github.com/openshift/hypershift/api v0.0.0-20241022184855-1fa7be0211e4
 	github.com/sethvargo/go-password v0.2.0
 	github.com/stretchr/testify v1.11.1
-	open-cluster-management.io/ocm v1.1.1-0.20260127102632-8fd640694e9c
+	open-cluster-management.io/ocm v1.1.1-0.20260128054152-9d1a993e2c6f
 	sigs.k8s.io/cluster-api v1.9.3
 	sigs.k8s.io/yaml v1.6.0
 )
