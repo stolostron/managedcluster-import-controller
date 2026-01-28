@@ -1431,7 +1431,7 @@ open-cluster-management.io/api/feature
 open-cluster-management.io/api/operator/v1
 open-cluster-management.io/api/work/v1
 open-cluster-management.io/api/work/v1alpha1
-# open-cluster-management.io/ocm v1.1.1-0.20260127102632-8fd640694e9c
+# open-cluster-management.io/ocm v1.1.1-0.20260128054152-9d1a993e2c6f
 ## explicit; go 1.25.0
 open-cluster-management.io/ocm/deploy/cluster-manager/chart
 open-cluster-management.io/ocm/deploy/klusterlet/chart
