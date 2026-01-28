@@ -197,6 +197,11 @@ func (in *KlusterletConfigSpec) DeepCopyInto(out *KlusterletConfigSpec) {
 		*out = new(v1.RegistrationDriver)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.AddOnKubeClientRegistrationDriver != nil {
+		in, out := &in.AddOnKubeClientRegistrationDriver, &out.AddOnKubeClientRegistrationDriver
+		*out = new(v1.AddOnRegistrationDriver)
+		(*in).DeepCopyInto(*out)
+	}
 	return
 }
 

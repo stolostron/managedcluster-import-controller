@@ -373,6 +373,10 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 		}
 	}
 
+	if c.klusterletConfig != nil && c.klusterletConfig.Spec.AddOnKubeClientRegistrationDriver != nil {
+		c.chartConfig.Klusterlet.RegistrationConfiguration.AddOnKubeClientRegistrationDriver = c.klusterletConfig.Spec.AddOnKubeClientRegistrationDriver
+	}
+
 	if c.klusterletConfig != nil && c.klusterletConfig.Spec.WorkStatusSyncInterval != nil {
 		c.chartConfig.Klusterlet.WorkConfiguration.StatusSyncInterval = c.klusterletConfig.Spec.WorkStatusSyncInterval
 	}
