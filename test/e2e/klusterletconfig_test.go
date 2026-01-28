@@ -541,6 +541,202 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", Label
 		assertFeatureGate("klusterlet", nil, nil)
 		assertManagedClusterAvailable(managedClusterName)
 	})
+
+	It("Should deploy the hosted klusterlet with nodePlacement from KlusterletConfig", Label("hosted"), func() {
+		var hostingClusterName string
+		hostingClusterName = fmt.Sprintf("hosting-cluster-%s", utilrand.String(6))
+
+		By(fmt.Sprintf("Create hosting cluster %s", hostingClusterName), func() {
+			_, err := util.CreateManagedCluster(hubClusterClient, hostingClusterName,
+				util.NewLable("local-cluster", "true"))
+			Expect(err).ToNot(HaveOccurred())
+		})
+		assertManagedClusterImportSecretCreated(hostingClusterName, "other")
+		assertManagedClusterImportSecretApplied(hostingClusterName)
+		assertManagedClusterAvailable(hostingClusterName)
+		assertManagedClusterManifestWorksAvailable(hostingClusterName)
+
+		defer func() {
+			assertManagedClusterDeleted(hostingClusterName)
+		}()
+
+		By(fmt.Sprintf("Create auto-import-secret for managed cluster %s with kubeconfig", managedClusterName), func() {
+			secret, err := util.NewAutoImportSecret(hubKubeClient, managedClusterName, operatorv1.InstallModeHosted)
+			Expect(err).ToNot(HaveOccurred())
+
+			_, err = hubKubeClient.CoreV1().Secrets(managedClusterName).Create(context.TODO(), secret, metav1.CreateOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		By(fmt.Sprintf("Create hosted mode managed cluster %s with klusterletconfig annotation", managedClusterName), func() {
+			_, err := util.CreateHostedManagedClusterWithAnnotations(hubClusterClient, managedClusterName, hostingClusterName,
+				map[string]string{
+					"agent.open-cluster-management.io/klusterlet-config": klusterletConfigName,
+					"open-cluster-management/nodeSelector":               "{}",
+					"open-cluster-management/tolerations":                "[]",
+				})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		assertManagedClusterImportSecretCreated(managedClusterName, "other", operatorv1.InstallModeHosted)
+		assertManagedClusterImportSecretApplied(managedClusterName, operatorv1.InstallModeHosted)
+
+		By("Create KlusterletConfig with nodePlacement for hosted mode", func() {
+			_, err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Create(context.TODO(), &klusterletconfigv1alpha1.KlusterletConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: klusterletConfigName,
+				},
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					NodePlacement: &operatorv1.NodePlacement{
+						NodeSelector: map[string]string{
+							"kubernetes.io/os": "linux",
+						},
+						Tolerations: []corev1.Toleration{
+							{
+								Key:               "node.kubernetes.io/hosted",
+								Operator:          corev1.TolerationOpExists,
+								Effect:            corev1.TaintEffectNoSchedule,
+								TolerationSeconds: &tolerationSeconds,
+							},
+						},
+					},
+				},
+			}, metav1.CreateOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		klusterletName := fmt.Sprintf("klusterlet-%s", managedClusterName)
+		assertHostedKlusterletNodePlacement(
+			klusterletName,
+			map[string]string{"kubernetes.io/os": "linux"},
+			[]corev1.Toleration{{
+				Key:               "node.kubernetes.io/hosted",
+				Operator:          corev1.TolerationOpExists,
+				Effect:            corev1.TaintEffectNoSchedule,
+				TolerationSeconds: &tolerationSeconds,
+			}},
+		)
+
+		By("Update KlusterletConfig to clear nodePlacement", func() {
+			Eventually(func() error {
+				oldkc, err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Get(context.TODO(), klusterletConfigName, metav1.GetOptions{})
+				if err != nil {
+					return err
+				}
+
+				newkc := oldkc.DeepCopy()
+				newkc.Spec.NodePlacement = &operatorv1.NodePlacement{}
+				_, err = klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Update(context.TODO(), newkc, metav1.UpdateOptions{})
+				return err
+			}, 60*time.Second, 1*time.Second).Should(Succeed())
+		})
+
+		// klusterletconfig's nodeplacement is nil, expect to use values in managed cluster annotations which is empty
+		assertHostedKlusterletNodePlacement(klusterletName, map[string]string{}, []corev1.Toleration{})
+
+		assertManagedClusterAvailable(managedClusterName)
+		assertHostedManagedClusterManifestWorksAvailable(managedClusterName, hostingClusterName)
+
+		By("Delete Klusterletconfig", func() {
+			err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Delete(context.TODO(), klusterletConfigName, metav1.DeleteOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		defer func() {
+			assertAutoImportSecretDeleted(managedClusterName)
+			assertHostedManagedClusterDeleted(managedClusterName, hostingClusterName)
+		}()
+	})
+
+	It("Should deploy the hosted klusterlet with pullSecret from KlusterletConfig", Label("hosted"), func() {
+		var hostingClusterName string
+		var pullSecretName string
+
+		hostingClusterName = fmt.Sprintf("hosting-cluster-%s", utilrand.String(6))
+		pullSecretName = fmt.Sprintf("pull-secret-%s", utilrand.String(6))
+
+		By(fmt.Sprintf("Create pull secret %s", pullSecretName), func() {
+			err := util.CreatePullSecret(hubKubeClient, "default", pullSecretName)
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		})
+
+		defer func() {
+			assertPullSecretDeleted("default", pullSecretName)
+		}()
+
+		By(fmt.Sprintf("Create hosting cluster %s", hostingClusterName), func() {
+			_, err := util.CreateManagedCluster(hubClusterClient, hostingClusterName,
+				util.NewLable("local-cluster", "true"))
+			Expect(err).ToNot(HaveOccurred())
+		})
+		assertManagedClusterImportSecretCreated(hostingClusterName, "other")
+		assertManagedClusterImportSecretApplied(hostingClusterName)
+		assertManagedClusterAvailable(hostingClusterName)
+		assertManagedClusterManifestWorksAvailable(hostingClusterName)
+
+		defer func() {
+			assertManagedClusterDeleted(hostingClusterName)
+		}()
+
+		By(fmt.Sprintf("Create auto-import-secret for managed cluster %s with kubeconfig", managedClusterName), func() {
+			secret, err := util.NewAutoImportSecret(hubKubeClient, managedClusterName, operatorv1.InstallModeHosted)
+			Expect(err).ToNot(HaveOccurred())
+
+			_, err = hubKubeClient.CoreV1().Secrets(managedClusterName).Create(context.TODO(), secret, metav1.CreateOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		By(fmt.Sprintf("Create hosted mode managed cluster %s with klusterletconfig annotation", managedClusterName), func() {
+			_, err := util.CreateHostedManagedClusterWithAnnotations(hubClusterClient, managedClusterName, hostingClusterName,
+				map[string]string{
+					"agent.open-cluster-management.io/klusterlet-config": klusterletConfigName,
+				})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		assertManagedClusterImportSecretCreated(managedClusterName, "other", operatorv1.InstallModeHosted)
+		assertManagedClusterImportSecretApplied(managedClusterName, operatorv1.InstallModeHosted)
+
+		By("Create KlusterletConfig with pullSecret and registries for hosted mode", func() {
+			_, err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Create(context.TODO(), &klusterletconfigv1alpha1.KlusterletConfig{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: klusterletConfigName,
+				},
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					PullSecret: corev1.ObjectReference{
+						Name:      pullSecretName,
+						Namespace: "default",
+					},
+					Registries: []klusterletconfigv1alpha1.Registries{
+						{
+							Source: "quay.io/open-cluster-management",
+							Mirror: "quay.io/rhacm2",
+						},
+						{
+							Source: "quay.io/stolostron",
+							Mirror: "quay.io/rhacm2",
+						},
+					},
+				},
+			}, metav1.CreateOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		assertHostedImagePullSecretAndRegistry(managedClusterName)
+
+		assertManagedClusterAvailable(managedClusterName)
+		assertHostedManagedClusterManifestWorksAvailable(managedClusterName, hostingClusterName)
+
+		By("Delete Klusterletconfig", func() {
+			err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Delete(context.TODO(), klusterletConfigName, metav1.DeleteOptions{})
+			Expect(err).ToNot(HaveOccurred())
+		})
+
+		defer func() {
+			assertAutoImportSecretDeleted(managedClusterName)
+			assertHostedManagedClusterDeleted(managedClusterName, hostingClusterName)
+		}()
+	})
 })
 
 func newCert(commoneName string) ([]byte, []byte, error) {
