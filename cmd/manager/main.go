@@ -47,6 +47,7 @@ import (
 	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
 	informerswork "open-cluster-management.io/api/client/work/informers/externalversions"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 
 	routeclient "github.com/openshift/client-go/route/clientset/versioned"
@@ -93,6 +94,7 @@ func init() {
 	utilruntime.Must(klusterletconfigv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(hyperv1beta1.AddToScheme(scheme))
 	utilruntime.Must(capiv1beta1.AddToScheme(scheme))
+	utilruntime.Must(operatorv1.AddToScheme(scheme))
 }
 
 func main() {
