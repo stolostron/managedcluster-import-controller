@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -550,17 +551,142 @@ func assertManagedClusterDeletedFromHub(clusterName string) {
 	start = time.Now()
 	ginkgo.By(fmt.Sprintf("Should delete the managed cluster namespace %s", clusterName), func() {
 		gomega.Eventually(func() error {
-			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), clusterName, metav1.GetOptions{})
+			ns, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
 				return nil
 			}
 			if err != nil {
 				return err
 			}
-			return fmt.Errorf("managed cluster namespace %s still exists", clusterName)
+			diagnostics := getNamespaceDiagnostics(context.TODO(), clusterName)
+			return fmt.Errorf("managed cluster namespace %s still exists (Phase: %s, Finalizers: %v)%s",
+				clusterName, ns.Status.Phase, ns.Finalizers, diagnostics)
 		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
+}
+
+// getNamespaceDiagnostics collects diagnostic information for a namespace that cannot be deleted.
+// It returns namespace metadata (finalizers, deletionTimestamp) and lists remaining resources.
+func getNamespaceDiagnostics(ctx context.Context, namespaceName string) string {
+	var diagnostics strings.Builder
+	diagnostics.WriteString(fmt.Sprintf("\n=== Namespace Diagnostics for %s ===\n", namespaceName))
+
+	// Get namespace metadata
+	ns, err := hubKubeClient.CoreV1().Namespaces().Get(ctx, namespaceName, metav1.GetOptions{})
+	if err != nil {
+		diagnostics.WriteString(fmt.Sprintf("Failed to get namespace: %v\n", err))
+		return diagnostics.String()
+	}
+
+	// Namespace metadata
+	diagnostics.WriteString(fmt.Sprintf("Namespace Phase: %s\n", ns.Status.Phase))
+	if ns.DeletionTimestamp != nil {
+		diagnostics.WriteString(fmt.Sprintf("DeletionTimestamp: %s\n", ns.DeletionTimestamp.String()))
+	}
+	if len(ns.Finalizers) > 0 {
+		diagnostics.WriteString(fmt.Sprintf("Finalizers: %v\n", ns.Finalizers))
+	}
+
+	// Check namespace conditions
+	if len(ns.Status.Conditions) > 0 {
+		diagnostics.WriteString("Namespace Conditions:\n")
+		for _, cond := range ns.Status.Conditions {
+			diagnostics.WriteString(fmt.Sprintf("  - Type: %s, Status: %s, Reason: %s, Message: %s\n",
+				cond.Type, cond.Status, cond.Reason, cond.Message))
+		}
+	}
+
+	// List remaining resources in the namespace
+	diagnostics.WriteString("\n--- Remaining Resources ---\n")
+
+	// Check Pods
+	pods, err := hubKubeClient.CoreV1().Pods(namespaceName).List(ctx, metav1.ListOptions{})
+	if err == nil && len(pods.Items) > 0 {
+		diagnostics.WriteString(fmt.Sprintf("Pods (%d):\n", len(pods.Items)))
+		for _, pod := range pods.Items {
+			diagnostics.WriteString(fmt.Sprintf("  - %s (Phase: %s, Finalizers: %v)\n",
+				pod.Name, pod.Status.Phase, pod.Finalizers))
+		}
+	}
+
+	// Check Secrets
+	secrets, err := hubKubeClient.CoreV1().Secrets(namespaceName).List(ctx, metav1.ListOptions{})
+	if err == nil && len(secrets.Items) > 0 {
+		diagnostics.WriteString(fmt.Sprintf("Secrets (%d):\n", len(secrets.Items)))
+		for _, secret := range secrets.Items {
+			diagnostics.WriteString(fmt.Sprintf("  - %s (Finalizers: %v)\n", secret.Name, secret.Finalizers))
+		}
+	}
+
+	// Check ConfigMaps
+	configMaps, err := hubKubeClient.CoreV1().ConfigMaps(namespaceName).List(ctx, metav1.ListOptions{})
+	if err == nil && len(configMaps.Items) > 0 {
+		diagnostics.WriteString(fmt.Sprintf("ConfigMaps (%d):\n", len(configMaps.Items)))
+		for _, cm := range configMaps.Items {
+			diagnostics.WriteString(fmt.Sprintf("  - %s (Finalizers: %v)\n", cm.Name, cm.Finalizers))
+		}
+	}
+
+	// Check ServiceAccounts
+	serviceAccounts, err := hubKubeClient.CoreV1().ServiceAccounts(namespaceName).List(ctx, metav1.ListOptions{})
+	if err == nil && len(serviceAccounts.Items) > 0 {
+		diagnostics.WriteString(fmt.Sprintf("ServiceAccounts (%d):\n", len(serviceAccounts.Items)))
+		for _, sa := range serviceAccounts.Items {
+			diagnostics.WriteString(fmt.Sprintf("  - %s (Finalizers: %v)\n", sa.Name, sa.Finalizers))
+		}
+	}
+
+	// Check Deployments
+	deployments, err := hubKubeClient.AppsV1().Deployments(namespaceName).List(ctx, metav1.ListOptions{})
+	if err == nil && len(deployments.Items) > 0 {
+		diagnostics.WriteString(fmt.Sprintf("Deployments (%d):\n", len(deployments.Items)))
+		for _, deploy := range deployments.Items {
+			diagnostics.WriteString(fmt.Sprintf("  - %s (Finalizers: %v)\n", deploy.Name, deploy.Finalizers))
+		}
+	}
+
+	// Check using discovery client for all remaining resources
+	// This helps find CRD instances that may have finalizers
+	apiResourceLists, err := hubKubeClient.Discovery().ServerPreferredNamespacedResources()
+	if err != nil {
+		// Log but don't fail - this is just additional diagnostic info
+		diagnostics.WriteString(fmt.Sprintf("Warning: Could not get API resources: %v\n", err))
+	} else {
+		for _, resourceList := range apiResourceLists {
+			gv, err := schema.ParseGroupVersion(resourceList.GroupVersion)
+			if err != nil {
+				continue
+			}
+			for _, resource := range resourceList.APIResources {
+				// Skip subresources
+				if strings.Contains(resource.Name, "/") {
+					continue
+				}
+				// Skip resources we already checked
+				if resource.Name == "pods" || resource.Name == "secrets" ||
+					resource.Name == "configmaps" || resource.Name == "serviceaccounts" ||
+					resource.Name == "deployments" {
+					continue
+				}
+				gvr := gv.WithResource(resource.Name)
+				list, err := hubDynamicClient.Resource(gvr).Namespace(namespaceName).List(ctx, metav1.ListOptions{})
+				if err != nil {
+					continue
+				}
+				if len(list.Items) > 0 {
+					diagnostics.WriteString(fmt.Sprintf("%s.%s (%d):\n", resource.Name, gv.Group, len(list.Items)))
+					for _, item := range list.Items {
+						finalizers := item.GetFinalizers()
+						diagnostics.WriteString(fmt.Sprintf("  - %s (Finalizers: %v)\n", item.GetName(), finalizers))
+					}
+				}
+			}
+		}
+	}
+
+	diagnostics.WriteString("=== End Diagnostics ===\n")
+	return diagnostics.String()
 }
 
 func assertManagedClusterDeletedFromSpoke() {
@@ -568,14 +694,16 @@ func assertManagedClusterDeletedFromSpoke() {
 	ginkgo.By("Should delete the open-cluster-management-agent namespace", func() {
 		gomega.Eventually(func() error {
 			klusterletNamespace := "open-cluster-management-agent"
-			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), klusterletNamespace, metav1.GetOptions{})
+			ns, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), klusterletNamespace, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
 				return nil
 			}
 			if err != nil {
 				return err
 			}
-			return fmt.Errorf("namespace %s still exists", klusterletNamespace)
+			diagnostics := getNamespaceDiagnostics(context.TODO(), klusterletNamespace)
+			return fmt.Errorf("namespace %s still exists (Phase: %s, Finalizers: %v)%s",
+				klusterletNamespace, ns.Status.Phase, ns.Finalizers, diagnostics)
 		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("delete the open-cluster-management-agent namespace spending time: %.2f seconds", time.Since(start).Seconds())
@@ -603,14 +731,16 @@ func assertHostedManagedClusterDeletedFromSpoke(cluster, managementCluster strin
 	ginkgo.By(fmt.Sprintf("Should delete the %s namespace", namespace), func() {
 		gomega.Eventually(func() error {
 			klusterletNamespace := namespace
-			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), klusterletNamespace, metav1.GetOptions{})
+			ns, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), klusterletNamespace, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
 				return nil
 			}
 			if err != nil {
 				return err
 			}
-			return fmt.Errorf("namespace %s still exists", klusterletNamespace)
+			diagnostics := getNamespaceDiagnostics(context.TODO(), klusterletNamespace)
+			return fmt.Errorf("namespace %s still exists (Phase: %s, Finalizers: %v)%s",
+				klusterletNamespace, ns.Status.Phase, ns.Finalizers, diagnostics)
 		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
