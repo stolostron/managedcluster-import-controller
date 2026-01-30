@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/openshift/library-go/pkg/operator/events"
-	"github.com/stolostron/cluster-lifecycle-api/helpers/localcluster"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -232,9 +231,6 @@ func (r *ReconcileResourceCleanup) forceCleanup(ctx context.Context, cluster *cl
 
 	errs = appendIfErr(errs, helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, cluster.Name, r.recorder))
 
-	// After ManifestWorks are force deleted, delete orphaned Klusterlet CR for self-managed clusters
-	errs = appendIfErr(errs, r.deleteOrphanedKlusterletForSelfManagedCluster(ctx, cluster))
-
 	return utilerrors.NewAggregate(errs)
 }
 
@@ -269,11 +265,6 @@ func (r *ReconcileResourceCleanup) Cleanup(ctx context.Context, cluster *cluster
 		}
 	}
 
-	// After ManifestWorks are deleted, delete orphaned Klusterlet CR for self-managed clusters
-	if err := r.deleteOrphanedKlusterletForSelfManagedCluster(ctx, cluster); err != nil {
-		return err
-	}
-
 	hostingCluster, _ := helpers.GetHostingCluster(cluster)
 	if !helpers.IsHostedCluster(cluster) || hostingCluster == "" {
 		return nil
@@ -300,12 +291,6 @@ func (r *ReconcileResourceCleanup) cleanupCompleted(ctx context.Context, cluster
 
 	workRoleBinding, err := helpers.GetWorkRoleBinding(ctx, r.clientHolder.RuntimeClient, cluster.Name)
 	if err != nil || workRoleBinding != nil {
-		return false, err
-	}
-
-	// For self-managed clusters, also check if Klusterlet CR is deleted
-	klusterletDeleted, err := r.isKlusterletDeletedForSelfManagedCluster(ctx, cluster)
-	if err != nil || !klusterletDeleted {
 		return false, err
 	}
 
@@ -367,80 +352,6 @@ func clusterNeedForceDelete(cluster *clusterv1.ManagedCluster) bool {
 		return true
 	}
 	return helpers.IsClusterUnavailable(cluster)
-}
-
-// deleteOrphanedKlusterletForSelfManagedCluster deletes the orphaned Klusterlet CR
-// for self-managed clusters (where Hub=Spoke).
-// This is needed because when klusterlet ManifestWork is deleted with Orphan propagation policy,
-// the Klusterlet CR is not deleted, causing the cleanup controller to not execute.
-func (r *ReconcileResourceCleanup) deleteOrphanedKlusterletForSelfManagedCluster(
-	ctx context.Context,
-	cluster *clusterv1.ManagedCluster,
-) error {
-	// Only handle self-managed clusters (local-cluster)
-	// For remote managed clusters, the Klusterlet CR is on the spoke cluster,
-	// which we cannot access directly from the hub.
-	if !localcluster.IsClusterSelfManaged(cluster) {
-		return nil
-	}
-
-	// Get the klusterlet name - for self-managed clusters, it's always "klusterlet"
-	klusterletName := constants.KlusterletSuffix
-
-	// Check if the Klusterlet CR exists and is orphaned (no DeletionTimestamp)
-	klusterlet, err := r.clientHolder.OperatorClient.OperatorV1().Klusterlets().Get(ctx, klusterletName, metav1.GetOptions{})
-	if errors.IsNotFound(err) {
-		// Klusterlet CR already deleted, nothing to do
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-
-	// Only delete if the Klusterlet CR has no DeletionTimestamp (orphaned)
-	if klusterlet.DeletionTimestamp != nil {
-		// Already being deleted, nothing to do
-		return nil
-	}
-
-	// Verify this Klusterlet CR belongs to this managed cluster
-	if klusterlet.Spec.ClusterName != "" && klusterlet.Spec.ClusterName != cluster.Name {
-		// This Klusterlet CR belongs to a different cluster, don't delete
-		return nil
-	}
-
-	log.Info("Deleting orphaned Klusterlet CR for self-managed cluster",
-		"cluster", cluster.Name, "klusterlet", klusterletName)
-
-	// Delete the Klusterlet CR
-	err = r.clientHolder.OperatorClient.OperatorV1().Klusterlets().Delete(ctx, klusterletName, metav1.DeleteOptions{})
-	if errors.IsNotFound(err) {
-		return nil
-	}
-	return err
-}
-
-// isKlusterletDeletedForSelfManagedCluster checks if the Klusterlet CR is deleted for self-managed clusters.
-// Returns true if the cluster is not self-managed or if the Klusterlet CR is deleted.
-func (r *ReconcileResourceCleanup) isKlusterletDeletedForSelfManagedCluster(
-	ctx context.Context,
-	cluster *clusterv1.ManagedCluster,
-) (bool, error) {
-	// Only check for self-managed clusters
-	if !localcluster.IsClusterSelfManaged(cluster) {
-		return true, nil
-	}
-
-	klusterletName := constants.KlusterletSuffix
-	_, err := r.clientHolder.OperatorClient.OperatorV1().Klusterlets().Get(ctx, klusterletName, metav1.GetOptions{})
-	if errors.IsNotFound(err) {
-		return true, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	// Klusterlet CR still exists
-	return false, nil
 }
 
 func appendIfErr(errs []error, err error) []error {
