@@ -170,6 +170,7 @@ rules:
   - create
   - update
   - patch
+  - delete
 - apiGroups:
   - apps
   resources:
