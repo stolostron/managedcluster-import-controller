@@ -537,15 +537,15 @@ func assertManagedClusterDeletedFromHub(clusterName string) {
 	start := time.Now()
 	ginkgo.By(fmt.Sprintf("Should delete the managed cluster %s", clusterName), func() {
 		gomega.Eventually(func() error {
-			_, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
+			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
 				return nil
 			}
 			if err != nil {
 				return err
 			}
-
-			return fmt.Errorf("managed cluster %s still exists", clusterName)
+			diagnostics := getManagedClusterDeletionDiagnostics(context.TODO(), cluster)
+			return fmt.Errorf("managed cluster %s still exists%s", clusterName, diagnostics)
 		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
@@ -566,6 +566,84 @@ func assertManagedClusterDeletedFromHub(clusterName string) {
 		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
+}
+
+// getManagedClusterDeletionDiagnostics collects diagnostic information when ManagedCluster cannot be deleted.
+func getManagedClusterDeletionDiagnostics(ctx context.Context, cluster *clusterv1.ManagedCluster) string {
+	var diagnostics strings.Builder
+	diagnostics.WriteString(fmt.Sprintf("\n=== ManagedCluster Deletion Diagnostics for %s ===\n", cluster.Name))
+
+	// Cluster metadata
+	diagnostics.WriteString(fmt.Sprintf("DeletionTimestamp: %v\n", cluster.DeletionTimestamp))
+	diagnostics.WriteString(fmt.Sprintf("Finalizers: %v\n", cluster.Finalizers))
+
+	// Cluster conditions
+	diagnostics.WriteString("\n--- Conditions ---\n")
+	for _, cond := range cluster.Status.Conditions {
+		diagnostics.WriteString(fmt.Sprintf("  %s: %s (Reason: %s, Message: %s)\n",
+			cond.Type, cond.Status, cond.Reason, cond.Message))
+	}
+
+	// Check ManifestWorks in cluster namespace
+	diagnostics.WriteString("\n--- ManifestWorks in cluster namespace ---\n")
+	works, err := hubWorkClient.WorkV1().ManifestWorks(cluster.Name).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		diagnostics.WriteString(fmt.Sprintf("Failed to list ManifestWorks: %v\n", err))
+	} else if len(works.Items) == 0 {
+		diagnostics.WriteString("No ManifestWorks found\n")
+	} else {
+		for _, work := range works.Items {
+			diagnostics.WriteString(fmt.Sprintf("  - %s (DeletionTimestamp: %v, Finalizers: %v)\n",
+				work.Name, work.DeletionTimestamp, work.Finalizers))
+		}
+	}
+
+	// Check Addons in cluster namespace
+	diagnostics.WriteString("\n--- ManagedClusterAddons ---\n")
+	addons, err := addonClient.AddonV1alpha1().ManagedClusterAddOns(cluster.Name).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		diagnostics.WriteString(fmt.Sprintf("Failed to list Addons: %v\n", err))
+	} else if len(addons.Items) == 0 {
+		diagnostics.WriteString("No Addons found\n")
+	} else {
+		for _, addon := range addons.Items {
+			diagnostics.WriteString(fmt.Sprintf("  - %s (DeletionTimestamp: %v, Finalizers: %v)\n",
+				addon.Name, addon.DeletionTimestamp, addon.Finalizers))
+		}
+	}
+
+	// Check import-controller logs
+	diagnostics.WriteString("\n--- Import Controller Logs (last 30 lines, filtered) ---\n")
+	importPods, err := hubKubeClient.CoreV1().Pods("open-cluster-management").List(ctx, metav1.ListOptions{
+		LabelSelector: "name=managedcluster-import-controller",
+	})
+	if err != nil {
+		diagnostics.WriteString(fmt.Sprintf("Failed to list import-controller pods: %v\n", err))
+	} else {
+		for _, pod := range importPods.Items {
+			tailLines := int64(30)
+			logs, err := hubKubeClient.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &corev1.PodLogOptions{
+				TailLines: &tailLines,
+			}).Do(ctx).Raw()
+			if err != nil {
+				diagnostics.WriteString(fmt.Sprintf("Failed to get logs: %v\n", err))
+				continue
+			}
+			lines := strings.Split(string(logs), "\n")
+			for _, line := range lines {
+				lineLower := strings.ToLower(line)
+				if strings.Contains(lineLower, cluster.Name) ||
+					strings.Contains(lineLower, "error") ||
+					strings.Contains(lineLower, "cleanup") ||
+					strings.Contains(lineLower, "finalizer") {
+					diagnostics.WriteString(fmt.Sprintf("  %s\n", line))
+				}
+			}
+		}
+	}
+
+	diagnostics.WriteString("=== End ManagedCluster Diagnostics ===\n")
+	return diagnostics.String()
 }
 
 // getCRDDeletionDiagnostics collects diagnostic information when CRD cannot be deleted.
