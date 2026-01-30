@@ -347,18 +347,36 @@ func (r *ReconcileResourceCleanup) Cleanup(ctx context.Context, cluster *cluster
 	// only klusterletCRD manifestWork will be orphaned at the last, need to force delete.
 	klusterletCRDWorkName := fmt.Sprintf("%s-%s", cluster.Name, constants.KlusterletCRDsSuffix)
 	if len(works.Items) == 1 && works.Items[0].Name == klusterletCRDWorkName {
-		// the manifestWorks are deleted by registration controller.
-		// the agent may be orphaned if the CRD manifestWork is force deleted directly.
-		// so the crd is deleting when the deleting condition of crd work is true
-		// and can force delete the crd work after the crd work is deleting.
-		if !meta.IsStatusConditionTrue(works.Items[0].Status.Conditions, workv1.WorkDeleting) {
-			return nil
+		crdWork := &works.Items[0]
+
+		// If the ManifestWork doesn't have a DeletionTimestamp yet, trigger deletion and wait
+		if crdWork.DeletionTimestamp.IsZero() {
+			if err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(cluster.Name).Delete(
+				ctx, klusterletCRDWorkName, metav1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
+				return err
+			}
+			return nil // Wait for next reconcile
 		}
 
-		if err = helpers.ForceDeleteManifestWork(ctx, r.clientHolder.WorkClient, r.recorder,
-			cluster.Name, klusterletCRDWorkName); err != nil {
-			return err
+		// ManifestWork is being deleted. Check if we should force-delete.
+		// WorkDeleting=True means work-agent has STARTED processing, but the CRD content
+		// may not be deleted yet. We should wait for work-agent to complete naturally.
+		// Only force-delete after a timeout (30 seconds) to handle unresponsive work-agent.
+		shouldForceDelete := false
+		if time.Since(crdWork.DeletionTimestamp.Time) > 30*time.Second {
+			log.Info(fmt.Sprintf("CRD manifestwork %s has been deleting for over 30s, force deleting",
+				klusterletCRDWorkName))
+			shouldForceDelete = true
 		}
+
+		if shouldForceDelete {
+			if err = helpers.ForceDeleteManifestWork(ctx, r.clientHolder.WorkClient, r.recorder,
+				cluster.Name, klusterletCRDWorkName); err != nil {
+				return err
+			}
+		}
+		// Otherwise, wait for work-agent to complete naturally
+		return nil
 	}
 
 	hostingCluster, _ := helpers.GetHostingCluster(cluster)

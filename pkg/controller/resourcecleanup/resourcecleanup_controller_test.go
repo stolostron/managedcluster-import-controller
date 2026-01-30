@@ -79,7 +79,10 @@ func TestReconcile(t *testing.T) {
 			},
 		},
 		{
-			name:    "default cluster is deleting and klustereletCRD work is not deleting and no finalizer",
+			// This test simulates the case where CRD ManifestWork is being deleted
+			// (has DeletionTimestamp) but hasn't timed out yet (< 30s).
+			// We should requeue and wait for work-agent to complete naturally.
+			name:    "default cluster is deleting and klustereletCRD work is being deleted but not timed out",
 			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}},
 			runtimeObjects: []client.Object{
 				&clusterv1.ManagedCluster{
@@ -99,8 +102,10 @@ func TestReconcile(t *testing.T) {
 			works: []runtime.Object{
 				&workv1.ManifestWork{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "test-klusterlet-crds",
-						Namespace: "test",
+						Name:              "test-klusterlet-crds",
+						Namespace:         "test",
+						DeletionTimestamp: &now,
+						Finalizers:        []string{workv1.ManifestWorkFinalizer},
 					},
 				},
 			},
@@ -186,12 +191,13 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			requeue: false,
+			// Now we wait for timeout (30s) before force deleting, so requeue is expected
+			requeue: true,
 			validateFunc: func(t *testing.T, clientHolder *helpers.ClientHolder) {
 				managedCluster := &clusterv1.ManagedCluster{}
 				if err := clientHolder.RuntimeClient.Get(context.TODO(),
-					types.NamespacedName{Name: "test"}, managedCluster); !errors.IsNotFound(err) {
-					t.Errorf("expected no cluster,but got error: %v", err)
+					types.NamespacedName{Name: "test"}, managedCluster); errors.IsNotFound(err) {
+					t.Errorf("expected cluster to still exist, but got error: %v", err)
 				}
 			},
 		},
