@@ -675,6 +675,42 @@ func getCRDDeletionDiagnostics(ctx context.Context, crdName string, crd *apiexte
 		}
 	}
 
+	// Check for remaining ManifestWorks that might contain the CRD
+	diagnostics.WriteString("\n--- Remaining ManifestWorks (all namespaces with klusterlet-crds) ---\n")
+	allNamespaces, err := hubKubeClient.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		diagnostics.WriteString(fmt.Sprintf("Failed to list namespaces: %v\n", err))
+	} else {
+		foundCRDWork := false
+		for _, ns := range allNamespaces.Items {
+			works, err := hubWorkClient.WorkV1().ManifestWorks(ns.Name).List(ctx, metav1.ListOptions{})
+			if err != nil {
+				continue
+			}
+			for _, work := range works.Items {
+				if strings.Contains(work.Name, "klusterlet-crds") || strings.Contains(work.Name, "klusterlet") {
+					foundCRDWork = true
+					deleteOption := "default (Foreground)"
+					if work.Spec.DeleteOption != nil {
+						deleteOption = string(work.Spec.DeleteOption.PropagationPolicy)
+					}
+					diagnostics.WriteString(fmt.Sprintf("  - %s/%s (DeletionTS: %v, Finalizers: %v, DeleteOption: %s)\n",
+						work.Namespace, work.Name, work.DeletionTimestamp, work.Finalizers, deleteOption))
+					// Show work conditions
+					for _, cond := range work.Status.Conditions {
+						if cond.Type == "Applied" || cond.Type == "Available" || cond.Type == "Deleting" {
+							diagnostics.WriteString(fmt.Sprintf("      %s: %s (Reason: %s)\n",
+								cond.Type, cond.Status, cond.Reason))
+						}
+					}
+				}
+			}
+		}
+		if !foundCRDWork {
+			diagnostics.WriteString("No klusterlet-related ManifestWorks found\n")
+		}
+	}
+
 	// Check klusterlet-operator logs for errors
 	diagnostics.WriteString("\n--- Klusterlet Operator Logs (last 20 lines, errors only) ---\n")
 	operatorPods, err := hubKubeClient.CoreV1().Pods("open-cluster-management-agent").List(ctx, metav1.ListOptions{
@@ -698,6 +734,35 @@ func getCRDDeletionDiagnostics(ctx context.Context, crdName string, crd *apiexte
 				lineLower := strings.ToLower(line)
 				if strings.Contains(lineLower, "error") || strings.Contains(lineLower, "failed") ||
 					strings.Contains(lineLower, "cleanup") || strings.Contains(lineLower, "finalizer") {
+					diagnostics.WriteString(fmt.Sprintf("  %s\n", line))
+				}
+			}
+		}
+	}
+
+	// Check import-controller logs for CRD-related messages
+	diagnostics.WriteString("\n--- Import Controller Logs (last 30 lines, resourcecleanup) ---\n")
+	importPods, err := hubKubeClient.CoreV1().Pods("multicluster-engine").List(ctx, metav1.ListOptions{
+		LabelSelector: "app=managedcluster-import-controller-v2",
+	})
+	if err != nil {
+		diagnostics.WriteString(fmt.Sprintf("Failed to list import controller pods: %v\n", err))
+	} else {
+		for _, pod := range importPods.Items {
+			tailLines := int64(30)
+			logs, err := hubKubeClient.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &corev1.PodLogOptions{
+				TailLines: &tailLines,
+			}).Do(ctx).Raw()
+			if err != nil {
+				diagnostics.WriteString(fmt.Sprintf("Failed to get logs for pod %s: %v\n", pod.Name, err))
+				continue
+			}
+			lines := strings.Split(string(logs), "\n")
+			for _, line := range lines {
+				lineLower := strings.ToLower(line)
+				if strings.Contains(lineLower, "resourcecleanup") || strings.Contains(lineLower, "klusterlet") ||
+					strings.Contains(lineLower, "crd") || strings.Contains(lineLower, "error") ||
+					strings.Contains(lineLower, "manifestwork") {
 					diagnostics.WriteString(fmt.Sprintf("  %s\n", line))
 				}
 			}
