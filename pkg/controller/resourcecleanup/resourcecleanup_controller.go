@@ -390,6 +390,12 @@ func (r *ReconcileResourceCleanup) cleanupCompleted(ctx context.Context, cluster
 		return false, err
 	}
 
+	// Wait for Klusterlet CR to be fully deleted before considering cleanup complete.
+	// This ensures klusterlet-operator has finished its cleanup (including CRD deletion).
+	if exists, err := r.klusterletExists(ctx, cluster.Name); err != nil || exists {
+		return false, err
+	}
+
 	hostingCluster, _ := helpers.GetHostingCluster(cluster)
 	if !helpers.IsHostedCluster(cluster) || hostingCluster == "" {
 		return true, nil
@@ -440,6 +446,40 @@ func (r *ReconcileResourceCleanup) namespaceExists(ctx context.Context, name str
 		return false, err
 	}
 	return true, nil
+}
+
+// klusterletExists checks if any Klusterlet CR exists for the given cluster.
+// For self-managed clusters, we need to wait for klusterlet-operator to finish cleanup.
+func (r *ReconcileResourceCleanup) klusterletExists(ctx context.Context, clusterName string) (bool, error) {
+	// Check hosted mode klusterlet name (klusterlet-{clusterName})
+	hostedKlusterletName := fmt.Sprintf("%s-%s", constants.KlusterletSuffix, clusterName)
+	klusterlet := &operatorv1.Klusterlet{}
+	err := r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: hostedKlusterletName}, klusterlet)
+	if err == nil {
+		log.Info(fmt.Sprintf("Klusterlet %s still exists, waiting for cleanup to complete", hostedKlusterletName))
+		return true, nil
+	}
+	if !errors.IsNotFound(err) {
+		return false, err
+	}
+
+	// Check default mode klusterlet name ("klusterlet")
+	defaultKlusterletName := constants.KlusterletSuffix
+	err = r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: defaultKlusterletName}, klusterlet)
+	if err == nil {
+		// Verify the klusterlet belongs to this cluster
+		if klusterlet.Spec.ClusterName == clusterName {
+			log.Info(fmt.Sprintf("Klusterlet %s still exists for cluster %s, waiting for cleanup to complete",
+				defaultKlusterletName, clusterName))
+			return true, nil
+		}
+		return false, nil
+	}
+	if !errors.IsNotFound(err) {
+		return false, err
+	}
+
+	return false, nil
 }
 
 func clusterNeedForceDelete(cluster *clusterv1.ManagedCluster) bool {
