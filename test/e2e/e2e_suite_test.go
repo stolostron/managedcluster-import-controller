@@ -24,6 +24,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
+	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -567,6 +568,68 @@ func assertManagedClusterDeletedFromHub(clusterName string) {
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
 }
 
+// getCRDDeletionDiagnostics collects diagnostic information when CRD cannot be deleted.
+// It checks for remaining Klusterlet CRs and CRD metadata.
+func getCRDDeletionDiagnostics(ctx context.Context, crdName string, crd *apiextensionsv1.CustomResourceDefinition) string {
+	var diagnostics strings.Builder
+	diagnostics.WriteString(fmt.Sprintf("\n=== CRD Deletion Diagnostics for %s ===\n", crdName))
+
+	// CRD metadata
+	diagnostics.WriteString(fmt.Sprintf("DeletionTimestamp: %v\n", crd.DeletionTimestamp))
+	diagnostics.WriteString(fmt.Sprintf("Finalizers: %v\n", crd.Finalizers))
+
+	// Check for remaining Klusterlet CRs
+	diagnostics.WriteString("\n--- Klusterlet CRs (blocking CRD deletion) ---\n")
+	klusterlets, err := hubOperatorClient.OperatorV1().Klusterlets().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		diagnostics.WriteString(fmt.Sprintf("Failed to list Klusterlets: %v\n", err))
+	} else if len(klusterlets.Items) == 0 {
+		diagnostics.WriteString("No Klusterlet CRs found\n")
+	} else {
+		for _, kl := range klusterlets.Items {
+			diagnostics.WriteString(fmt.Sprintf("  - %s (DeletionTimestamp: %v, Finalizers: %v)\n",
+				kl.Name, kl.DeletionTimestamp, kl.Finalizers))
+			// Show conditions
+			for _, cond := range kl.Status.Conditions {
+				diagnostics.WriteString(fmt.Sprintf("      %s: %s (Reason: %s)\n",
+					cond.Type, cond.Status, cond.Reason))
+			}
+		}
+	}
+
+	// Check klusterlet-operator logs for errors
+	diagnostics.WriteString("\n--- Klusterlet Operator Logs (last 20 lines, errors only) ---\n")
+	operatorPods, err := hubKubeClient.CoreV1().Pods("open-cluster-management-agent").List(ctx, metav1.ListOptions{
+		LabelSelector: "app=klusterlet",
+	})
+	if err != nil {
+		diagnostics.WriteString(fmt.Sprintf("Failed to list operator pods: %v\n", err))
+	} else {
+		for _, pod := range operatorPods.Items {
+			tailLines := int64(20)
+			logs, err := hubKubeClient.CoreV1().Pods(pod.Namespace).GetLogs(pod.Name, &corev1.PodLogOptions{
+				TailLines: &tailLines,
+			}).Do(ctx).Raw()
+			if err != nil {
+				diagnostics.WriteString(fmt.Sprintf("Failed to get logs for pod %s: %v\n", pod.Name, err))
+				continue
+			}
+			// Filter for error-related lines
+			lines := strings.Split(string(logs), "\n")
+			for _, line := range lines {
+				lineLower := strings.ToLower(line)
+				if strings.Contains(lineLower, "error") || strings.Contains(lineLower, "failed") ||
+					strings.Contains(lineLower, "cleanup") || strings.Contains(lineLower, "finalizer") {
+					diagnostics.WriteString(fmt.Sprintf("  %s\n", line))
+				}
+			}
+		}
+	}
+
+	diagnostics.WriteString("=== End CRD Diagnostics ===\n")
+	return diagnostics.String()
+}
+
 // getNamespaceDiagnostics collects diagnostic information for a namespace that cannot be deleted.
 // It returns namespace metadata (finalizers, deletionTimestamp) and lists remaining resources.
 func getNamespaceDiagnostics(ctx context.Context, namespaceName string) string {
@@ -863,14 +926,15 @@ func assertManagedClusterDeletedFromSpoke() {
 	ginkgo.By("Should delete the klusterlet crd", func() {
 		gomega.Eventually(func() error {
 			klusterletCRDName := "klusterlets.operator.open-cluster-management.io"
-			_, err := crdClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), klusterletCRDName, metav1.GetOptions{})
+			crd, err := crdClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), klusterletCRDName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
 				return nil
 			}
 			if err != nil {
 				return err
 			}
-			return fmt.Errorf("crd %s still exists", klusterletCRDName)
+			diagnostics := getCRDDeletionDiagnostics(context.TODO(), klusterletCRDName, crd)
+			return fmt.Errorf("crd %s still exists%s", klusterletCRDName, diagnostics)
 		}, 120*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("delete klusterlet crd spending time: %.2f seconds", time.Since(start).Seconds())
