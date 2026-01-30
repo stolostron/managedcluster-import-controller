@@ -276,6 +276,10 @@ func (r *ReconcileResourceCleanup) deleteOrphanedKlusterlet(ctx context.Context,
 		}
 		return nil
 	}
+	// If the CRD doesn't exist (NoMatchError), nothing to do
+	if meta.IsNoMatchError(err) {
+		return nil
+	}
 	if !errors.IsNotFound(err) {
 		return err
 	}
@@ -291,6 +295,10 @@ func (r *ReconcileResourceCleanup) deleteOrphanedKlusterlet(ctx context.Context,
 				return err
 			}
 		}
+		return nil
+	}
+	// If the CRD doesn't exist (NoMatchError), nothing to do
+	if meta.IsNoMatchError(err) {
 		return nil
 	}
 	if !errors.IsNotFound(err) {
@@ -513,6 +521,10 @@ func (r *ReconcileResourceCleanup) klusterletExists(ctx context.Context, cluster
 		log.Info(fmt.Sprintf("Klusterlet %s still exists, waiting for cleanup to complete", hostedKlusterletName))
 		return true, nil
 	}
+	// If the CRD doesn't exist (NoMatchError), no Klusterlet exists
+	if meta.IsNoMatchError(err) {
+		return false, nil
+	}
 	if !errors.IsNotFound(err) {
 		return false, err
 	}
@@ -527,6 +539,10 @@ func (r *ReconcileResourceCleanup) klusterletExists(ctx context.Context, cluster
 				defaultKlusterletName, clusterName))
 			return true, nil
 		}
+		return false, nil
+	}
+	// If the CRD doesn't exist (NoMatchError), no Klusterlet exists
+	if meta.IsNoMatchError(err) {
 		return false, nil
 	}
 	if !errors.IsNotFound(err) {
