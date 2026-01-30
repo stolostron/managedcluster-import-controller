@@ -40,6 +40,8 @@ func init() {
 	testScheme.AddKnownTypes(addonv1alpha1.SchemeGroupVersion, &addonv1alpha1.ManagedClusterAddOnList{})
 	testScheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWork{})
 	testScheme.AddKnownTypes(workv1.SchemeGroupVersion, &workv1.ManifestWorkList{})
+	testScheme.AddKnownTypes(operatorv1.SchemeGroupVersion, &operatorv1.Klusterlet{})
+	testScheme.AddKnownTypes(operatorv1.SchemeGroupVersion, &operatorv1.KlusterletList{})
 }
 
 func TestReconcile(t *testing.T) {

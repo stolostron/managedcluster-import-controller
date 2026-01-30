@@ -16,6 +16,7 @@ import (
 	utilerrors "k8s.io/apimachinery/pkg/util/errors"
 	kevents "k8s.io/client-go/tools/events"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	operatorv1 "open-cluster-management.io/api/operator/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -199,7 +200,50 @@ func (r *ReconcileResourceCleanup) orphanCleanup(ctx context.Context, clusterNam
 	errs = appendIfErr(errs, helpers.ForceDeleteAllManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, clusterName, r.recorder))
 	errs = appendIfErr(errs, r.forceDeleteManifestWorks(ctx, clusterName))
 	errs = appendIfErr(errs, helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, clusterName, r.recorder))
+	errs = appendIfErr(errs, r.deleteOrphanedKlusterlet(ctx, clusterName))
 	return utilerrors.NewAggregate(errs)
+}
+
+// deleteOrphanedKlusterlet deletes the orphaned Klusterlet CR for the given cluster.
+// This handles the case where ManifestWork uses DeleteOption: Orphan, leaving the Klusterlet CR
+// without a DeletionTimestamp when the ManagedCluster is deleted before the work-agent finishes cleanup.
+// For default/singleton mode, the klusterlet name is "klusterlet".
+// For hosted mode, the klusterlet name is "klusterlet-{clusterName}".
+func (r *ReconcileResourceCleanup) deleteOrphanedKlusterlet(ctx context.Context, clusterName string) error {
+	// Try hosted mode klusterlet name first (klusterlet-{clusterName})
+	hostedKlusterletName := fmt.Sprintf("%s-%s", constants.KlusterletSuffix, clusterName)
+	klusterlet := &operatorv1.Klusterlet{}
+	err := r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: hostedKlusterletName}, klusterlet)
+	if err == nil {
+		// Found the klusterlet, delete it
+		log.Info(fmt.Sprintf("Deleting orphaned klusterlet %s for cluster %s", hostedKlusterletName, clusterName))
+		if err := r.clientHolder.RuntimeClient.Delete(ctx, klusterlet); err != nil && !errors.IsNotFound(err) {
+			return err
+		}
+		return nil
+	}
+	if !errors.IsNotFound(err) {
+		return err
+	}
+
+	// Try default mode klusterlet name ("klusterlet")
+	defaultKlusterletName := constants.KlusterletSuffix
+	err = r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: defaultKlusterletName}, klusterlet)
+	if err == nil {
+		// Verify the klusterlet belongs to this cluster
+		if klusterlet.Spec.ClusterName == clusterName {
+			log.Info(fmt.Sprintf("Deleting orphaned klusterlet %s for cluster %s", defaultKlusterletName, clusterName))
+			if err := r.clientHolder.RuntimeClient.Delete(ctx, klusterlet); err != nil && !errors.IsNotFound(err) {
+				return err
+			}
+		}
+		return nil
+	}
+	if !errors.IsNotFound(err) {
+		return err
+	}
+
+	return nil
 }
 
 func (r *ReconcileResourceCleanup) forceCleanup(ctx context.Context, cluster *clusterv1.ManagedCluster) error {
@@ -230,6 +274,7 @@ func (r *ReconcileResourceCleanup) forceCleanup(ctx context.Context, cluster *cl
 	}
 
 	errs = appendIfErr(errs, helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, cluster.Name, r.recorder))
+	errs = appendIfErr(errs, r.deleteOrphanedKlusterlet(ctx, cluster.Name))
 
 	return utilerrors.NewAggregate(errs)
 }
