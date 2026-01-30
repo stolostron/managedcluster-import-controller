@@ -154,11 +154,25 @@ func (r *ReconcileResourceCleanup) forceDeleteManifestWorks(
 	// For CRD manifestwork, only force delete if work-agent has started processing (WorkDeleting condition)
 	// This ensures the CRD gets deleted by work-agent before we remove the finalizers
 	if crdWork != nil {
-		if meta.IsStatusConditionTrue(crdWork.Status.Conditions, workv1.WorkDeleting) {
+		// Force delete if:
+		// 1. WorkDeleting condition is true (work-agent has started processing), OR
+		// 2. ManifestWork has been deleting for more than 30 seconds (work-agent is not responding)
+		shouldForceDelete := meta.IsStatusConditionTrue(crdWork.Status.Conditions, workv1.WorkDeleting)
+		if !shouldForceDelete && !crdWork.DeletionTimestamp.IsZero() {
+			// Check if deletion has been pending for too long (30 seconds)
+			if time.Since(crdWork.DeletionTimestamp.Time) > 30*time.Second {
+				log.Info(fmt.Sprintf("CRD manifestwork %s has been deleting for over 30s without WorkDeleting condition, force deleting",
+					klusterletCRDWorkName))
+				shouldForceDelete = true
+			}
+		}
+
+		if shouldForceDelete {
 			return helpers.ForceDeleteManifestWork(ctx, r.clientHolder.WorkClient, r.recorder,
 				clusterName, klusterletCRDWorkName)
 		}
-		// If WorkDeleting is not true yet, just trigger deletion (don't force)
+
+		// If WorkDeleting is not true yet and not timed out, just trigger deletion (don't force)
 		// and let the controller retry
 		if crdWork.DeletionTimestamp.IsZero() {
 			if err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(clusterName).Delete(
