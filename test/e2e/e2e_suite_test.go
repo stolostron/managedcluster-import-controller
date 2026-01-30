@@ -7,6 +7,7 @@ import (
 	"context"
 	"crypto/x509"
 	"fmt"
+	"io"
 	"os"
 	"os/user"
 	"path"
@@ -709,6 +710,71 @@ func getNamespaceDiagnostics(ctx context.Context, namespaceName string) string {
 				for _, cond := range kl.Status.Conditions {
 					diagnostics.WriteString(fmt.Sprintf("    - %s: %s (Reason: %s)\n",
 						cond.Type, cond.Status, cond.Reason))
+				}
+			}
+		}
+	}
+
+	// Get klusterlet-operator logs for debugging cleanup issues
+	diagnostics.WriteString("\n--- Klusterlet Operator Logs (last 50 lines) ---\n")
+	operatorPods, err := hubKubeClient.CoreV1().Pods(namespaceName).List(ctx, metav1.ListOptions{
+		LabelSelector: "app=klusterlet",
+	})
+	if err != nil {
+		diagnostics.WriteString(fmt.Sprintf("Failed to list klusterlet operator pods: %v\n", err))
+	} else if len(operatorPods.Items) == 0 {
+		diagnostics.WriteString("No klusterlet operator pods found in namespace\n")
+	} else {
+		for _, pod := range operatorPods.Items {
+			diagnostics.WriteString(fmt.Sprintf("Pod: %s (Phase: %s)\n", pod.Name, pod.Status.Phase))
+			// Get logs from the pod
+			tailLines := int64(50)
+			logOptions := &corev1.PodLogOptions{
+				TailLines: &tailLines,
+			}
+			req := hubKubeClient.CoreV1().Pods(namespaceName).GetLogs(pod.Name, logOptions)
+			logStream, err := req.Stream(ctx)
+			if err != nil {
+				diagnostics.WriteString(fmt.Sprintf("  Failed to get logs: %v\n", err))
+				continue
+			}
+			defer logStream.Close()
+
+			buf := new(strings.Builder)
+			_, err = io.Copy(buf, logStream)
+			if err != nil {
+				diagnostics.WriteString(fmt.Sprintf("  Failed to read logs: %v\n", err))
+				continue
+			}
+
+			// Filter logs for cleanup-related messages
+			logLines := strings.Split(buf.String(), "\n")
+			diagnostics.WriteString("  Logs (filtered for cleanup/connectivity/error):\n")
+			relevantLogCount := 0
+			for _, line := range logLines {
+				lineLower := strings.ToLower(line)
+				if strings.Contains(lineLower, "cleanup") ||
+					strings.Contains(lineLower, "connectivity") ||
+					strings.Contains(lineLower, "appliedmanifestwork") ||
+					strings.Contains(lineLower, "error") ||
+					strings.Contains(lineLower, "unauthorized") ||
+					strings.Contains(lineLower, "forbidden") ||
+					strings.Contains(lineLower, "failed") ||
+					strings.Contains(lineLower, "finalizer") {
+					diagnostics.WriteString(fmt.Sprintf("    %s\n", line))
+					relevantLogCount++
+				}
+			}
+			if relevantLogCount == 0 {
+				diagnostics.WriteString("    (no relevant logs found, showing last 10 lines)\n")
+				startIdx := len(logLines) - 10
+				if startIdx < 0 {
+					startIdx = 0
+				}
+				for _, line := range logLines[startIdx:] {
+					if line != "" {
+						diagnostics.WriteString(fmt.Sprintf("    %s\n", line))
+					}
 				}
 			}
 		}
