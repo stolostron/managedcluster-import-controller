@@ -308,9 +308,11 @@ func (r *ReconcileResourceCleanup) deleteOrphanedKlusterlet(ctx context.Context,
 	return nil
 }
 
-// deleteOrphanedKlusterletCRD deletes the Klusterlet CRD if no Klusterlet CRs exist.
+// deleteOrphanedKlusterletCRD attempts to delete the Klusterlet CRD if no Klusterlet CRs exist.
 // This handles the case where work-agent is terminated before it can delete the CRD content
 // (because klusterlet-operator deletes the namespace where work-agent runs when cleaning up).
+// Note: This is best-effort - if the controller doesn't have permission to delete CRDs,
+// it will just log a warning and continue.
 func (r *ReconcileResourceCleanup) deleteOrphanedKlusterletCRD(ctx context.Context) error {
 	// List all Klusterlet CRs
 	klusterlets := &operatorv1.KlusterletList{}
@@ -327,12 +329,18 @@ func (r *ReconcileResourceCleanup) deleteOrphanedKlusterletCRD(ctx context.Conte
 		return nil
 	}
 
-	// No Klusterlet CRs exist, delete the orphaned CRD
+	// No Klusterlet CRs exist, attempt to delete the orphaned CRD
 	klusterletCRDName := "klusterlets.operator.open-cluster-management.io"
-	log.Info(fmt.Sprintf("Deleting orphaned klusterlet CRD %s since no Klusterlet CRs exist", klusterletCRDName))
+	log.Info(fmt.Sprintf("Attempting to delete orphaned klusterlet CRD %s since no Klusterlet CRs exist", klusterletCRDName))
 	err := r.clientHolder.APIExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().
 		Delete(ctx, klusterletCRDName, metav1.DeleteOptions{})
 	if errors.IsNotFound(err) {
+		return nil
+	}
+	// If forbidden (no permission to delete CRDs), just log and continue.
+	// CRD deletion is best-effort and shouldn't block ManagedCluster cleanup.
+	if errors.IsForbidden(err) {
+		log.Info(fmt.Sprintf("No permission to delete klusterlet CRD %s, skipping (best-effort cleanup)", klusterletCRDName))
 		return nil
 	}
 	return err
