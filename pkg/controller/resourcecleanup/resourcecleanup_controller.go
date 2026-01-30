@@ -252,6 +252,9 @@ func (r *ReconcileResourceCleanup) orphanCleanup(ctx context.Context, clusterNam
 	errs = appendIfErr(errs, r.forceDeleteManifestWorks(ctx, clusterName))
 	errs = appendIfErr(errs, helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, clusterName, r.recorder))
 	errs = appendIfErr(errs, r.deleteOrphanedKlusterlet(ctx, clusterName))
+	// Delete orphaned Klusterlet CRD if no Klusterlet CRs exist. This handles the case where
+	// work-agent is terminated before it can delete the CRD content.
+	errs = appendIfErr(errs, r.deleteOrphanedKlusterletCRD(ctx))
 	return utilerrors.NewAggregate(errs)
 }
 
@@ -297,6 +300,36 @@ func (r *ReconcileResourceCleanup) deleteOrphanedKlusterlet(ctx context.Context,
 	return nil
 }
 
+// deleteOrphanedKlusterletCRD deletes the Klusterlet CRD if no Klusterlet CRs exist.
+// This handles the case where work-agent is terminated before it can delete the CRD content
+// (because klusterlet-operator deletes the namespace where work-agent runs when cleaning up).
+func (r *ReconcileResourceCleanup) deleteOrphanedKlusterletCRD(ctx context.Context) error {
+	// List all Klusterlet CRs
+	klusterlets := &operatorv1.KlusterletList{}
+	if err := r.clientHolder.RuntimeClient.List(ctx, klusterlets); err != nil {
+		// If the CRD doesn't exist (NoMatchError), nothing to do
+		if meta.IsNoMatchError(err) {
+			return nil
+		}
+		return err
+	}
+
+	// If any Klusterlet CRs still exist, don't delete the CRD
+	if len(klusterlets.Items) > 0 {
+		return nil
+	}
+
+	// No Klusterlet CRs exist, delete the orphaned CRD
+	klusterletCRDName := "klusterlets.operator.open-cluster-management.io"
+	log.Info(fmt.Sprintf("Deleting orphaned klusterlet CRD %s since no Klusterlet CRs exist", klusterletCRDName))
+	err := r.clientHolder.APIExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().
+		Delete(ctx, klusterletCRDName, metav1.DeleteOptions{})
+	if errors.IsNotFound(err) {
+		return nil
+	}
+	return err
+}
+
 func (r *ReconcileResourceCleanup) forceCleanup(ctx context.Context, cluster *clusterv1.ManagedCluster) error {
 	var errs []error
 	exists, err := r.namespaceExists(ctx, cluster.Name)
@@ -326,6 +359,9 @@ func (r *ReconcileResourceCleanup) forceCleanup(ctx context.Context, cluster *cl
 
 	errs = appendIfErr(errs, helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, cluster.Name, r.recorder))
 	errs = appendIfErr(errs, r.deleteOrphanedKlusterlet(ctx, cluster.Name))
+	// Delete orphaned Klusterlet CRD if no Klusterlet CRs exist. This handles the case where
+	// work-agent is terminated before it can delete the CRD content.
+	errs = appendIfErr(errs, r.deleteOrphanedKlusterletCRD(ctx))
 
 	return utilerrors.NewAggregate(errs)
 }
