@@ -685,6 +685,91 @@ func getNamespaceDiagnostics(ctx context.Context, namespaceName string) string {
 		}
 	}
 
+	// Check Klusterlet CRs (cluster-scoped)
+	diagnostics.WriteString("\n--- Klusterlet CRs ---\n")
+	klusterlets, err := hubOperatorClient.OperatorV1().Klusterlets().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		diagnostics.WriteString(fmt.Sprintf("Failed to list klusterlets: %v\n", err))
+	} else if len(klusterlets.Items) == 0 {
+		diagnostics.WriteString("No klusterlets found\n")
+	} else {
+		for _, kl := range klusterlets.Items {
+			diagnostics.WriteString(fmt.Sprintf("Klusterlet: %s\n", kl.Name))
+			diagnostics.WriteString(fmt.Sprintf("  Namespace: %s\n", kl.Spec.Namespace))
+			diagnostics.WriteString(fmt.Sprintf("  DeployOption.Mode: %s\n", kl.Spec.DeployOption.Mode))
+			if kl.DeletionTimestamp != nil {
+				diagnostics.WriteString(fmt.Sprintf("  DeletionTimestamp: %s\n", kl.DeletionTimestamp.String()))
+			}
+			if len(kl.Finalizers) > 0 {
+				diagnostics.WriteString(fmt.Sprintf("  Finalizers: %v\n", kl.Finalizers))
+			}
+			// Show klusterlet conditions
+			if len(kl.Status.Conditions) > 0 {
+				diagnostics.WriteString("  Conditions:\n")
+				for _, cond := range kl.Status.Conditions {
+					diagnostics.WriteString(fmt.Sprintf("    - %s: %s (Reason: %s)\n",
+						cond.Type, cond.Status, cond.Reason))
+				}
+			}
+		}
+	}
+
+	// Check ManifestWorks in all managed cluster namespaces
+	diagnostics.WriteString("\n--- ManifestWorks (all namespaces) ---\n")
+	managedClusters, err := hubClusterClient.ClusterV1().ManagedClusters().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		diagnostics.WriteString(fmt.Sprintf("Failed to list managed clusters: %v\n", err))
+	} else {
+		for _, mc := range managedClusters.Items {
+			works, err := hubWorkClient.WorkV1().ManifestWorks(mc.Name).List(ctx, metav1.ListOptions{})
+			if err != nil {
+				continue
+			}
+			if len(works.Items) > 0 {
+				diagnostics.WriteString(fmt.Sprintf("ManifestWorks in namespace %s (%d):\n", mc.Name, len(works.Items)))
+				for _, work := range works.Items {
+					var workStatus string
+					for _, cond := range work.Status.Conditions {
+						if cond.Type == "Applied" {
+							workStatus = fmt.Sprintf("Applied=%s", cond.Status)
+							break
+						}
+					}
+					if work.DeletionTimestamp != nil {
+						diagnostics.WriteString(fmt.Sprintf("  - %s (Finalizers: %v, DeletionTimestamp: %s, %s)\n",
+							work.Name, work.Finalizers, work.DeletionTimestamp.String(), workStatus))
+					} else {
+						diagnostics.WriteString(fmt.Sprintf("  - %s (Finalizers: %v, %s)\n",
+							work.Name, work.Finalizers, workStatus))
+					}
+				}
+			}
+		}
+	}
+
+	// Also check if there are any managed clusters still existing
+	diagnostics.WriteString("\n--- ManagedClusters ---\n")
+	if managedClusters != nil && len(managedClusters.Items) > 0 {
+		for _, mc := range managedClusters.Items {
+			var mcStatus string
+			for _, cond := range mc.Status.Conditions {
+				if cond.Type == "ManagedClusterConditionAvailable" {
+					mcStatus = fmt.Sprintf("Available=%s", cond.Status)
+					break
+				}
+			}
+			if mc.DeletionTimestamp != nil {
+				diagnostics.WriteString(fmt.Sprintf("  - %s (Finalizers: %v, DeletionTimestamp: %s, %s)\n",
+					mc.Name, mc.Finalizers, mc.DeletionTimestamp.String(), mcStatus))
+			} else {
+				diagnostics.WriteString(fmt.Sprintf("  - %s (Finalizers: %v, %s)\n",
+					mc.Name, mc.Finalizers, mcStatus))
+			}
+		}
+	} else {
+		diagnostics.WriteString("No managed clusters found\n")
+	}
+
 	diagnostics.WriteString("=== End Diagnostics ===\n")
 	return diagnostics.String()
 }
