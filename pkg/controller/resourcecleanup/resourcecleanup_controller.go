@@ -384,16 +384,6 @@ func (r *ReconcileResourceCleanup) deleteOrphanedKlusterletForSelfManagedCluster
 		return nil
 	}
 
-	// Check if all ManifestWorks for this cluster have been deleted
-	works, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(cluster.Name).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return err
-	}
-	if len(works.Items) > 0 {
-		// ManifestWorks still exist, wait for them to be deleted first
-		return nil
-	}
-
 	// Get the klusterlet name - for self-managed clusters, it's always "klusterlet"
 	klusterletName := constants.KlusterletSuffix
 
