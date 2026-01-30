@@ -34,14 +34,6 @@ jobs:
       - name: E2E Tests (Core)
         run: OCM_VERSION=${{ github.base_ref }} make e2e-test-core
 
-      - if: ${{ failure() }}
-        name: Logs after Tests Failed
-        run: kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=-1
-
-      - if: ${{ failure() }}
-        name: Setup tmate session for debugging
-        uses: mxschmitt/action-tmate@v3
-        timeout-minutes: 30
 
   e2e-misc:
     runs-on: ubuntu-latest
@@ -62,15 +54,6 @@ jobs:
       - name: E2E Tests (Misc)
         run: OCM_VERSION=${{ github.base_ref }} make e2e-test-misc
 
-      - if: ${{ failure() }}
-        name: Logs after Tests Failed
-        run: kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=-1
-
-      - if: ${{ failure() }}
-        name: Setup tmate session for debugging
-        uses: mxschmitt/action-tmate@v3
-        timeout-minutes: 30
-
   e2e-hosted:
     runs-on: ubuntu-latest
     steps:
@@ -89,13 +72,3 @@ jobs:
 
       - name: E2E Tests (Hosted)
         run: OCM_VERSION=${{ github.base_ref }} make e2e-test-hosted
-
-      - if: ${{ failure() }}
-        name: Logs after Tests Failed
-        run: kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=-1
-
-      - if: ${{ failure() }}
-        name: Setup tmate session for debugging
-        uses: mxschmitt/action-tmate@v3
-        timeout-minutes: 30
-
