@@ -498,6 +498,13 @@ func assertHostedManagedClusterImportSecret(managedClusterName string) {
 }
 
 func assertManagedClusterDeleted(clusterName string) {
+	// Add a delay before deletion to allow controllers to fully reconcile.
+	// This is especially important for self-managed clusters where hub and spoke
+	// share the same cluster, causing tight race conditions between controllers.
+	ginkgo.By("Waiting for controllers to settle before deletion", func() {
+		time.Sleep(10 * time.Second)
+	})
+
 	ginkgo.By(fmt.Sprintf("Delete the managed cluster %s", clusterName), func() {
 		err := hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), clusterName, metav1.DeleteOptions{})
 		if err != nil && !errors.IsNotFound(err) {
@@ -519,6 +526,11 @@ func assertPullSecretDeleted(namespace, name string) {
 }
 
 func assertHostedManagedClusterDeleted(clusterName, managementCluster string) {
+	// Add a delay before deletion to allow controllers to fully reconcile.
+	ginkgo.By("Waiting for controllers to settle before deletion", func() {
+		time.Sleep(10 * time.Second)
+	})
+
 	ginkgo.By(fmt.Sprintf("Delete the hosted mode managed cluster %s", clusterName), func() {
 		err := hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), clusterName, metav1.DeleteOptions{})
 		if err != nil && !errors.IsNotFound(err) {
