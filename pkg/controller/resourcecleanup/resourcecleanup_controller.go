@@ -130,8 +130,45 @@ func (r *ReconcileResourceCleanup) forceDeleteManifestWorks(
 		return err
 	}
 
-	return helpers.ForceDeleteAllManifestWorks(ctx, r.clientHolder.WorkClient, r.recorder, manifestWorks.Items)
+	// The CRD manifestwork should NOT be force deleted directly because force delete
+	// removes the finalizers before work-agent can process the deletion, which means
+	// the CRD (contained in the manifestwork) won't be deleted by work-agent.
+	// Instead, we delete other manifestworks first and let the CRD manifestwork be
+	// deleted through normal cleanup or registration controller's GC.
+	klusterletCRDWorkName := fmt.Sprintf("%s-%s", clusterName, constants.KlusterletCRDsSuffix)
+	var nonCRDWorks []workv1.ManifestWork
+	var crdWork *workv1.ManifestWork
+	for i := range manifestWorks.Items {
+		if manifestWorks.Items[i].Name == klusterletCRDWorkName {
+			crdWork = &manifestWorks.Items[i]
+		} else {
+			nonCRDWorks = append(nonCRDWorks, manifestWorks.Items[i])
+		}
+	}
 
+	// Force delete non-CRD manifestworks first
+	if err := helpers.ForceDeleteAllManifestWorks(ctx, r.clientHolder.WorkClient, r.recorder, nonCRDWorks); err != nil {
+		return err
+	}
+
+	// For CRD manifestwork, only force delete if work-agent has started processing (WorkDeleting condition)
+	// This ensures the CRD gets deleted by work-agent before we remove the finalizers
+	if crdWork != nil {
+		if meta.IsStatusConditionTrue(crdWork.Status.Conditions, workv1.WorkDeleting) {
+			return helpers.ForceDeleteManifestWork(ctx, r.clientHolder.WorkClient, r.recorder,
+				clusterName, klusterletCRDWorkName)
+		}
+		// If WorkDeleting is not true yet, just trigger deletion (don't force)
+		// and let the controller retry
+		if crdWork.DeletionTimestamp.IsZero() {
+			if err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(clusterName).Delete(
+				ctx, klusterletCRDWorkName, metav1.DeleteOptions{}); err != nil && !errors.IsNotFound(err) {
+				return err
+			}
+		}
+	}
+
+	return nil
 }
 
 func (r *ReconcileResourceCleanup) deleteHostingManifestWorks(ctx context.Context,
