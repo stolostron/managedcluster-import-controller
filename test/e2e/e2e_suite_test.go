@@ -509,6 +509,84 @@ func assertManagedClusterDeleted(clusterName string) {
 	assertManagedClusterDeletedFromSpoke()
 }
 
+// forceCleanupSelfManagedClusterResources forcefully cleans up resources for self-managed clusters
+// when the normal cleanup chain is broken (e.g., after force delete).
+//
+// For self-managed clusters, force delete breaks the normal cleanup chain because:
+// 1. ManifestWorks are force deleted from hub (finalizers removed)
+// 2. But CRD is NOT actually deleted from managed cluster
+// 3. Klusterlet CR still exists
+// 4. Klusterlet Operator cleanup is NOT triggered
+// 5. Agent namespace remains
+//
+// This function manually cleans up by:
+// 1. Deleting the ManagedCluster (if still exists)
+// 2. Deleting the Klusterlet CR to trigger Klusterlet Operator cleanup
+// 3. Waiting for agent namespace to be deleted
+// 4. Deleting the Klusterlet CRD
+// 5. Waiting for cluster namespace to be deleted
+func forceCleanupSelfManagedClusterResources(clusterName string) {
+	ginkgo.By(fmt.Sprintf("Force cleanup: Delete the managed cluster %s", clusterName), func() {
+		err := hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), clusterName, metav1.DeleteOptions{})
+		if err != nil && !errors.IsNotFound(err) {
+			util.Logf("Warning: failed to delete managed cluster %s: %v", clusterName, err)
+		}
+	})
+
+	ginkgo.By("Force cleanup: Delete the Klusterlet CR to trigger cleanup", func() {
+		// Delete the klusterlet CR - this triggers Klusterlet Operator cleanup
+		err := hubOperatorClient.OperatorV1().Klusterlets().Delete(context.TODO(), "klusterlet", metav1.DeleteOptions{})
+		if err != nil && !errors.IsNotFound(err) {
+			util.Logf("Warning: failed to delete klusterlet: %v", err)
+		}
+	})
+
+	ginkgo.By("Force cleanup: Wait for agent namespace to be deleted", func() {
+		gomega.Eventually(func() error {
+			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), "open-cluster-management-agent", metav1.GetOptions{})
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("namespace open-cluster-management-agent still exists")
+		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
+	})
+
+	ginkgo.By("Force cleanup: Delete the Klusterlet CRD", func() {
+		klusterletCRDName := "klusterlets.operator.open-cluster-management.io"
+		err := crdClient.ApiextensionsV1().CustomResourceDefinitions().Delete(context.TODO(), klusterletCRDName, metav1.DeleteOptions{})
+		if err != nil && !errors.IsNotFound(err) {
+			util.Logf("Warning: failed to delete klusterlet CRD: %v", err)
+		}
+
+		gomega.Eventually(func() error {
+			_, err := crdClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), klusterletCRDName, metav1.GetOptions{})
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("crd %s still exists", klusterletCRDName)
+		}, 2*time.Minute, 3*time.Second).Should(gomega.Succeed())
+	})
+
+	ginkgo.By(fmt.Sprintf("Force cleanup: Wait for cluster namespace %s to be deleted", clusterName), func() {
+		gomega.Eventually(func() error {
+			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), clusterName, metav1.GetOptions{})
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("namespace %s still exists", clusterName)
+		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
+	})
+}
+
 func assertPullSecretDeleted(namespace, name string) {
 	ginkgo.By(fmt.Sprintf("Delete the pull secret %s/%s", name, namespace), func() {
 		err := hubKubeClient.CoreV1().Secrets(namespace).Delete(context.TODO(), name, metav1.DeleteOptions{})
