@@ -207,7 +207,7 @@ var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", gi
 					return err
 				}
 				return fmt.Errorf("the managed cluster namespace %s should be deleted", managedClusterName)
-			}, 10*time.Minute, 1*time.Second).Should(gomega.Succeed())
+			}, 10*time.Minute, 10*time.Second).Should(gomega.Succeed())
 		})
 	})
 })
@@ -227,7 +227,7 @@ func assertOnlyManagedClusterDeleted(managedClusterName string) {
 				return err
 			}
 			return fmt.Errorf("the managed cluster %s should be deleted", managedClusterName)
-		}, 10*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		}, 10*time.Minute, 10*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -247,7 +247,7 @@ func assertKlusterletNamespaceDeleted() {
 				return err
 			}
 			return fmt.Errorf("the klusterlet namespace %s should be deleted", klusterletNamespace)
-		}, 10*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		}, 10*time.Minute, 10*time.Second).Should(gomega.Succeed())
 	})
 
 }
@@ -290,7 +290,7 @@ func assertKlusterletDeleted() {
 				return err
 			}
 			return fmt.Errorf("the klusterlet crd %s should be deleted, try remove all finalizers again", klusterletCRDName)
-		}, 10*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		}, 10*time.Minute, 10*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
 }

@@ -93,7 +93,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 				}
 
 				return len(cluster.Finalizers) > 2
-			}, 1*time.Minute, 1*time.Second).ShouldNot(gomega.BeFalse())
+			}, 1*time.Minute, 3*time.Second).ShouldNot(gomega.BeFalse())
 
 			// detach the cluster
 			err = hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), localClusterName, metav1.DeleteOptions{})
@@ -195,7 +195,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 				}
 
 				return len(cluster.Finalizers) > 2
-			}, 1*time.Minute, 1*time.Second).ShouldNot(gomega.BeFalse())
+			}, 1*time.Minute, 3*time.Second).ShouldNot(gomega.BeFalse())
 
 			// detach the cluster
 			err = hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), localClusterName, metav1.DeleteOptions{})
