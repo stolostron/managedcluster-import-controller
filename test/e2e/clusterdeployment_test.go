@@ -86,7 +86,10 @@ var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", gi
 				err := util.DeleteClusterDeployment(hubDynamicClient, managedClusterName)
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			})
-			assertManagedClusterDeleted(managedClusterName)
+
+			// For self-managed clusters with short lease duration, use forceCleanupSelfManagedClusterResources
+			// to ensure proper cleanup regardless of whether normal or force delete occurred.
+			forceCleanupSelfManagedClusterResources(managedClusterName)
 		})
 
 		ginkgo.It("Should not recover the agent once joined if auto-import strategy is ImportOnly", func() {
