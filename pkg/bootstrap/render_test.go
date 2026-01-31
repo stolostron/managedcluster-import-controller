@@ -1136,6 +1136,151 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				// Should not be called for error cases
 			},
 		},
+	{
+		name: "hosted with nodePlacement from klusterletConfig",
+		clientObjs: []runtimeclient.Object{
+			&corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test",
+				},
+			},
+		},
+		defaultImagePullSecret: "test-image-pull-secret",
+		runtimeObjs: []runtime.Object{
+			&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-image-pull-secret",
+				},
+				Data: map[string][]byte{
+					corev1.DockerConfigJsonKey: []byte("fake-token"),
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+			},
+		},
+		config: NewKlusterletManifestsConfig(
+			operatorv1.InstallModeHosted,
+			"test", // cluster name
+			[]byte("bootstrap kubeconfig"),
+		).WithoutImagePullSecretGenerate().WithKlusterletConfig(&klusterletconfigv1alpha1.KlusterletConfig{
+			Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+				NodePlacement: &operatorv1.NodePlacement{
+					NodeSelector: map[string]string{
+						"kubernetes.io/os": "linux",
+					},
+					Tolerations: []corev1.Toleration{
+						{
+							Key:               "node.kubernetes.io/hosted",
+							Operator:          corev1.TolerationOpExists,
+							Effect:            corev1.TaintEffectNoExecute,
+							TolerationSeconds: &tolerationSeconds,
+						},
+					},
+				},
+			},
+		}),
+		validateFunc: func(t *testing.T, objects, crds []runtime.Object) {
+			testinghelpers.ValidateObjectCount(t, objects, 3)
+			testinghelpers.ValidateCRDs(t, crds, 0)
+			testinghelpers.ValidateKlusterlet(t, objects[2], operatorv1.InstallModeHosted,
+				"klusterlet-test", "test", "open-cluster-management-test")
+			klusterlet, _ := objects[2].(*operatorv1.Klusterlet)
+			if klusterlet.Spec.NodePlacement.NodeSelector["kubernetes.io/os"] != "linux" {
+				t.Errorf("the klusterlet node selector %s is not %s",
+					klusterlet.Spec.NodePlacement.NodeSelector["kubernetes.io/os"], "linux")
+			}
+			if klusterlet.Spec.NodePlacement.Tolerations[0].Key != "node.kubernetes.io/hosted" {
+				t.Errorf("the klusterlet tolerations %s is not %s",
+					klusterlet.Spec.NodePlacement.Tolerations[0].Key, "node.kubernetes.io/hosted")
+			}
+		},
+	},
+	{
+		name: "hosted with pullSecret and registries from klusterletConfig",
+		clientObjs: []runtimeclient.Object{
+			&corev1.Namespace{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test",
+				},
+			},
+		},
+		defaultImagePullSecret: "test-image-pull-secret",
+		runtimeObjs: []runtime.Object{
+			&corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "custom-pull-secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					corev1.DockerConfigJsonKey: []byte("custom-fake-token"),
+				},
+				Type: corev1.SecretTypeDockerConfigJson,
+			},
+		},
+		config: NewKlusterletManifestsConfig(
+			operatorv1.InstallModeHosted,
+			"test", // cluster name
+			[]byte("bootstrap kubeconfig"),
+		).WithKlusterletConfig(&klusterletconfigv1alpha1.KlusterletConfig{
+			Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+				PullSecret: corev1.ObjectReference{
+					Name:      "custom-pull-secret",
+					Namespace: "default",
+				},
+				Registries: []klusterletconfigv1alpha1.Registries{
+					{
+						Source: "quay.io/open-cluster-management",
+						Mirror: "quay.io/rhacm2",
+					},
+					{
+						Source: "quay.io/stolostron",
+						Mirror: "quay.io/rhacm2",
+					},
+				},
+			},
+		}),
+		validateFunc: func(t *testing.T, objects, crds []runtime.Object) {
+			testinghelpers.ValidateObjectCount(t, objects, 4)
+			testinghelpers.ValidateCRDs(t, crds, 0)
+
+			// Find the klusterlet object
+			var klusterlet *operatorv1.Klusterlet
+			var imagePullSecretIdx int
+			for i, obj := range objects {
+				if k, ok := obj.(*operatorv1.Klusterlet); ok {
+					klusterlet = k
+				}
+				if s, ok := obj.(*corev1.Secret); ok {
+					if s.Type == corev1.SecretTypeDockerConfigJson {
+						imagePullSecretIdx = i
+					}
+				}
+			}
+
+			if klusterlet == nil {
+				t.Fatal("klusterlet not found in objects")
+			}
+
+			// Verify klusterlet properties
+			if klusterlet.Name != "klusterlet-test" {
+				t.Errorf("expected klusterlet name klusterlet-test, got %s", klusterlet.Name)
+			}
+			if klusterlet.Spec.ClusterName != "test" {
+				t.Errorf("expected cluster name test, got %s", klusterlet.Spec.ClusterName)
+			}
+
+			// Verify that custom registries are applied
+			if !strings.HasPrefix(klusterlet.Spec.RegistrationImagePullSpec, "quay.io/rhacm2/registration") {
+				t.Errorf("the klusterlet registration image pull spec %s does not use custom registry",
+					klusterlet.Spec.RegistrationImagePullSpec)
+			}
+			if !strings.HasPrefix(klusterlet.Spec.WorkImagePullSpec, "quay.io/rhacm2/work") {
+				t.Errorf("the klusterlet work image pull spec %s does not use custom registry",
+					klusterlet.Spec.WorkImagePullSpec)
+			}
+			// Verify that custom pull secret is applied
+			testinghelpers.ValidateImagePullSecret(t, objects[imagePullSecretIdx], "open-cluster-management-test", "custom-fake-token")
+		},
+	},
 	}
 
 	for _, testcase := range testcases {

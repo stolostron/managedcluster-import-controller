@@ -179,20 +179,12 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 	var kcImagePullSecret corev1.ObjectReference
 	var appliedManifestWorkEvictionGracePeriod string
 
-	switch installMode {
-	case operatorv1.InstallModeHosted, operatorv1.InstallModeSingletonHosted:
-		// do nothing
-	case operatorv1.InstallModeDefault, operatorv1.InstallModeSingleton:
-		if c.klusterletConfig != nil {
-			kcRegistries = c.klusterletConfig.Spec.Registries
-			kcNodePlacement = c.klusterletConfig.Spec.NodePlacement
-			kcImagePullSecret = c.klusterletConfig.Spec.PullSecret
-			appliedManifestWorkEvictionGracePeriod = c.klusterletConfig.Spec.AppliedManifestWorkEvictionGracePeriod
-		}
-	default:
-		return nil, nil, nil, fmt.Errorf("invalid install mode: %s", installMode)
+	if c.klusterletConfig != nil {
+		kcRegistries = c.klusterletConfig.Spec.Registries
+		kcNodePlacement = c.klusterletConfig.Spec.NodePlacement
+		kcImagePullSecret = c.klusterletConfig.Spec.PullSecret
+		appliedManifestWorkEvictionGracePeriod = c.klusterletConfig.Spec.AppliedManifestWorkEvictionGracePeriod
 	}
-
 	c.chartConfig.NoOperator = installNoOperator(installMode, c.klusterletConfig)
 
 	var managedClusterAnnotations map[string]string
