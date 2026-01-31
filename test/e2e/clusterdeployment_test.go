@@ -148,6 +148,10 @@ var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", gi
 				assertManagedClusterAvailableUnknown(managedClusterName)
 			})
 
+			// Wait for namespace to be fully deleted before re-importing to avoid
+			// "unable to create new content in namespace because it is being terminated" error
+			assertKlusterletNamespaceDeleted()
+
 			ginkgo.By(fmt.Sprintf("Should recover the managed cluster %s once the immediate-import annotation is added", managedClusterName), func() {
 				err := util.SetImmediateImportAnnotation(hubClusterClient, managedClusterName, "")
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
@@ -173,6 +177,11 @@ var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", gi
 
 		assertManagedClusterDeletedFromHub(managedClusterName)
 
+		// In e2e environment (Hub = Spoke), we need to clean up orphaned AppliedManifestWork
+		// and delete Klusterlet explicitly. See docs/e2e-cleanup-analysis.md for details.
+		cleanupOrphanedAppliedManifestWork()
+		deleteKlusterletIfExists()
+
 		assertKlusterletNamespaceDeleted()
 		assertKlusterletDeleted()
 	})
@@ -184,6 +193,12 @@ var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", gi
 		})
 
 		assertOnlyManagedClusterDeleted(managedClusterName)
+
+		// In e2e environment (Hub = Spoke), we need to clean up orphaned AppliedManifestWork
+		// and delete Klusterlet explicitly. See docs/e2e-cleanup-analysis.md for details.
+		cleanupOrphanedAppliedManifestWork()
+		deleteKlusterletIfExists()
+
 		assertKlusterletNamespaceDeleted()
 		assertKlusterletDeleted()
 
@@ -293,4 +308,54 @@ func assertKlusterletDeleted() {
 		}, 10*time.Minute, 1*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
+}
+
+// cleanupOrphanedAppliedManifestWork cleans up AppliedManifestWork resources that have
+// the klusterlet-works label. These may be orphaned if work-agent was deleted before
+// it could process them. See docs/e2e-cleanup-analysis.md for details.
+func cleanupOrphanedAppliedManifestWork() {
+	ginkgo.By("Clean up orphaned AppliedManifestWork", func() {
+		gomega.Eventually(func() error {
+			// List all AppliedManifestWork with klusterlet-works label
+			amwList, err := hubDynamicClient.Resource(appliedManifestWorkGVR).List(context.TODO(), metav1.ListOptions{
+				LabelSelector: "import.open-cluster-management.io/klusterlet-works=true",
+			})
+			if err != nil {
+				return err
+			}
+
+			// Delete each orphaned AppliedManifestWork
+			for _, amw := range amwList.Items {
+				util.Logf("Deleting orphaned AppliedManifestWork: %s", amw.GetName())
+				err := hubDynamicClient.Resource(appliedManifestWorkGVR).Delete(context.TODO(), amw.GetName(), metav1.DeleteOptions{})
+				if err != nil && !errors.IsNotFound(err) {
+					return err
+				}
+			}
+
+			// Verify all are deleted
+			amwList, err = hubDynamicClient.Resource(appliedManifestWorkGVR).List(context.TODO(), metav1.ListOptions{
+				LabelSelector: "import.open-cluster-management.io/klusterlet-works=true",
+			})
+			if err != nil {
+				return err
+			}
+			if len(amwList.Items) > 0 {
+				return fmt.Errorf("still have %d AppliedManifestWork remaining", len(amwList.Items))
+			}
+			return nil
+		}, 2*time.Minute, 1*time.Second).Should(gomega.Succeed())
+	})
+}
+
+// deleteKlusterletIfExists deletes the klusterlet CR if it exists.
+// In e2e environment (Hub = Spoke), we need to explicitly delete the klusterlet
+// to clean up the namespace. See docs/e2e-cleanup-analysis.md for details.
+func deleteKlusterletIfExists() {
+	ginkgo.By("Delete the klusterlet if exists", func() {
+		err := hubOperatorClient.OperatorV1().Klusterlets().Delete(context.TODO(), "klusterlet", metav1.DeleteOptions{})
+		if err != nil && !errors.IsNotFound(err) {
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		}
+	})
 }

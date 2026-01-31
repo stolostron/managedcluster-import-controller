@@ -35,7 +35,8 @@ var _ = ginkgo.Describe("Importing a self managed cluster", ginkgo.Label("core")
 			// reset the custom controller config
 			util.RemoveControllerConfigConfigMap(hubKubeClient)
 
-			assertManagedClusterDeleted(localClusterName)
+			// Use assertSelfManagedClusterDeleted for self-managed cluster tests
+			assertSelfManagedClusterDeleted(localClusterName)
 		})
 
 		ginkgo.It("Should import the local-cluster", func() {
@@ -67,7 +68,8 @@ var _ = ginkgo.Describe("Importing a self managed cluster", ginkgo.Label("core")
 			// reset the custom controller config
 			util.RemoveControllerConfigConfigMap(hubKubeClient)
 
-			assertManagedClusterDeleted(localClusterName)
+			// Use assertSelfManagedClusterDeleted for self-managed cluster tests
+			assertSelfManagedClusterDeleted(localClusterName)
 		})
 
 		ginkgo.It("Should not recover the agent once joined if auto-import strategy is ImportOnly", func() {
@@ -150,7 +152,8 @@ var _ = ginkgo.Describe("Importing a self managed cluster", ginkgo.Label("core")
 		})
 
 		ginkgo.AfterEach(func() {
-			assertManagedClusterDeleted(managedClusterName)
+			// Use assertSelfManagedClusterDeleted for self-managed cluster tests
+			assertSelfManagedClusterDeleted(managedClusterName)
 		})
 
 		ginkgo.It("Should import the self managed cluster", func() {

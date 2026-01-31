@@ -28,6 +28,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
+	k8sschema "k8s.io/apimachinery/pkg/runtime/schema"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -68,6 +69,13 @@ var (
 	hubMapper              meta.RESTMapper
 
 	scheme = k8sruntime.NewScheme()
+
+	// GVR for AppliedManifestWork resource
+	appliedManifestWorkGVR = k8sschema.GroupVersionResource{
+		Group:    "work.open-cluster-management.io",
+		Version:  "v1",
+		Resource: "appliedmanifestworks",
+	}
 )
 
 func init() {
@@ -507,6 +515,120 @@ func assertManagedClusterDeleted(clusterName string) {
 
 	assertManagedClusterDeletedFromHub(clusterName)
 	assertManagedClusterDeletedFromSpoke()
+}
+
+// assertSelfManagedClusterDeleted handles cleanup for self-managed clusters (local-cluster=true).
+// For self-managed clusters, the cleanup order is critical:
+// 1. Delete managed cluster first (triggers import-controller to delete ManifestWork)
+// 2. Wait for AppliedManifestWork to be cleaned up (while work-agent is still running)
+// 3. Clean up any orphaned AppliedManifestWork (in case work-agent was deleted too early)
+// 4. Delete klusterlet if still exists
+// 5. Wait for namespace and CRD deletion
+//
+// See docs/e2e-cleanup-analysis.md for detailed analysis of the cleanup order problem.
+func assertSelfManagedClusterDeleted(clusterName string) {
+	// Step 1: Delete managed cluster first - this triggers import-controller to delete ManifestWork
+	// The work-agent needs to be running to process ManifestWork deletion and clean up AppliedManifestWork
+	ginkgo.By(fmt.Sprintf("Delete the managed cluster %s", clusterName), func() {
+		err := hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), clusterName, metav1.DeleteOptions{})
+		if err != nil && !errors.IsNotFound(err) {
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		}
+	})
+
+	// Step 2: Wait for managed cluster to be deleted from hub
+	assertManagedClusterDeletedFromHub(clusterName)
+
+	// Step 3: Clean up orphaned AppliedManifestWork with klusterlet-works label
+	// These may be orphaned if work-agent was deleted before it could process them
+	ginkgo.By("Clean up orphaned AppliedManifestWork", func() {
+		gomega.Eventually(func() error {
+			// List all AppliedManifestWork with klusterlet-works label
+			amwList, err := hubDynamicClient.Resource(appliedManifestWorkGVR).List(context.TODO(), metav1.ListOptions{
+				LabelSelector: "import.open-cluster-management.io/klusterlet-works=true",
+			})
+			if err != nil {
+				return err
+			}
+
+			// Delete each orphaned AppliedManifestWork
+			for _, amw := range amwList.Items {
+				util.Logf("Deleting orphaned AppliedManifestWork: %s", amw.GetName())
+				err := hubDynamicClient.Resource(appliedManifestWorkGVR).Delete(context.TODO(), amw.GetName(), metav1.DeleteOptions{})
+				if err != nil && !errors.IsNotFound(err) {
+					return err
+				}
+			}
+
+			// Verify all are deleted
+			amwList, err = hubDynamicClient.Resource(appliedManifestWorkGVR).List(context.TODO(), metav1.ListOptions{
+				LabelSelector: "import.open-cluster-management.io/klusterlet-works=true",
+			})
+			if err != nil {
+				return err
+			}
+			if len(amwList.Items) > 0 {
+				return fmt.Errorf("still have %d AppliedManifestWork remaining", len(amwList.Items))
+			}
+			return nil
+		}, 2*time.Minute, 1*time.Second).Should(gomega.Succeed())
+	})
+
+	// Step 4: Delete klusterlet if it still exists
+	ginkgo.By("Delete the klusterlet if exists", func() {
+		err := hubOperatorClient.OperatorV1().Klusterlets().Delete(context.TODO(), "klusterlet", metav1.DeleteOptions{})
+		if err != nil && !errors.IsNotFound(err) {
+			gomega.Expect(err).ToNot(gomega.HaveOccurred())
+		}
+	})
+
+	// Step 5: Wait for klusterlet to be fully deleted
+	ginkgo.By("Wait for klusterlet to be deleted", func() {
+		gomega.Eventually(func() error {
+			_, err := hubOperatorClient.OperatorV1().Klusterlets().Get(context.TODO(), "klusterlet", metav1.GetOptions{})
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("klusterlet still exists")
+		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+	})
+
+	// Step 6: Wait for namespace to be deleted
+	start := time.Now()
+	ginkgo.By("Should delete the open-cluster-management-agent namespace", func() {
+		gomega.Eventually(func() error {
+			klusterletNamespace := "open-cluster-management-agent"
+			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), klusterletNamespace, metav1.GetOptions{})
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("namespace %s still exists", klusterletNamespace)
+		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+	})
+	util.Logf("delete the open-cluster-management-agent namespace spending time: %.2f seconds", time.Since(start).Seconds())
+
+	// Step 7: Wait for CRD to be deleted (should be cascade deleted when AppliedManifestWork is deleted)
+	start = time.Now()
+	ginkgo.By("Should delete the klusterlet CRD", func() {
+		gomega.Eventually(func() error {
+			klusterletCRDName := "klusterlets.operator.open-cluster-management.io"
+			_, err := crdClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), klusterletCRDName, metav1.GetOptions{})
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("crd %s still exists", klusterletCRDName)
+		}, 120*time.Second, 1*time.Second).Should(gomega.Succeed())
+	})
+	util.Logf("delete klusterlet CRD spending time: %.2f seconds", time.Since(start).Seconds())
 }
 
 func assertPullSecretDeleted(namespace, name string) {

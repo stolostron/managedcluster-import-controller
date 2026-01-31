@@ -44,7 +44,8 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 		})
 
 		ginkgo.AfterEach(func() {
-			assertManagedClusterDeleted(localClusterName)
+			// Use assertSelfManagedClusterDeleted for self-managed cluster tests
+			assertSelfManagedClusterDeleted(localClusterName)
 			defer func() {
 				util.Logf("run case: %s, spending time: %.2f seconds", caseName, time.Since(start).Seconds())
 			}()

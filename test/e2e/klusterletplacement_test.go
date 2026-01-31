@@ -31,7 +31,8 @@ var _ = ginkgo.Describe("Adding node placement to the klusterlet", ginkgo.Label(
 	})
 
 	ginkgo.AfterEach(func() {
-		assertManagedClusterDeleted(managedClusterName)
+		// Use assertSelfManagedClusterDeleted for self-managed cluster tests
+		assertSelfManagedClusterDeleted(managedClusterName)
 	})
 
 	ginkgo.It("Should deploy the klusterlet without node placement", func() {

@@ -49,7 +49,9 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", Label
 		// reset the custom controller config
 		util.RemoveControllerConfigConfigMap(hubKubeClient)
 
-		assertManagedClusterDeleted(managedClusterName)
+		// Use assertSelfManagedClusterDeleted for self-managed cluster tests (local-cluster=true)
+		// which handles klusterlet and CRD cleanup properly
+		assertSelfManagedClusterDeleted(managedClusterName)
 	})
 
 	It("Should deploy the klusterlet with nodePlacement", func() {

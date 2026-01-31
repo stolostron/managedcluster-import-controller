@@ -42,7 +42,8 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", g
 		// reset the custom controller config
 		util.RemoveControllerConfigConfigMap(hubKubeClient)
 
-		assertManagedClusterDeleted(managedClusterName)
+		// Use assertSelfManagedClusterDeleted for self-managed cluster tests
+		assertSelfManagedClusterDeleted(managedClusterName)
 	})
 
 	ginkgo.It("Should import the cluster with auto-import-secret with kubeconfig", func() {
