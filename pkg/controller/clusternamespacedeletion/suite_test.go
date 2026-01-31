@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"testing"
 
 	"github.com/onsi/ginkgo/v2"
@@ -22,7 +21,10 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
+	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
@@ -79,6 +81,9 @@ var _ = ginkgo.BeforeSuite(func() {
 	err = addonv1alpha1.AddToScheme(scheme.Scheme)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	err = capiv1beta1.AddToScheme(scheme.Scheme)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+	err = workv1.AddToScheme(scheme.Scheme)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
 	opts := ctrl.Options{
 		Scheme: scheme.Scheme,
@@ -90,6 +95,9 @@ var _ = ginkgo.BeforeSuite(func() {
 	hubDynamicClient, err = dynamic.NewForConfig(cfg)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
+	hubWorkClient, err := workclient.NewForConfig(cfg)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+
 	mgr, err := ctrl.NewManager(cfg, opts)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	runtimeClient = mgr.GetClient()
@@ -98,6 +106,7 @@ var _ = ginkgo.BeforeSuite(func() {
 		RuntimeClient:    runtimeClient,
 		RuntimeAPIReader: mgr.GetAPIReader(),
 		KubeClient:       k8sClient,
+		WorkClient:       hubWorkClient,
 	}
 
 	err = Add(context.TODO(), mgr, clientHolder)

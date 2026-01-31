@@ -17,9 +17,11 @@ import (
 	clustercontroller "github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
 	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -27,9 +29,10 @@ import (
 )
 
 var (
-	log                        = logf.Log.WithName(ControllerName)
-	podDeletionGracePeriod     = 10 * time.Second
-	hostedClusterRequeuePeriod = 1 * time.Minute
+	log                            = logf.Log.WithName(ControllerName)
+	podDeletionGracePeriod         = 10 * time.Second
+	hostedClusterRequeuePeriod     = 1 * time.Minute
+	manifestWorkDeletionGracePeriod = 5 * time.Second
 )
 
 const (
@@ -43,10 +46,12 @@ const (
 // 2. no clusterdeployment in the ns
 // 3. no infraenv in the ns
 // 4. no active jobs in the ns
+// 5. no manifestworks in the ns
 type ReconcileClusterNamespaceDeletion struct {
-	client    client.Client
-	apiReader client.Reader
-	recorder  events.Recorder
+	client     client.Client
+	apiReader  client.Reader
+	recorder   events.Recorder
+	workClient workclient.Interface
 }
 
 // blank assignment to verify that ReconcileManagedCluster implements reconcile.Reconciler
@@ -116,6 +121,20 @@ func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, reque
 	if len(addons.Items) > 0 {
 		reqLogger.Info(fmt.Sprintf("Waiting for addons, there are %d addon in namespace %s", len(addons.Items), ns.Name))
 		return reconcile.Result{}, nil
+	}
+
+	// Wait for ManifestWorks to be deleted before deleting the namespace.
+	// This prevents a race condition where namespace cascade deletes ManifestWorks
+	// before work-agent can process them, which would leave AppliedManifestWorks
+	// and Klusterlet CRs orphaned on self-managed clusters.
+	manifestWorks, err := r.workClient.WorkV1().ManifestWorks(ns.Name).List(ctx, metav1.ListOptions{})
+	if err != nil && !errors.IsNotFound(err) {
+		return reconcile.Result{}, err
+	}
+	if manifestWorks != nil && len(manifestWorks.Items) > 0 {
+		reqLogger.Info(fmt.Sprintf("Waiting for manifestworks, there are %d manifestworks in namespace %s",
+			len(manifestWorks.Items), ns.Name))
+		return reconcile.Result{RequeueAfter: manifestWorkDeletionGracePeriod}, nil
 	}
 
 	hostedclusters := &hyperv1beta1.HostedClusterList{}

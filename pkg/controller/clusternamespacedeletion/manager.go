@@ -10,6 +10,9 @@ import (
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/types"
+	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
+	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -19,9 +22,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-
-	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	clustercontroller "github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
@@ -170,10 +170,35 @@ func Add(ctx context.Context,
 				},
 			}),
 		).
+		Watches(
+			&workv1.ManifestWork{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, o client.Object) []reconcile.Request {
+				return []reconcile.Request{
+					{
+						NamespacedName: types.NamespacedName{
+							Name: o.GetNamespace(),
+						},
+					},
+				}
+			}),
+			// only cares deletion - trigger reconcile when ManifestWork is deleted
+			// so we can check if namespace can be deleted
+			builder.WithPredicates(predicate.Funcs{
+				GenericFunc: func(e event.GenericEvent) bool { return false },
+				DeleteFunc:  func(e event.DeleteEvent) bool { return true },
+				CreateFunc: func(e event.CreateEvent) bool {
+					return false
+				},
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					return false
+				},
+			}),
+		).
 		Complete(&ReconcileClusterNamespaceDeletion{
-			client:    clientHolder.RuntimeClient,
-			apiReader: clientHolder.RuntimeAPIReader,
-			recorder:  helpers.NewEventRecorder(clientHolder.KubeClient, ControllerName),
+			client:     clientHolder.RuntimeClient,
+			apiReader:  clientHolder.RuntimeAPIReader,
+			recorder:   helpers.NewEventRecorder(clientHolder.KubeClient, ControllerName),
+			workClient: clientHolder.WorkClient,
 		})
 
 	return err
