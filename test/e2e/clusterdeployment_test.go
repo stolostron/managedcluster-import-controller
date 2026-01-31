@@ -135,7 +135,7 @@ var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", gi
 				err := util.DeleteClusterDeployment(hubDynamicClient, managedClusterName)
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			})
-			assertManagedClusterDeleted(managedClusterName)
+			forceCleanupSelfManagedClusterResources(managedClusterName)
 		})
 
 		ginkgo.It("Should trigger auto-import with immediate-import annotation", func() {
