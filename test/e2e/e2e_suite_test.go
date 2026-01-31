@@ -498,15 +498,19 @@ func assertHostedManagedClusterImportSecret(managedClusterName string) {
 }
 
 func assertManagedClusterDeleted(clusterName string) {
+	util.Logf("assertManagedClusterDeleted: starting deletion for cluster %s", clusterName)
 	ginkgo.By(fmt.Sprintf("Delete the managed cluster %s", clusterName), func() {
 		err := hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), clusterName, metav1.DeleteOptions{})
 		if err != nil && !errors.IsNotFound(err) {
+			util.Logf("assertManagedClusterDeleted: error deleting cluster %s: %v", clusterName, err)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 		}
+		util.Logf("assertManagedClusterDeleted: delete request sent for cluster %s", clusterName)
 	})
 
 	assertManagedClusterDeletedFromHub(clusterName)
 	assertManagedClusterDeletedFromSpoke()
+	util.Logf("assertManagedClusterDeleted: cluster %s deletion completed", clusterName)
 }
 
 func assertPullSecretDeleted(namespace, name string) {
@@ -519,117 +523,151 @@ func assertPullSecretDeleted(namespace, name string) {
 }
 
 func assertHostedManagedClusterDeleted(clusterName, managementCluster string) {
+	util.Logf("assertHostedManagedClusterDeleted: starting deletion for hosted cluster %s, managementCluster: %s", clusterName, managementCluster)
 	ginkgo.By(fmt.Sprintf("Delete the hosted mode managed cluster %s", clusterName), func() {
 		err := hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), clusterName, metav1.DeleteOptions{})
 		if err != nil && !errors.IsNotFound(err) {
+			util.Logf("assertHostedManagedClusterDeleted: error deleting hosted cluster %s: %v", clusterName, err)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 		}
+		util.Logf("assertHostedManagedClusterDeleted: delete request sent for hosted cluster %s", clusterName)
 	})
 
 	assertManagedClusterDeletedFromHub(clusterName)
 	assertHostedManagedClusterDeletedFromSpoke(clusterName, managementCluster)
+	util.Logf("assertHostedManagedClusterDeleted: hosted cluster %s deletion completed", clusterName)
 }
 
 func assertManagedClusterDeletedFromHub(clusterName string) {
 	start := time.Now()
+	util.Logf("assertManagedClusterDeletedFromHub: starting deletion check for cluster %s", clusterName)
 	ginkgo.By(fmt.Sprintf("Should delete the managed cluster %s", clusterName), func() {
 		gomega.Eventually(func() error {
-			_, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
+			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
+				util.Logf("assertManagedClusterDeletedFromHub: cluster %s is deleted", clusterName)
 				return nil
 			}
 			if err != nil {
+				util.Logf("assertManagedClusterDeletedFromHub: error getting cluster %s: %v", clusterName, err)
 				return err
 			}
 
+			util.Logf("assertManagedClusterDeletedFromHub: cluster %s still exists, finalizers: %v, deletionTimestamp: %v",
+				clusterName, cluster.Finalizers, cluster.DeletionTimestamp)
 			return fmt.Errorf("managed cluster %s still exists", clusterName)
 		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
 	})
-	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
+	util.Logf("assertManagedClusterDeletedFromHub: spending time: %.2f seconds", time.Since(start).Seconds())
 
 	start = time.Now()
+	util.Logf("assertManagedClusterDeletedFromHub: starting namespace deletion check for cluster %s", clusterName)
 	ginkgo.By(fmt.Sprintf("Should delete the managed cluster namespace %s", clusterName), func() {
 		gomega.Eventually(func() error {
-			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), clusterName, metav1.GetOptions{})
+			ns, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), clusterName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
+				util.Logf("assertManagedClusterDeletedFromHub: namespace %s is deleted", clusterName)
 				return nil
 			}
 			if err != nil {
+				util.Logf("assertManagedClusterDeletedFromHub: error getting namespace %s: %v", clusterName, err)
 				return err
 			}
+			util.Logf("assertManagedClusterDeletedFromHub: namespace %s still exists, phase: %s, finalizers: %v",
+				clusterName, ns.Status.Phase, ns.Finalizers)
 			return fmt.Errorf("managed cluster namespace %s still exists", clusterName)
 		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
 	})
-	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
+	util.Logf("assertManagedClusterDeletedFromHub: namespace deletion spending time: %.2f seconds", time.Since(start).Seconds())
 }
 
 func assertManagedClusterDeletedFromSpoke() {
 	start := time.Now()
+	util.Logf("assertManagedClusterDeletedFromSpoke: starting agent namespace deletion check")
 	ginkgo.By("Should delete the open-cluster-management-agent namespace", func() {
 		gomega.Eventually(func() error {
 			klusterletNamespace := "open-cluster-management-agent"
-			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), klusterletNamespace, metav1.GetOptions{})
+			ns, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), klusterletNamespace, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
+				util.Logf("assertManagedClusterDeletedFromSpoke: namespace %s is deleted", klusterletNamespace)
 				return nil
 			}
 			if err != nil {
+				util.Logf("assertManagedClusterDeletedFromSpoke: error getting namespace %s: %v", klusterletNamespace, err)
 				return err
 			}
+			util.Logf("assertManagedClusterDeletedFromSpoke: namespace %s still exists, phase: %s, finalizers: %v",
+				klusterletNamespace, ns.Status.Phase, ns.Finalizers)
 			return fmt.Errorf("namespace %s still exists", klusterletNamespace)
 		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
 	})
-	util.Logf("delete the open-cluster-management-agent namespace spending time: %.2f seconds", time.Since(start).Seconds())
+	util.Logf("assertManagedClusterDeletedFromSpoke: delete the open-cluster-management-agent namespace spending time: %.2f seconds", time.Since(start).Seconds())
 
 	start = time.Now()
+	util.Logf("assertManagedClusterDeletedFromSpoke: starting klusterlet CRD deletion check")
 	ginkgo.By("Should delete the klusterlet crd", func() {
 		gomega.Eventually(func() error {
 			klusterletCRDName := "klusterlets.operator.open-cluster-management.io"
-			_, err := crdClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), klusterletCRDName, metav1.GetOptions{})
+			crd, err := crdClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), klusterletCRDName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
+				util.Logf("assertManagedClusterDeletedFromSpoke: CRD %s is deleted", klusterletCRDName)
 				return nil
 			}
 			if err != nil {
+				util.Logf("assertManagedClusterDeletedFromSpoke: error getting CRD %s: %v", klusterletCRDName, err)
 				return err
 			}
+			util.Logf("assertManagedClusterDeletedFromSpoke: CRD %s still exists, deletionTimestamp: %v, finalizers: %v",
+				klusterletCRDName, crd.DeletionTimestamp, crd.Finalizers)
 			return fmt.Errorf("crd %s still exists", klusterletCRDName)
 		}, 120*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
-	util.Logf("delete klusterlet crd spending time: %.2f seconds", time.Since(start).Seconds())
+	util.Logf("assertManagedClusterDeletedFromSpoke: delete klusterlet CRD spending time: %.2f seconds", time.Since(start).Seconds())
 }
 
 func assertHostedManagedClusterDeletedFromSpoke(cluster, managementCluster string) {
 	start := time.Now()
 	namespace := fmt.Sprintf("klusterlet-%s", cluster)
+	util.Logf("assertHostedManagedClusterDeletedFromSpoke: starting deletion check for hosted cluster %s, namespace: %s", cluster, namespace)
 	ginkgo.By(fmt.Sprintf("Should delete the %s namespace", namespace), func() {
 		gomega.Eventually(func() error {
 			klusterletNamespace := namespace
-			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), klusterletNamespace, metav1.GetOptions{})
+			ns, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), klusterletNamespace, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
+				util.Logf("assertHostedManagedClusterDeletedFromSpoke: namespace %s is deleted", klusterletNamespace)
 				return nil
 			}
 			if err != nil {
+				util.Logf("assertHostedManagedClusterDeletedFromSpoke: error getting namespace %s: %v", klusterletNamespace, err)
 				return err
 			}
+			util.Logf("assertHostedManagedClusterDeletedFromSpoke: namespace %s still exists, phase: %s, finalizers: %v",
+				klusterletNamespace, ns.Status.Phase, ns.Finalizers)
 			return fmt.Errorf("namespace %s still exists", klusterletNamespace)
 		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
 	})
-	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
+	util.Logf("assertHostedManagedClusterDeletedFromSpoke: namespace deletion spending time: %.2f seconds", time.Since(start).Seconds())
 
 	start = time.Now()
 	klusterletManifestWorkName := fmt.Sprintf("%s-klusterlet", cluster)
+	util.Logf("assertHostedManagedClusterDeletedFromSpoke: checking manifestwork %s deletion", klusterletManifestWorkName)
 	ginkgo.By(fmt.Sprintf("Should delete the klusterlet manifest work %s", klusterletManifestWorkName), func() {
 		gomega.Eventually(func() error {
-			_, err := hubWorkClient.WorkV1().ManifestWorks(managementCluster).Get(context.TODO(), klusterletManifestWorkName, metav1.GetOptions{})
+			work, err := hubWorkClient.WorkV1().ManifestWorks(managementCluster).Get(context.TODO(), klusterletManifestWorkName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
+				util.Logf("assertHostedManagedClusterDeletedFromSpoke: manifestwork %s is deleted", klusterletManifestWorkName)
 				return nil
 			}
 			if err != nil {
+				util.Logf("assertHostedManagedClusterDeletedFromSpoke: error getting manifestwork %s: %v", klusterletManifestWorkName, err)
 				return err
 			}
+			util.Logf("assertHostedManagedClusterDeletedFromSpoke: manifestwork %s still exists, deletionTimestamp: %v, finalizers: %v",
+				klusterletManifestWorkName, work.DeletionTimestamp, work.Finalizers)
 			return fmt.Errorf("klusterlet manifest work %s still exists", klusterletManifestWorkName)
 		}, 1*time.Minute, 1*time.Second).Should(gomega.Succeed())
 	})
-	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
+	util.Logf("assertHostedManagedClusterDeletedFromSpoke: manifestwork deletion spending time: %.2f seconds", time.Since(start).Seconds())
 }
 
 func assertManagedClusterImportSecretApplied(clusterName string, mode ...operatorv1.InstallMode) {
@@ -822,6 +860,7 @@ func assertManagedClusterManifestWorks(clusterName string) {
 }
 
 func assertManagedClusterManifestWorksAvailable(clusterName string) {
+	util.Logf("assertManagedClusterManifestWorksAvailable: starting check for cluster %s", clusterName)
 	assertManagedClusterFinalizer(clusterName, "managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup")
 
 	klusterletCRDsName := fmt.Sprintf("%s-klusterlet-crds", clusterName)
@@ -837,26 +876,31 @@ func assertManagedClusterManifestWorksAvailable(clusterName string) {
 
 			klusterletCRDs, err := manifestWorks.Get(context.TODO(), klusterletCRDsName, metav1.GetOptions{})
 			if err != nil {
+				util.Logf("assertManagedClusterManifestWorksAvailable: error getting klusterletCRDs work: %v", err)
 				return err
 			}
 			if !meta.IsStatusConditionTrue(klusterletCRDs.Status.Conditions, workv1.WorkAvailable) {
+				util.Logf("assertManagedClusterManifestWorksAvailable: klusterletCRDs is not available, conditions: %v", klusterletCRDs.Status.Conditions)
 				return fmt.Errorf("klusterletCRDs is not available")
 			}
 
 			klusterlet, err := manifestWorks.Get(context.TODO(), klusterletName, metav1.GetOptions{})
 			if err != nil {
+				util.Logf("assertManagedClusterManifestWorksAvailable: error getting klusterlet work: %v", err)
 				return err
 			}
 			if !meta.IsStatusConditionTrue(klusterlet.Status.Conditions, workv1.WorkAvailable) {
+				util.Logf("assertManagedClusterManifestWorksAvailable: klusterlet is not available, conditions: %v", klusterlet.Status.Conditions)
 				return fmt.Errorf("klusterlet is not available")
 			}
 
+			util.Logf("assertManagedClusterManifestWorksAvailable: both manifestworks are available for cluster %s", clusterName)
 			return nil
 		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
-		util.Logf("assert managed cluster manifestworks spending time: %.2f seconds", time.Since(start).Seconds())
+		util.Logf("assertManagedClusterManifestWorksAvailable: assert managed cluster manifestworks spending time: %.2f seconds", time.Since(start).Seconds())
 	})
 
-	util.Logf("wait for applied manifest works ready to avoid delete prematurely (10s)")
+	util.Logf("assertManagedClusterManifestWorksAvailable: wait for applied manifest works ready to avoid delete prematurely (10s)")
 	time.Sleep(10 * time.Second)
 }
 
