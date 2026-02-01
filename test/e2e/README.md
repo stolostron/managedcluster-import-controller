@@ -158,6 +158,21 @@ namespace: open-cluster-management-local
 2. Wait for ALL agent namespaces (including custom ones like `open-cluster-management-local`)
 3. Wait for all klusterlet CRs to be deleted before deleting the CRD
 
+#### Issue 7: Agent Namespace Orphaned After Force Delete
+
+**Problem**: When `forceCleanupSelfManagedClusterResources()` runs but the klusterlet CRs have already been deleted by force delete (before the cleanup function runs), the agent namespaces will never be cleaned up because there's no klusterlet CR to trigger the Klusterlet Operator's cleanup.
+
+**Symptom**:
+```
+Error: namespace open-cluster-management-local still exists
+Klusterlet CRs: map[items:[]]  (empty list)
+```
+
+**Solution**: The `forceCleanupSelfManagedClusterResources()` function has been updated to:
+1. Check if any klusterlet CRs exist before waiting for namespace deletion
+2. If no klusterlet CRs exist but namespace still exists, manually delete the namespace
+3. This ensures cleanup succeeds even when force delete has already removed the klusterlet CRs
+
 ---
 
 ## Self-Managed Cluster Cleanup Rule

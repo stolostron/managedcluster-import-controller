@@ -556,14 +556,28 @@ func forceCleanupSelfManagedClusterResources(clusterName string) {
 		// Custom: open-cluster-management-local (used by tests with KlusterletConfig NoOperator mode)
 		agentNamespaces := []string{"open-cluster-management-agent", "open-cluster-management-local"}
 		gomega.Eventually(func() error {
+			// First, check if any klusterlet CRs still exist
+			klusterlets, listErr := hubOperatorClient.OperatorV1().Klusterlets().List(context.TODO(), metav1.ListOptions{})
+			noKlusterlets := listErr != nil || klusterlets == nil || len(klusterlets.Items) == 0
+
 			for _, ns := range agentNamespaces {
 				_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), ns, metav1.GetOptions{})
-				if err == nil {
-					return fmt.Errorf("namespace %s still exists", ns)
+				if errors.IsNotFound(err) {
+					// Namespace is already deleted
+					continue
 				}
-				if !errors.IsNotFound(err) {
+				if err != nil {
 					return err
 				}
+				// Namespace still exists
+				if noKlusterlets {
+					// No klusterlet CRs exist to trigger cleanup, so manually delete the namespace
+					util.Logf("No klusterlet CRs exist, manually deleting namespace %s", ns)
+					if delErr := hubKubeClient.CoreV1().Namespaces().Delete(context.TODO(), ns, metav1.DeleteOptions{}); delErr != nil && !errors.IsNotFound(delErr) {
+						util.Logf("Warning: failed to delete namespace %s: %v", ns, delErr)
+					}
+				}
+				return fmt.Errorf("namespace %s still exists", ns)
 			}
 			return nil
 		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
