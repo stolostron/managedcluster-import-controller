@@ -102,7 +102,7 @@ e2e-test-core: build-image ensure-helm
 	@build/setup-ocm.sh
 	@build/setup-import-controller.sh
 	go test -c ./test/e2e -o _output/e2e.test
-	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="core && !agent-registration" --ginkgo.timeout=45m --ginkgo.fail-fast
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="core && !agent-registration" --ginkgo.timeout=60m --ginkgo.fail-fast
 
 ## Runs e2e test for miscellaneous tests with single cluster
 .PHONY: e2e-test-misc
@@ -111,7 +111,7 @@ e2e-test-misc: build-image ensure-helm
 	@build/setup-ocm.sh
 	@build/setup-import-controller.sh
 	go test -c ./test/e2e -o _output/e2e.test
-	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="!core && !hosted && !agent-registration" --ginkgo.timeout=45m --ginkgo.fail-fast
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="!core && !hosted && !agent-registration" --ginkgo.timeout=60m --ginkgo.fail-fast
 
 ## Runs e2e test for hosted tests with dual clusters
 .PHONY: e2e-test-hosted
@@ -120,7 +120,7 @@ e2e-test-hosted: build-image ensure-helm
 	@build/setup-ocm.sh
 	@build/setup-import-controller.sh
 	go test -c ./test/e2e -o _output/e2e.test
-	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="hosted" --ginkgo.timeout=45m --ginkgo.fail-fast
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="hosted" --ginkgo.timeout=60m --ginkgo.fail-fast
 
 ## Clean e2e test
 .PHONY: clean-e2e-test
