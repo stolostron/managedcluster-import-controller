@@ -119,6 +119,25 @@ ginkgo.By("Should stay offline", func() {
 })
 ```
 
+#### Issue 5: Hosted Clusters with Short Lease Duration
+
+**Problem**: For hosted mode clusters with short lease duration, force delete is triggered when the cluster becomes unavailable. Force delete removes ManifestWorks from the hub without cleaning up the klusterlet resources on the hosting cluster (namespace `klusterlet-<cluster-name>`).
+
+**Symptom**:
+```
+Error: namespace klusterlet-test-hosted-xwg6cr still exists
+```
+
+**Solution**: Use `CreateHostedManagedCluster` (default lease) instead of `CreateHostedManagedClusterWithShortLeaseDuration` unless the test specifically requires short lease behavior for testing force delete scenarios.
+
+```go
+// CORRECT - for tests that don't need short lease behavior
+_, err := util.CreateHostedManagedCluster(hubClusterClient, clusterName, hostingClusterName)
+
+// INCORRECT - will cause flaky failures due to force delete breaking cleanup
+_, err := util.CreateHostedManagedClusterWithShortLeaseDuration(hubClusterClient, clusterName, hostingClusterName)
+```
+
 ---
 
 ## Self-Managed Cluster Cleanup Rule

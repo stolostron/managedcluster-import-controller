@@ -191,7 +191,9 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 			})
 
 			ginkgo.By(fmt.Sprintf("Create hosted mode managed cluster %s", hosted1), func() {
-				_, err := util.CreateHostedManagedClusterWithShortLeaseDuration(hubClusterClient, hosted1, hostingClusterName)
+				// Use regular lease duration to avoid force delete which breaks the cleanup chain.
+			// Force delete removes ManifestWorks from hub without cleaning up klusterlet namespace.
+			_, err := util.CreateHostedManagedCluster(hubClusterClient, hosted1, hostingClusterName)
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			})
 
@@ -207,7 +209,8 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 			})
 
 			ginkgo.By(fmt.Sprintf("Create hosted mode managed cluster %s", hosted2), func() {
-				_, err := util.CreateHostedManagedClusterWithShortLeaseDuration(hubClusterClient, hosted2, hostingClusterName)
+				// Use regular lease duration to avoid force delete which breaks the cleanup chain.
+			_, err := util.CreateHostedManagedCluster(hubClusterClient, hosted2, hostingClusterName)
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			})
 
