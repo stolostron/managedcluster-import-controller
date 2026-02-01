@@ -533,25 +533,59 @@ func forceCleanupSelfManagedClusterResources(clusterName string) {
 		}
 	})
 
-	ginkgo.By("Force cleanup: Delete the Klusterlet CR to trigger cleanup", func() {
-		// Delete the klusterlet CR - this triggers Klusterlet Operator cleanup
-		err := hubOperatorClient.OperatorV1().Klusterlets().Delete(context.TODO(), "klusterlet", metav1.DeleteOptions{})
+	ginkgo.By("Force cleanup: Delete all Klusterlet CRs to trigger cleanup", func() {
+		// Delete all klusterlet CRs - this triggers Klusterlet Operator cleanup
+		// We need to delete all because some tests use custom klusterlet names (e.g., klusterlet-local)
+		klusterlets, err := hubOperatorClient.OperatorV1().Klusterlets().List(context.TODO(), metav1.ListOptions{})
 		if err != nil && !errors.IsNotFound(err) {
-			util.Logf("Warning: failed to delete klusterlet: %v", err)
+			util.Logf("Warning: failed to list klusterlets: %v", err)
+		}
+		if klusterlets != nil {
+			for _, klusterlet := range klusterlets.Items {
+				err := hubOperatorClient.OperatorV1().Klusterlets().Delete(context.TODO(), klusterlet.Name, metav1.DeleteOptions{})
+				if err != nil && !errors.IsNotFound(err) {
+					util.Logf("Warning: failed to delete klusterlet %s: %v", klusterlet.Name, err)
+				}
+			}
 		}
 	})
 
-	ginkgo.By("Force cleanup: Wait for agent namespace to be deleted", func() {
+	ginkgo.By("Force cleanup: Wait for all agent namespaces to be deleted", func() {
+		// Wait for both default and custom agent namespaces to be deleted
+		// Default: open-cluster-management-agent
+		// Custom: open-cluster-management-local (used by tests with KlusterletConfig NoOperator mode)
+		agentNamespaces := []string{"open-cluster-management-agent", "open-cluster-management-local"}
 		gomega.Eventually(func() error {
-			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), "open-cluster-management-agent", metav1.GetOptions{})
-			if errors.IsNotFound(err) {
+			for _, ns := range agentNamespaces {
+				_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), ns, metav1.GetOptions{})
+				if err == nil {
+					return fmt.Errorf("namespace %s still exists", ns)
+				}
+				if !errors.IsNotFound(err) {
+					return err
+				}
+			}
+			return nil
+		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
+	})
+
+	ginkgo.By("Force cleanup: Wait for all Klusterlet CRs to be deleted", func() {
+		// Ensure all klusterlet CRs are deleted before deleting the CRD
+		gomega.Eventually(func() error {
+			klusterlets, err := hubOperatorClient.OperatorV1().Klusterlets().List(context.TODO(), metav1.ListOptions{})
+			if err != nil {
+				// If we can't list (e.g., CRD is gone), that's fine
 				return nil
 			}
-			if err != nil {
-				return err
+			if len(klusterlets.Items) > 0 {
+				names := make([]string, 0, len(klusterlets.Items))
+				for _, k := range klusterlets.Items {
+					names = append(names, k.Name)
+				}
+				return fmt.Errorf("klusterlets still exist: %v", names)
 			}
-			return fmt.Errorf("namespace open-cluster-management-agent still exists")
-		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
+			return nil
+		}, 3*time.Minute, 5*time.Second).Should(gomega.Succeed())
 	})
 
 	ginkgo.By("Force cleanup: Delete the Klusterlet CRD", func() {

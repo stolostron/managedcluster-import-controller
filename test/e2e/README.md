@@ -138,6 +138,26 @@ _, err := util.CreateHostedManagedCluster(hubClusterClient, clusterName, hosting
 _, err := util.CreateHostedManagedClusterWithShortLeaseDuration(hubClusterClient, clusterName, hostingClusterName)
 ```
 
+#### Issue 6: Custom Klusterlet Names with KlusterletConfig
+
+**Problem**: When tests use `KlusterletConfig` with custom settings (e.g., `NoOperator` mode with a postfix), the klusterlet is created with a custom name (e.g., `klusterlet-local`) in a custom namespace (e.g., `open-cluster-management-local`). When force delete is triggered, these custom resources are not cleaned up because the cleanup function only handles the default klusterlet.
+
+**Symptom**:
+```
+Error: crd klusterlets.operator.open-cluster-management.io still exists
+```
+
+With remaining klusterlet CR:
+```
+name: klusterlet-local
+namespace: open-cluster-management-local
+```
+
+**Solution**: The `forceCleanupSelfManagedClusterResources()` function has been updated to:
+1. Delete ALL klusterlet CRs (not just "klusterlet")
+2. Wait for ALL agent namespaces (including custom ones like `open-cluster-management-local`)
+3. Wait for all klusterlet CRs to be deleted before deleting the CRD
+
 ---
 
 ## Self-Managed Cluster Cleanup Rule
