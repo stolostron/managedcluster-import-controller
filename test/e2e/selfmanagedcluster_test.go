@@ -10,6 +10,7 @@ import (
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/rand"
 
@@ -125,6 +126,22 @@ var _ = ginkgo.Describe("Importing a self managed cluster", ginkgo.Label("core")
 				err := util.RemoveKlusterlet(hubOperatorClient, "klusterlet")
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 				assertManagedClusterAvailableUnknown(localClusterName)
+			})
+
+			// Wait for agent namespace to be fully deleted before triggering immediate-import.
+			// If we add the immediate-import annotation while the namespace is still terminating,
+			// the controller will fail to create resources in the terminating namespace.
+			ginkgo.By("Wait for agent namespace to be deleted", func() {
+				gomega.Eventually(func() error {
+					_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), "open-cluster-management-agent", metav1.GetOptions{})
+					if errors.IsNotFound(err) {
+						return nil
+					}
+					if err != nil {
+						return err
+					}
+					return fmt.Errorf("namespace open-cluster-management-agent still exists")
+				}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
 			})
 
 			ginkgo.By(fmt.Sprintf("Should recover the managed cluster %s once the immediate-import annotation is added", localClusterName), func() {

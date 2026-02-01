@@ -4,9 +4,15 @@ This directory contains end-to-end tests for the managed cluster import controll
 
 ## Important Guidelines for Writing E2E Tests
 
-### Self-Managed Cluster Cleanup Rule
+### Common E2E Test Issues and Solutions
 
-**CRITICAL**: When writing or modifying e2e tests that use `CreateManagedClusterWithShortLeaseDuration` with `local-cluster=true` label, you **MUST** use `forceCleanupSelfManagedClusterResources()` in the `AfterEach` cleanup function instead of `assertManagedClusterDeleted()`.
+This section documents the common issues encountered in e2e tests and how to avoid them.
+
+#### Issue 1: Force Delete Breaks Cleanup Chain
+
+**Problem**: For self-managed clusters with short lease duration, force delete is triggered when the cluster becomes unavailable. Force delete breaks the normal cleanup chain because ManifestWorks are deleted from hub without actually cleaning up resources on the managed cluster.
+
+**Solution**: Use `forceCleanupSelfManagedClusterResources()` in AfterEach for tests using `CreateManagedClusterWithShortLeaseDuration`.
 
 ```go
 // CORRECT - for tests using CreateManagedClusterWithShortLeaseDuration
@@ -19,6 +25,67 @@ ginkgo.AfterEach(func() {
     assertManagedClusterDeleted(clusterName)  // DO NOT use this for short lease duration tests
 })
 ```
+
+#### Issue 2: Short Lease Duration Causes Flaky Failures
+
+**Problem**: Using `CreateManagedClusterWithShortLeaseDuration` (10s lease) in tests can cause flaky failures:
+- Recovery tests: Klusterlet doesn't have enough time to stabilize after re-deployment
+- Destroy/detach tests: Short lease expires during test execution
+
+**Symptom**:
+```
+Error: assert managed cluster available failed
+Condition: ManagedClusterConditionAvailable Unknown
+Reason: ManagedClusterLeaseUpdateStopped - Registration agent stopped updating its lease
+```
+
+**Solution**: Use `CreateManagedCluster` (60s lease) unless the test specifically requires short lease behavior.
+
+#### Issue 3: Immediate-Import While Namespace Terminating
+
+**Problem**: When removing klusterlet to simulate offline state, the agent namespace enters terminating state. If immediate-import annotation is added before namespace is fully deleted, the controller fails to create resources.
+
+**Symptom**:
+```
+Error: secrets "bootstrap-hub-kubeconfig" is forbidden: unable to create new content
+in namespace open-cluster-management-agent because it is being terminated
+```
+
+**Solution**: Wait for agent namespace to be fully deleted before adding immediate-import annotation.
+
+```go
+ginkgo.By("Should become offline after removing klusterlet", func() {
+    err := util.RemoveKlusterlet(hubOperatorClient, "klusterlet")
+    gomega.Expect(err).ToNot(gomega.HaveOccurred())
+    assertManagedClusterAvailableUnknown(managedClusterName)
+})
+
+// CRITICAL: Wait for namespace deletion before triggering immediate-import
+ginkgo.By("Wait for agent namespace to be deleted", func() {
+    gomega.Eventually(func() error {
+        _, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), "open-cluster-management-agent", metav1.GetOptions{})
+        if errors.IsNotFound(err) {
+            return nil
+        }
+        if err != nil {
+            return err
+        }
+        return fmt.Errorf("namespace open-cluster-management-agent still exists")
+    }, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
+})
+
+ginkgo.By("Should recover with immediate-import annotation", func() {
+    err := util.SetImmediateImportAnnotation(hubClusterClient, managedClusterName, "")
+    gomega.Expect(err).ToNot(gomega.HaveOccurred())
+    assertManagedClusterAvailable(managedClusterName)
+})
+```
+
+---
+
+## Self-Managed Cluster Cleanup Rule
+
+**CRITICAL**: When writing or modifying e2e tests that use `CreateManagedClusterWithShortLeaseDuration` with `local-cluster=true` label, you **MUST** use `forceCleanupSelfManagedClusterResources()` in the `AfterEach` cleanup function instead of `assertManagedClusterDeleted()`.
 
 ## Why Force Delete Causes Resource Residue
 
