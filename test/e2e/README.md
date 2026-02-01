@@ -81,6 +81,44 @@ ginkgo.By("Should recover with immediate-import annotation", func() {
 })
 ```
 
+#### Issue 4: Agent Heartbeats After Klusterlet Removal
+
+**Problem**: When testing that a cluster stays offline (Unknown) after removing klusterlet, the agent pod may still be running and sending heartbeats until the klusterlet operator finishes cleanup. This causes the cluster to become Available again unexpectedly.
+
+**Symptom**:
+```
+Error: assert managed cluster available unknown consistently failed
+cluster conditions: [...{ManagedClusterConditionAvailable True ...}]
+```
+
+**Solution**: Wait for agent namespace to be fully deleted after removing klusterlet before checking cluster status consistency.
+
+```go
+ginkgo.By("Should become offline after removing klusterlet", func() {
+    err := util.RemoveKlusterlet(hubOperatorClient, "klusterlet")
+    gomega.Expect(err).ToNot(gomega.HaveOccurred())
+    assertManagedClusterAvailableUnknown(managedClusterName)
+})
+
+// CRITICAL: Wait for namespace deletion to ensure agent stops sending heartbeats
+ginkgo.By("Wait for agent namespace to be deleted", func() {
+    gomega.Eventually(func() error {
+        _, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), "open-cluster-management-agent", metav1.GetOptions{})
+        if errors.IsNotFound(err) {
+            return nil
+        }
+        if err != nil {
+            return err
+        }
+        return fmt.Errorf("namespace open-cluster-management-agent still exists")
+    }, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
+})
+
+ginkgo.By("Should stay offline", func() {
+    assertManagedClusterAvailableUnknownConsistently(managedClusterName, 30*time.Second)
+})
+```
+
 ---
 
 ## Self-Managed Cluster Cleanup Rule

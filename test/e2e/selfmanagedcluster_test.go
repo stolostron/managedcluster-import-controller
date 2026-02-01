@@ -91,6 +91,22 @@ var _ = ginkgo.Describe("Importing a self managed cluster", ginkgo.Label("core")
 				assertManagedClusterAvailableUnknown(localClusterName)
 			})
 
+			// Wait for agent namespace to be fully deleted to ensure agent stops sending heartbeats.
+			// Otherwise the agent may reconnect and make the cluster Available again during the
+			// consistency check, causing flaky test failures.
+			ginkgo.By("Wait for agent namespace to be deleted", func() {
+				gomega.Eventually(func() error {
+					_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), "open-cluster-management-agent", metav1.GetOptions{})
+					if errors.IsNotFound(err) {
+						return nil
+					}
+					if err != nil {
+						return err
+					}
+					return fmt.Errorf("namespace open-cluster-management-agent still exists")
+				}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
+			})
+
 			ginkgo.By(fmt.Sprintf("Should not recover the managed cluster %s after deleting import secret", localClusterName), func() {
 				err := util.RemoveImportSecret(hubKubeClient, localClusterName)
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
