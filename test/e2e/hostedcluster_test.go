@@ -152,7 +152,7 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 				cluster.Annotations[constants.KlusterletNamespaceAnnotation] = "open-cluster-management-agent-hosted"
 				_, err = hubClusterClient.ClusterV1().ManagedClusters().Update(context.TODO(), cluster, metav1.UpdateOptions{})
 				return err
-			}, 1*time.Minute, 1*time.Second).Should(gomega.Succeed())
+			}, 1*time.Minute, 3*time.Second).Should(gomega.Succeed())
 
 			assertManagedClusterImportSecretCreated(managedClusterName, "other", operatorv1.InstallModeHosted)
 			assertHostedManagedClusterManifestWorksAvailable(managedClusterName, hostingClusterName)
@@ -283,7 +283,7 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 				}
 
 				return len(cluster.Finalizers) > 2
-			}, 1*time.Minute, 1*time.Second).ShouldNot(gomega.BeFalse())
+			}, 1*time.Minute, 3*time.Second).ShouldNot(gomega.BeFalse())
 
 			// detach the cluster
 			err = hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), managedClusterName, metav1.DeleteOptions{})
@@ -349,7 +349,7 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 				}
 
 				return len(cluster.Finalizers) > 2
-			}, 1*time.Minute, 1*time.Second).ShouldNot(gomega.BeFalse())
+			}, 1*time.Minute, 3*time.Second).ShouldNot(gomega.BeFalse())
 
 			ginkgo.By(fmt.Sprintf("detach the cluster %s after the finalizers are applied", managedClusterName))
 			err = hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), managedClusterName, metav1.DeleteOptions{})

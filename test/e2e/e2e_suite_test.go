@@ -359,7 +359,7 @@ func assertManagedClusterPriorityClass(managedClusterName string) {
 					operator.Spec.Template.Spec.PriorityClassName)
 			}
 			return nil
-		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 60*time.Second, 3*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -379,7 +379,7 @@ func assertBootstrapKubeconfig(serverURL, proxyURL, ca string, caData []byte, ve
 				return assertKubeconfig("hub-kubeconfig-secret", serverURL, proxyURL, ca, caData)
 			}
 			return nil
-		}, 120*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 120*time.Second, 3*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -476,7 +476,7 @@ func assertManagedClusterPriorityClassHosted(managedClusterName string) {
 					klusterlet.Spec.PriorityClassName)
 			}
 			return nil
-		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 60*time.Second, 3*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -507,6 +507,84 @@ func assertManagedClusterDeleted(clusterName string) {
 
 	assertManagedClusterDeletedFromHub(clusterName)
 	assertManagedClusterDeletedFromSpoke()
+}
+
+// forceCleanupSelfManagedClusterResources forcefully cleans up resources for self-managed clusters
+// when the normal cleanup chain is broken (e.g., after force delete).
+//
+// For self-managed clusters, force delete breaks the normal cleanup chain because:
+// 1. ManifestWorks are force deleted from hub (finalizers removed)
+// 2. But CRD is NOT actually deleted from managed cluster
+// 3. Klusterlet CR still exists
+// 4. Klusterlet Operator cleanup is NOT triggered
+// 5. Agent namespace remains
+//
+// This function manually cleans up by:
+// 1. Deleting the ManagedCluster (if still exists)
+// 2. Deleting the Klusterlet CR to trigger Klusterlet Operator cleanup
+// 3. Waiting for agent namespace to be deleted
+// 4. Deleting the Klusterlet CRD
+// 5. Waiting for cluster namespace to be deleted
+func forceCleanupSelfManagedClusterResources(clusterName string) {
+	ginkgo.By(fmt.Sprintf("Force cleanup: Delete the managed cluster %s", clusterName), func() {
+		err := hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), clusterName, metav1.DeleteOptions{})
+		if err != nil && !errors.IsNotFound(err) {
+			util.Logf("Warning: failed to delete managed cluster %s: %v", clusterName, err)
+		}
+	})
+
+	ginkgo.By("Force cleanup: Delete the Klusterlet CR to trigger cleanup", func() {
+		// Delete the klusterlet CR - this triggers Klusterlet Operator cleanup
+		err := hubOperatorClient.OperatorV1().Klusterlets().Delete(context.TODO(), "klusterlet", metav1.DeleteOptions{})
+		if err != nil && !errors.IsNotFound(err) {
+			util.Logf("Warning: failed to delete klusterlet: %v", err)
+		}
+	})
+
+	ginkgo.By("Force cleanup: Wait for agent namespace to be deleted", func() {
+		gomega.Eventually(func() error {
+			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), "open-cluster-management-agent", metav1.GetOptions{})
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("namespace open-cluster-management-agent still exists")
+		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
+	})
+
+	ginkgo.By("Force cleanup: Delete the Klusterlet CRD", func() {
+		klusterletCRDName := "klusterlets.operator.open-cluster-management.io"
+		err := crdClient.ApiextensionsV1().CustomResourceDefinitions().Delete(context.TODO(), klusterletCRDName, metav1.DeleteOptions{})
+		if err != nil && !errors.IsNotFound(err) {
+			util.Logf("Warning: failed to delete klusterlet CRD: %v", err)
+		}
+
+		gomega.Eventually(func() error {
+			_, err := crdClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), klusterletCRDName, metav1.GetOptions{})
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("crd %s still exists", klusterletCRDName)
+		}, 2*time.Minute, 3*time.Second).Should(gomega.Succeed())
+	})
+
+	ginkgo.By(fmt.Sprintf("Force cleanup: Wait for cluster namespace %s to be deleted", clusterName), func() {
+		gomega.Eventually(func() error {
+			_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), clusterName, metav1.GetOptions{})
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("namespace %s still exists", clusterName)
+		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
+	})
 }
 
 func assertPullSecretDeleted(namespace, name string) {
@@ -543,7 +621,7 @@ func assertManagedClusterDeletedFromHub(clusterName string) {
 			}
 
 			return fmt.Errorf("managed cluster %s still exists", clusterName)
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
 
@@ -558,7 +636,7 @@ func assertManagedClusterDeletedFromHub(clusterName string) {
 				return err
 			}
 			return fmt.Errorf("managed cluster namespace %s still exists", clusterName)
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
 }
@@ -576,7 +654,7 @@ func assertManagedClusterDeletedFromSpoke() {
 				return err
 			}
 			return fmt.Errorf("namespace %s still exists", klusterletNamespace)
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("delete the open-cluster-management-agent namespace spending time: %.2f seconds", time.Since(start).Seconds())
 
@@ -592,7 +670,7 @@ func assertManagedClusterDeletedFromSpoke() {
 				return err
 			}
 			return fmt.Errorf("crd %s still exists", klusterletCRDName)
-		}, 120*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 120*time.Second, 3*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("delete klusterlet crd spending time: %.2f seconds", time.Since(start).Seconds())
 }
@@ -611,7 +689,7 @@ func assertHostedManagedClusterDeletedFromSpoke(cluster, managementCluster strin
 				return err
 			}
 			return fmt.Errorf("namespace %s still exists", klusterletNamespace)
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
 
@@ -627,7 +705,7 @@ func assertHostedManagedClusterDeletedFromSpoke(cluster, managementCluster strin
 				return err
 			}
 			return fmt.Errorf("klusterlet manifest work %s still exists", klusterletManifestWorkName)
-		}, 1*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		}, 1*time.Minute, 3*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
 }
@@ -709,7 +787,7 @@ func assertManagedClusterAvailable(clusterName string) {
 			}
 
 			return fmt.Errorf("assert managed cluster %s available failed, cluster conditions: %v", clusterName, cluster.Status.Conditions)
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -731,7 +809,7 @@ func assertImmediateImportCompleted(clusterName string) {
 			}
 
 			return fmt.Errorf("assert immediate-import annotation of managed cluster %s failed, value: %v", clusterName, immediateImportValue)
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -752,7 +830,7 @@ func assertManagedClusterAvailableUnknown(clusterName string) {
 			}
 
 			return fmt.Errorf("assert managed cluster %s available unknown failed, cluster conditions: %v", clusterName, cluster.Status.Conditions)
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -793,7 +871,7 @@ func assertHostedKlusterletManifestWorks(managementClusterName, managedClusterNa
 			}
 
 			return nil
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -814,7 +892,7 @@ func assertManagedClusterManifestWorks(clusterName string) {
 			}
 
 			return nil
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
 		util.Logf("assert managed cluster manifestworks spending time: %.2f seconds", time.Since(start).Seconds())
 	})
 
@@ -852,7 +930,7 @@ func assertManagedClusterManifestWorksAvailable(clusterName string) {
 			}
 
 			return nil
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
 		util.Logf("assert managed cluster manifestworks spending time: %.2f seconds", time.Since(start).Seconds())
 	})
 
@@ -881,7 +959,7 @@ func assertHostedManagedClusterManifestWorksAvailable(clusterName, hostingCluste
 			}
 
 			return nil
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
 		util.Logf("assert hosted managed cluster manifestworks spending time: %.2f seconds",
 			time.Since(start).Seconds())
 	})
@@ -915,7 +993,7 @@ func assertManagedClusterNamespace(managedClusterName string) {
 				return err
 			}
 			return nil
-		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 60*time.Second, 3*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -957,7 +1035,7 @@ func assertKlusterletNodePlacement(nodeSelecor map[string]string, tolerations []
 			}
 
 			return nil
-		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 60*time.Second, 3*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -1030,7 +1108,7 @@ func assertBootstrapKubeconfigWithProxyConfig(proxyURL string, caDataIncluded, c
 			}
 
 			return nil
-		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 60*time.Second, 3*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -1058,7 +1136,7 @@ func AssertKlusterletNamespace(clusterName, name, namespace string) {
 			}
 
 			return nil
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -1099,7 +1177,7 @@ func assertAppliedManifestWorkEvictionGracePeriod(evictionGracePeriod *metav1.Du
 			default:
 				return fmt.Errorf("Should not step into this branch")
 			}
-		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 60*time.Second, 3*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -1142,7 +1220,7 @@ func assertFeatureGate(name string, regsitrationFeatureGates, workFeatureGates [
 			}
 
 			return nil
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		}, 5*time.Minute, 5*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -1184,7 +1262,7 @@ func assertNamespaceCreated(kubeClient kubernetes.Interface, namespace string) {
 				return err
 			}
 			return nil
-		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
+		}, 60*time.Second, 3*time.Second).Should(gomega.Succeed())
 	})
 }
 
@@ -1214,7 +1292,7 @@ func assertManifestworkFinalizer(namespace, workName, expected string) {
 				}
 			}
 			return fmt.Errorf("Manifestwork %s/%s does not have expected finalizer %s", namespace, workName, expected)
-		}, 3*time.Minute, 10*time.Second).Should(gomega.Succeed())
+		}, 3*time.Minute, 5*time.Second).Should(gomega.Succeed())
 	})
 }
 

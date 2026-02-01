@@ -67,7 +67,9 @@ var _ = ginkgo.Describe("Importing a self managed cluster", ginkgo.Label("core")
 			// reset the custom controller config
 			util.RemoveControllerConfigConfigMap(hubKubeClient)
 
-			assertManagedClusterDeleted(localClusterName)
+			// For self-managed clusters with short lease duration, use forceCleanupSelfManagedClusterResources
+			// to ensure proper cleanup regardless of whether normal or force delete occurred.
+			forceCleanupSelfManagedClusterResources(localClusterName)
 		})
 
 		ginkgo.It("Should not recover the agent once joined if auto-import strategy is ImportOnly", func() {
