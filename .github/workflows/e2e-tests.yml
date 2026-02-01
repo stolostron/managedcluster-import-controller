@@ -52,17 +52,47 @@ jobs:
           echo "==== ManagedClusters ===="
           kubectl get managedclusters -A -o yaml || true
 
+          echo "==== Managed Cluster Leases ===="
+          for ns in $(kubectl get managedclusters -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+            echo "---- Leases in namespace: $ns ----"
+            kubectl get lease -n "$ns" -o yaml || true
+          done
+
           echo "==== Namespace open-cluster-management-agent ===="
           kubectl get ns open-cluster-management-agent -o yaml || true
 
+          echo "==== Namespace open-cluster-management-local ===="
+          kubectl get ns open-cluster-management-local -o yaml || true
+
           echo "==== Pods in open-cluster-management-agent ===="
           kubectl get pods -n open-cluster-management-agent -o wide || true
+
+          echo "==== Pods in open-cluster-management-local ===="
+          kubectl get pods -n open-cluster-management-local -o wide || true
+
+          echo "==== Klusterlet Operator Pods ===="
+          kubectl get pods -n open-cluster-management -l app=klusterlet -o wide || true
+
+          echo "==== Events in open-cluster-management-agent ===="
+          kubectl get events -n open-cluster-management-agent --sort-by='.lastTimestamp' || true
+
+          echo "==== Events in open-cluster-management ===="
+          kubectl get events -n open-cluster-management --sort-by='.lastTimestamp' | tail -50 || true
 
           echo "==== Logs from pods in open-cluster-management-agent ===="
           for pod in $(kubectl get pods -n open-cluster-management-agent -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
             echo "---- Logs from pod: $pod ----"
             kubectl logs -n open-cluster-management-agent "$pod" --all-containers --tail=100 || true
           done
+
+          echo "==== Logs from pods in open-cluster-management-local ===="
+          for pod in $(kubectl get pods -n open-cluster-management-local -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+            echo "---- Logs from pod: $pod ----"
+            kubectl logs -n open-cluster-management-local "$pod" --all-containers --tail=100 || true
+          done
+
+          echo "==== Klusterlet Operator Logs ===="
+          kubectl -n open-cluster-management logs -l app=klusterlet --tail=100 || true
 
           echo "==== Import Controller Logs ===="
           kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=100 || true
@@ -109,17 +139,47 @@ jobs:
           echo "==== ManagedClusters ===="
           kubectl get managedclusters -A -o yaml || true
 
+          echo "==== Managed Cluster Leases ===="
+          for ns in $(kubectl get managedclusters -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+            echo "---- Leases in namespace: $ns ----"
+            kubectl get lease -n "$ns" -o yaml || true
+          done
+
           echo "==== Namespace open-cluster-management-agent ===="
           kubectl get ns open-cluster-management-agent -o yaml || true
 
+          echo "==== Namespace open-cluster-management-local ===="
+          kubectl get ns open-cluster-management-local -o yaml || true
+
           echo "==== Pods in open-cluster-management-agent ===="
           kubectl get pods -n open-cluster-management-agent -o wide || true
+
+          echo "==== Pods in open-cluster-management-local ===="
+          kubectl get pods -n open-cluster-management-local -o wide || true
+
+          echo "==== Klusterlet Operator Pods ===="
+          kubectl get pods -n open-cluster-management -l app=klusterlet -o wide || true
+
+          echo "==== Events in open-cluster-management-agent ===="
+          kubectl get events -n open-cluster-management-agent --sort-by='.lastTimestamp' || true
+
+          echo "==== Events in open-cluster-management ===="
+          kubectl get events -n open-cluster-management --sort-by='.lastTimestamp' | tail -50 || true
 
           echo "==== Logs from pods in open-cluster-management-agent ===="
           for pod in $(kubectl get pods -n open-cluster-management-agent -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
             echo "---- Logs from pod: $pod ----"
             kubectl logs -n open-cluster-management-agent "$pod" --all-containers --tail=100 || true
           done
+
+          echo "==== Logs from pods in open-cluster-management-local ===="
+          for pod in $(kubectl get pods -n open-cluster-management-local -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+            echo "---- Logs from pod: $pod ----"
+            kubectl logs -n open-cluster-management-local "$pod" --all-containers --tail=100 || true
+          done
+
+          echo "==== Klusterlet Operator Logs ===="
+          kubectl -n open-cluster-management logs -l app=klusterlet --tail=100 || true
 
           echo "==== Import Controller Logs ===="
           kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=100 || true
@@ -166,17 +226,50 @@ jobs:
           echo "==== ManagedClusters ===="
           kubectl get managedclusters -A -o yaml || true
 
+          echo "==== Managed Cluster Leases ===="
+          for ns in $(kubectl get managedclusters -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+            echo "---- Leases in namespace: $ns ----"
+            kubectl get lease -n "$ns" -o yaml || true
+          done
+
           echo "==== Namespace open-cluster-management-agent ===="
           kubectl get ns open-cluster-management-agent -o yaml || true
 
+          echo "==== Namespace open-cluster-management-local ===="
+          kubectl get ns open-cluster-management-local -o yaml || true
+
           echo "==== Pods in open-cluster-management-agent ===="
           kubectl get pods -n open-cluster-management-agent -o wide || true
+
+          echo "==== Pods in open-cluster-management-local ===="
+          kubectl get pods -n open-cluster-management-local -o wide || true
+
+          echo "==== Klusterlet Operator Pods ===="
+          kubectl get pods -n open-cluster-management -l app=klusterlet -o wide || true
+
+          echo "==== Hosted Klusterlet Namespaces ===="
+          kubectl get ns -o name | grep klusterlet- || true
+
+          echo "==== Events in open-cluster-management-agent ===="
+          kubectl get events -n open-cluster-management-agent --sort-by='.lastTimestamp' || true
+
+          echo "==== Events in open-cluster-management ===="
+          kubectl get events -n open-cluster-management --sort-by='.lastTimestamp' | tail -50 || true
 
           echo "==== Logs from pods in open-cluster-management-agent ===="
           for pod in $(kubectl get pods -n open-cluster-management-agent -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
             echo "---- Logs from pod: $pod ----"
             kubectl logs -n open-cluster-management-agent "$pod" --all-containers --tail=100 || true
           done
+
+          echo "==== Logs from pods in open-cluster-management-local ===="
+          for pod in $(kubectl get pods -n open-cluster-management-local -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
+            echo "---- Logs from pod: $pod ----"
+            kubectl logs -n open-cluster-management-local "$pod" --all-containers --tail=100 || true
+          done
+
+          echo "==== Klusterlet Operator Logs ===="
+          kubectl -n open-cluster-management logs -l app=klusterlet --tail=100 || true
 
           echo "==== Import Controller Logs ===="
           kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=100 || true
