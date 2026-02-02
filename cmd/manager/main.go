@@ -350,6 +350,7 @@ func main() {
 	}
 
 	setupLog.Info("Starting Controller Manager")
+	setupLog.Info("CI trigger log: controller manager is about to start", "metricsPort", metricsPort)
 	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "failed to start manager")
 		logs.FlushLogs()
