@@ -45,47 +45,67 @@ type InformerHolder struct {
 }
 
 // NewImportSecretSource return a source only for import secrets
-func NewImportSecretSource(secretInformer cache.SharedIndexInformer) *Source {
+func NewImportSecretSource(secretInformer cache.SharedIndexInformer,
+	h handler.EventHandler,
+	p ...predicate.Predicate) *Source {
 	return &Source{
 		informer:     secretInformer,
 		expectedType: reflect.TypeOf(&corev1.Secret{}),
 		name:         "import-secret",
+		handler:      h,
+		predicates:   p,
 	}
 }
 
 // NewAutoImportSecretSource return a source only for auto import secrets
-func NewAutoImportSecretSource(secretInformer cache.SharedIndexInformer) *Source {
+func NewAutoImportSecretSource(secretInformer cache.SharedIndexInformer,
+	h handler.EventHandler,
+	p ...predicate.Predicate) *Source {
 	return &Source{
 		informer:     secretInformer,
 		expectedType: reflect.TypeOf(&corev1.Secret{}),
 		name:         "auto-import-secret",
+		handler:      h,
+		predicates:   p,
 	}
 }
 
 // NewKlusterletWorkSource return a source only for klusterlet manifest works
-func NewKlusterletWorkSource(workInformer cache.SharedIndexInformer) *Source {
+func NewKlusterletWorkSource(workInformer cache.SharedIndexInformer,
+	h handler.EventHandler,
+	p ...predicate.Predicate) *Source {
 	return &Source{
 		informer:     workInformer,
 		expectedType: reflect.TypeOf(&workv1.ManifestWork{}),
 		name:         "klusterlet-manifest-works",
+		handler:      h,
+		predicates:   p,
 	}
 }
 
 // NewHostedWorkSource return a source only for hosted manifest works
-func NewHostedWorkSource(workInformer cache.SharedIndexInformer) *Source {
+func NewHostedWorkSource(workInformer cache.SharedIndexInformer,
+	h handler.EventHandler,
+	p ...predicate.Predicate) *Source {
 	return &Source{
 		informer:     workInformer,
 		expectedType: reflect.TypeOf(&workv1.ManifestWork{}),
 		name:         "hosted-manifest-works",
+		handler:      h,
+		predicates:   p,
 	}
 }
 
 // NewManagedClusterSource return a source for managed cluster
-func NewManagedClusterSource(mcInformer cache.SharedIndexInformer) *Source {
+func NewManagedClusterSource(mcInformer cache.SharedIndexInformer,
+	h handler.EventHandler,
+	p ...predicate.Predicate) *Source {
 	return &Source{
 		informer:     mcInformer,
 		expectedType: reflect.TypeOf(&clusterv1.ManagedCluster{}),
 		name:         "managed-cluster",
+		handler:      h,
+		predicates:   p,
 	}
 }
 
@@ -94,74 +114,75 @@ type Source struct {
 	informer     cache.SharedIndexInformer
 	expectedType reflect.Type
 	name         string
+	handler      handler.EventHandler
+	predicates   []predicate.Predicate
 }
 
 var _ source.SyncingSource = &Source{}
 
-func (s *Source) Start(ctx context.Context, handler handler.EventHandler,
-	queue workqueue.RateLimitingInterface, predicates ...predicate.Predicate) error {
+func (s *Source) Start(ctx context.Context, queue workqueue.TypedRateLimitingInterface[reconcile.Request]) error {
 	_, err := s.informer.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj interface{}) {
 			newObj, ok := obj.(client.Object)
 			if !ok {
-				klog.Errorf(fmt.Sprintf("OnAdd missing Object, type %T", obj))
+				klog.Errorf("OnAdd missing Object, type %T", obj)
 				return
 			}
 
 			if objType := reflect.TypeOf(newObj); s.expectedType != objType {
-				klog.Errorf(fmt.Sprintf("OnAdd missing Object, type %T", obj))
+				klog.Errorf("OnAdd missing Object, type %T", obj)
 				return
 			}
 
 			createEvent := event.CreateEvent{Object: newObj}
 
-			for _, p := range predicates {
+			for _, p := range s.predicates {
 				if !p.Create(createEvent) {
 					return
 				}
 			}
 
-			handler.Create(ctx, createEvent, queue)
+			s.handler.Create(ctx, createEvent, queue)
 		},
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			oldClientObj, ok := oldObj.(client.Object)
 			if !ok {
-				klog.Errorf(fmt.Sprintf("OnAdd missing Object, type %T", oldObj))
+				klog.Errorf("OnAdd missing Object, type %T", oldObj)
 				return
 			}
 
 			if objType := reflect.TypeOf(oldClientObj); s.expectedType != objType {
-				klog.Errorf(fmt.Sprintf("OnAdd missing Object, type %T", oldObj))
+				klog.Errorf("OnAdd missing Object, type %T", oldObj)
 				return
 			}
 
 			newClientObj, ok := newObj.(client.Object)
 			if !ok {
-				klog.Errorf(fmt.Sprintf("OnAdd missing Object, type %T", newObj))
+				klog.Errorf("OnAdd missing Object, type %T", newObj)
 				return
 			}
 
 			if objType := reflect.TypeOf(newClientObj); s.expectedType != objType {
-				klog.Errorf(fmt.Sprintf("OnAdd missing Object, type %T", newObj))
+				klog.Errorf("OnAdd missing Object, type %T", newObj)
 				return
 			}
 
 			updateEvent := event.UpdateEvent{ObjectOld: oldClientObj, ObjectNew: newClientObj}
 
-			for _, p := range predicates {
+			for _, p := range s.predicates {
 				if !p.Update(updateEvent) {
 					return
 				}
 			}
 
-			handler.Update(ctx, updateEvent, queue)
+			s.handler.Update(ctx, updateEvent, queue)
 		},
 		DeleteFunc: func(obj interface{}) {
 			if _, ok := obj.(client.Object); !ok {
 				// If the object doesn't have Metadata, assume it is a tombstone object of type DeletedFinalStateUnknown
 				tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 				if !ok {
-					klog.Errorf(fmt.Sprintf("Error decoding objects. Expected cache.DeletedFinalStateUnknown, type %T", obj))
+					klog.Errorf("Error decoding objects. Expected cache.DeletedFinalStateUnknown, type %T", obj)
 					return
 				}
 
@@ -171,19 +192,19 @@ func (s *Source) Start(ctx context.Context, handler handler.EventHandler,
 
 			o, ok := obj.(client.Object)
 			if !ok {
-				klog.Errorf(fmt.Sprintf("OnDelete missing Object, type %T", obj))
+				klog.Errorf("OnDelete missing Object, type %T", obj)
 				return
 			}
 
 			deleteEvent := event.DeleteEvent{Object: o}
 
-			for _, p := range predicates {
+			for _, p := range s.predicates {
 				if !p.Delete(deleteEvent) {
 					return
 				}
 			}
 
-			handler.Delete(ctx, deleteEvent, queue)
+			s.handler.Delete(ctx, deleteEvent, queue)
 		},
 	})
 
@@ -211,23 +232,23 @@ type ManagedClusterResourceEventHandler struct {
 
 var _ handler.EventHandler = &ManagedClusterResourceEventHandler{}
 
-func (e *ManagedClusterResourceEventHandler) Create(ctx context.Context, evt event.CreateEvent, q workqueue.RateLimitingInterface) {
+func (e *ManagedClusterResourceEventHandler) Create(ctx context.Context, evt event.CreateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	e.add(evt.Object, q)
 }
 
-func (e *ManagedClusterResourceEventHandler) Update(ctx context.Context, evt event.UpdateEvent, q workqueue.RateLimitingInterface) {
+func (e *ManagedClusterResourceEventHandler) Update(ctx context.Context, evt event.UpdateEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	e.add(evt.ObjectNew, q)
 }
 
-func (e *ManagedClusterResourceEventHandler) Delete(ctx context.Context, evt event.DeleteEvent, q workqueue.RateLimitingInterface) {
+func (e *ManagedClusterResourceEventHandler) Delete(ctx context.Context, evt event.DeleteEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	e.add(evt.Object, q)
 }
 
-func (e *ManagedClusterResourceEventHandler) Generic(ctx context.Context, evt event.GenericEvent, q workqueue.RateLimitingInterface) {
+func (e *ManagedClusterResourceEventHandler) Generic(ctx context.Context, evt event.GenericEvent, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	// do nothing
 }
 
-func (e *ManagedClusterResourceEventHandler) add(obj client.Object, q workqueue.RateLimitingInterface) {
+func (e *ManagedClusterResourceEventHandler) add(obj client.Object, q workqueue.TypedRateLimitingInterface[reconcile.Request]) {
 	request := reconcile.Request{
 		NamespacedName: types.NamespacedName{
 			Namespace: obj.GetNamespace(),

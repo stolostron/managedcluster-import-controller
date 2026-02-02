@@ -21,8 +21,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
-	operatorv1 "open-cluster-management.io/api/operator/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
@@ -45,95 +45,107 @@ func Add(ctx context.Context,
 			MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
 		}).
 		WatchesRawSource(
-			source.NewHostedWorkSource(informerHolder.HostedWorkInformer),
-			&source.ManagedClusterResourceEventHandler{
-				MapFunc: func(o client.Object) reconcile.Request {
-					managedClusterName := o.GetNamespace()
-					workName := o.GetName()
-					if strings.HasSuffix(workName, constants.HostedKlusterletManifestworkSuffix) {
-						managedClusterName = strings.TrimSuffix(workName, "-"+constants.HostedKlusterletManifestworkSuffix)
-					}
-					if strings.HasSuffix(workName, constants.HostedManagedKubeconfigManifestworkSuffix) {
-						managedClusterName = strings.TrimSuffix(workName, "-"+constants.HostedManagedKubeconfigManifestworkSuffix)
-					}
-					return reconcile.Request{
-						NamespacedName: types.NamespacedName{
-							Namespace: managedClusterName,
-							Name:      managedClusterName,
-						},
-					}
+			source.NewHostedWorkSource(informerHolder.HostedWorkInformer,
+				&source.ManagedClusterResourceEventHandler{
+					MapFunc: func(o client.Object) reconcile.Request {
+						return reconcile.Request{
+							NamespacedName: types.NamespacedName{
+								Namespace: o.GetNamespace(),
+								Name:      o.GetNamespace(),
+							},
+						}
+					},
 				},
-			},
-			builder.WithPredicates(predicate.Funcs{
-				GenericFunc: func(e event.GenericEvent) bool { return false },
-				CreateFunc:  func(e event.CreateEvent) bool { return true },
-				DeleteFunc:  func(e event.DeleteEvent) bool { return true },
-				UpdateFunc: func(e event.UpdateEvent) bool {
-					workName := e.ObjectNew.GetName()
-					// for update event, only watch hosted mode manifest works
-					if !strings.HasSuffix(workName, constants.HostedKlusterletManifestworkSuffix) &&
-						!strings.HasSuffix(workName, constants.HostedManagedKubeconfigManifestworkSuffix) {
+				predicate.Funcs{
+					GenericFunc: func(e event.GenericEvent) bool { return false },
+					DeleteFunc: func(e event.DeleteEvent) bool {
+						workName := e.Object.GetName()
+						// only watch hosted manifest works
+						if !strings.HasSuffix(workName, constants.HostedKlusterletManifestworkSuffix) {
+							return false
+						}
+						return true
+					},
+					CreateFunc: func(e event.CreateEvent) bool {
+						workName := e.Object.GetName()
+						// only watch hosted manifest works
+						if !strings.HasSuffix(workName, constants.HostedKlusterletManifestworkSuffix) {
+							return false
+						}
+						return true
+					},
+					UpdateFunc: func(e event.UpdateEvent) bool {
+						workName := e.ObjectNew.GetName()
+						// only watch hosted manifest works
+						if !strings.HasSuffix(workName, constants.HostedKlusterletManifestworkSuffix) {
+							return false
+						}
+
+						new, okNew := e.ObjectNew.(*workv1.ManifestWork)
+						old, okOld := e.ObjectOld.(*workv1.ManifestWork)
+						if okNew && okOld {
+							return !helpers.ManifestsEqual(new.Spec.Workload.Manifests, old.Spec.Workload.Manifests)
+						}
+
 						return false
-					}
-
-					new, okNew := e.ObjectNew.(*workv1.ManifestWork)
-					old, okOld := e.ObjectOld.(*workv1.ManifestWork)
-					if okNew && okOld {
-						return !helpers.ManifestsEqual(new.Spec.Workload.Manifests, old.Spec.Workload.Manifests) ||
-							!equality.Semantic.DeepEqual(new.Status, old.Status)
-					}
-
-					return false
-				},
-			}),
+					},
+				}),
 		).
 		Watches(
 			&clusterv1.ManagedCluster{},
 			&handler.EnqueueRequestForObject{},
 			builder.WithPredicates(predicate.Funcs{
-				GenericFunc: func(e event.GenericEvent) bool { return isHostedModeObject(e.Object) },
-				DeleteFunc:  func(e event.DeleteEvent) bool { return isHostedModeObject(e.Object) },
-				CreateFunc:  func(e event.CreateEvent) bool { return isHostedModeObject(e.Object) },
-				UpdateFunc:  func(e event.UpdateEvent) bool { return isHostedModeObject(e.ObjectNew) },
+				GenericFunc: func(e event.GenericEvent) bool { return false },
+				DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+				CreateFunc:  func(e event.CreateEvent) bool { return false },
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					// handle the change of the hosted annotation
+					_, oldHosted := e.ObjectOld.GetAnnotations()[constants.KlusterletDeployModeAnnotation]
+					_, newHosted := e.ObjectNew.GetAnnotations()[constants.KlusterletDeployModeAnnotation]
+					if oldHosted != newHosted {
+						return true
+					}
+
+					// handle the change of the klusterletconfig annotation
+					oldKlusterletConfig := e.ObjectOld.GetAnnotations()[apiconstants.AnnotationKlusterletConfig]
+					newKlusterletConfig := e.ObjectNew.GetAnnotations()[apiconstants.AnnotationKlusterletConfig]
+					return oldKlusterletConfig != newKlusterletConfig
+				},
 			}),
 		).
 		WatchesRawSource(
-			source.NewImportSecretSource(informerHolder.ImportSecretInformer),
-			&source.ManagedClusterResourceEventHandler{},
-			builder.WithPredicates(predicate.Funcs{
-				GenericFunc: func(e event.GenericEvent) bool { return false },
-				DeleteFunc:  func(e event.DeleteEvent) bool { return false },
-				CreateFunc: func(e event.CreateEvent) bool {
-					// only handle the hosted mode import secret
-					return isHostedModeObject(e.Object)
-				},
-				UpdateFunc: func(e event.UpdateEvent) bool {
-					new, okNew := e.ObjectNew.(*corev1.Secret)
-					old, okOld := e.ObjectOld.(*corev1.Secret)
-					if okNew && okOld {
-						return !equality.Semantic.DeepEqual(old.Data, new.Data)
-					}
-
-					return false
-				},
-			}),
+			source.NewImportSecretSource(informerHolder.ImportSecretInformer,
+				&source.ManagedClusterResourceEventHandler{},
+				predicate.Funcs{
+					GenericFunc: func(e event.GenericEvent) bool { return false },
+					DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+					CreateFunc:  func(e event.CreateEvent) bool { return true },
+					UpdateFunc: func(e event.UpdateEvent) bool {
+						new, okNew := e.ObjectNew.(*corev1.Secret)
+						old, okOld := e.ObjectOld.(*corev1.Secret)
+						if okNew && okOld {
+							return !equality.Semantic.DeepEqual(old.Data, new.Data)
+						}
+						return false
+					},
+				}),
 		).
-		WatchesRawSource( // watch the auto-import secrets
-			source.NewAutoImportSecretSource(informerHolder.AutoImportSecretInformer),
-			&source.ManagedClusterResourceEventHandler{},
-			builder.WithPredicates(predicate.Funcs{
-				GenericFunc: func(e event.GenericEvent) bool { return false },
-				DeleteFunc:  func(e event.DeleteEvent) bool { return false },
-				CreateFunc:  func(e event.CreateEvent) bool { return true },
-				UpdateFunc: func(e event.UpdateEvent) bool {
-					new, okNew := e.ObjectNew.(*corev1.Secret)
-					old, okOld := e.ObjectOld.(*corev1.Secret)
-					if okNew && okOld {
-						return !equality.Semantic.DeepEqual(old.Data, new.Data)
-					}
-					return false
-				},
-			}),
+		WatchesRawSource(
+			source.NewAutoImportSecretSource(informerHolder.AutoImportSecretInformer,
+				&source.ManagedClusterResourceEventHandler{},
+				predicate.Funcs{
+					GenericFunc: func(e event.GenericEvent) bool { return false },
+					DeleteFunc:  func(e event.DeleteEvent) bool { return false },
+					CreateFunc:  func(e event.CreateEvent) bool { return true },
+					UpdateFunc: func(e event.UpdateEvent) bool {
+						new, okNew := e.ObjectNew.(*corev1.Secret)
+						old, okOld := e.ObjectOld.(*corev1.Secret)
+						if okNew && okOld {
+							return !equality.Semantic.DeepEqual(old.Data, new.Data)
+						}
+						return false
+					},
+				}),
 		).
 		Complete(NewReconcileHosted(
 			clientHolder,
@@ -143,8 +155,4 @@ func Add(ctx context.Context,
 			mcRecorder,
 		))
 	return controllerName, err
-}
-
-func isHostedModeObject(object client.Object) bool {
-	return strings.EqualFold(object.GetAnnotations()[constants.KlusterletDeployModeAnnotation], string(operatorv1.InstallModeHosted))
 }
