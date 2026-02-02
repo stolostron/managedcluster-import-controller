@@ -61,6 +61,10 @@ $(GOLANGCI_LINT):
 	@mkdir -p $(TOOLS_DIR)
 	@GOBIN=$(TOOLS_DIR) go install github.com/golangci/golangci-lint/cmd/golangci-lint@$(GOLANGCI_LINT_VERSION)
 
+.PHONY: test
+test:
+	@build/run-unit-tests.sh
+
 .PHONY: build
 build:
 	go build -o $(BUILD_OUTPUT_DIR)/manager ./cmd/manager
