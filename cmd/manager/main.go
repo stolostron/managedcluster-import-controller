@@ -410,6 +410,7 @@ func main() {
 	}
 
 	setupLog.Info("Starting Controller Manager")
+	setupLog.Info("CI trigger log: controller initialization completed successfully")
 	if err := mgr.Start(ctx); err != nil {
 		setupLog.Error(err, "failed to start manager")
 		exitCode = 1
