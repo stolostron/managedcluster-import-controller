@@ -114,14 +114,14 @@ func Add(ctx context.Context,
 			}),
 		).
 		WatchesRawSource(
-			source.NewImportSecretSource(informerHolder.ImportSecretInformer),
-			&source.ManagedClusterResourceEventHandler{},
-			builder.WithPredicates(predicate.Funcs{
-				GenericFunc: func(e event.GenericEvent) bool { return false },
-				CreateFunc:  func(e event.CreateEvent) bool { return false },
-				DeleteFunc:  func(e event.DeleteEvent) bool { return true },
-				UpdateFunc:  func(e event.UpdateEvent) bool { return true },
-			}),
+			source.NewImportSecretSource(informerHolder.ImportSecretInformer,
+				&source.ManagedClusterResourceEventHandler{},
+				predicate.Funcs{
+					GenericFunc: func(e event.GenericEvent) bool { return false },
+					CreateFunc:  func(e event.CreateEvent) bool { return false },
+					DeleteFunc:  func(e event.DeleteEvent) bool { return true },
+					UpdateFunc:  func(e event.UpdateEvent) bool { return true },
+				}),
 		).
 		Complete(&ReconcileImportConfig{
 			clientHolder:           clientHolder,

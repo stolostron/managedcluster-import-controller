@@ -42,9 +42,8 @@ func Add(ctx context.Context,
 			MaxConcurrentReconciles: helpers.GetMaxConcurrentReconciles(),
 		}).
 		WatchesRawSource( // watch the import-secret
-			source.NewImportSecretSource(informerHolder.ImportSecretInformer),
-			&source.ManagedClusterResourceEventHandler{},
-			builder.WithPredicates(
+			source.NewImportSecretSource(informerHolder.ImportSecretInformer,
+				&source.ManagedClusterResourceEventHandler{},
 				predicate.Funcs{
 					GenericFunc: func(e event.GenericEvent) bool { return false },
 					DeleteFunc:  func(e event.DeleteEvent) bool { return false },
@@ -58,8 +57,7 @@ func Add(ctx context.Context,
 
 						return false
 					},
-				},
-			),
+				}),
 		).
 		Watches( // watch the managed cluster
 			&clusterv1.ManagedCluster{},
@@ -86,9 +84,8 @@ func Add(ctx context.Context,
 			),
 		).
 		WatchesRawSource( // watch the klusterlet manifest works
-			source.NewKlusterletWorkSource(informerHolder.KlusterletWorkInformer),
-			&source.ManagedClusterResourceEventHandler{},
-			builder.WithPredicates(
+			source.NewKlusterletWorkSource(informerHolder.KlusterletWorkInformer,
+				&source.ManagedClusterResourceEventHandler{},
 				predicate.Funcs{
 					GenericFunc: func(e event.GenericEvent) bool { return false },
 					DeleteFunc:  func(e event.DeleteEvent) bool { return false },
@@ -118,8 +115,7 @@ func Add(ctx context.Context,
 
 						return false
 					},
-				},
-			),
+				}),
 		).
 		Complete(NewReconcileLocalCluster(
 			clientHolder,
