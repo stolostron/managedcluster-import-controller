@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"reflect"
 	"strings"
+	"time"
 
 	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -33,6 +34,7 @@ import (
 	ocinfrav1 "github.com/openshift/api/config/v1"
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 )
 
@@ -169,7 +171,7 @@ func RequestSAToken(ctx context.Context, kubeClient kubernetes.Interface, saName
 
 // GetBootstrapToken lists the secrets from the managed cluster namespace to look for the managed cluster
 // bootstrap token firstly (compatibility with the ocp that version is less than 4.11), if there is no
-// token found, uses tokenrequest to request token.
+// valid token found, uses tokenrequest to request token.
 func GetBootstrapToken(ctx context.Context, kubeClient kubernetes.Interface,
 	saName, secretNamespace string, tokenExpirationSeconds int64) ([]byte, []byte, []byte, error) {
 	secrets, err := kubeClient.CoreV1().Secrets(secretNamespace).List(ctx, metav1.ListOptions{})
@@ -201,6 +203,21 @@ func GetBootstrapToken(ctx context.Context, kubeClient kubernetes.Interface,
 
 		if len(token) == 0 {
 			continue
+		}
+
+		// Check if the legacy token has been marked as invalid
+		if invalidSince, exists := secret.Labels[constants.LegacyTokenInvalidSince]; exists {
+			invalidTime, err := time.Parse(time.RFC3339, invalidSince)
+			if err != nil {
+				klog.Errorf("failed to parse legacy-token-invalid-since label value %q for secret %s/%s: %v",
+					invalidSince, secretNamespace, secret.Name, err)
+				continue
+			}
+			if time.Now().After(invalidTime) {
+				klog.Infof("legacy token in secret %s/%s is invalid since %s, skipping",
+					secretNamespace, secret.Name, invalidSince)
+				continue
+			}
 		}
 
 		return token, nil, nil, nil
