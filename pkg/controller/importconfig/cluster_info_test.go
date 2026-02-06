@@ -279,6 +279,32 @@ func TestBuildBootstrapKubeconfigData(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name:       "legacy token marked as invalid",
+			clientObjs: []client.Object{testInfraConfigDNS, apiserverConfigWithCustomCA},
+			runtimeObjs: []runtime.Object{cm, secretCorrect,
+				mockLegacyImportSecret(t, "https://my-dns-name.com:6443", certData2, "legacy-token"),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "testcluster-bootstrap-sa-token-xyz",
+						Namespace: "testcluster",
+						Labels: map[string]string{
+							constants.LegacyTokenInvalidSince: time.Now().Add(-24 * time.Hour).Format(time.RFC3339),
+						},
+					},
+					Type: corev1.SecretTypeServiceAccountToken,
+					Data: map[string][]byte{
+						"token": []byte("legacy-token"),
+					},
+				},
+			},
+			want: &wantData{
+				serverURL: "https://my-dns-name.com:6443",
+				certData:  certData2,
+				token:     "fake-token", // Should generate new token since legacy token is invalid
+			},
+			wantErr: false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -673,6 +699,72 @@ func TestValidateLegacyServiceAccountToken(t *testing.T) {
 					Type: corev1.SecretTypeOpaque,
 					Data: map[string][]byte{
 						"token": []byte("any-token"),
+					},
+				},
+			},
+			expectedResult: false,
+		},
+		{
+			name:            "legacy token marked invalid in the past",
+			saName:          "test-bootstrap-sa",
+			secretNamespace: "test-cluster",
+			expectedToken:   "valid-token-123",
+			secrets: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa-token-abc123",
+						Namespace: "test-cluster",
+						Labels: map[string]string{
+							constants.LegacyTokenInvalidSince: time.Now().Add(-24 * time.Hour).Format(time.RFC3339),
+						},
+					},
+					Type: corev1.SecretTypeServiceAccountToken,
+					Data: map[string][]byte{
+						"token": []byte("valid-token-123"),
+					},
+				},
+			},
+			expectedResult: false,
+		},
+		{
+			name:            "legacy token marked invalid in the future",
+			saName:          "test-bootstrap-sa",
+			secretNamespace: "test-cluster",
+			expectedToken:   "valid-token-123",
+			secrets: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa-token-abc123",
+						Namespace: "test-cluster",
+						Labels: map[string]string{
+							constants.LegacyTokenInvalidSince: time.Now().Add(24 * time.Hour).Format(time.RFC3339),
+						},
+					},
+					Type: corev1.SecretTypeServiceAccountToken,
+					Data: map[string][]byte{
+						"token": []byte("valid-token-123"),
+					},
+				},
+			},
+			expectedResult: true,
+		},
+		{
+			name:            "legacy token with invalid timestamp format",
+			saName:          "test-bootstrap-sa",
+			secretNamespace: "test-cluster",
+			expectedToken:   "valid-token-123",
+			secrets: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa-token-abc123",
+						Namespace: "test-cluster",
+						Labels: map[string]string{
+							constants.LegacyTokenInvalidSince: "invalid-timestamp",
+						},
+					},
+					Type: corev1.SecretTypeServiceAccountToken,
+					Data: map[string][]byte{
+						"token": []byte("valid-token-123"),
 					},
 				},
 			},
