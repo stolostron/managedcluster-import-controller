@@ -1238,6 +1238,39 @@ func TestGetBootstrapCAData(t *testing.T) {
 			},
 			expectedCAData: mergedCAData,
 		},
+		{
+			name:            "with system trust store and proxy ca bundle",
+			apiServerCAData: certData1,
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
+						ServerVerificationStrategy: klusterletconfigv1alpha1.ServerVerificationStrategyUseSystemTruststore,
+					},
+					HubKubeAPIServerProxyConfig: klusterletconfigv1alpha1.KubeAPIServerProxyConfig{
+						HTTPSProxy: "https://127.0.0.1:3128",
+						CABundle:   certData2,
+					},
+				},
+			},
+			expectedCAData: nil,
+		},
+		{
+			name:            "with system trust store, proxy url matches https proxy with ca bundle from deprecated field",
+			apiServerCAData: certData1,
+			klusterletConfig: &klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					HubKubeAPIServerConfig: &klusterletconfigv1alpha1.KubeAPIServerConfig{
+						ProxyURL:                   "https://proxy-server",
+						ServerVerificationStrategy: klusterletconfigv1alpha1.ServerVerificationStrategyUseSystemTruststore,
+					},
+					HubKubeAPIServerProxyConfig: klusterletconfigv1alpha1.KubeAPIServerProxyConfig{
+						HTTPSProxy: "https://proxy-server",
+						CABundle:   certData2,
+					},
+				},
+			},
+			expectedCAData: nil,
+		},
 	}
 
 	for _, c := range cases {

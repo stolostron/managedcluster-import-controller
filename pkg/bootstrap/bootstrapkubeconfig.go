@@ -286,6 +286,13 @@ func GetKubeconfigClusterName(ctx context.Context, client client.Client) (string
 
 func GetBootstrapCAData(ctx context.Context, clientHolder *helpers.ClientHolder, kubeAPIServer string,
 	caNamespace string, klusterletConfig *klusterletconfigv1alpha1.KlusterletConfig) ([]byte, error) {
+	// When using system trust store, return nil without retrieving any CA data
+	if klusterletConfig != nil && klusterletConfig.Spec.HubKubeAPIServerConfig != nil &&
+		klusterletConfig.Spec.HubKubeAPIServerConfig.ServerVerificationStrategy ==
+			klusterletconfigv1alpha1.ServerVerificationStrategyUseSystemTruststore {
+		return nil, nil
+	}
+
 	apiServerCAData, err := getKubeAPIServerCAData(ctx, clientHolder, kubeAPIServer, caNamespace, klusterletConfig)
 	if err != nil {
 		return nil, err
