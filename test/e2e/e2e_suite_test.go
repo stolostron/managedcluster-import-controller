@@ -1272,3 +1272,86 @@ func assertClusterImportConfigSecret(managedClusterName string) {
 		}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 }
+
+func assertHostedKlusterletNodePlacement(klusterletName string, nodeSelector map[string]string, tolerations []corev1.Toleration) {
+	ginkgo.By("Hosted klusterlet should have expected nodePlacement", func() {
+		gomega.Eventually(func() error {
+			name := fmt.Sprintf("%s-import", klusterletName)
+			// Get the managed cluster name from klusterlet name (format: klusterlet-<managedClusterName>)
+			managedClusterName := strings.TrimPrefix(klusterletName, "klusterlet-")
+			secret, err := hubKubeClient.CoreV1().Secrets(managedClusterName).Get(context.TODO(), name, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+
+			var klusterlet *operatorv1.Klusterlet
+			for _, yaml := range helpers.SplitYamls(secret.Data[constants.ImportSecretImportYamlKey]) {
+				obj := helpers.MustCreateObject(yaml)
+				switch required := obj.(type) {
+				case *operatorv1.Klusterlet:
+					klusterlet = required
+				}
+			}
+			if klusterlet == nil {
+				return fmt.Errorf("klusterlet is not found in import.yaml")
+			}
+
+			if !equality.Semantic.DeepEqual(klusterlet.Spec.NodePlacement.NodeSelector, nodeSelector) {
+				return fmt.Errorf("klusterlet nodePlacement diff: %s", cmp.Diff(klusterlet.Spec.NodePlacement.NodeSelector, nodeSelector))
+			}
+
+			if !equality.Semantic.DeepEqual(klusterlet.Spec.NodePlacement.Tolerations, tolerations) {
+				return fmt.Errorf("klusterlet tolerations diff: %s", cmp.Diff(klusterlet.Spec.NodePlacement.Tolerations, tolerations))
+			}
+
+			return nil
+		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
+	})
+}
+
+func assertHostedImagePullSecretAndRegistry(managedClusterName string) {
+	ginkgo.By("Hosted klusterlet should have image pull secret and customized registry", func() {
+		gomega.Eventually(func() error {
+			name := fmt.Sprintf("%s-import", managedClusterName)
+			secret, err := hubKubeClient.CoreV1().Secrets(managedClusterName).Get(context.TODO(), name, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+
+			importYaml, ok := secret.Data["import.yaml"]
+			if !ok {
+				return fmt.Errorf("import.yaml not found in secret")
+			}
+
+			objs := util.ToImportResoruces(importYaml)
+
+			hasImagePullCredentials := false
+			hasCustomizedImage := false
+			for _, obj := range objs {
+				if obj.GetName() == "open-cluster-management-image-pull-credentials" && obj.GetKind() == "Secret" {
+					hasImagePullCredentials = true
+				}
+
+				if obj.GetName() == fmt.Sprintf("klusterlet-%s", managedClusterName) && obj.GetKind() == "Klusterlet" {
+					klusterlet := util.ToKlusterlet(obj)
+					if klusterlet == nil {
+						return fmt.Errorf("failed to convert to klusterlet")
+					}
+					if strings.HasPrefix(klusterlet.Spec.WorkImagePullSpec, "quay.io/rhacm2/work") &&
+						strings.HasPrefix(klusterlet.Spec.RegistrationImagePullSpec, "quay.io/rhacm2/registration") {
+						hasCustomizedImage = true
+					}
+				}
+			}
+
+			if !hasImagePullCredentials {
+				return fmt.Errorf("image pull credentials secret not found")
+			}
+			if !hasCustomizedImage {
+				return fmt.Errorf("customized image registry not found")
+			}
+
+			return nil
+		}, 60*time.Second, 1*time.Second).Should(gomega.Succeed())
+	})
+}
