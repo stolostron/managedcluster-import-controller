@@ -128,8 +128,7 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", g
 		})
 
 		ginkgo.By(fmt.Sprintf("Import managed cluster %s", managedClusterName), func() {
-			// using a local cluster to speed up cluster deletion
-			_, err := util.CreateManagedClusterWithShortLeaseDuration(hubClusterClient, managedClusterName, nil, util.NewLable("local-cluster", "true"))
+			_, err := util.CreateManagedCluster(hubClusterClient, managedClusterName, util.NewLable("local-cluster", "true"))
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
 			assertManagedClusterImportSecretApplied(managedClusterName)
@@ -187,8 +186,7 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", g
 		})
 
 		ginkgo.By(fmt.Sprintf("Import managed cluster %s", managedClusterName), func() {
-			// using a local cluster to speed up cluster deletion
-			_, err := util.CreateManagedClusterWithShortLeaseDuration(hubClusterClient, managedClusterName, nil, util.NewLable("local-cluster", "true"))
+			_, err := util.CreateManagedCluster(hubClusterClient, managedClusterName, util.NewLable("local-cluster", "true"))
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
 			assertManagedClusterAvailable(managedClusterName)
@@ -367,7 +365,7 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", g
 		})
 
 		ginkgo.By("Create managed cluster", func() {
-			_, err := util.CreateManagedClusterWithShortLeaseDuration(
+			_, err := util.CreateManagedClusterWithAnnotations(
 				hubClusterClient,
 				testcluster,
 				map[string]string{

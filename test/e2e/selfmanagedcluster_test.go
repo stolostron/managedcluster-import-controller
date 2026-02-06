@@ -58,7 +58,7 @@ var _ = ginkgo.Describe("Importing a self managed cluster", ginkgo.Label("core")
 			util.RemoveControllerConfigConfigMap(hubKubeClient)
 
 			ginkgo.By(fmt.Sprintf("Create managed cluster %s", localClusterName), func() {
-				_, err := util.CreateManagedClusterWithShortLeaseDuration(hubClusterClient, localClusterName, nil, util.NewLable("local-cluster", "true"))
+				_, err := util.CreateManagedCluster(hubClusterClient, localClusterName, util.NewLable("local-cluster", "true"))
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			})
 		})
