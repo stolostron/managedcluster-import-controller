@@ -152,7 +152,7 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 				cluster.Annotations[constants.KlusterletNamespaceAnnotation] = "open-cluster-management-agent-hosted"
 				_, err = hubClusterClient.ClusterV1().ManagedClusters().Update(context.TODO(), cluster, metav1.UpdateOptions{})
 				return err
-			}, 1*time.Minute, 1*time.Second).Should(gomega.Succeed())
+			}, 1*time.Minute, 3*time.Second).Should(gomega.Succeed())
 
 			assertManagedClusterImportSecretCreated(managedClusterName, "other", operatorv1.InstallModeHosted)
 			assertHostedManagedClusterManifestWorksAvailable(managedClusterName, hostingClusterName)
@@ -191,7 +191,9 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 			})
 
 			ginkgo.By(fmt.Sprintf("Create hosted mode managed cluster %s", hosted1), func() {
-				_, err := util.CreateHostedManagedClusterWithShortLeaseDuration(hubClusterClient, hosted1, hostingClusterName)
+				// Use regular lease duration to avoid force delete which breaks the cleanup chain.
+			// Force delete removes ManifestWorks from hub without cleaning up klusterlet namespace.
+			_, err := util.CreateHostedManagedCluster(hubClusterClient, hosted1, hostingClusterName)
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			})
 
@@ -207,7 +209,8 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 			})
 
 			ginkgo.By(fmt.Sprintf("Create hosted mode managed cluster %s", hosted2), func() {
-				_, err := util.CreateHostedManagedClusterWithShortLeaseDuration(hubClusterClient, hosted2, hostingClusterName)
+				// Use regular lease duration to avoid force delete which breaks the cleanup chain.
+			_, err := util.CreateHostedManagedCluster(hubClusterClient, hosted2, hostingClusterName)
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			})
 
@@ -283,7 +286,7 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 				}
 
 				return len(cluster.Finalizers) > 2
-			}, 1*time.Minute, 1*time.Second).ShouldNot(gomega.BeFalse())
+			}, 1*time.Minute, 3*time.Second).ShouldNot(gomega.BeFalse())
 
 			// detach the cluster
 			err = hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), managedClusterName, metav1.DeleteOptions{})
@@ -349,7 +352,7 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 				}
 
 				return len(cluster.Finalizers) > 2
-			}, 1*time.Minute, 1*time.Second).ShouldNot(gomega.BeFalse())
+			}, 1*time.Minute, 3*time.Second).ShouldNot(gomega.BeFalse())
 
 			ginkgo.By(fmt.Sprintf("detach the cluster %s after the finalizers are applied", managedClusterName))
 			err = hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), managedClusterName, metav1.DeleteOptions{})

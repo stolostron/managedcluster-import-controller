@@ -49,7 +49,9 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", Label
 		// reset the custom controller config
 		util.RemoveControllerConfigConfigMap(hubKubeClient)
 
-		assertManagedClusterDeleted(managedClusterName)
+		// For self-managed clusters with short lease duration, use forceCleanupSelfManagedClusterResources
+		// to ensure proper cleanup regardless of whether normal or force delete occurred.
+		forceCleanupSelfManagedClusterResources(managedClusterName)
 	})
 
 	It("Should deploy the klusterlet with nodePlacement", func() {

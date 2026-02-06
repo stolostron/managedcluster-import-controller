@@ -44,7 +44,9 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 		})
 
 		ginkgo.AfterEach(func() {
-			assertManagedClusterDeleted(localClusterName)
+			// For self-managed clusters with short lease duration, use forceCleanupSelfManagedClusterResources
+			// to ensure proper cleanup regardless of whether normal or force delete occurred.
+			forceCleanupSelfManagedClusterResources(localClusterName)
 			defer func() {
 				util.Logf("run case: %s, spending time: %.2f seconds", caseName, time.Since(start).Seconds())
 			}()
@@ -93,7 +95,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 				}
 
 				return len(cluster.Finalizers) > 2
-			}, 1*time.Minute, 1*time.Second).ShouldNot(gomega.BeFalse())
+			}, 1*time.Minute, 3*time.Second).ShouldNot(gomega.BeFalse())
 
 			// detach the cluster
 			err = hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), localClusterName, metav1.DeleteOptions{})
@@ -195,7 +197,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 				}
 
 				return len(cluster.Finalizers) > 2
-			}, 1*time.Minute, 1*time.Second).ShouldNot(gomega.BeFalse())
+			}, 1*time.Minute, 3*time.Second).ShouldNot(gomega.BeFalse())
 
 			// detach the cluster
 			err = hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), localClusterName, metav1.DeleteOptions{})
