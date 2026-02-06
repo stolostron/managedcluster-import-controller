@@ -51,7 +51,7 @@ func extractBootstrapKubeConfigDataFromImportSecret(importSecret *corev1.Secret)
 }
 
 // validateLegacyServiceAccountToken validates that a legacy serviceaccount token secret exists
-// and contains the expected token value
+// and contains the expected token value and is not marked as invalid
 func validateLegacyServiceAccountToken(ctx context.Context, kubeClient kubernetes.Interface,
 	saName, secretNamespace, expectedToken string) bool {
 	if len(expectedToken) == 0 {
@@ -86,6 +86,18 @@ func validateLegacyServiceAccountToken(ctx context.Context, kubeClient kubernete
 
 		// Check if the token in the secret matches the expected token
 		if string(token) == expectedToken {
+			// Check if the legacy token has been marked as invalid
+			if invalidSince, exists := secret.Labels[constants.LegacyTokenInvalidSince]; exists {
+				invalidTime, err := time.Parse(time.RFC3339, invalidSince)
+				if err != nil {
+					klog.Errorf("failed to parse legacy-token-invalid-since label value %q: %v", invalidSince, err)
+					return false
+				}
+				if time.Now().After(invalidTime) {
+					klog.Infof("legacy token for %s/%s is invalid since %s", secretNamespace, saName, invalidSince)
+					return false
+				}
+			}
 			return true
 		}
 	}
@@ -165,7 +177,7 @@ func buildBootstrapKubeconfigData(ctx context.Context, clientHolder *helpers.Cli
 			expiration := importSecret.Data[constants.ImportSecretTokenExpiration]
 			valid := validateTokenExpiration(tokenString, creation, expiration)
 
-			// For legacy tokens (no expiration), additionally validate the serviceaccount secret exists
+			// For legacy tokens (no expiration), additionally validate the serviceaccount secret exists and is not marked as invalid
 			if valid && len(expiration) == 0 {
 				saName := helpers.GetBootstrapSAName(managedCluster.Name)
 				valid = validateLegacyServiceAccountToken(ctx, clientHolder.KubeClient, saName, managedCluster.Name, tokenString)
