@@ -208,3 +208,11 @@ const (
 	// ValuesYamlKey is the key of values.yaml context in the data of the secret cluster-import-config
 	ValuesYamlKey = "values.yaml"
 )
+
+const (
+	// LegacyTokenInvalidSince is the label key used by Kubernetes to mark legacy service account tokens as invalid.
+	// The label value is a timestamp in RFC3339 format indicating when the token became invalid.
+	// This label is added by the LegacyServiceAccountTokenCleanUp feature (beta in k8s 1.29+).
+	// See: https://github.com/kubernetes/enhancements/blob/master/keps/sig-auth/2799-reduction-of-secret-based-service-account-token/README.md
+	LegacyTokenInvalidSince = "kubernetes.io/legacy-token-invalid-since" // #nosec G101
+)

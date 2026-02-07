@@ -25,11 +25,13 @@ import (
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
 
+	authv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kubefake "k8s.io/client-go/kubernetes/fake"
+	clienttesting "k8s.io/client-go/testing"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -1464,6 +1466,166 @@ func TestValidateBootstrapKubeconfig(t *testing.T) {
 				c.requiredKubeAPIServer, c.requiredProxyURL, c.requiredCA, c.requiredCAData, c.requiredCtxClusterName)
 			if valid != c.valid {
 				t.Errorf("expected %v, but got %v", c.valid, valid)
+			}
+		})
+	}
+}
+
+func TestGetBootstrapToken(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name                     string
+		saName                   string
+		secretNamespace          string
+		tokenExpirationSeconds   int64
+		secrets                  []runtime.Object
+		expectTokenRequest       bool
+		expectedTokenFromSecret  string
+	}{
+		{
+			name:                   "legacy token exists and valid",
+			saName:                 "test-bootstrap-sa",
+			secretNamespace:        "test-cluster",
+			tokenExpirationSeconds: 3600,
+			secrets: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa-token-abc123",
+						Namespace: "test-cluster",
+					},
+					Type: corev1.SecretTypeServiceAccountToken,
+					Data: map[string][]byte{
+						"token": []byte("legacy-token-123"),
+					},
+				},
+			},
+			expectTokenRequest:      false,
+			expectedTokenFromSecret: "legacy-token-123",
+		},
+		{
+			name:                   "no legacy token exists, should request new token",
+			saName:                 "test-bootstrap-sa",
+			secretNamespace:        "test-cluster",
+			tokenExpirationSeconds: 3600,
+			secrets:                []runtime.Object{},
+			expectTokenRequest:     true,
+		},
+		{
+			name:                   "legacy token marked invalid in the past",
+			saName:                 "test-bootstrap-sa",
+			secretNamespace:        "test-cluster",
+			tokenExpirationSeconds: 3600,
+			secrets: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa-token-abc123",
+						Namespace: "test-cluster",
+						Labels: map[string]string{
+							"kubernetes.io/legacy-token-invalid-since": "2024-01-01T00:00:00Z",
+						},
+					},
+					Type: corev1.SecretTypeServiceAccountToken,
+					Data: map[string][]byte{
+						"token": []byte("invalid-legacy-token"),
+					},
+				},
+			},
+			expectTokenRequest: true,
+		},
+		{
+			name:                   "legacy token with invalid timestamp format, should skip and request new token",
+			saName:                 "test-bootstrap-sa",
+			secretNamespace:        "test-cluster",
+			tokenExpirationSeconds: 3600,
+			secrets: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa-token-abc123",
+						Namespace: "test-cluster",
+						Labels: map[string]string{
+							"kubernetes.io/legacy-token-invalid-since": "not-a-valid-timestamp",
+						},
+					},
+					Type: corev1.SecretTypeServiceAccountToken,
+					Data: map[string][]byte{
+						"token": []byte("legacy-token-with-bad-label"),
+					},
+				},
+			},
+			expectTokenRequest: true,
+		},
+		{
+			name:                   "legacy token marked invalid in the future, should still be valid",
+			saName:                 "test-bootstrap-sa",
+			secretNamespace:        "test-cluster",
+			tokenExpirationSeconds: 3600,
+			secrets: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa-token-abc123",
+						Namespace: "test-cluster",
+						Labels: map[string]string{
+							"kubernetes.io/legacy-token-invalid-since": "2099-01-01T00:00:00Z",
+						},
+					},
+					Type: corev1.SecretTypeServiceAccountToken,
+					Data: map[string][]byte{
+						"token": []byte("future-invalid-token"),
+					},
+				},
+			},
+			expectTokenRequest:      false,
+			expectedTokenFromSecret: "future-invalid-token",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fakeKubeClient := kubefake.NewSimpleClientset(tt.secrets...)
+
+			// Mock the TokenRequest API
+			tokenRequestCalled := false
+			fakeKubeClient.PrependReactor("create", "serviceaccounts", func(action clienttesting.Action) (handled bool, ret runtime.Object, err error) {
+				if action.GetSubresource() == "token" {
+					tokenRequestCalled = true
+					return true, &authv1.TokenRequest{
+						Status: authv1.TokenRequestStatus{
+							Token:               "new-requested-token",
+							ExpirationTimestamp: metav1.Now(),
+						},
+					}, nil
+				}
+				return false, nil, nil
+			})
+
+			token, creation, expiration, err := GetBootstrapToken(ctx, fakeKubeClient, tt.saName, tt.secretNamespace, tt.tokenExpirationSeconds)
+
+			if err != nil {
+				t.Errorf("GetBootstrapToken() error = %v", err)
+				return
+			}
+
+			if tokenRequestCalled != tt.expectTokenRequest {
+				t.Errorf("TokenRequest API called = %v, expected %v", tokenRequestCalled, tt.expectTokenRequest)
+			}
+
+			if tt.expectTokenRequest {
+				// Should have requested a new token
+				if string(token) != "new-requested-token" {
+					t.Errorf("Expected new token from TokenRequest, got %s", string(token))
+				}
+				if len(expiration) == 0 {
+					t.Errorf("Expected expiration to be set for TokenRequest token")
+				}
+			} else {
+				// Should have used the existing legacy token
+				if string(token) != tt.expectedTokenFromSecret {
+					t.Errorf("Expected token %s from secret, got %s", tt.expectedTokenFromSecret, string(token))
+				}
+				if len(creation) != 0 || len(expiration) != 0 {
+					t.Errorf("Expected no creation/expiration for legacy token, got creation=%s, expiration=%s", string(creation), string(expiration))
+				}
 			}
 		})
 	}
