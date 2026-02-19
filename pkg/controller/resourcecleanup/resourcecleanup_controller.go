@@ -229,6 +229,8 @@ func (r *ReconcileResourceCleanup) forceCleanup(ctx context.Context, cluster *cl
 		errs = appendIfErr(errs, r.deleteHostingManifestWorks(ctx, hostingCluster, cluster.Name))
 	}
 
+	// Sleep 10 seconds to wait for the manifest works to be deleted, otherwise the work role binding will be deleted before the manifest works are deleted, and then the manifest works cannot be deleted successfully because of the missing permission.
+	time.Sleep(10 * time.Second)
 	errs = appendIfErr(errs, helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, cluster.Name, r.recorder))
 
 	return utilerrors.NewAggregate(errs)
