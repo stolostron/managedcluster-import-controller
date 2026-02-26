@@ -338,8 +338,8 @@ github.com/openshift/client-go v0.0.0-20260108185524-48f4ccfc4e13 h1:6rd4zSo2UaW
 github.com/openshift/client-go v0.0.0-20260108185524-48f4ccfc4e13/go.mod h1:YvOmPmV7wcJxpfhTDuFqqs2Xpb3M3ovsM6Qs/i2ptq4=
 github.com/openshift/custom-resource-status v1.1.3-0.20220503160415-f2fdb4999d87 h1:cHyxR+Y8rAMT6m1jQCaYGRwikqahI0OjjUDhFNf3ySQ=
 github.com/openshift/custom-resource-status v1.1.3-0.20220503160415-f2fdb4999d87/go.mod h1:DB/Mf2oTeiAmVVX1gN+NEqweonAPY0TKUwADizj8+ZA=
-github.com/openshift/hive/apis v0.0.0-20260127213836-e33d70397d57 h1:Jk9HVqFTkNNxCB4gaCMaDH4bAYsPuFTwbiPGJy2bKg4=
-github.com/openshift/hive/apis v0.0.0-20260127213836-e33d70397d57/go.mod h1:20tnfMYPSXqVDypUaO2vmxOtFzWj5l2KdZ+zYENpycI=
+github.com/openshift/hive/apis v0.0.0-20260226040156-9f19259341b8 h1:NKhwYnJ96S/XE91A1zAXzxkPtOLxD+XWnRsP4GjZ5Bg=
+github.com/openshift/hive/apis v0.0.0-20260226040156-9f19259341b8/go.mod h1:RV5orOtS1RVpnfOgITPjK+DKApvG2fevGEFzKikPhiY=
 github.com/openshift/hypershift/api v0.0.0-20241022184855-1fa7be0211e4 h1:hUOaw13h3naVIue2f86nBbki1lQO9C16KbKbrTn1Fzc=
 github.com/openshift/hypershift/api v0.0.0-20241022184855-1fa7be0211e4/go.mod h1:aTvlq6HevyNZ01GIaPBnnIe+HoLym3B2TIUBEol2reY=
 github.com/openshift/library-go v0.0.0-20260129085911-d5b641701b8b h1:FUS7+MCEnH+1HwTsHHLjD7mUCkqqtatxXmmjCDitdIA=
