@@ -128,14 +128,15 @@ var _ = ginkgo.BeforeSuite(func() {
 })
 
 func createGlobalKlusterletConfig() {
-	ginkgo.By("Create global KlusterletConfig, set work status sync interval", func() {
+	ginkgo.By("Create global KlusterletConfig, set work status sync interval and eviction grace period", func() {
 		_, err := klusterletconfigClient.ConfigV1alpha1().KlusterletConfigs().Create(context.TODO(),
 			&klusterletconfigv1alpha1.KlusterletConfig{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: constants.GlobalKlusterletConfigName,
 				},
 				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
-					WorkStatusSyncInterval: &metav1.Duration{Duration: 5 * time.Second},
+					WorkStatusSyncInterval:                 &metav1.Duration{Duration: 5 * time.Second},
+					AppliedManifestWorkEvictionGracePeriod: "1m",
 				},
 			}, metav1.CreateOptions{})
 		// expect err is nil or is already exists
@@ -711,6 +712,13 @@ func assertManagedClusterAvailable(clusterName string) {
 			return fmt.Errorf("assert managed cluster %s available failed, cluster conditions: %v", clusterName, cluster.Status.Conditions)
 		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
 	})
+
+	// Ensure the klusterlet-agent has completed leader election after any
+	// deployment rollout triggered by the import process. Without this, the
+	// agent may still be restarting when subsequent operations (e.g. cluster
+	// deletion) occur, causing the cluster to become unavailable and
+	// triggering the forceCleanup path instead of the graceful Cleanup path.
+	assertAgentLeaderElection()
 }
 
 func assertImmediateImportCompleted(clusterName string) {
@@ -1220,11 +1228,37 @@ func assertManifestworkFinalizer(namespace, workName, expected string) {
 
 func assertAgentLeaderElection() {
 	start := time.Now()
-	ginkgo.By("Check if klusterlet agent is leader", func() {
+
+	// Wait for any pending deployment rollout to be initiated.
+	// After import succeeds, the ManifestWork update triggers a cascade:
+	// work agent applies klusterlet spec → klusterlet operator updates deployment → rollout.
+	// This typically takes 2-5 seconds. Without this delay, the leader election
+	// check can pass with the OLD pod that is about to be replaced by the rollout.
+	time.Sleep(10 * time.Second)
+
+	ginkgo.By("Check if klusterlet agent deployment is stable and agent is leader", func() {
 		gomega.Eventually(func() error {
 			namespace := "open-cluster-management-agent"
 			agentSelector := "app=klusterlet-agent"
 			leaseName := "klusterlet-agent-lock"
+
+			// Ensure the deployment rollout is complete before checking leader election
+			deploy, err := hubKubeClient.AppsV1().Deployments(namespace).Get(
+				context.TODO(), "klusterlet-agent", metav1.GetOptions{})
+			if err != nil {
+				return fmt.Errorf("could not get klusterlet-agent deployment: %v", err)
+			}
+			if deploy.Spec.Replicas != nil {
+				if deploy.Status.UpdatedReplicas < *deploy.Spec.Replicas {
+					return fmt.Errorf("deployment rollout in progress: updatedReplicas=%d desired=%d",
+						deploy.Status.UpdatedReplicas, *deploy.Spec.Replicas)
+				}
+				if deploy.Status.AvailableReplicas < *deploy.Spec.Replicas {
+					return fmt.Errorf("deployment not fully available: availableReplicas=%d desired=%d",
+						deploy.Status.AvailableReplicas, *deploy.Spec.Replicas)
+				}
+			}
+
 			// agent pod
 			pods, err := hubKubeClient.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
 				LabelSelector: agentSelector,

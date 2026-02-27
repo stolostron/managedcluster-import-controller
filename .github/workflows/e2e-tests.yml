@@ -79,20 +79,27 @@ jobs:
           echo "==== Events in open-cluster-management ===="
           kubectl get events -n open-cluster-management --sort-by='.lastTimestamp' | tail -50 || true
 
+          echo "==== AppliedManifestWorks ===="
+          kubectl get appliedmanifestworks -o yaml || true
+
           echo "==== Logs from pods in open-cluster-management-agent ===="
           for pod in $(kubectl get pods -n open-cluster-management-agent -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
             echo "---- Logs from pod: $pod ----"
-            kubectl logs -n open-cluster-management-agent "$pod" --all-containers --tail=100 || true
+            kubectl logs -n open-cluster-management-agent "$pod" --all-containers --tail=500 || true
+            echo "---- Previous logs from pod: $pod ----"
+            kubectl logs -n open-cluster-management-agent "$pod" --all-containers --previous --tail=500 || true
           done
 
           echo "==== Logs from pods in open-cluster-management-local ===="
           for pod in $(kubectl get pods -n open-cluster-management-local -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
             echo "---- Logs from pod: $pod ----"
-            kubectl logs -n open-cluster-management-local "$pod" --all-containers --tail=100 || true
+            kubectl logs -n open-cluster-management-local "$pod" --all-containers --tail=500 || true
+            echo "---- Previous logs from pod: $pod ----"
+            kubectl logs -n open-cluster-management-local "$pod" --all-containers --previous --tail=500 || true
           done
 
           echo "==== Klusterlet Operator Logs ===="
-          kubectl -n open-cluster-management logs -l app=klusterlet --tail=100 || true
+          kubectl -n open-cluster-management logs -l app=klusterlet --tail=500 || true
 
           echo "==== Import Controller Logs ===="
           kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=100 || true
@@ -166,20 +173,27 @@ jobs:
           echo "==== Events in open-cluster-management ===="
           kubectl get events -n open-cluster-management --sort-by='.lastTimestamp' | tail -50 || true
 
+          echo "==== AppliedManifestWorks ===="
+          kubectl get appliedmanifestworks -o yaml || true
+
           echo "==== Logs from pods in open-cluster-management-agent ===="
           for pod in $(kubectl get pods -n open-cluster-management-agent -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
             echo "---- Logs from pod: $pod ----"
-            kubectl logs -n open-cluster-management-agent "$pod" --all-containers --tail=100 || true
+            kubectl logs -n open-cluster-management-agent "$pod" --all-containers --tail=500 || true
+            echo "---- Previous logs from pod: $pod ----"
+            kubectl logs -n open-cluster-management-agent "$pod" --all-containers --previous --tail=500 || true
           done
 
           echo "==== Logs from pods in open-cluster-management-local ===="
           for pod in $(kubectl get pods -n open-cluster-management-local -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
             echo "---- Logs from pod: $pod ----"
-            kubectl logs -n open-cluster-management-local "$pod" --all-containers --tail=100 || true
+            kubectl logs -n open-cluster-management-local "$pod" --all-containers --tail=500 || true
+            echo "---- Previous logs from pod: $pod ----"
+            kubectl logs -n open-cluster-management-local "$pod" --all-containers --previous --tail=500 || true
           done
 
           echo "==== Klusterlet Operator Logs ===="
-          kubectl -n open-cluster-management logs -l app=klusterlet --tail=100 || true
+          kubectl -n open-cluster-management logs -l app=klusterlet --tail=500 || true
 
           echo "==== Import Controller Logs ===="
           kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=100 || true
@@ -256,20 +270,27 @@ jobs:
           echo "==== Events in open-cluster-management ===="
           kubectl get events -n open-cluster-management --sort-by='.lastTimestamp' | tail -50 || true
 
+          echo "==== AppliedManifestWorks ===="
+          kubectl get appliedmanifestworks -o yaml || true
+
           echo "==== Logs from pods in open-cluster-management-agent ===="
           for pod in $(kubectl get pods -n open-cluster-management-agent -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
             echo "---- Logs from pod: $pod ----"
-            kubectl logs -n open-cluster-management-agent "$pod" --all-containers --tail=100 || true
+            kubectl logs -n open-cluster-management-agent "$pod" --all-containers --tail=500 || true
+            echo "---- Previous logs from pod: $pod ----"
+            kubectl logs -n open-cluster-management-agent "$pod" --all-containers --previous --tail=500 || true
           done
 
           echo "==== Logs from pods in open-cluster-management-local ===="
           for pod in $(kubectl get pods -n open-cluster-management-local -o jsonpath='{.items[*].metadata.name}' 2>/dev/null); do
             echo "---- Logs from pod: $pod ----"
-            kubectl logs -n open-cluster-management-local "$pod" --all-containers --tail=100 || true
+            kubectl logs -n open-cluster-management-local "$pod" --all-containers --tail=500 || true
+            echo "---- Previous logs from pod: $pod ----"
+            kubectl logs -n open-cluster-management-local "$pod" --all-containers --previous --tail=500 || true
           done
 
           echo "==== Klusterlet Operator Logs ===="
-          kubectl -n open-cluster-management logs -l app=klusterlet --tail=100 || true
+          kubectl -n open-cluster-management logs -l app=klusterlet --tail=500 || true
 
           echo "==== Import Controller Logs ===="
           kubectl -n open-cluster-management logs -l name=managedcluster-import-controller --tail=100 || true
