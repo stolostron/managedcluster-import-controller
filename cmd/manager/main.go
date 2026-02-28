@@ -95,8 +95,8 @@ func init() {
 }
 
 func main() {
-	var leaderElectionNamespace string = ""
-	var enablePprof bool = false
+	var leaderElectionNamespace = ""
+	var enablePprof = false
 	if enablePprofEnv, exists := os.LookupEnv("ENABLE_PPROF"); exists {
 		var err error
 		enablePprof, err = strconv.ParseBool(enablePprofEnv)
@@ -107,7 +107,7 @@ func main() {
 	}
 
 	var clusterIngressDomain string
-	var enableFlightCtl bool = false
+	var enableFlightCtl = false
 	var flightctlServer string
 	pflag.StringVar(&clusterIngressDomain, "cluster-ingress-domain", "", "the ingress domain of the cluster")
 	pflag.BoolVar(&enableFlightCtl, "enable-flightctl", false, "enable flightctl")

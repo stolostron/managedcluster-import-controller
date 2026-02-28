@@ -17,7 +17,6 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -144,7 +143,7 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 }
 
 func (r *ReconcileHosted) importCluster(ctx context.Context, managedCluster *clusterv1.ManagedCluster,
-	autoImportSecret *v1.Secret) (reconcile.Result, metav1.Condition, error) {
+	autoImportSecret *corev1.Secret) (reconcile.Result, metav1.Condition, error) {
 	hostedWorksSelector := labels.SelectorFromSet(map[string]string{constants.HostedClusterLabel: managedCluster.Name})
 
 	hostingClusterName, err := helpers.GetHostingCluster(managedCluster)
