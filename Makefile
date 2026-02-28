@@ -53,10 +53,22 @@ check-copyright:
 lint:
 	@bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/open-cluster-management-io/sdk-go/main/ci/lint/run-lint.sh | bash'
 
+ENSURE_ENVTEST_SCRIPT_REF ?= main
+ENSURE_ENVTEST_SCRIPT := https://raw.githubusercontent.com/open-cluster-management-io/sdk-go/$(ENSURE_ENVTEST_SCRIPT_REF)/ci/envtest/ensure-envtest.sh
+
+.PHONY: envtest-setup
+envtest-setup:
+	$(eval export KUBEBUILDER_ASSETS=$(shell curl -fsSL $(ENSURE_ENVTEST_SCRIPT) | bash))
+	@echo "KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS)"
+
 ## Runs unit tests
 .PHONY: test
-test:
-	@build/run-unit-tests.sh
+test: envtest-setup
+	@mkdir -p _output/unit/coverage
+	# Workaround for Go 1.25.x build cache regression with CGO_ENABLED=1
+	# See: https://github.com/golang/go/issues/69566
+	go clean -cache
+	go test -cover -covermode=atomic -coverprofile=_output/unit/coverage/cover.out $(GOPACKAGES)
 
 ## Builds controller binary
 .PHONY: build
