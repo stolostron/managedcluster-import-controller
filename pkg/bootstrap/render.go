@@ -235,7 +235,7 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 	} else {
 		nodeSelector, err = helpers.GetNodeSelectorFromManagedClusterAnnotations(managedClusterAnnotations)
 		if err != nil {
-			return nil, fmt.Errorf("Get nodeSelector for cluster %s failed: %v", b.ClusterName, err)
+			return nil, fmt.Errorf("get nodeSelector for cluster %s failed: %v", b.ClusterName, err)
 		}
 	}
 	if err := helpers.ValidateNodeSelector(nodeSelector); err != nil {
@@ -249,7 +249,7 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 	} else {
 		tolerations, err = helpers.GetTolerationsFromManagedClusterAnnotations(managedClusterAnnotations)
 		if err != nil {
-			return nil, fmt.Errorf("Get tolerations for cluster %s failed: %v", b.ClusterName, err)
+			return nil, fmt.Errorf("get tolerations for cluster %s failed: %v", b.ClusterName, err)
 		}
 	}
 	if err := helpers.ValidateTolerations(tolerations); err != nil {
@@ -450,7 +450,7 @@ func filesToTemplateBytes(files []string, config interface{}) ([]byte, error) {
 		if config != nil {
 			b = helpers.MustCreateAssetFromTemplate(file, b, config)
 		}
-		manifests.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, string(b)))
+		fmt.Fprintf(manifests, "%s%s", constants.YamlSperator, string(b))
 	}
 	return manifests.Bytes(), nil
 }
