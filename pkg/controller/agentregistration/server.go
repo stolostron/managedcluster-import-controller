@@ -18,6 +18,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog/v2"
+
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 
 	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"

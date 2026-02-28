@@ -16,6 +16,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/openshift/library-go/pkg/operator/events"
+
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/bootstrap"
@@ -23,6 +24,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 
 	listerklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/listers/klusterletconfig/v1alpha1"
+
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 
 	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"

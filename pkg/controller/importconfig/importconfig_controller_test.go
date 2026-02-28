@@ -14,6 +14,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
+
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	fakeklusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned/fake"
@@ -25,6 +26,7 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 	hivev1 "github.com/openshift/hive/apis/hive/v1"
+
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 
 	corev1 "k8s.io/api/core/v1"

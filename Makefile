@@ -51,7 +51,7 @@ check-copyright:
 
 .PHONY: lint
 lint:
-	build/run-lint-check.sh
+	@bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/open-cluster-management-io/sdk-go/main/ci/lint/run-lint.sh | bash'
 
 ## Runs unit tests
 .PHONY: test

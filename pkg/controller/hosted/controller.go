@@ -15,7 +15,6 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events"
 	operatorhelpers "github.com/openshift/library-go/pkg/operator/v1helpers"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -23,12 +22,13 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	kevents "k8s.io/client-go/tools/events"
+	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
 	addonapiv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
@@ -121,7 +121,7 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 		return reconcile.Result{}, err
 	}
 
-	result, condition, iErr := r.importCluster(ctx, managedCluster, autoImportSecret)
+	condition, iErr := r.importCluster(ctx, managedCluster, autoImportSecret)
 	if err := helpers.UpdateManagedClusterImportCondition(
 		r.clientHolder.RuntimeClient,
 		managedCluster,
@@ -141,7 +141,7 @@ func (r *ReconcileHosted) Reconcile(ctx context.Context, request reconcile.Reque
 		}
 	}
 
-	return result, iErr
+	return reconcile.Result{}, iErr
 }
 
 func (r *ReconcileHosted) cleanup(ctx context.Context,
@@ -186,13 +186,12 @@ func (r *ReconcileHosted) cleanup(ctx context.Context,
 }
 
 func (r *ReconcileHosted) importCluster(ctx context.Context, managedCluster *clusterv1.ManagedCluster,
-	autoImportSecret *v1.Secret) (reconcile.Result, metav1.Condition, error) {
+	autoImportSecret *corev1.Secret) (metav1.Condition, error) {
 	hostedWorksSelector := labels.SelectorFromSet(map[string]string{constants.HostedClusterLabel: managedCluster.Name})
 
 	hostingClusterName, err := helpers.GetHostingCluster(managedCluster)
 	if err != nil {
-		return reconcile.Result{},
-			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+		return helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterWaitForImporting,
 				"Waiting for the user to specify the hosting cluster"),
 			nil
@@ -205,16 +204,14 @@ func (r *ReconcileHosted) importCluster(ctx context.Context, managedCluster *clu
 		if errors.IsNotFound(err) {
 			message = "Hosting cluster is not a managed cluster of the hub"
 		}
-		return reconcile.Result{},
-			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+		return helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImporting,
 				message),
 			err
 	}
 
 	if !hostingCluster.DeletionTimestamp.IsZero() {
-		return reconcile.Result{},
-			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+		return helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImportFailed,
 				fmt.Sprintf("The hosting cluster %s is being deleted", hostingClusterName)),
 			nil
@@ -222,8 +219,7 @@ func (r *ReconcileHosted) importCluster(ctx context.Context, managedCluster *clu
 
 	hostedWorks, err := r.informerHolder.HostedWorkLister.ManifestWorks(hostingClusterName).List(hostedWorksSelector)
 	if err != nil {
-		return reconcile.Result{},
-			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+		return helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImporting,
 				fmt.Sprintf("Get hosted manifest works failed, error: %v", err)),
 			err
@@ -232,8 +228,7 @@ func (r *ReconcileHosted) importCluster(ctx context.Context, managedCluster *clu
 	// after the hosted works are created, make sure the managed cluster has manifest work finalizer
 	if err := helpers.AssertManifestWorkFinalizer(ctx, r.clientHolder.RuntimeClient, r.recorder,
 		managedCluster, len(hostedWorks)); err != nil {
-		return reconcile.Result{},
-			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+		return helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImporting,
 				fmt.Sprintf("Add finalizer for manifest work failed, error: %v", err)),
 			err
@@ -245,23 +240,20 @@ func (r *ReconcileHosted) importCluster(ctx context.Context, managedCluster *clu
 	importSecret, err := r.informerHolder.ImportSecretLister.Secrets(managedCluster.Name).Get(importSecretName)
 	if errors.IsNotFound(err) {
 		// wait for the import secret to exist, do nothing
-		return reconcile.Result{},
-			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+		return helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImporting,
 				"Wait for import secret to be created"),
 			nil
 	}
 	if err != nil {
-		return reconcile.Result{},
-			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+		return helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImporting,
 				fmt.Sprintf("Get import secret failed, error: %v", err)),
 			err
 	}
 
 	if err := helpers.ValidateImportSecret(importSecret); err != nil {
-		return reconcile.Result{},
-			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+		return helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImportFailed,
 				fmt.Sprintf("Import secret is invalid, error: %v", err)),
 			nil
@@ -270,8 +262,7 @@ func (r *ReconcileHosted) importCluster(ctx context.Context, managedCluster *clu
 	manifestWork := createHostingManifestWork(managedCluster.Name, importSecret, hostingClusterName)
 	_, err = helpers.ApplyResources(r.clientHolder, r.recorder, r.scheme, managedCluster, manifestWork)
 	if err != nil {
-		return reconcile.Result{},
-			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+		return helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImporting,
 				fmt.Sprintf("Apply importing resources to the hosting cluster failed, error: %v", err)),
 			err
@@ -280,15 +271,13 @@ func (r *ReconcileHosted) importCluster(ctx context.Context, managedCluster *clu
 	available, err := helpers.IsManifestWorksAvailable(ctx,
 		r.clientHolder.WorkClient, manifestWork.Namespace, manifestWork.Name)
 	if err != nil {
-		return reconcile.Result{},
-			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+		return helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImporting,
 				fmt.Sprintf("Check importing resources availability on the hosting cluster failed, error: %v", err)),
 			err
 	}
 	if !available {
-		return reconcile.Result{},
-			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+		return helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImporting,
 				"Wait for importing resources to be available on the hosting cluster"),
 			nil
@@ -299,8 +288,7 @@ func (r *ReconcileHosted) importCluster(ctx context.Context, managedCluster *clu
 		manifestWork, err = createManagedKubeconfigManifestWork(
 			managedCluster.Name, autoImportSecret, hostingClusterName)
 		if err != nil {
-			return reconcile.Result{},
-				helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+			return helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
 					constants.ConditionReasonManagedClusterImporting,
 					fmt.Sprintf("Build external managed kubeconfig manifest work failed, error: %v", err)),
 				err
@@ -308,8 +296,7 @@ func (r *ReconcileHosted) importCluster(ctx context.Context, managedCluster *clu
 
 		_, err = helpers.ApplyResources(r.clientHolder, r.recorder, r.scheme, managedCluster, manifestWork)
 		if err != nil {
-			return reconcile.Result{},
-				helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+			return helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
 					constants.ConditionReasonManagedClusterImporting,
 					fmt.Sprintf("Apply external managed kubeconfig to the hosting cluster failed, error: %v", err)),
 				err
@@ -319,21 +306,18 @@ func (r *ReconcileHosted) importCluster(ctx context.Context, managedCluster *clu
 	// check the klusterlet feedback rule
 	created, err := r.externalManagedKubeconfigCreated(ctx, managedCluster.Name, hostingClusterName)
 	if err != nil {
-		return reconcile.Result{},
-			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+		return helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImporting,
 				fmt.Sprintf("Check external managed kubeconfig availability failed, error: %v", err)),
 			err
 	}
 	if !created {
-		return reconcile.Result{},
-			helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+		return helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
 				constants.ConditionReasonManagedClusterImporting,
 				"Wait for the user to provide the external managed kubeconfig"),
 			err
 	}
-	return reconcile.Result{},
-		helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionTrue,
+	return helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionTrue,
 			constants.ConditionReasonManagedClusterImported,
 			"Import succeeded"),
 		nil
