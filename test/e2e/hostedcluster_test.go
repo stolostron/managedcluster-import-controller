@@ -13,6 +13,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
+
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 
 	"open-cluster-management.io/api/addon/v1alpha1"

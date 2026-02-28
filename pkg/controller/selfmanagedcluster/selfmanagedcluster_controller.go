@@ -14,9 +14,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/apimachinery/pkg/types"
 	kevents "k8s.io/client-go/tools/events"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"

@@ -9,10 +9,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
-	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
+	clusterv1 "open-cluster-management.io/api/cluster/v1"
 )
 
 func TestEnqueueManagedClusterInKlusterletConfigAnnotation(t *testing.T) {

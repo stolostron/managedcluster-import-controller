@@ -34,6 +34,7 @@ import (
 	klusterletconfigclient "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/clientset/versioned"
 	klusterletconfiginformer "github.com/stolostron/cluster-lifecycle-api/client/klusterletconfig/informers/externalversions"
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
+
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterclient "open-cluster-management.io/api/client/cluster/clientset/versioned"
 	informerscluster "open-cluster-management.io/api/client/cluster/informers/externalversions"
@@ -83,7 +84,7 @@ func init() {
 }
 
 func main() {
-	var leaderElectionNamespace string = ""
+	var leaderElectionNamespace string
 	pflag.StringVar(&leaderElectionNamespace, "leader-election-namespace", "", "required when the process is not running in cluster")
 	pflag.BoolVar(&helpers.DeployOnOCP, "deploy-on-ocp", true, "used to deploy the controller on OCP or not")
 

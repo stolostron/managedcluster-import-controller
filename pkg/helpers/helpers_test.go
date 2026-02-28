@@ -41,16 +41,17 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/utils/diff"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	operatorfake "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
 	workfake "open-cluster-management.io/api/client/work/clientset/versioned/fake"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
-	"sigs.k8s.io/controller-runtime/pkg/envtest"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 )

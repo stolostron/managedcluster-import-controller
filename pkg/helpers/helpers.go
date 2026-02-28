@@ -45,6 +45,11 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	kevents "k8s.io/client-go/tools/events"
 	"k8s.io/klog/v2"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterscheme "open-cluster-management.io/api/client/cluster/clientset/versioned/scheme"
 	operatorclient "open-cluster-management.io/api/client/operator/clientset/versioned"
@@ -52,10 +57,6 @@ import (
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/features"
@@ -70,7 +71,7 @@ const (
 )
 
 // DeployOnOCP is set once at the beginning
-var DeployOnOCP bool = true
+var DeployOnOCP = true
 
 var v1APIExtensionMinVersion = versionutil.MustParseGeneric("v1.16.0")
 
@@ -899,10 +900,10 @@ func ValidateNodeSelector(nodeSelector map[string]string) error {
 	errs := []error{}
 	for key, val := range nodeSelector {
 		if errMsgs := validation.IsQualifiedName(key); len(errMsgs) != 0 {
-			errs = append(errs, fmt.Errorf(strings.Join(errMsgs, ";")))
+			errs = append(errs, fmt.Errorf("%s", strings.Join(errMsgs, ";")))
 		}
 		if errMsgs := validation.IsValidLabelValue(val); len(errMsgs) != 0 {
-			errs = append(errs, fmt.Errorf(strings.Join(errMsgs, ";")))
+			errs = append(errs, fmt.Errorf("%s", strings.Join(errMsgs, ";")))
 		}
 	}
 	return utilerrors.NewAggregate(errs)
@@ -915,7 +916,7 @@ func ValidateTolerations(tolerations []corev1.Toleration) error {
 		// validate the toleration key
 		if len(toleration.Key) > 0 {
 			if errMsgs := validation.IsQualifiedName(toleration.Key); len(errMsgs) != 0 {
-				errs = append(errs, fmt.Errorf(strings.Join(errMsgs, ";")))
+				errs = append(errs, fmt.Errorf("%s", strings.Join(errMsgs, ";")))
 			}
 		}
 
@@ -936,7 +937,7 @@ func ValidateTolerations(tolerations []corev1.Toleration) error {
 		// empty operator means Equal
 		case corev1.TolerationOpEqual, "":
 			if errMsgs := validation.IsValidLabelValue(toleration.Value); len(errMsgs) != 0 {
-				errs = append(errs, fmt.Errorf(strings.Join(errMsgs, ";")))
+				errs = append(errs, fmt.Errorf("%s", strings.Join(errMsgs, ";")))
 			}
 		case corev1.TolerationOpExists:
 			if len(toleration.Value) > 0 {

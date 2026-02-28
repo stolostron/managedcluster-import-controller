@@ -17,6 +17,7 @@ import (
 	klusterletconfigv1alpha1 "github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
+
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 
 	"k8s.io/client-go/kubernetes"

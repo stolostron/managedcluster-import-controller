@@ -18,6 +18,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 )
 
@@ -151,23 +152,23 @@ func (c *KlusterletManifestsConfig) WithPriorityClassName(priorityClassName stri
 }
 
 // Generate returns the rendered klusterlet manifests in bytes.
-func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *helpers.ClientHolder) ([]byte, error) {
+func (c *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *helpers.ClientHolder) ([]byte, error) {
 	// Files depends on the install mode
 	var files []string
-	switch b.InstallMode {
+	switch c.InstallMode {
 	case operatorv1.InstallModeHosted, operatorv1.InstallModeSingletonHosted:
 		files = append(files, klusterletFiles...)
 	case operatorv1.InstallModeDefault, operatorv1.InstallModeSingleton:
-		if b.PriorityClassName == constants.DefaultKlusterletPriorityClassName {
+		if c.PriorityClassName == constants.DefaultKlusterletPriorityClassName {
 			files = append(files, priorityClassFiles...)
 		}
 		files = append(files, klusterletNamespaceFile)
-		if !installNoOperator(b.InstallMode, b.klusterletconfig) {
+		if !installNoOperator(c.InstallMode, c.klusterletconfig) {
 			files = append(files, klusterletOperatorFiles...)
 		}
 		files = append(files, klusterletFiles...)
 	default:
-		return nil, fmt.Errorf("invalid install mode: %s", b.InstallMode)
+		return nil, fmt.Errorf("invalid install mode: %s", c.InstallMode)
 	}
 
 	// For image, image pull secret, nodeplacement, we use configurations in klusterletconfg over configurations in managed cluster annotations.
@@ -175,30 +176,30 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 	var kcNodePlacement *operatorv1.NodePlacement
 	var kcImagePullSecret corev1.ObjectReference
 	var appliedManifestWorkEvictionGracePeriod string
-	if b.klusterletconfig != nil {
-		if b.InstallMode == operatorv1.InstallModeDefault || b.InstallMode == operatorv1.InstallModeSingleton {
-			kcRegistries = b.klusterletconfig.Spec.Registries
-			kcNodePlacement = b.klusterletconfig.Spec.NodePlacement
-			kcImagePullSecret = b.klusterletconfig.Spec.PullSecret
+	if c.klusterletconfig != nil {
+		if c.InstallMode == operatorv1.InstallModeDefault || c.InstallMode == operatorv1.InstallModeSingleton {
+			kcRegistries = c.klusterletconfig.Spec.Registries
+			kcNodePlacement = c.klusterletconfig.Spec.NodePlacement
+			kcImagePullSecret = c.klusterletconfig.Spec.PullSecret
 		}
-		appliedManifestWorkEvictionGracePeriod = b.klusterletconfig.Spec.AppliedManifestWorkEvictionGracePeriod
+		appliedManifestWorkEvictionGracePeriod = c.klusterletconfig.Spec.AppliedManifestWorkEvictionGracePeriod
 	}
 
 	// Images override
 	registrationOperatorImageName, err := getImage(constants.RegistrationOperatorImageEnvVarName,
-		kcRegistries, b.ManagedClusterAnnotations)
+		kcRegistries, c.ManagedClusterAnnotations)
 	if err != nil {
 		return nil, err
 	}
 
 	registrationImageName, err := getImage(constants.RegistrationImageEnvVarName,
-		kcRegistries, b.ManagedClusterAnnotations)
+		kcRegistries, c.ManagedClusterAnnotations)
 	if err != nil {
 		return nil, err
 	}
 
 	workImageName, err := getImage(constants.WorkImageEnvVarName,
-		kcRegistries, b.ManagedClusterAnnotations)
+		kcRegistries, c.ManagedClusterAnnotations)
 	if err != nil {
 		return nil, err
 	}
@@ -208,9 +209,9 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 	if kcNodePlacement != nil && len(kcNodePlacement.NodeSelector) != 0 {
 		nodeSelector = kcNodePlacement.NodeSelector
 	} else {
-		nodeSelector, err = helpers.GetNodeSelectorFromManagedClusterAnnotations(b.ManagedClusterAnnotations)
+		nodeSelector, err = helpers.GetNodeSelectorFromManagedClusterAnnotations(c.ManagedClusterAnnotations)
 		if err != nil {
-			return nil, fmt.Errorf("Get nodeSelector for cluster %s failed: %v", b.ClusterName, err)
+			return nil, fmt.Errorf("get nodeSelector for cluster %s failed: %v", c.ClusterName, err)
 		}
 	}
 	if err := helpers.ValidateNodeSelector(nodeSelector); err != nil {
@@ -222,9 +223,9 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 	if kcNodePlacement != nil && len(kcNodePlacement.Tolerations) != 0 {
 		tolerations = kcNodePlacement.Tolerations
 	} else {
-		tolerations, err = helpers.GetTolerationsFromManagedClusterAnnotations(b.ManagedClusterAnnotations)
+		tolerations, err = helpers.GetTolerationsFromManagedClusterAnnotations(c.ManagedClusterAnnotations)
 		if err != nil {
-			return nil, fmt.Errorf("Get tolerations for cluster %s failed: %v", b.ClusterName, err)
+			return nil, fmt.Errorf("get tolerations for cluster %s failed: %v", c.ClusterName, err)
 		}
 	}
 	if err := helpers.ValidateTolerations(tolerations); err != nil {
@@ -232,7 +233,7 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 	}
 
 	klusterletName, klusterletNamespace := getKlusterletNamespaceName(
-		b.klusterletconfig, b.ClusterName, b.ManagedClusterAnnotations, b.InstallMode)
+		c.klusterletconfig, c.ClusterName, c.ManagedClusterAnnotations, c.InstallMode)
 
 	// AppliedManifestWorkEvictionGracePeriod
 	if appliedManifestWorkEvictionGracePeriod == constants.AppliedManifestWorkEvictionGracePeriodInfinite {
@@ -241,13 +242,13 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 
 	renderConfig := RenderConfig{
 		KlusterletRenderConfig: KlusterletRenderConfig{
-			ManagedClusterNamespace: b.ClusterName,
+			ManagedClusterNamespace: c.ClusterName,
 			KlusterletName:          klusterletName,
 			KlusterletNamespace:     klusterletNamespace,
-			InstallMode:             string(b.InstallMode),
+			InstallMode:             string(c.InstallMode),
 
 			// BootstrapKubeConfig
-			BootstrapKubeconfig: base64.StdEncoding.EncodeToString(b.BootstrapKubeconfig),
+			BootstrapKubeconfig: base64.StdEncoding.EncodeToString(c.BootstrapKubeconfig),
 
 			// Images
 			RegistrationOperatorImage: registrationOperatorImageName,
@@ -256,7 +257,7 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 			ImageName:                 registrationOperatorImageName,
 
 			// PriorityClassName
-			PriorityClassName:                      b.PriorityClassName,
+			PriorityClassName:                      c.PriorityClassName,
 			AppliedManifestWorkEvictionGracePeriod: appliedManifestWorkEvictionGracePeriod,
 
 			// NodePlacement
@@ -264,15 +265,15 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 			Tolerations:  tolerations,
 
 			// KlusterletClusterAnnotations
-			ClusterAnnotations: b.KlusterletClusterAnnotations,
+			ClusterAnnotations: c.KlusterletClusterAnnotations,
 		},
 	}
 
 	// If need to generate imagePullSecret
-	if b.generateImagePullSecret {
+	if c.generateImagePullSecret {
 		// Image pull secret, need to add `manifests/klusterlet/image_pull_secret.yaml` to files if imagePullSecret is not nil
 
-		imagePullSecret, err := getImagePullSecret(ctx, clientHolder, kcImagePullSecret, b.ManagedClusterAnnotations)
+		imagePullSecret, err := getImagePullSecret(ctx, clientHolder, kcImagePullSecret, c.ManagedClusterAnnotations)
 		if err != nil {
 			return nil, err
 		}
@@ -299,15 +300,15 @@ func (b *KlusterletManifestsConfig) Generate(ctx context.Context, clientHolder *
 	return manifestsBytes, nil
 }
 
-func (b *KlusterletManifestsConfig) GenerateKlusterletCRDsV1() ([]byte, error) {
-	if installNoOperator(b.InstallMode, b.klusterletconfig) {
+func (c *KlusterletManifestsConfig) GenerateKlusterletCRDsV1() ([]byte, error) {
+	if installNoOperator(c.InstallMode, c.klusterletconfig) {
 		return []byte{}, nil
 	}
 	return filesToTemplateBytes([]string{klusterletCrdsV1File}, nil)
 }
 
-func (b *KlusterletManifestsConfig) GenerateKlusterletCRDsV1Beta1() ([]byte, error) {
-	if installNoOperator(b.InstallMode, b.klusterletconfig) {
+func (c *KlusterletManifestsConfig) GenerateKlusterletCRDsV1Beta1() ([]byte, error) {
+	if installNoOperator(c.InstallMode, c.klusterletconfig) {
 		return []byte{}, nil
 	}
 	return filesToTemplateBytes([]string{klusterletCrdsV1beta1File}, nil)
@@ -336,7 +337,7 @@ func filesToTemplateBytes(files []string, config interface{}) ([]byte, error) {
 		if config != nil {
 			b = helpers.MustCreateAssetFromTemplate(file, b, config)
 		}
-		manifests.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, string(b)))
+		fmt.Fprintf(manifests, "%s%s", constants.YamlSperator, string(b))
 	}
 	return manifests.Bytes(), nil
 }

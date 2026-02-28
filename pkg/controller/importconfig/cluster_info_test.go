@@ -17,6 +17,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
+
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 
 	ocinfrav1 "github.com/openshift/api/config/v1"

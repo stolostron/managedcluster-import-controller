@@ -366,7 +366,7 @@ func updateHTPasswdUserPassword(client *clustersmgmtv1.IdentityProvidersClient, 
 	return pw, nil
 }
 
-func deleteHTPasswdIDProvider(client *clustersmgmtv1.IdentityProvidersClient, clusterID string) error {
+func deleteHTPasswdIDProvider(client *clustersmgmtv1.IdentityProvidersClient, _ string) error {
 	providerID, err := findHTPasswdIDProvider(client)
 	if err != nil {
 		return err

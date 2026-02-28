@@ -24,7 +24,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	certutil "k8s.io/client-go/util/cert"
 	"k8s.io/klog/v2"
-	"k8s.io/utils/pointer"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	corev1 "k8s.io/api/core/v1"
@@ -146,7 +146,7 @@ func getBootstrapToken(ctx context.Context, kubeClient kubernetes.Interface,
 		saName,
 		&authv1.TokenRequest{
 			Spec: authv1.TokenRequestSpec{
-				ExpirationSeconds: pointer.Int64(tokenExpirationSeconds),
+				ExpirationSeconds: ptr.To(tokenExpirationSeconds),
 			},
 		},
 		metav1.CreateOptions{},
@@ -263,16 +263,17 @@ func getKubeAPIServerCAData(ctx context.Context, clientHolder *helpers.ClientHol
 	}
 	if isROKS {
 		// ROKS should have a certificate that is signed by trusted CA
-		if certs, err := getValidCertificatesFromURL(kubeAPIServer, nil); err != nil {
+		certs, err := getValidCertificatesFromURL(kubeAPIServer, nil)
+		if err != nil {
 			// should retry if failed to connect to apiserver
 			return nil, err
-		} else if len(certs) > 0 {
+		}
+		if len(certs) > 0 {
 			// simply don't give any certs as the apiserver is using certs signed by known CAs
 			klog.Info("Using certs signed by known CAs cas on the ROKS.")
 			return nil, nil
-		} else {
-			klog.Info("No additional valid certificate found for APIserver on the ROKS, skipping.")
 		}
+		klog.Info("No additional valid certificate found for APIserver on the ROKS, skipping.")
 	}
 
 	// failed to get the ca from ocp, fallback to the kube-root-ca.crt configmap from the pod namespace.
