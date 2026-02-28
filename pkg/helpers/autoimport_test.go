@@ -95,10 +95,6 @@ func TestDeleteAutoImportSecret(t *testing.T) {
 
 func TestImportHelper(t *testing.T) {
 
-	// if err := os.Setenv("KUBEBUILDER_ASSETS", "./../../_output/kubebuilder/bin"); err != nil { // uncomment these lines to run the test locally
-	// 	t.Fatal(err)
-	// }
-
 	apiServer := &envtest.Environment{}
 	config, err := apiServer.Start()
 	if err != nil {
