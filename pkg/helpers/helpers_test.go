@@ -79,11 +79,6 @@ func TestGetMaxConcurrentReconciles(t *testing.T) {
 }
 
 func TestGenerateClientFromSecret(t *testing.T) {
-
-	// if err := os.Setenv("KUBEBUILDER_ASSETS", "./../../_output/kubebuilder/bin"); err != nil { // uncomment these lines to run the test locally
-	// 	t.Fatal(err)
-	// }
-
 	// This line prevents controller-runtime from complaining about log.SetLogger never being called
 	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 
