@@ -53,10 +53,22 @@ check-copyright:
 lint:
 	@bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/open-cluster-management-io/sdk-go/main/ci/lint/run-lint.sh | bash'
 
+# Envtest setup
+ENSURE_ENVTEST_SCRIPT_REF ?= main
+ENSURE_ENVTEST_SCRIPT := https://raw.githubusercontent.com/open-cluster-management-io/sdk-go/$(ENSURE_ENVTEST_SCRIPT_REF)/ci/envtest/ensure-envtest.sh
+
+.PHONY: envtest-setup
+envtest-setup:
+	$(eval export KUBEBUILDER_ASSETS=$(shell curl -fsSL $(ENSURE_ENVTEST_SCRIPT) | bash))
+	@echo "KUBEBUILDER_ASSETS=$(KUBEBUILDER_ASSETS)"
+
 ## Runs unit tests
 .PHONY: test
-test:
-	@build/run-unit-tests.sh
+test: envtest-setup
+	# Workaround for Go 1.25.x build cache regression with CGO_ENABLED=1
+	# See: https://github.com/golang/go/issues/76946
+	go clean -cache
+	go test -cover -covermode=atomic -coverprofile=_output/unit/coverage/cover.out ./pkg/...
 
 ## Builds controller binary
 .PHONY: build
@@ -84,6 +96,9 @@ e2e-test: build-image ensure-helm
 	@build/setup-kind-clusters.sh
 	@build/setup-ocm.sh
 	@build/setup-import-controller.sh
+	# Workaround for Go 1.25.x build cache regression with CGO_ENABLED=1
+	# See: https://github.com/golang/go/issues/76946
+	go clean -cache
 	go test -c ./test/e2e -o _output/e2e.test
 	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="!agent-registration" --ginkgo.timeout=2h --ginkgo.fail-fast
 
@@ -93,6 +108,9 @@ e2e-test-core: build-image ensure-helm
 	@build/setup-kind-clusters.sh single
 	@build/setup-ocm.sh
 	@build/setup-import-controller.sh
+	# Workaround for Go 1.25.x build cache regression with CGO_ENABLED=1
+	# See: https://github.com/golang/go/issues/76946
+	go clean -cache
 	go test -c ./test/e2e -o _output/e2e.test
 	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="core && !agent-registration" --ginkgo.timeout=45m --ginkgo.fail-fast
 
@@ -102,6 +120,9 @@ e2e-test-misc: build-image ensure-helm
 	@build/setup-kind-clusters.sh single
 	@build/setup-ocm.sh
 	@build/setup-import-controller.sh
+	# Workaround for Go 1.25.x build cache regression with CGO_ENABLED=1
+	# See: https://github.com/golang/go/issues/76946
+	go clean -cache
 	go test -c ./test/e2e -o _output/e2e.test
 	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="!core && !hosted && !agent-registration" --ginkgo.timeout=45m --ginkgo.fail-fast
 
@@ -111,6 +132,9 @@ e2e-test-hosted: build-image ensure-helm
 	@build/setup-kind-clusters.sh
 	@build/setup-ocm.sh
 	@build/setup-import-controller.sh
+	# Workaround for Go 1.25.x build cache regression with CGO_ENABLED=1
+	# See: https://github.com/golang/go/issues/76946
+	go clean -cache
 	go test -c ./test/e2e -o _output/e2e.test
 	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="hosted" --ginkgo.timeout=45m --ginkgo.fail-fast
 
@@ -125,6 +149,9 @@ e2e-test-prow: ensure-helm
 	@build/setup-prow.sh
 	@build/setup-ocm.sh enable-auto-approval
 	@build/setup-import-controller.sh enable-agent-registration
+	# Workaround for Go 1.25.x build cache regression with CGO_ENABLED=1
+	# See: https://github.com/golang/go/issues/76946
+	go clean -cache
 	go test -c ./test/e2e -o _output/e2e.test
 	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="agent-registration" --ginkgo.timeout=2h --ginkgo.fail-fast
 
