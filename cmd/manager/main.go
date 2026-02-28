@@ -88,8 +88,8 @@ func init() {
 }
 
 func main() {
-	var leaderElectionNamespace string = ""
-	var enablePprof bool = false
+	var leaderElectionNamespace = ""
+	var enablePprof = false
 	if enablePprofEnv, exists := os.LookupEnv("ENABLE_PPROF"); exists {
 		var err error
 		enablePprof, err = strconv.ParseBool(enablePprofEnv)

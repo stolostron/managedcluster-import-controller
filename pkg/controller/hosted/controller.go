@@ -15,7 +15,6 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events"
 	operatorhelpers "github.com/openshift/library-go/pkg/operator/v1helpers"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -186,7 +185,7 @@ func (r *ReconcileHosted) cleanup(ctx context.Context,
 }
 
 func (r *ReconcileHosted) importCluster(ctx context.Context, managedCluster *clusterv1.ManagedCluster,
-	autoImportSecret *v1.Secret) (reconcile.Result, metav1.Condition, error) {
+	autoImportSecret *corev1.Secret) (reconcile.Result, metav1.Condition, error) {
 	hostedWorksSelector := labels.SelectorFromSet(map[string]string{constants.HostedClusterLabel: managedCluster.Name})
 
 	hostingClusterName, err := helpers.GetHostingCluster(managedCluster)
