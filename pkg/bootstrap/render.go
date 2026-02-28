@@ -425,7 +425,7 @@ func filesToTemplateBytes(files []string, config interface{}) ([]byte, error) {
 		if config != nil {
 			b = helpers.MustCreateAssetFromTemplate(file, b, config)
 		}
-		manifests.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, string(b)))
+		fmt.Fprintf(manifests, "%s%s", constants.YamlSperator, string(b))
 	}
 	return manifests.Bytes(), nil
 }
@@ -453,7 +453,7 @@ func AggregateObjects(objects [][]byte) []byte {
 
 	manifests := new(bytes.Buffer)
 	for _, ns := range namespaces {
-		manifests.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, ns))
+		fmt.Fprintf(manifests, "%s%s", constants.YamlSperator, ns)
 	}
 
 	sort.SliceStable(otherObjs, func(i, j int) bool {
@@ -461,12 +461,12 @@ func AggregateObjects(objects [][]byte) []byte {
 	})
 
 	for _, obj := range otherObjs {
-		manifests.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, obj))
+		fmt.Fprintf(manifests, "%s%s", constants.YamlSperator, obj)
 	}
 
 	// put klusterlet CR behind in order to make sure the klusterlet CR can be applied after the CRD is applied successfully.
 	if klusterlet != "" {
-		manifests.WriteString(fmt.Sprintf("%s%s", constants.YamlSperator, klusterlet))
+		fmt.Fprintf(manifests, "%s%s", constants.YamlSperator, klusterlet)
 	}
 
 	return manifests.Bytes()
