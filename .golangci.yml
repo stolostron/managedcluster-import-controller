@@ -17,115 +17,111 @@ linters:
     - staticcheck
     - unconvert
     - unused
-linters-settings:
-  errcheck:
-    check-type-assertions: false
-    check-blank: false
-  gocritic:
-    enabled-checks:
-      - appendCombine
-      # - argOrder
-      # - assignOp
-      # - badCond
-      - boolExprSimplify
-      - builtinShadow
-      # - captLocal
-      # - caseOrder
-      # - codegenComment
-      # - defaultCaseOrder
-      # - deprecatedComment
-      - docStub
-      # - dupArg
-      # - dupBranchBody
-      # - dupCase
-      # - dupSubExpr
-      # - elseif
-      - emptyFallthrough
-      - equalFold
-      # - flagDeref
-      # - flagName
-      - hexLiteral
-      - indexAlloc
-      - initClause
-      - methodExprCall
-      - nilValReturn
-      - octalLiteral
-      # - offBy1
-      - rangeExprCopy
-      # - regexpMust
-      # - sloppyLen
-      - stringXbytes
-      # - switchTrue
-      - typeAssertChain
-      # - typeSwitchVar
-      - typeUnparen
-      # - underef
-      # - unlambda
-      - unnecessaryBlock
-      # - unslice
-      # - valSwap
-      - weakCond
-  lll:
-    line-length: 200
-    tab-width: 1
-  misspell:
-    locale: US
-    ignore-rules:
-      - cancelled
-exclusions:
-  generated: lax
-  presets:
-    - comments
-    - common-false-positives
-    - legacy
-    - std-error-handling
-  paths:
-    - .*\.pb\.go
-    - .*\.gen\.go
-    - genfiles$
-    - vendor$
-    - bindata$
-    - third_party$
-    - builtin$
-    - examples$
-issues:
-  max-issues-per-linter: 0
-  max-same-issues: 0
-  exclude-rules:
-    - linters:
-        - errcheck
-        - maligned
-        - staticcheck
-      path: _test\.go$|^tests/|^samples/
-    - path: (.+)\.go$
-      text: composite literal uses unkeyed fields
-    - linters:
-        - staticcheck
-      text: "SA1019:"
-    - linters:
-        - staticcheck
-      text: "SA5011:"
-    - linters:
-        - staticcheck
-      text: "SA4006:"
-    - linters:
-        - unused
-      path: _test\.go$
-    - linters:
-        - ineffassign
-      path: _test\.go$
-    - linters:
-        - gocritic
-      path: _test\.go$
-    - linters:
-        - lll
-      path: _test\.go$
-    - linters:
-        - goconst
-      path: _test\.go$
-    - linters:
-        - misspell
-      text: "contianers"
+  settings:
+    errcheck:
+      check-type-assertions: false
+      check-blank: false
+    gocritic:
+      enabled-checks:
+        - appendCombine
+        # - argOrder
+        # - assignOp
+        # - badCond
+        - boolExprSimplify
+        - builtinShadow
+        # - captLocal
+        # - caseOrder
+        # - codegenComment
+        # - defaultCaseOrder
+        # - deprecatedComment
+        - docStub
+        # - dupArg
+        # - dupBranchBody
+        # - dupCase
+        # - dupSubExpr
+        # - elseif
+        - emptyFallthrough
+        - equalFold
+        # - flagDeref
+        # - flagName
+        - hexLiteral
+        - indexAlloc
+        - initClause
+        - methodExprCall
+        - nilValReturn
+        - octalLiteral
+        # - offBy1
+        - rangeExprCopy
+        # - regexpMust
+        # - sloppyLen
+        - stringXbytes
+        # - switchTrue
+        - typeAssertChain
+        # - typeSwitchVar
+        - typeUnparen
+        # - underef
+        # - unlambda
+        - unnecessaryBlock
+        # - unslice
+        # - valSwap
+        - weakCond
+    lll:
+      line-length: 200
+      tab-width: 1
+    misspell:
+      locale: US
+      ignore-rules:
+        - cancelled
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - .*\.pb\.go
+      - .*\.gen\.go
+      - genfiles$
+      - vendor$
+      - bindata$
+      - third_party$
+      - builtin$
+      - examples$
+    rules:
+      - linters:
+          - errcheck
+          - staticcheck
+        path: _test\.go$|^tests/|^samples/
+      - path: (.+)\.go$
+        text: composite literal uses unkeyed fields
+      - linters:
+          - staticcheck
+        text: "SA1019:"
+      - linters:
+          - staticcheck
+        text: "SA5011:"
+      - linters:
+          - staticcheck
+        text: "SA4006:"
+      - linters:
+          - unused
+        path: _test\.go$
+      - linters:
+          - ineffassign
+        path: _test\.go$
+      - linters:
+          - gocritic
+        path: _test\.go$
+      - linters:
+          - lll
+        path: _test\.go$
+      - linters:
+          - goconst
+        path: _test\.go$
+      - linters:
+          - misspell
+        text: "contianers"
 formatters:
   enable:
     - gofmt
