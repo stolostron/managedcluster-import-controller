@@ -460,8 +460,10 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", Label
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		// klusterletconfig is missing and it will be ignored
-		assertAppliedManifestWorkEvictionGracePeriod(nil)
+		// klusterletconfig is missing, falls back to global KlusterletConfig (1m)
+		assertAppliedManifestWorkEvictionGracePeriod(&metav1.Duration{
+			Duration: 1 * time.Minute,
+		})
 		assertManagedClusterAvailable(managedClusterName)
 		assertManagedClusterManifestWorksAvailable(managedClusterName)
 
@@ -488,7 +490,10 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", Label
 			Expect(err).ToNot(HaveOccurred())
 		})
 
-		assertAppliedManifestWorkEvictionGracePeriod(nil)
+		// per-cluster klusterletconfig deleted, falls back to global KlusterletConfig (1m)
+		assertAppliedManifestWorkEvictionGracePeriod(&metav1.Duration{
+			Duration: 1 * time.Minute,
+		})
 		assertManagedClusterAvailable(managedClusterName)
 		assertManagedClusterManifestWorksAvailable(managedClusterName)
 	})
