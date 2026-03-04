@@ -108,6 +108,10 @@ const (
 	// In the Hosted mode, this namespace still exists on the managed cluster to contain
 	// necessary resources, like service accounts, roles and rolebindings.
 	KlusterletNamespaceAnnotation string = "import.open-cluster-management.io/klusterlet-namespace"
+
+	// AddonEnableHostedModeAnnotation is the annotation on the ManagedCluster to indicate
+	// whether the hosted mode addons should be enabled.
+	AddonEnableHostedModeAnnotation string = "addon.open-cluster-management.io/enable-hosted-mode-addons"
 )
 
 const (
