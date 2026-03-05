@@ -33,7 +33,7 @@ jobs:
       - name: Run gosec security scan
         uses: securego/gosec@v2.24.7
         with:
-          args: -fmt=json -out=gosec.json -stdout -no-fail ./...
+          args: -fmt=json -out=_output/gosec.json -stdout -no-fail ./...
 
       - name: SonarCloud Scan
         uses: sonarsource/sonarcloud-github-action@v5

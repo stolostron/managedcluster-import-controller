@@ -67,7 +67,8 @@ test: envtest-setup
 	# Workaround for Go 1.25.x build cache regression with CGO_ENABLED=1
 	# See: https://github.com/golang/go/issues/69566
 	go clean -cache
-	go test -cover -covermode=atomic -coverprofile=coverage.out -json $(GOPACKAGES) > report.json 2>&1
+	@mkdir -p _output
+	go test -cover -covermode=atomic -coverprofile=_output/coverage.out -json $(GOPACKAGES) > _output/report.json 2>&1
 
 ## Builds controller binary
 .PHONY: build
