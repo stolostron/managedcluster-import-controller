@@ -1,0 +1,42 @@
+# Copyright Contributors to the Open Cluster Management project
+
+name: SonarCloud Analysis
+
+on:
+  push:
+    branches: [main, release-*, backplane-*]
+    paths-ignore:
+      - ".tekton/**"
+      - "docs/**"
+  pull_request:
+    branches: [main, release-*, backplane-*]
+    paths-ignore:
+      - ".tekton/**"
+      - "docs/**"
+
+jobs:
+  sonarcloud:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.25"
+
+      - name: Run unit tests with coverage
+        run: make test
+
+      - name: Run gosec security scan
+        uses: securego/gosec@v2.24.7
+        with:
+          args: -fmt=json -out=gosec.json -stdout ./...
+
+      - name: SonarCloud Scan
+        uses: sonarsource/sonarcloud-github-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
