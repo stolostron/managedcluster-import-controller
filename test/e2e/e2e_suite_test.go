@@ -498,6 +498,21 @@ func assertHostedManagedClusterImportSecret(managedClusterName string) {
 }
 
 func assertManagedClusterDeleted(clusterName string) {
+	// Safety net: ensure klusterlet-agent has completed leader election before deleting.
+	agentPods, podErr := hubKubeClient.CoreV1().Pods("open-cluster-management-agent").List(
+		context.TODO(), metav1.ListOptions{LabelSelector: "app=klusterlet-agent"})
+	if podErr == nil && len(agentPods.Items) > 0 {
+		// Delete all agent pods to force a restart
+		for _, pod := range agentPods.Items {
+			_ = hubKubeClient.CoreV1().Pods("open-cluster-management-agent").Delete(
+				context.TODO(), pod.Name, metav1.DeleteOptions{})
+		}
+		// Delete the leader election lease so the new pod must re-elect
+		_ = hubKubeClient.CoordinationV1().Leases("open-cluster-management-agent").Delete(
+			context.TODO(), "klusterlet-agent-lock", metav1.DeleteOptions{})
+		assertAgentLeaderElection()
+	}
+
 	ginkgo.By(fmt.Sprintf("Delete the managed cluster %s", clusterName), func() {
 		err := hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), clusterName, metav1.DeleteOptions{})
 		if err != nil && !errors.IsNotFound(err) {
@@ -693,6 +708,21 @@ func assertManagedClusterImportSecretNotApplied(clusterName string) {
 }
 
 func assertManagedClusterAvailable(clusterName string) {
+	// Ensure klusterlet-agent has completed leader election before checking the availability of the managed cluster.
+	agentPods, podErr := hubKubeClient.CoreV1().Pods("open-cluster-management-agent").List(
+		context.TODO(), metav1.ListOptions{LabelSelector: "app=klusterlet-agent"})
+	if podErr == nil && len(agentPods.Items) > 0 {
+		// Delete all agent pods to force a restart
+		for _, pod := range agentPods.Items {
+			_ = hubKubeClient.CoreV1().Pods("open-cluster-management-agent").Delete(
+				context.TODO(), pod.Name, metav1.DeleteOptions{})
+		}
+		// Delete the leader election lease so the new pod must re-elect
+		_ = hubKubeClient.CoordinationV1().Leases("open-cluster-management-agent").Delete(
+			context.TODO(), "klusterlet-agent-lock", metav1.DeleteOptions{})
+		assertAgentLeaderElection()
+	}
+
 	start := time.Now()
 	defer func() {
 		util.Logf("assert managed cluster %s available spending time: %.2f seconds", clusterName, time.Since(start).Seconds())
@@ -1160,6 +1190,20 @@ func hasCertificate(certs []*x509.Certificate, cert *x509.Certificate) bool {
 }
 
 func assertManagedClusterOffline(clusterName string, timeout time.Duration) {
+	agentPods, podErr := hubKubeClient.CoreV1().Pods("open-cluster-management-agent").List(
+		context.TODO(), metav1.ListOptions{LabelSelector: "app=klusterlet-agent"})
+	if podErr == nil && len(agentPods.Items) > 0 {
+		// Delete all agent pods to force a restart
+		for _, pod := range agentPods.Items {
+			_ = hubKubeClient.CoreV1().Pods("open-cluster-management-agent").Delete(
+				context.TODO(), pod.Name, metav1.DeleteOptions{})
+		}
+		// Delete the leader election lease so the new pod must re-elect
+		_ = hubKubeClient.CoordinationV1().Leases("open-cluster-management-agent").Delete(
+			context.TODO(), "klusterlet-agent-lock", metav1.DeleteOptions{})
+		assertAgentLeaderElection()
+	}
+
 	ginkgo.By(fmt.Sprintf("Managed cluster %s should be offline", clusterName), func() {
 		gomega.Eventually(func() error {
 			cluster, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
@@ -1220,20 +1264,33 @@ func assertManifestworkFinalizer(namespace, workName, expected string) {
 
 func assertAgentLeaderElection() {
 	start := time.Now()
+
+	namespace := "open-cluster-management-agent"
+	agentSelector := "app=klusterlet-agent"
+	leaseName := "klusterlet-agent-lock"
+
 	ginkgo.By("Check if klusterlet agent is leader", func() {
 		gomega.Eventually(func() error {
-			namespace := "open-cluster-management-agent"
-			agentSelector := "app=klusterlet-agent"
-			leaseName := "klusterlet-agent-lock"
 			// agent pod
-			pods, err := hubKubeClient.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
+			allPods, err := hubKubeClient.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
 				LabelSelector: agentSelector,
 			})
 			if err != nil {
 				return fmt.Errorf("could not get agent pod: %v", err)
 			}
-			if len(pods.Items) != 1 {
-				return fmt.Errorf("should be only one agent pod but get %d", len(pods.Items))
+
+			// Filter out terminating pods to avoid being blocked by pods
+			// in graceful shutdown during a rolling update
+			var pods []corev1.Pod
+			for _, pod := range allPods.Items {
+				if pod.DeletionTimestamp.IsZero() {
+					pods = append(pods, pod)
+				}
+			}
+
+			if len(pods) != 1 {
+				return fmt.Errorf("expected 1 non-terminating agent pod, got %d (total including terminating: %d)",
+					len(pods), len(allPods.Items))
 			}
 
 			// agent lease
@@ -1243,14 +1300,14 @@ func assertAgentLeaderElection() {
 			}
 
 			// Check if the HolderIdentity field is present and if it has the prefix of the podName
-			if lease.Spec.HolderIdentity != nil && strings.HasPrefix(*lease.Spec.HolderIdentity, pods.Items[0].Name) {
+			if lease.Spec.HolderIdentity != nil && strings.HasPrefix(*lease.Spec.HolderIdentity, pods[0].Name) {
 				return nil
 			}
 
-			return fmt.Errorf("klusterlet agent leader is still %s not %s", *lease.Spec.HolderIdentity, pods.Items[0].Name)
+			return fmt.Errorf("klusterlet agent leader is still %s not %s", *lease.Spec.HolderIdentity, pods[0].Name)
 		}, 180*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
-	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
+	util.Logf("assert agent leader election spending time: %.2f seconds", time.Since(start).Seconds())
 }
 
 func assertClusterImportConfigSecret(managedClusterName string) {
