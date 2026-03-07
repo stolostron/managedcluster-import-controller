@@ -16,12 +16,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
-	"open-cluster-management.io/api/addon/v1alpha1"
+	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 )
 
@@ -35,8 +36,181 @@ func init() {
 	testscheme.AddKnownTypes(hivev1.SchemeGroupVersion, &hivev1.ClusterDeployment{})
 	testscheme.AddKnownTypes(schema.GroupVersion{Group: asv1beta1.GroupVersion.Group, Version: asv1beta1.GroupVersion.Version}, &asv1beta1.InfraEnvList{})
 	testscheme.AddKnownTypes(schema.GroupVersion{Group: asv1beta1.GroupVersion.Group, Version: asv1beta1.GroupVersion.Version}, &asv1beta1.InfraEnv{})
-	testscheme.AddKnownTypes(schema.GroupVersion{Group: v1alpha1.GroupVersion.Group, Version: v1alpha1.GroupVersion.Version}, &v1alpha1.ManagedClusterAddOnList{})
-	testscheme.AddKnownTypes(schema.GroupVersion{Group: v1alpha1.GroupVersion.Group, Version: v1alpha1.GroupVersion.Version}, &v1alpha1.ManagedClusterAddOn{})
+	testscheme.AddKnownTypes(schema.GroupVersion{Group: addonv1alpha1.GroupVersion.Group, Version: addonv1alpha1.GroupVersion.Version}, &addonv1alpha1.ManagedClusterAddOnList{})
+	testscheme.AddKnownTypes(schema.GroupVersion{Group: addonv1alpha1.GroupVersion.Group, Version: addonv1alpha1.GroupVersion.Version}, &addonv1alpha1.ManagedClusterAddOn{})
+}
+
+func TestEnsureAddonHostingAnnotation(t *testing.T) {
+	cases := []struct {
+		name             string
+		annotations      map[string]string
+		expectModified   bool
+		expectAnnotation string // expected value of addon hosting-cluster-name annotation; empty means should be absent
+	}{
+		{
+			name:           "nil annotations",
+			annotations:    nil,
+			expectModified: false,
+		},
+		{
+			name:           "no relevant annotations",
+			annotations:    map[string]string{"foo": "bar"},
+			expectModified: false,
+		},
+		{
+			name: "enable-hosted-mode-addons is not true",
+			annotations: map[string]string{
+				constants.AddonEnableHostedModeAnnotation: "false",
+				constants.KlusterletDeployModeAnnotation:  "Hosted",
+				constants.HostingClusterNameAnnotation:     "hosting-cluster",
+			},
+			expectModified: false,
+		},
+		{
+			name: "missing enable-hosted-mode-addons annotation",
+			annotations: map[string]string{
+				constants.KlusterletDeployModeAnnotation: "Hosted",
+				constants.HostingClusterNameAnnotation:    "hosting-cluster",
+			},
+			expectModified: false,
+		},
+		{
+			name: "klusterlet deploy mode is not hosted",
+			annotations: map[string]string{
+				constants.AddonEnableHostedModeAnnotation: "true",
+				constants.KlusterletDeployModeAnnotation:  "Default",
+				constants.HostingClusterNameAnnotation:     "hosting-cluster",
+			},
+			expectModified: false,
+		},
+		{
+			name: "missing klusterlet deploy mode annotation",
+			annotations: map[string]string{
+				constants.AddonEnableHostedModeAnnotation: "true",
+				constants.HostingClusterNameAnnotation:     "hosting-cluster",
+			},
+			expectModified: false,
+		},
+		{
+			name: "missing hosting cluster name annotation",
+			annotations: map[string]string{
+				constants.AddonEnableHostedModeAnnotation: "true",
+				constants.KlusterletDeployModeAnnotation:  "Hosted",
+			},
+			expectModified: false,
+		},
+		{
+			name: "empty hosting cluster name",
+			annotations: map[string]string{
+				constants.AddonEnableHostedModeAnnotation: "true",
+				constants.KlusterletDeployModeAnnotation:  "Hosted",
+				constants.HostingClusterNameAnnotation:     "",
+			},
+			expectModified: false,
+		},
+		{
+			name: "all conditions met with Hosted mode",
+			annotations: map[string]string{
+				constants.AddonEnableHostedModeAnnotation: "true",
+				constants.KlusterletDeployModeAnnotation:  "Hosted",
+				constants.HostingClusterNameAnnotation:     "hosting-cluster",
+			},
+			expectModified:   true,
+			expectAnnotation: "hosting-cluster",
+		},
+		{
+			name: "all conditions met with SingletonHosted mode",
+			annotations: map[string]string{
+				constants.AddonEnableHostedModeAnnotation: "true",
+				constants.KlusterletDeployModeAnnotation:  "SingletonHosted",
+				constants.HostingClusterNameAnnotation:     "my-hosting",
+			},
+			expectModified:   true,
+			expectAnnotation: "my-hosting",
+		},
+		{
+			name: "annotation already set with same value",
+			annotations: map[string]string{
+				constants.AddonEnableHostedModeAnnotation:     "true",
+				constants.KlusterletDeployModeAnnotation:      "Hosted",
+				constants.HostingClusterNameAnnotation:         "hosting-cluster",
+				addonv1alpha1.HostingClusterNameAnnotationKey: "hosting-cluster",
+			},
+			expectModified:   false,
+			expectAnnotation: "hosting-cluster",
+		},
+		{
+			name: "annotation already set with different value",
+			annotations: map[string]string{
+				constants.AddonEnableHostedModeAnnotation:     "true",
+				constants.KlusterletDeployModeAnnotation:      "Hosted",
+				constants.HostingClusterNameAnnotation:         "new-hosting",
+				addonv1alpha1.HostingClusterNameAnnotationKey: "old-hosting",
+			},
+			expectModified:   true,
+			expectAnnotation: "new-hosting",
+		},
+		{
+			name: "remove annotation when enable-hosted-mode-addons is not true",
+			annotations: map[string]string{
+				constants.AddonEnableHostedModeAnnotation:     "false",
+				constants.KlusterletDeployModeAnnotation:      "Hosted",
+				constants.HostingClusterNameAnnotation:         "hosting-cluster",
+				addonv1alpha1.HostingClusterNameAnnotationKey: "hosting-cluster",
+			},
+			expectModified: true,
+		},
+		{
+			name: "remove annotation when cluster is not hosted",
+			annotations: map[string]string{
+				constants.AddonEnableHostedModeAnnotation:     "true",
+				constants.KlusterletDeployModeAnnotation:      "Default",
+				constants.HostingClusterNameAnnotation:         "hosting-cluster",
+				addonv1alpha1.HostingClusterNameAnnotationKey: "hosting-cluster",
+			},
+			expectModified: true,
+		},
+		{
+			name: "remove annotation when enable-hosted-mode-addons is missing",
+			annotations: map[string]string{
+				constants.KlusterletDeployModeAnnotation:      "Hosted",
+				constants.HostingClusterNameAnnotation:         "hosting-cluster",
+				addonv1alpha1.HostingClusterNameAnnotationKey: "hosting-cluster",
+			},
+			expectModified: true,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			cluster := &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        "test",
+					Annotations: c.annotations,
+				},
+			}
+
+			modified := false
+			ensureAddonHostingAnnotation(&modified, cluster)
+
+			if modified != c.expectModified {
+				t.Errorf("expected modified=%v, got %v", c.expectModified, modified)
+			}
+
+			if c.expectAnnotation != "" {
+				got, ok := cluster.Annotations[addonv1alpha1.HostingClusterNameAnnotationKey]
+				if !ok {
+					t.Errorf("expected annotation %s to be set", addonv1alpha1.HostingClusterNameAnnotationKey)
+				} else if got != c.expectAnnotation {
+					t.Errorf("expected annotation value %q, got %q", c.expectAnnotation, got)
+				}
+			} else if cluster.Annotations != nil {
+				if _, ok := cluster.Annotations[addonv1alpha1.HostingClusterNameAnnotationKey]; ok {
+					t.Errorf("expected annotation %s to be absent", addonv1alpha1.HostingClusterNameAnnotationKey)
+				}
+			}
+		})
+	}
 }
 
 func TestReconcile(t *testing.T) {
