@@ -32,7 +32,7 @@ jobs:
         id: install
 
       - name: E2E Tests (Core)
-        run: OCM_VERSION=${{ github.base_ref }} make e2e-test-core
+        run: OCM_VERSION=${{ github.base_ref }} make e2e-new-test-core
 
       - if: ${{ failure() }}
         name: Collect Debug Info after Tests Failed
@@ -123,7 +123,7 @@ jobs:
         id: install
 
       - name: E2E Tests (Misc)
-        run: OCM_VERSION=${{ github.base_ref }} make e2e-test-misc
+        run: OCM_VERSION=${{ github.base_ref }} make e2e-new-test-misc
 
       - if: ${{ failure() }}
         name: Collect Debug Info after Tests Failed
@@ -214,7 +214,7 @@ jobs:
         id: install
 
       - name: E2E Tests (Hosted)
-        run: OCM_VERSION=${{ github.base_ref }} make e2e-test-hosted
+        run: OCM_VERSION=${{ github.base_ref }} make e2e-new-test-hosted
 
       - if: ${{ failure() }}
         name: Collect Debug Info after Tests Failed
