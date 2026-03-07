@@ -1278,26 +1278,32 @@ func assertAgentLeaderElection() {
 
 	ginkgo.By("Check if klusterlet agent is leader", func() {
 		gomega.Eventually(func() error {
+			// Ensure the deployment rollout is complete before checking leader election
+			deploy, err := hubKubeClient.AppsV1().Deployments(namespace).Get(
+				context.TODO(), "klusterlet-agent", metav1.GetOptions{})
+			if err != nil {
+				return fmt.Errorf("could not get klusterlet-agent deployment: %v", err)
+			}
+			if deploy.Spec.Replicas != nil {
+				if deploy.Status.UpdatedReplicas < *deploy.Spec.Replicas {
+					return fmt.Errorf("deployment rollout in progress: updatedReplicas=%d desired=%d",
+						deploy.Status.UpdatedReplicas, *deploy.Spec.Replicas)
+				}
+				if deploy.Status.AvailableReplicas < *deploy.Spec.Replicas {
+					return fmt.Errorf("deployment not fully available: availableReplicas=%d desired=%d",
+						deploy.Status.AvailableReplicas, *deploy.Spec.Replicas)
+				}
+			}
+
 			// agent pod
-			allPods, err := hubKubeClient.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
+			pods, err := hubKubeClient.CoreV1().Pods(namespace).List(context.TODO(), metav1.ListOptions{
 				LabelSelector: agentSelector,
 			})
 			if err != nil {
 				return fmt.Errorf("could not get agent pod: %v", err)
 			}
-
-			// Filter out terminating pods to avoid being blocked by pods
-			// in graceful shutdown during a rolling update
-			var pods []corev1.Pod
-			for _, pod := range allPods.Items {
-				if pod.DeletionTimestamp.IsZero() {
-					pods = append(pods, pod)
-				}
-			}
-
-			if len(pods) != 1 {
-				return fmt.Errorf("expected 1 non-terminating agent pod, got %d (total including terminating: %d)",
-					len(pods), len(allPods.Items))
+			if len(pods.Items) != 1 {
+				return fmt.Errorf("should be only one agent pod but get %d", len(pods.Items))
 			}
 
 			// agent lease
@@ -1307,11 +1313,11 @@ func assertAgentLeaderElection() {
 			}
 
 			// Check if the HolderIdentity field is present and if it has the prefix of the podName
-			if lease.Spec.HolderIdentity != nil && strings.HasPrefix(*lease.Spec.HolderIdentity, pods[0].Name) {
+			if lease.Spec.HolderIdentity != nil && strings.HasPrefix(*lease.Spec.HolderIdentity, pods.Items[0].Name) {
 				return nil
 			}
 
-			return fmt.Errorf("klusterlet agent leader is still %s not %s", *lease.Spec.HolderIdentity, pods[0].Name)
+			return fmt.Errorf("klusterlet agent leader is still %s not %s", *lease.Spec.HolderIdentity, pods.Items[0].Name)
 		}, 180*time.Second, 1*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("assert agent leader election spending time: %.2f seconds", time.Since(start).Seconds())
