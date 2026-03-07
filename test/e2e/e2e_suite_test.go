@@ -1263,6 +1263,13 @@ func assertManifestworkFinalizer(namespace, workName, expected string) {
 }
 
 func assertAgentLeaderElection() {
+	// Wait for any pending deployment rollout to be initiated.
+	// After import succeeds, the ManifestWork update triggers a cascade:
+	// work agent applies klusterlet spec → klusterlet operator updates deployment → rollout.
+	// This typically takes 2-5 seconds. Without this delay, the leader election
+	// check can pass with the OLD pod that is about to be replaced by the rollout.
+	time.Sleep(10 * time.Second)
+
 	start := time.Now()
 
 	namespace := "open-cluster-management-agent"
