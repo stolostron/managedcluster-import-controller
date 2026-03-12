@@ -153,6 +153,11 @@ var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", gi
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
 				assertManagedClusterImportSecretCreated(managedClusterName, "hive")
+
+				// Wait for leader election before checking the managed cluster status.
+				// The initial import always triggers a rolling update, and the new pod must be leader
+				// before the managed cluster can become available. See test/e2e/README.md for details.
+				assertAgentLeaderElection()
 				assertManagedClusterAvailable(managedClusterName)
 			})
 
@@ -161,6 +166,11 @@ var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", gi
 	})
 
 	ginkgo.It(fmt.Sprintf("Should destroy the managed cluster %s", managedClusterName), func() {
+		// Wait for leader election before deleting the ManagedCluster. The initial
+		// import always triggers a rolling update, and the new pod must be leader
+		// before cleanup can proceed correctly. See test/e2e/README.md for details.
+		assertAgentLeaderElection()
+
 		ginkgo.By(fmt.Sprintf("Delete the clusterdeployment %s", managedClusterName), func() {
 			err := util.DeleteClusterDeployment(hubDynamicClient, managedClusterName)
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
@@ -178,6 +188,11 @@ var _ = ginkgo.Describe("Importing a managed cluster with clusterdeployment", gi
 	})
 
 	ginkgo.It(fmt.Sprintf("Should detach the managed cluster %s", managedClusterName), func() {
+		// Wait for leader election before deleting the ManagedCluster. The initial
+		// import always triggers a rolling update, and the new pod must be leader
+		// before cleanup can proceed correctly. See test/e2e/README.md for details.
+		assertAgentLeaderElection()
+
 		ginkgo.By(fmt.Sprintf("Delete the managed cluster %s", managedClusterName), func() {
 			err := hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), managedClusterName, metav1.DeleteOptions{})
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
