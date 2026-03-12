@@ -3,7 +3,6 @@
 **JIRA:** [ACM-26882: [ACM] Central TLS Profile consistency](https://issues.redhat.com/browse/ACM-26882)
 **Document Status:** Design Document
 **Last Updated:** 2026-03-12
-**Deadline:** OCP 4.22 GA
 
 ---
 
@@ -24,32 +23,22 @@
 
 ### Purpose
 
-This design document provides a unified approach for all server foundation repositories to implement TLS profile compliance as required by OpenShift 4.22 GA. The requirement mandates that all components **dynamically fetch and apply TLS configuration from centralized sources** rather than hardcoding TLS settings. This is critical for **Post-Quantum Cryptography (PQC) readiness**.
+This design provides a unified approach for server foundation repositories to implement TLS profile compliance for OpenShift 4.22 GA. Components must **dynamically fetch and apply TLS configuration** rather than hardcoding TLS settings, critical for **Post-Quantum Cryptography (PQC) readiness**.
 
 ### Challenge for OCM
 
-OCM repos are **upstream Kubernetes projects** that must work on any Kubernetes distribution. They **cannot depend on OpenShift-specific APIs** like `APIServer.spec.tlsSecurityProfile`.
+OCM repos are **upstream Kubernetes projects** that cannot depend on OpenShift-specific APIs like `APIServer.spec.tlsSecurityProfile`.
 
-### Background: Deployment Relationships
+### Deployment Relationships
 
-Understanding who deploys what is critical to the design:
-
-**Hub Cluster:**
-- **backplane-operator** (Stolostron) deploys:
-  - `cluster-manager-operator` (OCM operator, scenario 3)
-  - `cluster-proxy-addon-manager` (OCM addon manager, scenario 5)
-- **cluster-manager-operator** (OCM) deploys:
-  - `registration-controller` (scenario 4)
-  - `work-controller` (scenario 4)
-  - `placement-controller` (scenario 4)
-
-**Managed Cluster:**
-- **import-controller** (Stolostron) deploys:
-  - `klusterlet-operator` (OCM operator, scenario 6)
-- **klusterlet-operator** (OCM) deploys:
-  - `klusterlet-agent` (registration-agent, work-agent) (scenario 7)
-- **Addon agents** (scenario 8) are deployed by respective addon managers
-- **klusterlet-operator** already has capability to copy image pull secrets to addon namespaces
+| Deployer | Deploys | Scenario |
+|---|---|---|
+| **Hub:** backplane-operator | cluster-manager-operator | 3 |
+| **Hub:** backplane-operator | cluster-proxy-addon-manager | 5 |
+| **Hub:** cluster-manager-operator | registration/work/placement-controller | 4 |
+| **Spoke:** import-controller | klusterlet-operator | 6 |
+| **Spoke:** klusterlet-operator | klusterlet/registration/work-agent | 7 |
+| **Spoke:** addon managers | addon agents | 8 |
 
 ---
 
@@ -72,6 +61,8 @@ Understanding who deploys what is critical to the design:
 ## Solution Overview
 
 ### Sidecar + ConfigMap Pattern
+
+**How this resolves the upstream challenge:** The sidecar (downstream code) handles OpenShift-specific API access (`APIServer.spec.tlsSecurityProfile`), translating it into a standard Kubernetes ConfigMap. Upstream OCM components only use standard Kubernetes client-go to watch and read ConfigMaps, maintaining full portability across any Kubernetes distribution while enabling OpenShift integration when deployed by Stolostron.
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
@@ -107,39 +98,17 @@ Understanding who deploys what is critical to the design:
 3. **ConfigMap Propagation**: Operators create ConfigMaps in managed component namespaces
 4. **Restart on Change**: Components watch ConfigMap and restart when TLS config changes
 5. **Safe Fallback**: Components use TLS 1.2 when ConfigMap not available (vanilla Kubernetes)
-6. **Addon Flexibility**: For addon managers (Scenario 5) and addon agents (Scenario 8), this design is **for reference only**. Each addon squad can decide whether to adopt this pattern or implement their own solution. We do not enforce using this specific proposal for addons.
+6. **Addon Flexibility**: Scenarios 5 & 8 are **for reference only**. Addon squads may implement their own solution.
 
 ---
 
 ## Stolostron Scenarios
 
-### Scenario 1: Stolostron Hub (OpenShift)
+### Scenario 1 & 2: Stolostron Hub & Spoke (OpenShift)
 
-**Components:**
-- All Stolostron-specific hub components
+**Solution:** Refer to [Hint for resolving TLS non-compliance tickets Code Examples](https://docs.google.com/document/d/1234567890)
 
-**Solution:**
-Refer to [Hint for resolving TLS non-compliance tickets Code Examples](https://docs.google.com/document/d/1234567890) for implementation.
-
-**Key Points:**
-- Use OpenShift library-go TLS helpers
-- Watch `APIServer.spec.tlsSecurityProfile` directly
-- No sidecar needed (native OpenShift code)
-
----
-
-### Scenario 2: Stolostron Spoke (OpenShift)
-
-**Components:**
-- All Stolostron-specific managed cluster components
-
-**Solution:**
-Refer to [Hint for resolving TLS non-compliance tickets Code Examples](https://docs.google.com/document/d/1234567890) for implementation.
-
-**Key Points:**
-- Use OpenShift library-go TLS helpers
-- Watch managed cluster's `APIServer.spec.tlsSecurityProfile`
-- No sidecar needed (native OpenShift code)
+**Approach:** Use OpenShift library-go TLS helpers to watch `APIServer.spec.tlsSecurityProfile` directly (no sidecar needed)
 
 ---
 
@@ -147,13 +116,7 @@ Refer to [Hint for resolving TLS non-compliance tickets Code Examples](https://d
 
 ### Scenario 3: OCM Hub - cluster-manager-operator
 
-**Component:** `cluster-manager-operator` (registration-operator in cluster-manager mode)
-
-**Deployed by:** backplane-operator (Stolostron)
-
-**Platform:** OpenShift (when deployed by Stolostron) or Kubernetes (upstream)
-
-**Architecture Flow:**
+**Namespace:** `multicluster-engine` | **Deployed by:** backplane-operator
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -191,42 +154,16 @@ Refer to [Hint for resolving TLS non-compliance tickets Code Examples](https://d
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**How It Works:**
-
-1. **Sidecar Injection** (Downstream - backplane-operator)
-   - backplane-operator detects OpenShift platform
-   - Injects `tls-profile-sync` sidecar into cluster-manager-operator pod
-
-2. **ConfigMap Creation** (Sidecar)
-   - Sidecar watches hub's `APIServer.spec.tlsSecurityProfile`
-   - Creates/updates `ocm-tls-profile` ConfigMap in `multicluster-engine` namespace
-
-3. **Component Consumption** (Upstream - cluster-manager-operator)
-   - Watches `ocm-tls-profile` ConfigMap using standard Kubernetes client-go
-   - When ConfigMap changes → applies new TLS config → **restarts itself**
-   - If ConfigMap not found (vanilla K8s) → falls back to TLS 1.2
-
-**Code Owner:**
-- Sidecar injection: Downstream (backplane-operator)
-- Sidecar container: Downstream (stolostron/import-controller->tls-profile-sync)
-- ConfigMap watching + restart logic: Upstream (registration-operator)
+**Implementation:**
+- Sidecar: backplane-operator injects `tls-profile-sync` → watches `APIServer.spec.tlsSecurityProfile` → creates `multicluster-engine/ocm-tls-profile`
+- Component: Watches ConfigMap → restarts on change → TLS 1.2 fallback if not found
 
 ---
 
 ### Scenario 4: OCM Hub - ocm-hub-components
 
-**Components:**
-- registration-controller
-- work-controller (work-webhook)
-- placement-controller
-
-**Deployed by:** cluster-manager-operator (OCM)
-
-**Deployed in:** `open-cluster-management-hub` namespace (all components in same namespace)
-
-**Platform:** OpenShift (when operator deployed by Stolostron) or Kubernetes (upstream)
-
-**Architecture Flow:**
+**Components:** registration-controller, work-controller, placement-controller
+**Namespace:** `open-cluster-management-hub` | **Deployed by:** cluster-manager-operator
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -264,43 +201,19 @@ Refer to [Hint for resolving TLS non-compliance tickets Code Examples](https://d
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**How It Works:**
-
-1. **Operator Reads Source ConfigMap**
-   - cluster-manager-operator (in `multicluster-engine` namespace) watches `multicluster-engine/ocm-tls-profile`
-
-2. **Operator Creates ConfigMap in Hub Components Namespace**
-   - Creates/updates `ocm-tls-profile` in `open-cluster-management-hub` namespace
-   - Single ConfigMap shared by all hub components (they're all in the same namespace)
-
-3. **Components Watch Their Namespace's ConfigMap**
-   - All hub components watch `open-cluster-management-hub/ocm-tls-profile`
-   - On ConfigMap change → applies TLS config → **restarts**
-   - If ConfigMap not found → falls back to TLS 1.2
-
-**Code Owner:**
-- ConfigMap propagation logic: Upstream (cluster-manager-operator)
-- ConfigMap watching + restart: Upstream (each component)
+**Implementation:**
+- Operator: cluster-manager-operator watches `multicluster-engine/ocm-tls-profile` → creates `open-cluster-management-hub/ocm-tls-profile`
+- Components: Watch ConfigMap in their namespace → restart on change → TLS 1.2 fallback
 
 ---
 
 ### Scenario 5: OCM Hub - addon-manager
 
-> **Note:** This scenario is **for reference only**. Each addon squad can decide whether to adopt this pattern or implement their own solution.
+> **Note:** For reference only. Addon squads may implement their own solution.
 
-**Components:**
-- cluster-proxy-addon-manager (deployed in `multicluster-engine` namespace)
-- Other addon managers like submariner (deployed in their own namespaces)
+**Components:** cluster-proxy-addon-manager, submariner-addon-manager, etc.
 
-**Deployed by:** backplane-operator (Stolostron)
-
-**Platform:** OpenShift (when deployed by Stolostron) or Kubernetes (upstream)
-
-#### Sub-case 5a: cluster-proxy-addon-manager (Same Namespace as Operator)
-
-**Deployed in:** `multicluster-engine` namespace (same as cluster-manager-operator)
-
-**Architecture Flow:**
+**5a: Same Namespace** (cluster-proxy-addon-manager in `multicluster-engine`)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -330,27 +243,9 @@ Refer to [Hint for resolving TLS non-compliance tickets Code Examples](https://d
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**How It Works:**
+**Implementation:** No sidecar needed; watches shared ConfigMap in `multicluster-engine` → restarts on change
 
-1. **No Sidecar Needed**
-   - cluster-proxy-addon-manager deployed in same namespace as cluster-manager-operator
-   - Reads the same ConfigMap created by cluster-manager-operator's sidecar
-
-2. **Component Consumption**
-   - Watches `multicluster-engine/ocm-tls-profile`
-   - On ConfigMap change → applies TLS config → **restarts**
-   - If ConfigMap not found → falls back to TLS 1.2
-
-**Code Owner:**
-- All upstream (no sidecar injection needed)
-
-#### Sub-case 5b: Other Addon Managers (Different Namespace)
-
-**Example:** submariner-addon-manager
-
-**Deployed in:** Addon-specific namespace (e.g., `submariner-operator`)
-
-**Architecture Flow:**
+**5b: Different Namespace** (e.g., submariner-addon-manager in `submariner-operator`)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -388,25 +283,9 @@ Refer to [Hint for resolving TLS non-compliance tickets Code Examples](https://d
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**How It Works:**
-
-1. **Sidecar Injection** (Downstream - backplane-operator)
-   - backplane-operator detects addon manager in different namespace
-   - Injects `tls-profile-sync` sidecar into addon manager pod
-
-2. **ConfigMap Creation** (Sidecar)
-   - Sidecar watches hub's `APIServer.spec.tlsSecurityProfile`
-   - Creates/updates `ocm-tls-profile` in addon's namespace (e.g., `submariner-operator`)
-
-3. **Component Consumption** (Upstream - addon manager)
-   - Watches ConfigMap in its own namespace
-   - On change → applies TLS config → **restarts**
-   - If ConfigMap not found → falls back to TLS 1.2
-
-**Code Owner:**
-- Sidecar injection: Downstream (backplane-operator)
-- Sidecar container: Downstream (stolostron/tls-profile-sync)
-- ConfigMap watching + restart: Upstream (addon-manager code)
+**Implementation:**
+- Sidecar: backplane-operator injects `tls-profile-sync` → creates ConfigMap in addon namespace
+- Component: Watches ConfigMap → restarts on change
 
 ---
 
@@ -414,13 +293,7 @@ Refer to [Hint for resolving TLS non-compliance tickets Code Examples](https://d
 
 ### Scenario 6: OCM Spoke - klusterlet-operator
 
-**Component:** `klusterlet-operator` (registration-operator in klusterlet mode)
-
-**Deployed by:** import-controller (Stolostron)
-
-**Platform:** OpenShift (when deployed by Stolostron) or Kubernetes (upstream)
-
-**Architecture Flow:**
+**Namespace:** `open-cluster-management-agent` | **Deployed by:** import-controller
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -458,46 +331,20 @@ Refer to [Hint for resolving TLS non-compliance tickets Code Examples](https://d
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**How It Works:**
-
-1. **Sidecar Injection** (Downstream - import-controller)
-   - import-controller detects OpenShift platform on managed cluster
-   - Injects `tls-profile-sync` sidecar into klusterlet-operator pod
-
-2. **ConfigMap Creation** (Sidecar)
-   - Sidecar watches **managed cluster's** `APIServer.spec.tlsSecurityProfile` (NOT hub!)
-   - Creates/updates `ocm-tls-profile` in `open-cluster-management-agent` namespace
-
-3. **Component Consumption** (Upstream - klusterlet-operator)
-   - Watches `ocm-tls-profile` ConfigMap
-   - On change → applies TLS config → **restarts**
-   - If ConfigMap not found → falls back to TLS 1.2
+**Implementation:**
+- Sidecar: import-controller injects `tls-profile-sync` → watches **managed cluster's** APIServer → creates ConfigMap
+- Component: Watches ConfigMap → restarts on change
 
 **Important:** Each managed cluster uses its **OWN** TLS profile, not the hub's!
-
-**Code Owner:**
-- Sidecar injection: Downstream (import-controller)
-- Sidecar container: Downstream (stolostron/tls-profile-sync)
-- ConfigMap watching + restart: Upstream (registration-operator)
 
 ---
 
 ### Scenario 7: OCM Spoke - klusterlet-agent
 
-**Components:**
-- klusterlet-agent (singleton mode)
-- registration-agent (default mode)
-- work-agent (default mode)
+**Components:** klusterlet-agent (singleton), registration-agent, work-agent (default mode)
+**Deployed by:** klusterlet-operator
 
-**Deployed by:** klusterlet-operator (OCM)
-
-**Platform:** OpenShift (when operator deployed by Stolostron) or Kubernetes (upstream)
-
-#### Sub-case 7a: Default Mode (Same Namespace as Operator)
-
-**Deployed in:** `open-cluster-management-agent` namespace (same as klusterlet-operator)
-
-**Architecture Flow:**
+**7a: Default Mode** (Same namespace: `open-cluster-management-agent`)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -530,25 +377,9 @@ Refer to [Hint for resolving TLS non-compliance tickets Code Examples](https://d
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**How It Works:**
+**Implementation:** No ConfigMap copy needed; all components in same namespace share ConfigMap → watch → restart on change
 
-1. **No ConfigMap Copy Needed**
-   - klusterlet-operator and klusterlet agents in same namespace (`open-cluster-management-agent`)
-   - All components read the same ConfigMap
-
-2. **Component Consumption**
-   - Agents watch `open-cluster-management-agent/ocm-tls-profile`
-   - On change → apply TLS config → **restart**
-   - If ConfigMap not found → fall back to TLS 1.2
-
-**Code Owner:**
-- All upstream (no Stolostron-specific code)
-
-#### Sub-case 7b: Hosted Mode (Different Namespace)
-
-**Deployed in:** Hosted namespace (e.g., `klusterlet-<managed-cluster-name>`)
-
-**Architecture Flow:**
+**7b: Hosted Mode** (Different namespace: `klusterlet-<cluster-name>`)
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -590,44 +421,19 @@ Refer to [Hint for resolving TLS non-compliance tickets Code Examples](https://d
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**How It Works:**
+**Implementation:**
+- Operator: klusterlet-operator copies ConfigMap from `open-cluster-management-agent` to hosted namespace
+- Components: Watch ConfigMap in their namespace → restart on change
 
-1. **Operator Reads Source ConfigMap**
-   - klusterlet-operator (in `open-cluster-management-agent`) watches `open-cluster-management-agent/ocm-tls-profile`
-
-2. **Operator Copies ConfigMap to Hosted Namespace**
-   - klusterlet-operator runs a controller to detect hosted mode deployments
-   - Copies ConfigMap to hosted namespace (e.g., `klusterlet-<managed-cluster-name>`)
-
-3. **Component Consumption**
-   - Agents in hosted namespace watch ConfigMap in their namespace
-   - On change → apply TLS config → **restart**
-   - If ConfigMap not found → fall back to TLS 1.2
-
-**Note:** In hosted mode, the TLS profile comes from the **hosting cluster's** APIServer (where klusterlet-operator runs), not the managed cluster's APIServer.
-
-**Code Owner:**
-- ConfigMap copy logic: Upstream (klusterlet-operator)
-- ConfigMap watching + restart: Upstream (agents)
+**Note:** TLS profile comes from **hosting cluster's** APIServer, not managed cluster's APIServer.
 
 ---
 
 ### Scenario 8: OCM Spoke - addon-agent
 
-> **Note:** This scenario is **for reference only**. Each addon squad can decide whether to adopt this pattern or implement their own solution.
+> **Note:** For reference only. Addon squads may implement their own solution.
 
-**Components:**
-- app-addon-agent
-- policy-addon-agent
-- observability-addon-agent
-- cluster-proxy-addon-agent
-- Any other addon agents
-
-**Deployed by:** Respective addon managers (hub)
-
-**Platform:** OpenShift (when klusterlet deployed by Stolostron) or Kubernetes (upstream)
-
-**Architecture Flow:**
+**Components:** app-addon-agent, policy-addon-agent, observability-addon-agent, cluster-proxy-addon-agent, etc.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -673,31 +479,11 @@ Refer to [Hint for resolving TLS non-compliance tickets Code Examples](https://d
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**How It Works:**
+**Implementation:**
+- Controller: `AddonTLSConfigController` in klusterlet-operator copies ConfigMap to addon namespaces (similar to `AddonPullImageSecretController`)
+- Agents: Watch ConfigMap in their namespace → restart on change
 
-1. **ConfigMap Copy Controller** (Upstream - klusterlet-operator)
-   - `AddonTLSConfigController` runs in klusterlet-operator
-   - Pattern: Same as existing `AddonPullImageSecretController`
-   - Watches namespaces labeled `addon.open-cluster-management.io/namespace: "true"`
-
-2. **ConfigMap Propagation**
-   - Source: `open-cluster-management-agent/ocm-tls-profile`
-   - Destination: `addon-<name>/ocm-tls-profile`
-   - On source update → update all copies
-
-3. **Addon Agent Consumption**
-   - Each addon agent watches ConfigMap in its own namespace
-   - On change → apply TLS config → **restart**
-   - If ConfigMap not found → fall back to TLS 1.2
-
-**Why Copy ConfigMaps?**
-- ✅ Namespace isolation (addons read from own namespace)
-- ✅ Simpler RBAC (no cross-namespace access needed)
-- ✅ Consistent with existing pattern (image pull secrets)
-
-**Code Owner:**
-- AddonTLSConfigController: Upstream (klusterlet-operator)
-- ConfigMap watching + restart: Upstream (addon agent code)
+**Benefits:** Namespace isolation, simpler RBAC, consistent with existing pattern
 
 ---
 
@@ -719,19 +505,10 @@ data:
 
 ### Component Restart Logic
 
-Components watch the ConfigMap and restart when it changes:
-
-**Pseudo-code:**
 ```go
-// In component's main.go
 func main() {
-    // 1. Read TLS config from ConfigMap (or use fallback)
     tlsConfig := readTLSConfigFromConfigMap()
-
-    // 2. Start ConfigMap watcher
     go watchConfigMapAndRestart()
-
-    // 3. Start component with TLS config
     startComponent(tlsConfig)
 }
 
@@ -739,8 +516,7 @@ func watchConfigMapAndRestart() {
     watcher := watchConfigMap("ocm-tls-profile")
     for event := range watcher.ResultChan() {
         if event.Type == watch.Modified {
-            // Restart: exit with code 0, let Kubernetes restart the pod
-            os.Exit(0)
+            os.Exit(0)  // Kubernetes restarts the pod
         }
     }
 }
@@ -748,11 +524,8 @@ func watchConfigMapAndRestart() {
 func readTLSConfigFromConfigMap() *tls.Config {
     cm, err := client.CoreV1().ConfigMaps(namespace).Get("ocm-tls-profile")
     if err != nil {
-        // ConfigMap not found → fallback to TLS 1.2
-        return &tls.Config{MinVersion: tls.VersionTLS12}
+        return &tls.Config{MinVersion: tls.VersionTLS12}  // Fallback
     }
-
-    // Parse ConfigMap and return TLS config
     return parseTLSConfig(cm)
 }
 ```
@@ -761,7 +534,7 @@ func readTLSConfigFromConfigMap() *tls.Config {
 
 | Component | Repository | Owner | Purpose |
 |---|---|---|---|
-| tls-profile-sync sidecar | stolostron/tls-profile-sync | Downstream | Watches OpenShift APIServer, creates ConfigMap |
+| tls-profile-sync sidecar | stolostron/import-controller->tls-profile-sync | Downstream | Watches OpenShift APIServer, creates ConfigMap |
 | Shared TLS library/helpers | open-cluster-management-io/sdk-go | Upstream | ConfigMap parsing, fallback logic, TLS config helpers |
 | AddonTLSConfigController | open-cluster-management-io/registration-operator | Upstream | Copies ConfigMap to addon namespaces (in klusterlet-operator) |
 | Addon ConfigMap watch + restart | open-cluster-management-io/addon-framework | Upstream | Common addon functionality to watch ConfigMap and restart |
@@ -777,22 +550,18 @@ func readTLSConfigFromConfigMap() *tls.Config {
 | All hub/spoke components | Multiple ocm repos | Use sdk-go TLS library, watch ConfigMap, restart on change | Upstream |
 | addon-framework | open-cluster-management-io/addon-framework | Provide ConfigMap watch + restart for all addons | Upstream |
 
-### Sidecar Injection Points
+### Sidecar Injection
 
-**Downstream Repos Responsible for Sidecar Injection:**
+**backplane-operator** injects sidecar into:
+- cluster-manager-operator pod
+- Addon-manager pods in different namespaces (e.g., submariner-addon-manager)
 
-1. **backplane-operator** (Stolostron) injects sidecar into:
-   - cluster-manager-operator pod
-   - Addon-manager pods deployed in different namespaces (e.g., submariner-addon-manager)
+**import-controller** injects sidecar into:
+- klusterlet-operator pod
 
-2. **import-controller** (Stolostron) injects sidecar into:
-   - klusterlet-operator pod
-
-**Sidecar Detection Logic:**
+**Detection logic:**
 ```go
-// In backplane-operator / import-controller
 func shouldInjectSidecar() bool {
-    // Check if platform is OpenShift
     _, err := client.Discovery().ServerResourcesForGroupVersion("config.openshift.io/v1")
     return err == nil
 }
@@ -802,78 +571,47 @@ func shouldInjectSidecar() bool {
 
 ## Compliance Verification
 
-**Tools:**
-- `tls-scanner`: Validate no hardcoded TLS settings
-- `semgrep`: Scan for `tls.VersionTLS` hardcoding
-- E2E tests: Verify dynamic TLS profile changes
+**Tools:** `tls-scanner`, `semgrep`, E2E tests
 
 **Test Scenarios:**
-1. Change OpenShift APIServer TLS profile → verify components restart with new config
-2. Deploy on vanilla Kubernetes → verify components use TLS 1.2 fallback
+1. Change APIServer TLS profile → verify components restart with new config
+2. Deploy on vanilla Kubernetes → verify TLS 1.2 fallback
 3. Add new addon → verify ConfigMap copied to addon namespace
 4. Sidecar crash → verify components continue with last known config
 
----
+**Current Findings:**
 
-## Current Findings
-
-### Identified Hardcoded TLS Settings
-
-**File:** [pkg/common/options/webhook.go:97](pkg/common/options/webhook.go#L97)
-```go
-config.MinVersion = tls.VersionTLS12  // HARDCODED - needs remediation
-```
-
-**Remediation:**
-Replace with shared TLS library that reads from ConfigMap or uses fallback.
-
-**Expected Change:**
-```go
-// Before
-TLSOpts: []func(config *tls.Config){
-    func(config *tls.Config) {
-        config.MinVersion = tls.VersionTLS12  // HARDCODED
-    },
-},
-
-// After
-TLSOpts: []func(config *tls.Config){
-    GetTLSConfigFromConfigMap(ctx, client, namespace),  // Dynamic
-},
-```
+[pkg/common/options/webhook.go:97](pkg/common/options/webhook.go#L97) - Hardcoded `tls.VersionTLS12` needs remediation
 
 ---
 
 ## FAQ
 
 **Q: Do upstream OCM repos need OpenShift dependencies?**
-A: No. Upstream only uses standard Kubernetes client-go to read ConfigMaps.
+A: No. Upstream uses standard Kubernetes client-go to read ConfigMaps.
 
 **Q: What if sidecar crashes?**
-A: Kubernetes restarts sidecar. Components continue with last known ConfigMap state.
+A: Kubernetes restarts sidecar. Components continue with last known ConfigMap.
 
-**Q: Why restart components instead of hot-reload?**
-A: Simpler implementation. TLS profile changes are infrequent (admin actions). Kubernetes handles graceful restart.
+**Q: Why restart instead of hot-reload?**
+A: Simpler implementation. TLS changes are infrequent. Kubernetes handles graceful restarts.
 
 **Q: Can users customize TLS profile?**
-A: Yes, via `APIServer.spec.tlsSecurityProfile` (OpenShift cluster-wide setting). Changes propagate automatically.
+A: Yes, via `APIServer.spec.tlsSecurityProfile`. Changes propagate automatically.
 
 **Q: What about client TLS?**
-A: Separate initiative. This design focuses on server TLS (webhook servers, metrics servers, etc.)
+A: Separate initiative. This design focuses on server TLS (webhooks, metrics servers).
 
 **Q: Why does each managed cluster use its own TLS profile?**
-A: Managed cluster security admins control their own security policy. Managed cluster may require stricter or looser TLS than hub.
+A: Managed cluster admins control their own security policy independently.
 
-**Q: What if ConfigMap is deleted? Does the operator create it again?**
+**Q: What if ConfigMap is deleted?**
+A: Yes, automatically recreated via reconciliation:
+- **Sidecars**: Recreate within seconds from APIServer TLS profile
+- **Operators**: Recreate from source ConfigMaps
+- **Components**: Fall back to TLS 1.2 temporarily, then restart with recreated ConfigMap
 
-A: Yes, the ConfigMap is automatically recreated through Kubernetes reconciliation loops:
-
-- **Sidecars**: The `tls-profile-sync` sidecar continuously watches the APIServer TLS profile and reconciles the ConfigMap. If deleted, it recreates the ConfigMap within seconds based on the current APIServer settings.
-- **Operators**: Operators (cluster-manager-operator, klusterlet-operator) watch their source ConfigMaps and recreate managed ConfigMaps. For example, if `open-cluster-management-hub/ocm-tls-profile` is deleted, cluster-manager-operator recreates it from `multicluster-engine/ocm-tls-profile`.
-- **During Recreation**: Components detect ConfigMap deletion and fall back to TLS 1.2 temporarily. Once the ConfigMap is recreated, components detect the change and restart to apply the correct TLS profile.
-- **Result**: Brief service interruption during restart, but system self-heals automatically.
-
-**Q: How does this support Post-Quantum Cryptography (PQC)?**
+**Q: How does this support PQC?**
 A: When OpenShift adds PQC cipher suites to APIServer TLS profiles, all components automatically adopt them via dynamic ConfigMap updates.
 
 ---
