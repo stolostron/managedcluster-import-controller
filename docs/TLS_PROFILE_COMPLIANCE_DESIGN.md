@@ -9,13 +9,16 @@
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Scenario Summary](#scenario-summary)
-3. [Solution Overview](#solution-overview)
+2. [Solution Overview](#solution-overview)
+3. [Scenario Summary](#scenario-summary)
 4. [Stolostron Scenarios](#stolostron-scenarios)
 5. [OCM Hub Scenarios](#ocm-hub-scenarios)
 6. [OCM Spoke Scenarios](#ocm-spoke-scenarios)
 7. [Implementation Details](#implementation-details)
 8. [Compliance Verification](#compliance-verification)
+9. [FAQ](#faq)
+10. [Approval and Sign-off](#approval-and-sign-off)
+11. [References](#references)
 
 ---
 
@@ -39,22 +42,6 @@ OCM repos are **upstream Kubernetes projects** that cannot depend on OpenShift-s
 | **Spoke:** import-controller | klusterlet-operator | 6 |
 | **Spoke:** klusterlet-operator | klusterlet/registration/work-agent | 7 |
 | **Spoke:** addon managers | addon agents | 8 |
-
----
-
-## Scenario Summary
-
-| Scenario | Component | Platform | Sidecar | ConfigMap Pattern | Solution |
-|---|---|---|---|---|---|
-| **1** | Stolostron Hub | OpenShift | ✅ | Direct consumption | Refer to OpenShift hint doc |
-| **2** | Stolostron Spoke | OpenShift | ✅ | Direct consumption | Refer to OpenShift hint doc |
-| **3** | OCM Hub - cluster-manager-operator | OpenShift/K8s | ✅/❌ | Watches + restarts | Sidecar + ConfigMap |
-| **4** | OCM Hub - ocm-hub-components | OpenShift/K8s | ❌ | Operator creates ConfigMap | Operator propagation |
-| **5** | OCM Hub - addon-manager | OpenShift/K8s | ✅/❌ | Watches + restarts | Sidecar + ConfigMap |
-| **6** | OCM Spoke - klusterlet-operator | OpenShift/K8s | ✅/❌ | Watches + restarts | Sidecar + ConfigMap |
-| **7** | OCM Spoke - klusterlet-agent | OpenShift/K8s | ❌ | Operator creates ConfigMap | Operator propagation |
-| **8** | OCM Spoke - addon-agent | OpenShift/K8s | ❌ | Operator copies ConfigMap | ConfigMap copy pattern |
-| **9** | cluster-proxy components (self-deployed by cluster proxy manager/agent) | OpenShift/K8s | TBD | TBD | TBD |
 
 ---
 
@@ -99,6 +86,22 @@ OCM repos are **upstream Kubernetes projects** that cannot depend on OpenShift-s
 4. **Restart on Change**: Components watch ConfigMap and restart when TLS config changes
 5. **Safe Fallback**: Components use TLS 1.2 when ConfigMap not available (vanilla Kubernetes)
 6. **Addon Flexibility**: Scenarios 5 & 8 are **for reference only**. Addon squads may implement their own solution.
+
+---
+
+## Scenario Summary
+
+| Scenario | Component | Platform | Sidecar | ConfigMap Pattern | Solution |
+|---|---|---|---|---|---|
+| **1** | Stolostron Hub | OpenShift | ✅ | Direct consumption | Refer to OpenShift hint doc |
+| **2** | Stolostron Spoke | OpenShift | ✅ | Direct consumption | Refer to OpenShift hint doc |
+| **3** | OCM Hub - cluster-manager-operator | OpenShift/K8s | ✅/❌ | Watches + restarts | Sidecar + ConfigMap |
+| **4** | OCM Hub - ocm-hub-components | OpenShift/K8s | ❌ | Operator creates ConfigMap | Operator propagation |
+| **5** | OCM Hub - addon-manager | OpenShift/K8s | ✅/❌ | Watches + restarts | Sidecar + ConfigMap |
+| **6** | OCM Spoke - klusterlet-operator | OpenShift/K8s | ✅/❌ | Watches + restarts | Sidecar + ConfigMap |
+| **7** | OCM Spoke - klusterlet-agent | OpenShift/K8s | ❌ | Operator creates ConfigMap | Operator propagation |
+| **8** | OCM Spoke - addon-agent | OpenShift/K8s | ❌ | Operator copies ConfigMap | ConfigMap copy pattern |
+| **9** | cluster-proxy components (self-deployed by cluster proxy manager/agent) | OpenShift/K8s | TBD | TBD | TBD |
 
 ---
 
