@@ -24,6 +24,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilrand "k8s.io/apimachinery/pkg/util/rand"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
@@ -390,6 +391,12 @@ var _ = Describe("Use KlusterletConfig to customize klusterlet manifests", func(
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 		})
 
+		// Restart agent pods to escape CrashLoopBackOff from the invalid server URL.
+		// The invalid URL causes the agent to crash repeatedly with increasing backoff
+		// delays. Without restarting, the pod may take 10+ minutes to retry, causing
+		// assertManagedClusterAvailable to time out.
+		restartAgentPods()
+
 		By(fmt.Sprintf("Should recover the managed cluster %s", managedClusterName), func() {
 			err := util.SetImmediateImportAnnotation(hubClusterClient, managedClusterName, "")
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
@@ -602,7 +609,12 @@ func restartAgentPods(namespaces ...string) {
 		nspodsnum[ns] = len(pods.Items)
 		for _, pod := range pods.Items {
 			err = hubKubeClient.CoreV1().Pods(ns).Delete(context.TODO(), pod.Name, metav1.DeleteOptions{})
-			Expect(err).ToNot(HaveOccurred())
+			// Tolerate NotFound: the pod may have already been deleted by the
+			// Deployment controller (e.g. during a rolling update) between our
+			// List and Delete calls.
+			if err != nil && !errors.IsNotFound(err) {
+				Expect(err).ToNot(HaveOccurred())
+			}
 		}
 	}
 	gomega.Eventually(func() error {
