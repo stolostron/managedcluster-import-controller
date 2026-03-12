@@ -95,6 +95,11 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 				return len(cluster.Finalizers) > 2
 			}, 1*time.Minute, 1*time.Second).ShouldNot(gomega.BeFalse())
 
+			// Wait for leader election before deleting the ManagedCluster. The initial
+			// import always triggers a rolling update, and the new pod must be leader
+			// before cleanup can proceed correctly. See test/e2e/README.md for details.
+			assertAgentLeaderElection()
+
 			// detach the cluster
 			err = hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), localClusterName, metav1.DeleteOptions{})
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
@@ -197,6 +202,11 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 				return len(cluster.Finalizers) > 2
 			}, 1*time.Minute, 1*time.Second).ShouldNot(gomega.BeFalse())
 
+			// Wait for leader election before deleting the ManagedCluster. The initial
+			// import always triggers a rolling update, and the new pod must be leader
+			// before cleanup can proceed correctly. See test/e2e/README.md for details.
+			assertAgentLeaderElection()
+
 			// detach the cluster
 			err = hubClusterClient.ClusterV1().ManagedClusters().Delete(context.TODO(), localClusterName, metav1.DeleteOptions{})
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
@@ -274,6 +284,11 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 
 		// This case will take about several minutes to wait for the cluster state to become unavailable,
 		ginkgo.It("should keep the ns when infraenv exists", func() {
+			// Wait for leader election before deleting the ManagedCluster. The initial
+			// import always triggers a rolling update, and the new pod must be leader
+			// before cleanup can proceed correctly. See test/e2e/README.md for details.
+			assertAgentLeaderElection()
+
 			managedClusterName := localClusterName
 			assertManagedClusterNamespace(managedClusterName)
 
