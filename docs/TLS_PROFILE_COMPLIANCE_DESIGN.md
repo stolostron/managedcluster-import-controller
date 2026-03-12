@@ -93,14 +93,14 @@ OCM repos are **upstream Kubernetes projects** that cannot depend on OpenShift-s
 
 | Scenario | Component | Platform | Sidecar | ConfigMap Pattern | Solution |
 |---|---|---|---|---|---|
-| **1** | Stolostron Hub | OpenShift | ✅ | Direct consumption | Refer to OpenShift hint doc |
-| **2** | Stolostron Spoke | OpenShift | ✅ | Direct consumption | Refer to OpenShift hint doc |
-| **3** | OCM Hub - cluster-manager-operator | OpenShift/K8s | ✅/❌ | Watches + restarts | Sidecar + ConfigMap |
-| **4** | OCM Hub - ocm-hub-components | OpenShift/K8s | ❌ | Operator creates ConfigMap | Operator propagation |
-| **5** | OCM Hub - addon-manager | OpenShift/K8s | ✅/❌ | Watches + restarts | Sidecar + ConfigMap |
-| **6** | OCM Spoke - klusterlet-operator | OpenShift/K8s | ✅/❌ | Watches + restarts | Sidecar + ConfigMap |
-| **7** | OCM Spoke - klusterlet-agent | OpenShift/K8s | ❌ | Operator creates ConfigMap | Operator propagation |
-| **8** | OCM Spoke - addon-agent | OpenShift/K8s | ❌ | Operator copies ConfigMap | ConfigMap copy pattern |
+| **1** | Stolostron Hub | OpenShift | ✅ | Direct consumption | [Refer to OpenShift hint doc](#scenario-1--2-stolostron-hub--spoke-openshift) |
+| **2** | Stolostron Spoke | OpenShift | ✅ | Direct consumption | [Refer to OpenShift hint doc](#scenario-1--2-stolostron-hub--spoke-openshift) |
+| **3** | OCM Hub - cluster-manager-operator | OpenShift/K8s | ✅/❌ | Watches + restarts | [Sidecar + ConfigMap](#scenario-3-ocm-hub---cluster-manager-operator) |
+| **4** | OCM Hub - ocm-hub-components | OpenShift/K8s | ❌ | Operator creates ConfigMap | [Operator propagation](#scenario-4-ocm-hub---ocm-hub-components) |
+| **5** | OCM Hub - addon-manager | OpenShift/K8s | ✅/❌ | Watches + restarts | [Sidecar + ConfigMap](#scenario-5-ocm-hub---addon-manager) |
+| **6** | OCM Spoke - klusterlet-operator | OpenShift/K8s | ✅/❌ | Watches + restarts | [Sidecar + ConfigMap](#scenario-6-ocm-spoke---klusterlet-operator) |
+| **7** | OCM Spoke - klusterlet-agent | OpenShift/K8s | ❌ | Operator creates ConfigMap | [Operator propagation](#scenario-7-ocm-spoke---klusterlet-agent) |
+| **8** | OCM Spoke - addon-agent | OpenShift/K8s | ❌ | Operator copies ConfigMap | [ConfigMap copy pattern](#scenario-8-ocm-spoke---addon-agent) |
 | **9** | cluster-proxy components (self-deployed by cluster proxy manager/agent) | OpenShift/K8s | TBD | TBD | TBD |
 
 ---
@@ -109,7 +109,7 @@ OCM repos are **upstream Kubernetes projects** that cannot depend on OpenShift-s
 
 ### Scenario 1 & 2: Stolostron Hub & Spoke (OpenShift)
 
-**Solution:** Refer to [Hint for resolving TLS non-compliance tickets Code Examples](https://docs.google.com/document/d/1234567890)
+**Solution:** Refer to [Hint for resolving TLS non-compliance tickets Code Examples](https://docs.google.com/document/d/1cMc9E8psHfnoK06ntR8kHSWB8d3rMtmldhnmM4nImjs)
 
 **Approach:** Use OpenShift library-go TLS helpers to watch `APIServer.spec.tlsSecurityProfile` directly (no sidecar needed)
 
@@ -634,6 +634,6 @@ A: When OpenShift adds PQC cipher suites to APIServer TLS profiles, all componen
 
 ## References
 
-- **OpenShift Requirement:** [Hint for resolving TLS non-compliance tickets Code Examples](https://docs.google.com/document/d/1234567890)
+- **OpenShift Requirement:** [Hint for resolving TLS non-compliance tickets Code Examples](https://docs.google.com/document/d/1cMc9E8psHfnoK06ntR8kHSWB8d3rMtmldhnmM4nImjs)
 - **JIRA:** [ACM-26882: [ACM] Central TLS Profile consistency](https://issues.redhat.com/browse/ACM-26882)
 - **Existing Pattern:** `pkg/operator/operators/klusterlet/controllers/addonsecretcontroller/controller.go`
