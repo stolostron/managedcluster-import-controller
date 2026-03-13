@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	kevents "k8s.io/client-go/tools/events"
 	"k8s.io/utils/ptr"
+	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -132,6 +133,13 @@ func (r *ReconcileManagedCluster) ensureManagedClusterMetaObj(ctx context.Contex
 		msgs = append(msgs, "created-via annotaion is added")
 	}
 
+	// Add the annotation addon.open-cluster-management.io/hosting-cluster-name to the managedCluster because
+	// when an addon is installed via the InstallStrategy in CMA, this annotation will be synchronized to the addon.
+	ensureAddonHostingAnnotation(modified, managedCluster)
+	if *modified {
+		msgs = append(msgs, "addon hosting cluster name annotation is added")
+	}
+
 	// ensure cluster import finalizer
 	helpers.AddManagedClusterFinalizer(modified, managedCluster, constants.ImportFinalizer)
 	if *modified {
@@ -153,6 +161,36 @@ func (r *ReconcileManagedCluster) ensureManagedClusterMetaObj(ctx context.Contex
 	r.recorder.Eventf("ManagedClusterMetaObjModified", "The managed cluster %s meta data is modified: %s",
 		managedCluster.Name, strings.Join(msgs, ","))
 	return nil
+}
+
+// ensureAddonHostingAnnotation appends the addon hosting cluster name annotation to the managed cluster
+// if the managed cluster has hosted mode addons enabled and is deployed in hosted mode.
+// If the conditions are not met, it removes the annotation if it exists.
+func ensureAddonHostingAnnotation(modified *bool, cluster *clusterv1.ManagedCluster) {
+	annotations := cluster.Annotations
+	if annotations == nil {
+		return
+	}
+
+	enabledHostedAddon := annotations[constants.AddonEnableHostedModeAnnotation]
+	hostingClusterName := annotations[constants.HostingClusterNameAnnotation]
+	addonHostingClusterName, existed := annotations[addonv1alpha1.HostingClusterNameAnnotationKey]
+
+	if !helpers.IsHostedCluster(cluster) || enabledHostedAddon != "true" || hostingClusterName == "" {
+		if existed {
+			delete(cluster.Annotations, addonv1alpha1.HostingClusterNameAnnotationKey)
+			*modified = true
+		}
+		return
+	}
+
+	if hostingClusterName != addonHostingClusterName {
+		resourcemerge.MergeMap(modified, &cluster.Annotations, map[string]string{
+			addonv1alpha1.HostingClusterNameAnnotationKey: hostingClusterName,
+		})
+		return
+	}
+
 }
 
 func ensureCreateViaAnnotation(modified *bool, cluster *clusterv1.ManagedCluster) {
