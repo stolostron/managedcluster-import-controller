@@ -149,7 +149,7 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 	server := &http.Server{
 		ReadHeaderTimeout: 10 * time.Second,
 		Addr:              fmt.Sprintf(":%d", port),
-		TLSConfig:         helpers.GetTLSConfigForServer(clientHolder.RuntimeClient),
+		TLSConfig:         helpers.GetTLSConfigForServer(clientHolder.RuntimeAPIReader),
 		Handler:           mux,
 	}
 

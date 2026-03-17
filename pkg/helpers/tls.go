@@ -15,7 +15,8 @@ import (
 
 // GetTLSConfigForServer returns TLS config for HTTPS server based on hub's OpenShift APIServer settings.
 // Falls back to TLS 1.2 with no specific cipher suites on vanilla Kubernetes or if fetch fails.
-func GetTLSConfigForServer(runtimeClient client.Client) *tls.Config {
+// Uses client.Reader to avoid dependency on manager's cache (can be called before manager starts).
+func GetTLSConfigForServer(runtimeClient client.Reader) *tls.Config {
 	// Only on OpenShift hub
 	if !DeployOnOCP {
 		return &tls.Config{

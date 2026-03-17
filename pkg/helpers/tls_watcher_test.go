@@ -70,10 +70,10 @@ func TestSetupTLSProfileWatcher_OpenShift_NoAPIServer(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	// Should return error when APIServer object doesn't exist
+	// SetupTLSProfileWatcher should succeed (adds runnable), error happens when runnable starts
 	err := SetupTLSProfileWatcher(ctx, mgr)
-	if err == nil {
-		t.Error("SetupTLSProfileWatcher() should return error when APIServer object doesn't exist")
+	if err != nil {
+		t.Errorf("SetupTLSProfileWatcher() should succeed, got error: %v", err)
 	}
 }
 
