@@ -9,6 +9,8 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 	tlspkg "github.com/openshift/controller-runtime-common/pkg/tls"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	"k8s.io/klog/v2"
 	ctrl "sigs.k8s.io/controller-runtime"
 )
@@ -19,6 +21,11 @@ import (
 //
 // This ensures the agent-registration server picks up TLS profile changes without
 // requiring manual pod restart.
+//
+// Uses the runnable pattern to defer setup until after manager cache is ready, since
+// SecurityProfileWatcher requires a cached client. The runnable's Start() is called after
+// cache sync but during mgr.Start(), allowing it to safely add the watcher controller.
+// See: https://github.com/openshift/controller-runtime-common
 //
 // Returns nil on vanilla Kubernetes (no-op). On OpenShift, adds a runnable to the manager
 // that will start the watcher after the manager's cache is started.
@@ -33,8 +40,9 @@ func SetupTLSProfileWatcher(ctx context.Context, mgr ctrl.Manager) error {
 	return mgr.Add(&tlsProfileWatcherRunnable{mgr: mgr})
 }
 
-// tlsProfileWatcherRunnable implements manager.Runnable to set up the TLS watcher
-// after the manager's cache has started
+// tlsProfileWatcherRunnable implements manager.Runnable to defer TLS watcher setup until
+// after cache sync. Runs in the "Others" group (NeedLeaderElection=false) which starts after
+// caches. The Start() method runs during mgr.Start() and can safely call SetupWithManager().
 type tlsProfileWatcherRunnable struct {
 	mgr ctrl.Manager
 }
@@ -57,6 +65,12 @@ func (r *tlsProfileWatcherRunnable) Start(ctx context.Context) error {
 	// Fetch initial TLS profile
 	profile, err := tlspkg.FetchAPIServerTLSProfile(ctx, r.mgr.GetClient())
 	if err != nil {
+		// Skip setup gracefully if CRD doesn't exist (vanilla K8s) or resource is missing
+		if meta.IsNoMatchError(err) || apierrors.IsNotFound(err) {
+			klog.V(4).Infof("APIServer resource not available, skipping TLS watcher: %v", err)
+			return nil
+		}
+		// Other errors (RBAC, network, etc.) are unexpected - crash pod
 		klog.Errorf("Failed to fetch initial TLS profile for watcher: %v", err)
 		return err
 	}
@@ -77,7 +91,8 @@ func (r *tlsProfileWatcherRunnable) Start(ctx context.Context) error {
 		},
 	}
 
-	// Set up the watcher with the manager
+	// Set up the watcher with the manager. Safe to call during runnable's Start() because
+	// mgr.Start() is still running and immediately starts controllers added at this point.
 	if err := watcher.SetupWithManager(r.mgr); err != nil {
 		klog.Errorf("Failed to setup TLS profile watcher: %v", err)
 		return err
