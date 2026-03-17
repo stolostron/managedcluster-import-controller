@@ -662,6 +662,45 @@ A: When OpenShift adds PQC cipher suites to APIServer TLS profiles, all componen
 
 ---
 
+## Future Enhancements
+
+### Multi-Level TLS Configuration Hierarchy
+
+**Status:** Deferred for future requirements
+
+**Context:** Currently, klusterlet-operator (Scenario 6) reads TLS configuration from the hosting cluster's `APIServer.spec.tlsSecurityProfile` via sidecar. This works well for most scenarios. However, in advanced deployments, there may be a need for hub-driven TLS policy enforcement across managed clusters.
+
+**Proposed Enhancement:** Implement a three-tier configuration hierarchy with top-down priority:
+
+```text
+Priority 1 (Highest): Hub-driven config
+    ↓
+Priority 2: Local APIServer CR (hosting cluster)
+    ↓
+Priority 3 (Fallback): Go defaults (TLS 1.2)
+```
+
+**Implementation Options (when needed):**
+
+- **Option B (Preferred):** Hub creates a ConfigMap in managed cluster that klusterlet-operator reads
+  - Example: import-controller creates `open-cluster-management-agent/hub-tls-override` ConfigMap
+  - klusterlet-operator checks this ConfigMap first before reading local APIServer
+
+- **Option C (Alternative):** Add TLS config to Klusterlet CR spec
+  - Example: `Klusterlet.spec.tlsConfig.minVersion`
+  - Hub sets this in the Klusterlet CR during import
+  - klusterlet-operator reads from CR spec first
+
+**Benefits:**
+
+- Hub admins can enforce stricter TLS policies across all managed clusters
+- Supports scenarios where hub requires higher security than managed cluster defaults
+- Maintains backward compatibility (if hub doesn't set config, use local APIServer)
+
+**Current Decision:** Keep the current design (local APIServer via sidecar) until there's a concrete requirement for hub-driven TLS policy enforcement. This enhancement can be added without breaking existing deployments.
+
+---
+
 ## Approval and Sign-off
 
 **Document Owner:** ACM Server Foundation Team
