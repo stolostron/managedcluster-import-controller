@@ -372,6 +372,14 @@ func main() {
 		return
 	}
 
+	// Set up TLS profile watcher for agent-registration server
+	// Returns nil on vanilla Kubernetes; error is fatal on OpenShift
+	if err := helpers.SetupTLSProfileWatcher(ctx, mgr); err != nil {
+		setupLog.Error(err, "failed to setup TLS profile watcher")
+		exitCode = 1
+		return
+	}
+
 	controllerConfigInformerF.Start(ctx.Done())
 	importSecertInformerF.Start(ctx.Done())
 	autoimportSecretInformerF.Start(ctx.Done())

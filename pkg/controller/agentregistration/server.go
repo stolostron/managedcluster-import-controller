@@ -2,7 +2,6 @@ package agentregistration
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -150,7 +149,7 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 	server := &http.Server{
 		ReadHeaderTimeout: 10 * time.Second,
 		Addr:              fmt.Sprintf(":%d", port),
-		TLSConfig:         &tls.Config{MinVersion: tls.VersionTLS12},
+		TLSConfig:         helpers.GetTLSConfigForServer(clientHolder.RuntimeClient),
 		Handler:           mux,
 	}
 
