@@ -55,6 +55,13 @@ func buildTLSConfigFromProfile(profile *ocinfrav1.TLSSecurityProfile) (*tls.Conf
 
 	minVersion := parseTLSVersion(string(profileSpec.MinTLSVersion))
 
+	// Ensure minimum TLS version is at least 1.2 for security compliance
+	// This satisfies gosec G402 security requirements
+	if minVersion < tls.VersionTLS12 {
+		klog.Warningf("TLS profile specified version %v which is below TLS 1.2, upgrading to TLS 1.2", profileSpec.MinTLSVersion)
+		minVersion = tls.VersionTLS12
+	}
+
 	config := &tls.Config{
 		MinVersion: minVersion,
 	}

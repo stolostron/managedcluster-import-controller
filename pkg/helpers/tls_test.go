@@ -275,3 +275,57 @@ func TestBuildTLSConfigFromProfile_Intermediate(t *testing.T) {
 		t.Errorf("Intermediate profile should have cipher suites")
 	}
 }
+
+func TestBuildTLSConfigFromProfile_SecurityUpgrade(t *testing.T) {
+	// Test that insecure TLS versions (1.0, 1.1) are automatically upgraded to TLS 1.2
+	tests := []struct {
+		name        string
+		minVersion  ocinfrav1.TLSProtocolVersion
+		expectedMin uint16
+	}{
+		{
+			name:        "TLS 1.0 upgraded to 1.2",
+			minVersion:  ocinfrav1.VersionTLS10,
+			expectedMin: tls.VersionTLS12,
+		},
+		{
+			name:        "TLS 1.1 upgraded to 1.2",
+			minVersion:  ocinfrav1.VersionTLS11,
+			expectedMin: tls.VersionTLS12,
+		},
+		{
+			name:        "TLS 1.2 unchanged",
+			minVersion:  ocinfrav1.VersionTLS12,
+			expectedMin: tls.VersionTLS12,
+		},
+		{
+			name:        "TLS 1.3 unchanged",
+			minVersion:  ocinfrav1.VersionTLS13,
+			expectedMin: tls.VersionTLS13,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			profile := &ocinfrav1.TLSSecurityProfile{
+				Type: ocinfrav1.TLSProfileCustomType,
+				Custom: &ocinfrav1.CustomTLSProfile{
+					TLSProfileSpec: ocinfrav1.TLSProfileSpec{
+						MinTLSVersion: tt.minVersion,
+						Ciphers:       []string{"ECDHE-RSA-AES128-GCM-SHA256"},
+					},
+				},
+			}
+
+			config, err := buildTLSConfigFromProfile(profile)
+			if err != nil {
+				t.Errorf("buildTLSConfigFromProfile() error = %v", err)
+				return
+			}
+
+			if config.MinVersion != tt.expectedMin {
+				t.Errorf("MinVersion = %v, want %v", config.MinVersion, tt.expectedMin)
+			}
+		})
+	}
+}
