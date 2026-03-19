@@ -95,13 +95,34 @@ OCM repos are **upstream Kubernetes projects** that cannot depend on OpenShift-s
 
 ## Simplified Pattern Summary
 
+![TLS Profile Architecture](tls-profile.png)
+
 All scenarios follow 4 fundamental patterns:
+
+### Sidecar Injection (Stolostron Infrastructure)
+
+**Who Injects:**
+
+- **backplane-operator** injects `tls-profile-sync` sidecar into cluster-manager-operator pod
+- **import-controller** injects `tls-profile-sync` sidecar into klusterlet-operator pod
+
+**When:**
+
+- Only on OpenShift clusters (detected via `config.openshift.io/v1` API group)
+- During operator deployment/reconciliation
+
+**Applies to:**
+
+- **Scenario 3:** cluster-manager-operator (injected by backplane-operator)
+- **Scenario 5b:** addon-managers in different namespaces (injected by backplane-operator)
+- **Scenario 6:** klusterlet-operator (injected by import-controller)
 
 ### Case 1: ConfigMap Creation + Self-Managed Components
 
 **ConfigMap Source:**
 
-- Controller (sidecar) OR manual configuration creates `ocm-tls-profile` ConfigMap
+- `tls-profile-sync` sidecar watches OpenShift `APIServer.spec.tlsSecurityProfile`
+- Creates/updates `ocm-tls-profile` ConfigMap with parsed TLS settings
 
 **Who Consumes:**
 
