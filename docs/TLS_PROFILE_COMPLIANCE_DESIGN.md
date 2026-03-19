@@ -93,6 +93,90 @@ OCM repos are **upstream Kubernetes projects** that cannot depend on OpenShift-s
 
 ---
 
+## Simplified Pattern Summary
+
+All scenarios follow 4 fundamental patterns:
+
+### Case 1: ConfigMap Creation + Self-Managed Components
+
+**ConfigMap Source:**
+
+- Controller (sidecar) OR manual configuration creates `ocm-tls-profile` ConfigMap
+
+**Who Consumes:**
+
+- Components deployed on hub (addon-managers)
+- Operators (hub or spoke, doesn't matter)
+
+**Behavior:**
+
+- Watch `ocm-tls-profile` ConfigMap in their namespace
+- Restart (`os.Exit(0)`) when ConfigMap changes
+
+**Applies to:**
+
+- **Scenario 3:** cluster-manager-operator
+- **Scenario 5:** addon-managers (e.g., cluster-proxy-addon-manager,no sidecar needed as it is deployed in the same namespace of the cluster-manager-operator; submariner-addon-manager?)
+- **Scenario 6:** klusterlet-operator
+
+### Case 2: Operators Inject Flags into Components
+
+**Who:**
+
+- Operators (hub or spoke, doesn't matter)
+
+**Behavior:**
+
+- Watch ConfigMap from Case 1
+- Read ConfigMap and inject TLS values as command-line flags into component deployments
+- Add `tls-config-hash` annotation to trigger rollout when config changes
+
+**Applies to:**
+
+- **Scenario 3 → 4:** cluster-manager-operator injects flags into hub components
+- **Scenario 6 → 7:** klusterlet-operator injects flags into spoke agents
+
+**Note:** Operators do BOTH Case 1 (self-restart) AND Case 2 (inject flags for their components)
+
+### Case 3: Components Receive Flags
+
+**Who:**
+
+- Components deployed by operators
+
+**Behavior:**
+
+- Receive TLS config via flags: `--tls-min-version=VersionTLS13 --tls-cipher-suites=...`
+- Parse flags on startup (no ConfigMap watching)
+- Restarted by Kubernetes when operator changes deployment annotation
+
+**Applies to:**
+
+- **Scenario 4:** registration-controller, work-controller, placement-controller, addon-manager-controller, addon-webhook, registration-webhook, work-webhook
+- **Scenario 7:** klusterlet-agent, registration-agent, work-agent
+
+### Case 4: Addon Agents with ConfigMap Copy (Optional)
+
+**Infrastructure:**
+
+- klusterlet-operator copies `ocm-tls-profile` ConfigMap to addon namespaces
+
+**Who:**
+
+- Addon agents (optional - addon squads may choose their own approach)
+
+**Behavior:**
+
+- Watch `ocm-tls-profile` ConfigMap in their namespace
+- Restart when ConfigMap changes
+- Same as Case 1, but with ConfigMap copy infrastructure
+
+**Applies to:**
+
+- **Scenario 8:** cluster-proxy-addon-agent, ...
+
+---
+
 ## Scenario Summary
 
 | Scenario | Component | Platform | Sidecar | ConfigMap Pattern | Solution |
