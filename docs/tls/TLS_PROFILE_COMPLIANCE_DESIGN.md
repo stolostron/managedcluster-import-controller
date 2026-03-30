@@ -111,6 +111,13 @@ All scenarios follow 4 fundamental patterns:
 - Only on OpenShift clusters (detected via `config.openshift.io/v1` API group)
 - During operator deployment/reconciliation
 
+**Cipher Suite Format Conversion:**
+
+- OpenShift `APIServer.spec.tlsSecurityProfile` uses **OpenSSL-style** names (e.g., `ECDHE-RSA-AES128-GCM-SHA256`)
+- Upstream OCM expects **IANA format** (e.g., `TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256`)
+- The `tls-profile-sync` sidecar is responsible for converting OpenSSL → IANA when writing the `ocm-tls-profile` ConfigMap
+- This keeps upstream OCM code free of format conversion logic
+
 **Applies to:**
 
 - **Scenario 3:** cluster-manager-operator (injected by backplane-operator)
