@@ -410,11 +410,13 @@ func TestGetNamespace(t *testing.T) {
 		}
 	})
 
-	t.Run("returns empty when no env and no in-cluster file", func(t *testing.T) {
-		os.Unsetenv("POD_NAMESPACE")
+	t.Run("env var takes precedence over in-cluster file", func(t *testing.T) {
+		os.Setenv("POD_NAMESPACE", "env-namespace")
+		defer os.Unsetenv("POD_NAMESPACE")
+
 		ns := getNamespace()
-		if ns != "" {
-			t.Errorf("getNamespace() = %q, want empty", ns)
+		if ns != "env-namespace" {
+			t.Errorf("getNamespace() = %q, want env-namespace", ns)
 		}
 	})
 }

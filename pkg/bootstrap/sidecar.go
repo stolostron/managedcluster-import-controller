@@ -18,6 +18,8 @@ import (
 	"sigs.k8s.io/yaml"
 )
 
+const klusterletDeploymentName = "klusterlet"
+
 // isManagedClusterOpenShift returns true if the managed cluster is an OpenShift cluster.
 func isManagedClusterOpenShift(mc *clusterv1.ManagedCluster) bool {
 	if mc == nil {
@@ -63,7 +65,7 @@ func injectTLSProfileSyncSidecar(
 		if err := yaml.Unmarshal(obj, u); err != nil {
 			continue
 		}
-		if u.GetKind() != "Deployment" || u.GetName() != "klusterlet" {
+		if u.GetKind() != "Deployment" || u.GetName() != klusterletDeploymentName {
 			continue
 		}
 
