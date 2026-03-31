@@ -122,6 +122,33 @@ func CreateHostedManagedClusterWithShortLeaseDuration(clusterClient clusterclien
 	return cluster, err
 }
 
+func CreateHostedManagedClusterWithAnnotations(clusterClient clusterclient.Interface, name, management string, annotations map[string]string) (*clusterv1.ManagedCluster, error) {
+	clusterAnnotations := map[string]string{}
+	clusterAnnotations[constants.KlusterletDeployModeAnnotation] = string(operatorv1.InstallModeHosted)
+	clusterAnnotations[constants.HostingClusterNameAnnotation] = management
+	for k, v := range annotations {
+		clusterAnnotations[k] = v
+	}
+	cluster, err := clusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), name, metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		return clusterClient.ClusterV1().ManagedClusters().Create(
+			context.TODO(),
+			&clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:        name,
+					Annotations: clusterAnnotations,
+				},
+				Spec: clusterv1.ManagedClusterSpec{
+					HubAcceptsClient: true,
+				},
+			},
+			metav1.CreateOptions{},
+		)
+	}
+
+	return cluster, err
+}
+
 func CreateManagedCluster(clusterClient clusterclient.Interface, name string, labels ...Label) (*clusterv1.ManagedCluster, error) {
 	clusterLabels := map[string]string{}
 	for _, label := range labels {
