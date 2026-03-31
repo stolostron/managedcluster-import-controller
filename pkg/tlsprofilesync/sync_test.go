@@ -5,12 +5,18 @@ package tlsprofilesync
 
 import (
 	"context"
+	"os"
 	"testing"
 
 	configv1 "github.com/openshift/api/config/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	crfake "sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 func TestBuildConfigMapData(t *testing.T) {
@@ -236,4 +242,179 @@ func TestSyncConfigMap_ExistingConfigMap(t *testing.T) {
 	if cm.Data["profileType"] != "Modern" {
 		t.Errorf("profileType = %q, want Modern", cm.Data["profileType"])
 	}
+}
+
+func newFakeClient(objs ...client.Object) client.Client {
+	scheme := runtime.NewScheme()
+	_ = configv1.Install(scheme)
+	_ = corev1.AddToScheme(scheme)
+	return crfake.NewClientBuilder().WithScheme(scheme).WithObjects(objs...).Build()
+}
+
+func TestReconcile_ModernProfile(t *testing.T) {
+	ctx := context.Background()
+	namespace := "test-ns"
+
+	apiServer := &configv1.APIServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+		Spec: configv1.APIServerSpec{
+			TLSSecurityProfile: &configv1.TLSSecurityProfile{
+				Type: configv1.TLSProfileModernType,
+			},
+		},
+	}
+
+	kubeClient := fake.NewSimpleClientset()
+	r := &tlsProfileSyncReconciler{
+		client:     newFakeClient(apiServer),
+		kubeClient: kubeClient,
+		namespace:  namespace,
+	}
+
+	result, err := r.Reconcile(ctx, reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: "cluster"},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error: %v", err)
+	}
+	if result.Requeue {
+		t.Error("unexpected requeue")
+	}
+
+	cm, err := kubeClient.CoreV1().ConfigMaps(namespace).Get(
+		ctx, ConfigMapName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("ConfigMap not created: %v", err)
+	}
+	if cm.Data["profileType"] != "Modern" {
+		t.Errorf("profileType = %q, want Modern", cm.Data["profileType"])
+	}
+	if cm.Data["minTLSVersion"] != "VersionTLS13" {
+		t.Errorf("minTLSVersion = %q, want VersionTLS13", cm.Data["minTLSVersion"])
+	}
+}
+
+func TestReconcile_SkipsNonCluster(t *testing.T) {
+	ctx := context.Background()
+	kubeClient := fake.NewSimpleClientset()
+	r := &tlsProfileSyncReconciler{
+		client:     newFakeClient(),
+		kubeClient: kubeClient,
+		namespace:  "test-ns",
+	}
+
+	result, err := r.Reconcile(ctx, reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: "not-cluster"},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error: %v", err)
+	}
+	if result.Requeue {
+		t.Error("unexpected requeue")
+	}
+
+	// ConfigMap should NOT be created
+	_, err = kubeClient.CoreV1().ConfigMaps("test-ns").Get(
+		ctx, ConfigMapName, metav1.GetOptions{})
+	if err == nil {
+		t.Error("ConfigMap should not be created for non-cluster name")
+	}
+}
+
+func TestReconcile_APIServerNotFound(t *testing.T) {
+	ctx := context.Background()
+	kubeClient := fake.NewSimpleClientset()
+	r := &tlsProfileSyncReconciler{
+		client:     newFakeClient(), // no APIServer object
+		kubeClient: kubeClient,
+		namespace:  "test-ns",
+	}
+
+	result, err := r.Reconcile(ctx, reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: "cluster"},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() should not error on not-found: %v", err)
+	}
+	if result.Requeue {
+		t.Error("unexpected requeue")
+	}
+
+	// ConfigMap should NOT be created
+	_, err = kubeClient.CoreV1().ConfigMaps("test-ns").Get(
+		ctx, ConfigMapName, metav1.GetOptions{})
+	if err == nil {
+		t.Error("ConfigMap should not be created when APIServer not found")
+	}
+}
+
+func TestReconcile_UpdatesExistingConfigMap(t *testing.T) {
+	ctx := context.Background()
+	namespace := "test-ns"
+
+	apiServer := &configv1.APIServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+		Spec: configv1.APIServerSpec{
+			TLSSecurityProfile: &configv1.TLSSecurityProfile{
+				Type: configv1.TLSProfileModernType,
+			},
+		},
+	}
+
+	existing := &corev1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      ConfigMapName,
+			Namespace: namespace,
+		},
+		Data: map[string]string{
+			"minTLSVersion": "VersionTLS12",
+			"profileType":   "Intermediate",
+		},
+	}
+
+	kubeClient := fake.NewSimpleClientset(existing)
+	r := &tlsProfileSyncReconciler{
+		client:     newFakeClient(apiServer),
+		kubeClient: kubeClient,
+		namespace:  namespace,
+	}
+
+	_, err := r.Reconcile(ctx, reconcile.Request{
+		NamespacedName: types.NamespacedName{Name: "cluster"},
+	})
+	if err != nil {
+		t.Fatalf("Reconcile() error: %v", err)
+	}
+
+	cm, err := kubeClient.CoreV1().ConfigMaps(namespace).Get(
+		ctx, ConfigMapName, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("get ConfigMap: %v", err)
+	}
+	if cm.Data["profileType"] != "Modern" {
+		t.Errorf("profileType = %q, want Modern", cm.Data["profileType"])
+	}
+	if cm.Data["minTLSVersion"] != "VersionTLS13" {
+		t.Errorf("minTLSVersion = %q, want VersionTLS13", cm.Data["minTLSVersion"])
+	}
+}
+
+func TestGetNamespace(t *testing.T) {
+	t.Run("returns POD_NAMESPACE env var", func(t *testing.T) {
+		os.Setenv("POD_NAMESPACE", "my-namespace")
+		defer os.Unsetenv("POD_NAMESPACE")
+
+		ns := getNamespace()
+		if ns != "my-namespace" {
+			t.Errorf("getNamespace() = %q, want my-namespace", ns)
+		}
+	})
+
+	t.Run("returns empty when no env and no in-cluster file", func(t *testing.T) {
+		os.Unsetenv("POD_NAMESPACE")
+		ns := getNamespace()
+		if ns != "" {
+			t.Errorf("getNamespace() = %q, want empty", ns)
+		}
+	})
 }

@@ -49,6 +49,10 @@ var additionalClusterRoleFiles = []string{
 	"manifests/klusterlet/clusterrole_aggregate.yaml",
 }
 
+var tlsProfileSyncRBACFiles = []string{
+	"manifests/klusterlet/clusterrole_tls_profile_sync.yaml",
+}
+
 var reservedClusterClaimSuffixes = []string{
 	"openshift.io",
 	"open-cluster-management.io",
@@ -415,6 +419,16 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 		return nil, nil, nil, err
 	}
 	manifestsBytes = append(manifestsBytes, additionalManifestsBytes...)
+
+	// Add RBAC for tls-profile-sync sidecar on OpenShift managed clusters
+	if isManagedClusterOpenShift(c.managedCluster) {
+		tlsRBACBytes, err := filesToTemplateBytes(tlsProfileSyncRBACFiles, c.chartConfig)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		manifestsBytes = append(manifestsBytes, tlsRBACBytes...)
+	}
+
 	return manifestsBytes, crdBytes, valuesBytes, nil
 }
 

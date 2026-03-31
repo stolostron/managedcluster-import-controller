@@ -7,11 +7,13 @@ import (
 	"os"
 
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/tlsprofilesync"
 )
 
 func main() {
+	ctrl.SetLogger(zap.New(zap.UseDevMode(true)))
 	ctx := ctrl.SetupSignalHandler()
 	setupLog := ctrl.Log.WithName("setup")
 	if err := tlsprofilesync.Run(ctx); err != nil {
