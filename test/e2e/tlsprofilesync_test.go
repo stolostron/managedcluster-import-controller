@@ -14,6 +14,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/test/e2e/util"
 	appsv1 "k8s.io/api/apps/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/rand"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -49,7 +50,7 @@ var _ = ginkgo.Describe("TLS profile sync sidecar injection", ginkgo.Label("tls"
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			})
 
-			ginkgo.By("Import secret should contain klusterlet deployment with tls-profile-sync sidecar",
+			ginkgo.By("Import secret should contain sidecar and RBAC for tls-profile-sync",
 				func() {
 					gomega.Eventually(func() error {
 						secretName := fmt.Sprintf("%s-import", managedClusterName)
@@ -64,25 +65,45 @@ var _ = ginkgo.Describe("TLS profile sync sidecar injection", ginkgo.Label("tls"
 							return fmt.Errorf("import.yaml is empty")
 						}
 
+						foundSidecar := false
+						foundClusterRole := false
+						foundClusterRoleBinding := false
+
 						for _, yaml := range helpers.SplitYamls(importYAML) {
 							obj := helpers.MustCreateObject(yaml)
-							dep, ok := obj.(*appsv1.Deployment)
-							if !ok || dep.Name != "klusterlet" {
-								continue
-							}
-
-							// Verify sidecar container exists
-							for _, c := range dep.Spec.Template.Spec.Containers {
-								if c.Name == "tls-profile-sync" {
-									util.Logf("Found tls-profile-sync sidecar with image %s", c.Image)
-									return nil
+							switch o := obj.(type) {
+							case *appsv1.Deployment:
+								if o.Name != "klusterlet" {
+									continue
+								}
+								for _, c := range o.Spec.Template.Spec.Containers {
+									if c.Name == "tls-profile-sync" {
+										util.Logf("Found tls-profile-sync sidecar with image %s",
+											c.Image)
+										foundSidecar = true
+									}
+								}
+							case *rbacv1.ClusterRole:
+								if o.Name == "open-cluster-management:klusterlet-tls-profile-sync" {
+									foundClusterRole = true
+								}
+							case *rbacv1.ClusterRoleBinding:
+								if o.Name == "open-cluster-management:klusterlet-tls-profile-sync" {
+									foundClusterRoleBinding = true
 								}
 							}
-							return fmt.Errorf(
-								"klusterlet deployment has %d containers but no tls-profile-sync sidecar",
-								len(dep.Spec.Template.Spec.Containers))
 						}
-						return fmt.Errorf("klusterlet deployment not found in import secret")
+
+						if !foundSidecar {
+							return fmt.Errorf("tls-profile-sync sidecar not found in klusterlet deployment")
+						}
+						if !foundClusterRole {
+							return fmt.Errorf("tls-profile-sync ClusterRole not found")
+						}
+						if !foundClusterRoleBinding {
+							return fmt.Errorf("tls-profile-sync ClusterRoleBinding not found")
+						}
+						return nil
 					}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
 				})
 		})
@@ -110,7 +131,7 @@ var _ = ginkgo.Describe("TLS profile sync sidecar injection", ginkgo.Label("tls"
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
 			})
 
-			ginkgo.By("Import secret should contain klusterlet deployment without sidecar",
+			ginkgo.By("Import secret should not contain sidecar or RBAC for tls-profile-sync",
 				func() {
 					gomega.Eventually(func() error {
 						secretName := fmt.Sprintf("%s-import", managedClusterName)
@@ -125,26 +146,37 @@ var _ = ginkgo.Describe("TLS profile sync sidecar injection", ginkgo.Label("tls"
 							return fmt.Errorf("import.yaml is empty")
 						}
 
+						foundDeployment := false
 						for _, yaml := range helpers.SplitYamls(importYAML) {
 							obj := helpers.MustCreateObject(yaml)
-							dep, ok := obj.(*appsv1.Deployment)
-							if !ok || dep.Name != "klusterlet" {
-								continue
-							}
-
-							for _, c := range dep.Spec.Template.Spec.Containers {
-								if c.Name == "tls-profile-sync" {
+							switch o := obj.(type) {
+							case *appsv1.Deployment:
+								if o.Name != "klusterlet" {
+									continue
+								}
+								foundDeployment = true
+								for _, c := range o.Spec.Template.Spec.Containers {
+									if c.Name == "tls-profile-sync" {
+										return fmt.Errorf(
+											"tls-profile-sync sidecar should not exist for non-OpenShift")
+									}
+								}
+							case *rbacv1.ClusterRole:
+								if o.Name == "open-cluster-management:klusterlet-tls-profile-sync" {
 									return fmt.Errorf(
-										"tls-profile-sync sidecar should not be injected for non-OpenShift cluster")
+										"tls-profile-sync ClusterRole should not exist for non-OpenShift")
+								}
+							case *rbacv1.ClusterRoleBinding:
+								if o.Name == "open-cluster-management:klusterlet-tls-profile-sync" {
+									return fmt.Errorf(
+										"tls-profile-sync ClusterRoleBinding should not exist for non-OpenShift")
 								}
 							}
-							if len(dep.Spec.Template.Spec.Containers) != 1 {
-								return fmt.Errorf("expected 1 container, got %d",
-									len(dep.Spec.Template.Spec.Containers))
-							}
-							return nil
 						}
-						return fmt.Errorf("klusterlet deployment not found in import secret")
+						if !foundDeployment {
+							return fmt.Errorf("klusterlet deployment not found")
+						}
+						return nil
 					}, 30*time.Second, 1*time.Second).Should(gomega.Succeed())
 				})
 		})

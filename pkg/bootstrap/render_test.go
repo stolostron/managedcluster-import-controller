@@ -19,6 +19,7 @@ import (
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	appv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
 	schedulingv1 "k8s.io/api/scheduling/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -1156,26 +1157,55 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				},
 			}).WithoutImagePullSecretGenerate(),
 			validateFunc: func(t *testing.T, objs, crds []runtime.Object) {
+				foundSidecar := false
+				foundTLSClusterRole := false
+				foundTLSClusterRoleBinding := false
 				for _, obj := range objs {
-					dep, ok := obj.(*appv1.Deployment)
-					if !ok || dep.Name != "klusterlet" {
-						continue
+					switch o := obj.(type) {
+					case *appv1.Deployment:
+						if o.Name != "klusterlet" {
+							continue
+						}
+						if len(o.Spec.Template.Spec.Containers) != 2 {
+							t.Fatalf("expected 2 containers in klusterlet deployment, got %d",
+								len(o.Spec.Template.Spec.Containers))
+						}
+						sidecar := o.Spec.Template.Spec.Containers[1]
+						if sidecar.Name != "tls-profile-sync" {
+							t.Errorf("sidecar name = %q, want tls-profile-sync", sidecar.Name)
+						}
+						if sidecar.Image !=
+							"quay.io/open-cluster-management/managedcluster-import-controller:latest" {
+							t.Errorf("sidecar image = %q", sidecar.Image)
+						}
+						foundSidecar = true
+					case *rbacv1.ClusterRole:
+						if o.Name == "open-cluster-management:klusterlet-tls-profile-sync" {
+							foundTLSClusterRole = true
+							if len(o.Rules) == 0 ||
+								o.Rules[0].APIGroups[0] != "config.openshift.io" {
+								t.Errorf("ClusterRole rules = %v, want config.openshift.io", o.Rules)
+							}
+						}
+					case *rbacv1.ClusterRoleBinding:
+						if o.Name == "open-cluster-management:klusterlet-tls-profile-sync" {
+							foundTLSClusterRoleBinding = true
+							if len(o.Subjects) == 0 || o.Subjects[0].Name != "klusterlet" {
+								t.Errorf("ClusterRoleBinding subject = %v, want klusterlet SA",
+									o.Subjects)
+							}
+						}
 					}
-					if len(dep.Spec.Template.Spec.Containers) != 2 {
-						t.Fatalf("expected 2 containers in klusterlet deployment, got %d",
-							len(dep.Spec.Template.Spec.Containers))
-					}
-					sidecar := dep.Spec.Template.Spec.Containers[1]
-					if sidecar.Name != "tls-profile-sync" {
-						t.Errorf("sidecar name = %q, want tls-profile-sync", sidecar.Name)
-					}
-					if sidecar.Image !=
-						"quay.io/open-cluster-management/managedcluster-import-controller:latest" {
-						t.Errorf("sidecar image = %q", sidecar.Image)
-					}
-					return
 				}
-				t.Fatal("klusterlet Deployment not found")
+				if !foundSidecar {
+					t.Error("klusterlet Deployment with tls-profile-sync sidecar not found")
+				}
+				if !foundTLSClusterRole {
+					t.Error("tls-profile-sync ClusterRole not found")
+				}
+				if !foundTLSClusterRoleBinding {
+					t.Error("tls-profile-sync ClusterRoleBinding not found")
+				}
 			},
 		},
 		{
@@ -1196,18 +1226,31 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				},
 			}).WithoutImagePullSecretGenerate(),
 			validateFunc: func(t *testing.T, objs, crds []runtime.Object) {
+				foundDeployment := false
 				for _, obj := range objs {
-					dep, ok := obj.(*appv1.Deployment)
-					if !ok || dep.Name != "klusterlet" {
-						continue
+					switch o := obj.(type) {
+					case *appv1.Deployment:
+						if o.Name != "klusterlet" {
+							continue
+						}
+						if len(o.Spec.Template.Spec.Containers) != 1 {
+							t.Fatalf("expected 1 container in klusterlet deployment, got %d",
+								len(o.Spec.Template.Spec.Containers))
+						}
+						foundDeployment = true
+					case *rbacv1.ClusterRole:
+						if o.Name == "open-cluster-management:klusterlet-tls-profile-sync" {
+							t.Error("tls-profile-sync ClusterRole should not exist for non-OpenShift")
+						}
+					case *rbacv1.ClusterRoleBinding:
+						if o.Name == "open-cluster-management:klusterlet-tls-profile-sync" {
+							t.Error("tls-profile-sync ClusterRoleBinding should not exist for non-OpenShift")
+						}
 					}
-					if len(dep.Spec.Template.Spec.Containers) != 1 {
-						t.Fatalf("expected 1 container in klusterlet deployment, got %d",
-							len(dep.Spec.Template.Spec.Containers))
-					}
-					return
 				}
-				t.Fatal("klusterlet Deployment not found")
+				if !foundDeployment {
+					t.Fatal("klusterlet Deployment not found")
+				}
 			},
 		},
 	}
