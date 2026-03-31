@@ -35,6 +35,8 @@ func init() {
 	os.Setenv(constants.RegistrationOperatorImageEnvVarName, "quay.io/open-cluster-management/registration-operator:latest")
 	os.Setenv(constants.WorkImageEnvVarName, "quay.io/open-cluster-management/work:latest")
 	os.Setenv(constants.RegistrationImageEnvVarName, "quay.io/open-cluster-management/registration:latest")
+	os.Setenv(constants.TLSProfileSyncImageEnvVarName,
+		"quay.io/open-cluster-management/managedcluster-import-controller:latest")
 }
 
 func TestKlusterletConfigGenerate(t *testing.T) {
@@ -1134,6 +1136,78 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 			errorMessage: "failed to get GRPC config yaml:",
 			validateFunc: func(t *testing.T, objects, crds []runtime.Object) {
 				// Should not be called for error cases
+			},
+		},
+		{
+			name: "default with OpenShift managed cluster injects tls-profile-sync sidecar",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-ocp"},
+				},
+			},
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeDefault,
+				"test-ocp",
+				[]byte("bootstrap kubeconfig"),
+			).WithManagedCluster(&v1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "test-ocp",
+					Labels: map[string]string{"vendor": "OpenShift"},
+				},
+			}).WithoutImagePullSecretGenerate(),
+			validateFunc: func(t *testing.T, objs, crds []runtime.Object) {
+				for _, obj := range objs {
+					dep, ok := obj.(*appv1.Deployment)
+					if !ok || dep.Name != "klusterlet" {
+						continue
+					}
+					if len(dep.Spec.Template.Spec.Containers) != 2 {
+						t.Fatalf("expected 2 containers in klusterlet deployment, got %d",
+							len(dep.Spec.Template.Spec.Containers))
+					}
+					sidecar := dep.Spec.Template.Spec.Containers[1]
+					if sidecar.Name != "tls-profile-sync" {
+						t.Errorf("sidecar name = %q, want tls-profile-sync", sidecar.Name)
+					}
+					if sidecar.Image !=
+						"quay.io/open-cluster-management/managedcluster-import-controller:latest" {
+						t.Errorf("sidecar image = %q", sidecar.Image)
+					}
+					return
+				}
+				t.Fatal("klusterlet Deployment not found")
+			},
+		},
+		{
+			name: "default with non-OpenShift managed cluster has no sidecar",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-k8s"},
+				},
+			},
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeDefault,
+				"test-k8s",
+				[]byte("bootstrap kubeconfig"),
+			).WithManagedCluster(&v1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:   "test-k8s",
+					Labels: map[string]string{"vendor": "Kubernetes"},
+				},
+			}).WithoutImagePullSecretGenerate(),
+			validateFunc: func(t *testing.T, objs, crds []runtime.Object) {
+				for _, obj := range objs {
+					dep, ok := obj.(*appv1.Deployment)
+					if !ok || dep.Name != "klusterlet" {
+						continue
+					}
+					if len(dep.Spec.Template.Spec.Containers) != 1 {
+						t.Fatalf("expected 1 container in klusterlet deployment, got %d",
+							len(dep.Spec.Template.Spec.Containers))
+					}
+					return
+				}
+				t.Fatal("klusterlet Deployment not found")
 			},
 		},
 	}

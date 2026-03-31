@@ -49,6 +49,7 @@ const (
 	RegistrationOperatorImageEnvVarName = "REGISTRATION_OPERATOR_IMAGE"
 	RegistrationImageEnvVarName         = "REGISTRATION_IMAGE"
 	WorkImageEnvVarName                 = "WORK_IMAGE"
+	TLSProfileSyncImageEnvVarName       = "TLS_PROFILE_SYNC_IMAGE"
 	DefaultImagePullSecretEnvVarName    = "DEFAULT_IMAGE_PULL_SECRET" // #nosec G101
 )
 

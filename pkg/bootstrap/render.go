@@ -391,6 +391,18 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 		return nil, nil, nil, err
 	}
 
+	// Inject tls-profile-sync sidecar for OpenShift managed clusters
+	if !c.chartConfig.NoOperator && isManagedClusterOpenShift(c.managedCluster) {
+		tlsSyncImage, err := getTLSProfileSyncImage(kcRegistries, managedClusterAnnotations)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		objects, err = injectTLSProfileSyncSidecar(objects, tlsSyncImage, c.chartConfig.SecurityContext)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+	}
+
 	crdBytes := AggregateObjects(crds)
 	manifestsBytes := AggregateObjects(objects)
 
