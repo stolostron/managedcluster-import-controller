@@ -395,8 +395,18 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 		return nil, nil, nil, err
 	}
 
-	// Inject tls-profile-sync sidecar for OpenShift managed clusters
-	if !c.chartConfig.NoOperator && isManagedClusterOpenShift(c.managedCluster) {
+	if c.chartConfig.NoOperator {
+		manifestsBytes := AggregateObjects(objects)
+		return manifestsBytes, nil, valuesBytes, nil
+	}
+
+	additionalManifestsBytes, err := filesToTemplateBytes(additionalClusterRoleFiles, c.chartConfig)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
+	// Inject tls-profile-sync sidecar and RBAC for OpenShift managed clusters
+	if isManagedClusterOpenShift(c.managedCluster) {
 		tlsSyncImage, err := getTLSProfileSyncImage(kcRegistries, managedClusterAnnotations)
 		if err != nil {
 			return nil, nil, nil, err
@@ -405,30 +415,16 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 		if err != nil {
 			return nil, nil, nil, err
 		}
-	}
-
-	crdBytes := AggregateObjects(crds)
-	manifestsBytes := AggregateObjects(objects)
-
-	if c.chartConfig.NoOperator {
-		return manifestsBytes, nil, valuesBytes, nil
-	}
-
-	additionalManifestsBytes, err := filesToTemplateBytes(additionalClusterRoleFiles, c.chartConfig)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	manifestsBytes = append(manifestsBytes, additionalManifestsBytes...)
-
-	// Add RBAC for tls-profile-sync sidecar on OpenShift managed clusters
-	if isManagedClusterOpenShift(c.managedCluster) {
 		tlsRBACBytes, err := filesToTemplateBytes(tlsProfileSyncRBACFiles, c.chartConfig)
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		manifestsBytes = append(manifestsBytes, tlsRBACBytes...)
+		additionalManifestsBytes = append(additionalManifestsBytes, tlsRBACBytes...)
 	}
 
+	crdBytes := AggregateObjects(crds)
+	manifestsBytes := AggregateObjects(objects)
+	manifestsBytes = append(manifestsBytes, additionalManifestsBytes...)
 	return manifestsBytes, crdBytes, valuesBytes, nil
 }
 
