@@ -15,6 +15,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog/v2"
@@ -62,7 +63,9 @@ func Run(ctx context.Context) error {
 		Metrics: metricsserver.Options{
 			BindAddress: "0", // disable metrics server for sidecar
 		},
-		// No leader election — each sidecar instance manages its own namespace
+		LeaderElection:          true,
+		LeaderElectionID:        "tls-profile-sync.open-cluster-management.io",
+		LeaderElectionNamespace: namespace,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create manager: %w", err)
@@ -93,6 +96,22 @@ func Run(ctx context.Context) error {
 		&handler.TypedEnqueueRequestForObject[*configv1.APIServer]{},
 	)); err != nil {
 		return fmt.Errorf("failed to watch APIServer: %w", err)
+	}
+
+	// Watch the ocm-tls-profile ConfigMap so it gets recreated if accidentally deleted
+	if err := c.Watch(source.Kind(
+		mgr.GetCache(),
+		&corev1.ConfigMap{},
+		handler.TypedEnqueueRequestsFromMapFunc(
+			func(_ context.Context, cm *corev1.ConfigMap) []reconcile.Request {
+				if cm.Name == ConfigMapName && cm.Namespace == namespace {
+					return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: "cluster"}}}
+				}
+				return nil
+			},
+		),
+	)); err != nil {
+		return fmt.Errorf("failed to watch ConfigMap: %w", err)
 	}
 
 	klog.Info("Starting manager for tls-profile-sync")
