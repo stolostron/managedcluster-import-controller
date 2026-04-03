@@ -9,6 +9,8 @@
 OPENSOURCE.check
 .DS_Store
 
-# test outputs
+# build outputs
 _output
 __debug_bin
+/manager
+/tls-profile-sync

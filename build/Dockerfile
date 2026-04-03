@@ -14,11 +14,13 @@ RUN microdnf update -y
 ENV REMOTE_SOURCE_DIR='/remote-source'
 
 ENV OPERATOR=/usr/local/bin/managedcluster-import-controller \
+    TLS_PROFILE_SYNC=/usr/local/bin/tls-profile-sync \
     USER_UID=1001 \
     USER_NAME=managedcluster-import-controller
 
 # install operator binary
 COPY --from=builder $REMOTE_SOURCE_DIR/app/manager ${OPERATOR}
+COPY --from=builder $REMOTE_SOURCE_DIR/app/tls-profile-sync ${TLS_PROFILE_SYNC}
 
 COPY --from=builder $REMOTE_SOURCE_DIR/app/build/bin /usr/local/bin
 

@@ -74,6 +74,7 @@ test: envtest-setup
 .PHONY: build
 build:
 	go build -o $(BUILD_OUTPUT_DIR)/manager ./cmd/manager
+	go build -o $(BUILD_OUTPUT_DIR)/tls-profile-sync ./cmd/tls-profile-sync
 
 ## Builds controller image
 .PHONY: build-image
