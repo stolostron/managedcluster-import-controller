@@ -456,12 +456,13 @@ func NewCSR(labels ...Label) *certificatesv1.CertificateSigningRequest {
 }
 
 func ToImportResoruces(importYaml []byte) []*unstructured.Unstructured {
-	yamls := [][]byte{}
-	for _, yaml := range strings.Split(strings.Replace(string(importYaml), "\n---\n", "", 1), "\n---\n") {
+	parts := strings.Split(strings.Replace(string(importYaml), "\n---\n", "", 1), "\n---\n")
+	yamls := make([][]byte, 0, len(parts))
+	for _, yaml := range parts {
 		yamls = append(yamls, []byte(yaml))
 	}
 
-	unstructuredObjs := []*unstructured.Unstructured{}
+	unstructuredObjs := make([]*unstructured.Unstructured, 0, len(yamls))
 	for _, raw := range yamls {
 		jsonData, err := yaml.YAMLToJSON(raw)
 		if err != nil {
