@@ -54,6 +54,20 @@ func Run(ctx context.Context) error {
 		return fmt.Errorf("failed to get kubeconfig: %w", err)
 	}
 
+	kubeClient, err := kubernetes.NewForConfig(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create kubernetes client: %w", err)
+	}
+
+	// Detect if running on OpenShift by checking for the config.openshift.io API group
+	_, err = kubeClient.Discovery().ServerResourcesForGroupVersion("config.openshift.io/v1")
+	if err != nil {
+		klog.Infof("config.openshift.io API not found, not an OpenShift cluster, "+
+			"TLS profile sync is not needed, sleeping indefinitely: %v", err)
+		<-ctx.Done()
+		return nil
+	}
+
 	scheme := runtime.NewScheme()
 	utilruntime.Must(configv1.Install(scheme))
 	utilruntime.Must(corev1.AddToScheme(scheme))
@@ -69,11 +83,6 @@ func Run(ctx context.Context) error {
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create manager: %w", err)
-	}
-
-	kubeClient, err := kubernetes.NewForConfig(cfg)
-	if err != nil {
-		return fmt.Errorf("failed to create kubernetes client: %w", err)
 	}
 
 	reconciler := &tlsProfileSyncReconciler{
