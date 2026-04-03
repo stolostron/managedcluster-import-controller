@@ -406,10 +406,11 @@ func UpdateManagedClusterBootstrapSecret(client *ClientHolder, importSecret *cor
 
 // SplitYamls split yamls with sperator `---`
 func SplitYamls(yamls []byte) [][]byte {
-	bYamls := [][]byte{}
 	// remove the head sperator
 	sYamls := strings.Replace(string(yamls), constants.YamlSperator, "", 1)
-	for _, yaml := range strings.Split(sYamls, constants.YamlSperator) {
+	parts := strings.Split(sYamls, constants.YamlSperator)
+	bYamls := make([][]byte, 0, len(parts))
+	for _, yaml := range parts {
 		bYamls = append(bYamls, []byte(yaml))
 	}
 	return bYamls

@@ -105,12 +105,12 @@ func (s *Source) Start(ctx context.Context, handler handler.EventHandler,
 		AddFunc: func(obj interface{}) {
 			newObj, ok := obj.(client.Object)
 			if !ok {
-				klog.Errorf(fmt.Sprintf("OnAdd missing Object, type %T", obj))
+				klog.Errorf("OnAdd missing Object, type %T", obj)
 				return
 			}
 
 			if objType := reflect.TypeOf(newObj); s.expectedType != objType {
-				klog.Errorf(fmt.Sprintf("OnAdd missing Object, type %T", obj))
+				klog.Errorf("OnAdd missing Object, type %T", obj)
 				return
 			}
 
@@ -127,23 +127,23 @@ func (s *Source) Start(ctx context.Context, handler handler.EventHandler,
 		UpdateFunc: func(oldObj, newObj interface{}) {
 			oldClientObj, ok := oldObj.(client.Object)
 			if !ok {
-				klog.Errorf(fmt.Sprintf("OnAdd missing Object, type %T", oldObj))
+				klog.Errorf("OnAdd missing Object, type %T", oldObj)
 				return
 			}
 
 			if objType := reflect.TypeOf(oldClientObj); s.expectedType != objType {
-				klog.Errorf(fmt.Sprintf("OnAdd missing Object, type %T", oldObj))
+				klog.Errorf("OnAdd missing Object, type %T", oldObj)
 				return
 			}
 
 			newClientObj, ok := newObj.(client.Object)
 			if !ok {
-				klog.Errorf(fmt.Sprintf("OnAdd missing Object, type %T", newObj))
+				klog.Errorf("OnAdd missing Object, type %T", newObj)
 				return
 			}
 
 			if objType := reflect.TypeOf(newClientObj); s.expectedType != objType {
-				klog.Errorf(fmt.Sprintf("OnAdd missing Object, type %T", newObj))
+				klog.Errorf("OnAdd missing Object, type %T", newObj)
 				return
 			}
 
@@ -162,7 +162,7 @@ func (s *Source) Start(ctx context.Context, handler handler.EventHandler,
 				// If the object doesn't have Metadata, assume it is a tombstone object of type DeletedFinalStateUnknown
 				tombstone, ok := obj.(cache.DeletedFinalStateUnknown)
 				if !ok {
-					klog.Errorf(fmt.Sprintf("Error decoding objects. Expected cache.DeletedFinalStateUnknown, type %T", obj))
+					klog.Errorf("Error decoding objects. Expected cache.DeletedFinalStateUnknown, type %T", obj)
 					return
 				}
 
@@ -172,7 +172,7 @@ func (s *Source) Start(ctx context.Context, handler handler.EventHandler,
 
 			o, ok := obj.(client.Object)
 			if !ok {
-				klog.Errorf(fmt.Sprintf("OnDelete missing Object, type %T", obj))
+				klog.Errorf("OnDelete missing Object, type %T", obj)
 				return
 			}
 

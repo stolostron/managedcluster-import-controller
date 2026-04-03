@@ -447,9 +447,10 @@ func (r *ReconcileHosted) deleteManagedClusterManifestWorks(ctx context.Context,
 // into the hosting cluster
 func createHostingManifestWork(managedClusterName string,
 	importSecret *corev1.Secret, manifestWorkNamespace string) *workv1.ManifestWork {
-	manifests := []workv1.Manifest{}
 	importYaml := importSecret.Data[constants.ImportSecretImportYamlKey]
-	for _, yamlData := range helpers.SplitYamls(importYaml) {
+	splitYamls := helpers.SplitYamls(importYaml)
+	manifests := make([]workv1.Manifest, 0, len(splitYamls))
+	for _, yamlData := range splitYamls {
 		jsonData, err := yaml.YAMLToJSON(yamlData)
 		if err != nil {
 			panic(err)
