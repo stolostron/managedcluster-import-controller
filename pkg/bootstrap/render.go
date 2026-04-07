@@ -19,6 +19,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -61,6 +62,16 @@ var reservedClusterClaimSuffixes = []string{
 const (
 	grpcRouteName   = "grpc-server"
 	grpcCAConfigmap = "ca-bundle-configmap"
+
+	// grpcServiceName is the LoadBalancer Service name that exposes the gRPC server on non-OpenShift clusters.
+	// The cluster-manager operator automatically creates this service in the "open-cluster-management-hub" namespace.
+	// See: https://open-cluster-management.io/docs/getting-started/installation/register-cluster-via-grpc/
+	grpcServiceName = "cluster-manager-grpc-server"
+
+	// grpcServicePortNum is the port number for gRPC connections when using LoadBalancer Service.
+	// This port is appended to the LoadBalancer IP or hostname (e.g., "34.56.78.90:443").
+	// Not used for OpenShift Routes as Routes handle TLS termination without explicit port.
+	grpcServicePortNum = 443
 )
 
 type BootstrapKubeConfigSecret struct {
@@ -360,7 +371,7 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 	if c.klusterletConfig != nil && c.klusterletConfig.Spec.RegistrationDriver != nil {
 		c.chartConfig.Klusterlet.RegistrationConfiguration.RegistrationDriver = *c.klusterletConfig.Spec.RegistrationDriver
 
-		if helpers.DeployOnOCP && c.klusterletConfig.Spec.RegistrationDriver.AuthType == "grpc" {
+		if c.klusterletConfig.Spec.RegistrationDriver.AuthType == "grpc" {
 			// TODO: support MultiHubBootstrapHubKubeConfigs here
 			_, _, _, _, tokenString, _, err := helpers.ParseKubeConfigData([]byte(c.chartConfig.BootstrapHubKubeConfig))
 			if err != nil {
@@ -639,22 +650,72 @@ func imageOverride(source, mirror, imageName string) string {
 	return fmt.Sprintf("%s%s", mirror, trimSegment)
 }
 
+// buildGRPCConfigData retrieves the gRPC server endpoint and builds the gRPC configuration YAML.
+//
+// Platform support:
+//   - OpenShift: Uses Route "grpc-server" (URL format: "hostname")
+//   - Non-OpenShift (EKS/GKE/AKS): Uses LoadBalancer Service "cluster-manager-grpc-server" (URL format: "host:443")
+//   - AWS EKS uses .status.loadBalancer.ingress[0].hostname (ELB DNS name)
+//   - GCP/Azure use .status.loadBalancer.ingress[0].ip (static external IP)
 func buildGRPCConfigData(ctx context.Context, clientHolder *helpers.ClientHolder, token string, caData []byte) (string, error) {
+	var grpcURL string
+
+	// Try to get the endpoint from OpenShift Route first (for OpenShift clusters)
 	route, err := clientHolder.RouteV1Client.RouteV1().Routes(helpers.HubNamespace).
 		Get(ctx, grpcRouteName, metav1.GetOptions{})
-	if err != nil {
-		return "", fmt.Errorf("failed to get grpc-server route: %w", err)
-	}
 
-	if route.Spec.Host == "" {
-		return "", fmt.Errorf("grpc-server route has no host specified")
+	switch {
+	case err == nil:
+		// Route found - use it (OpenShift cluster)
+		if route.Spec.Host == "" {
+			return "", fmt.Errorf("grpc-server route has no host specified")
+		}
+		grpcURL = route.Spec.Host
+		klog.V(4).Infof("Using gRPC server endpoint from Route: %s", grpcURL)
+
+	case errors.IsNotFound(err):
+		// Route not found - fall back to LoadBalancer Service (non-OpenShift cluster)
+		klog.V(4).Infof("Route not found, attempting to get gRPC endpoint from LoadBalancer Service")
+		service, err := clientHolder.KubeClient.CoreV1().Services(helpers.HubNamespace).
+			Get(ctx, grpcServiceName, metav1.GetOptions{})
+		if err != nil {
+			return "", fmt.Errorf("failed to get grpc-server service: %w", err)
+		}
+
+		if service.Spec.Type != corev1.ServiceTypeLoadBalancer {
+			return "", fmt.Errorf("grpc-server service is not of type LoadBalancer, got: %s", service.Spec.Type)
+		}
+
+		if len(service.Status.LoadBalancer.Ingress) == 0 {
+			return "", fmt.Errorf("grpc-server service has no LoadBalancer ingress status")
+		}
+
+		// Extract the endpoint from LoadBalancer ingress.
+		// Different cloud providers populate different fields:
+		// - GCP/Azure: .status.loadBalancer.ingress[0].ip
+		// - AWS EKS: .status.loadBalancer.ingress[0].hostname (ELB IPs are dynamic, hostname is stable)
+		ingress := service.Status.LoadBalancer.Ingress[0]
+		switch {
+		case ingress.IP != "":
+			grpcURL = fmt.Sprintf("%s:%d", ingress.IP, grpcServicePortNum)
+			klog.V(4).Infof("Using gRPC server endpoint from LoadBalancer IP: %s", grpcURL)
+		case ingress.Hostname != "":
+			grpcURL = fmt.Sprintf("%s:%d", ingress.Hostname, grpcServicePortNum)
+			klog.V(4).Infof("Using gRPC server endpoint from LoadBalancer hostname: %s", grpcURL)
+		default:
+			return "", fmt.Errorf("grpc-server service LoadBalancer has neither IP nor hostname")
+		}
+
+	default:
+		// Other errors when getting route
+		return "", fmt.Errorf("failed to get grpc-server route: %w", err)
 	}
 
 	config := grpc.GRPCConfig{
 		CertConfig: cert.CertConfig{
 			CAData: caData,
 		},
-		URL:   route.Spec.Host,
+		URL:   grpcURL,
 		Token: token,
 	}
 
