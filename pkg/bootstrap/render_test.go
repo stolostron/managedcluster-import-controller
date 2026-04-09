@@ -1344,12 +1344,14 @@ func TestBuildGRPCConfigData(t *testing.T) {
 		token              string
 		route              *routev1.Route
 		createRoute        bool
+		service            *corev1.Service
+		createService      bool
 		expectedGRPCConfig string
 		expectError        bool
 		errorMessage       string
 	}{
 		{
-			name:        "with customized GRPCConfig and token",
+			name:        "with customized GRPCConfig and token via Route",
 			token:       "test-token",
 			createRoute: true,
 			route: &routev1.Route{
@@ -1365,7 +1367,7 @@ func TestBuildGRPCConfigData(t *testing.T) {
 			expectedGRPCConfig: "caData: Y2FEYXRh\nkeepAliveConfig: {}\ntoken: test-token\nurl: grpc.config.com\n",
 		},
 		{
-			name:        "with customized GRPCConfig without token",
+			name:        "with customized GRPCConfig without token via Route",
 			token:       "",
 			createRoute: true,
 			route: &routev1.Route{
@@ -1398,11 +1400,97 @@ func TestBuildGRPCConfigData(t *testing.T) {
 			errorMessage: "grpc-server route has no host specified",
 		},
 		{
-			name:         "route not found",
-			token:        "test-token",
-			createRoute:  false,
+			name:          "LoadBalancer service with IP (GCP/Azure)",
+			token:         "test-token",
+			createRoute:   false,
+			createService: true,
+			service: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      grpcServiceName,
+					Namespace: helpers.HubNamespace,
+				},
+				Spec: corev1.ServiceSpec{
+					Type: corev1.ServiceTypeLoadBalancer,
+				},
+				Status: corev1.ServiceStatus{
+					LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{
+							{IP: "34.56.78.90"},
+						},
+					},
+				},
+			},
+			expectedGRPCConfig: "caData: Y2FEYXRh\nkeepAliveConfig: {}\ntoken: test-token\nurl: 34.56.78.90:443\n",
+		},
+		{
+			name:          "LoadBalancer service with hostname (AWS EKS)",
+			token:         "test-token",
+			createRoute:   false,
+			createService: true,
+			service: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      grpcServiceName,
+					Namespace: helpers.HubNamespace,
+				},
+				Spec: corev1.ServiceSpec{
+					Type: corev1.ServiceTypeLoadBalancer,
+				},
+				Status: corev1.ServiceStatus{
+					LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{
+							{Hostname: "a1234567890abcdef.us-west-2.elb.amazonaws.com"},
+						},
+					},
+				},
+			},
+			expectedGRPCConfig: "caData: Y2FEYXRh\nkeepAliveConfig: {}\ntoken: test-token\nurl: a1234567890abcdef.us-west-2.elb.amazonaws.com:443\n",
+		},
+		{
+			name:          "LoadBalancer service with no ingress status",
+			token:         "test-token",
+			createRoute:   false,
+			createService: true,
+			service: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      grpcServiceName,
+					Namespace: helpers.HubNamespace,
+				},
+				Spec: corev1.ServiceSpec{
+					Type: corev1.ServiceTypeLoadBalancer,
+				},
+				Status: corev1.ServiceStatus{
+					LoadBalancer: corev1.LoadBalancerStatus{
+						Ingress: []corev1.LoadBalancerIngress{},
+					},
+				},
+			},
 			expectError:  true,
-			errorMessage: "failed to get grpc-server route",
+			errorMessage: "grpc-server service has no LoadBalancer ingress status",
+		},
+		{
+			name:          "service is not LoadBalancer type",
+			token:         "test-token",
+			createRoute:   false,
+			createService: true,
+			service: &corev1.Service{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      grpcServiceName,
+					Namespace: helpers.HubNamespace,
+				},
+				Spec: corev1.ServiceSpec{
+					Type: corev1.ServiceTypeClusterIP,
+				},
+			},
+			expectError:  true,
+			errorMessage: "grpc-server service is not of type LoadBalancer",
+		},
+		{
+			name:          "route and service not found",
+			token:         "test-token",
+			createRoute:   false,
+			createService: false,
+			expectError:   true,
+			errorMessage:  "failed to get grpc-server service",
 		},
 	}
 
@@ -1415,7 +1503,17 @@ func TestBuildGRPCConfigData(t *testing.T) {
 				routeClient = routefake.NewSimpleClientset()
 			}
 
-			clientHolder := &helpers.ClientHolder{RouteV1Client: routeClient}
+			var kubeClient *kubefake.Clientset
+			if testcase.createService {
+				kubeClient = kubefake.NewSimpleClientset(testcase.service)
+			} else {
+				kubeClient = kubefake.NewSimpleClientset()
+			}
+
+			clientHolder := &helpers.ClientHolder{
+				RouteV1Client: routeClient,
+				KubeClient:    kubeClient,
+			}
 
 			grpcConfigData, err := buildGRPCConfigData(context.TODO(), clientHolder, testcase.token, []byte("caData"))
 			if testcase.expectError {
