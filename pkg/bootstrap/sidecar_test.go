@@ -85,9 +85,9 @@ func TestGetTLSProfileSyncImage(t *testing.T) {
 			wantImage: "quay.io/ocm/import-controller:v1",
 		},
 		{
-			name:     "env var not set",
-			envValue: "",
-			wantErr:  true,
+			name:      "env var not set",
+			envValue:  "",
+			wantImage: "",
 		},
 		{
 			name:     "env var set with registry override",

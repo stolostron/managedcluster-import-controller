@@ -422,15 +422,20 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 		if err != nil {
 			return nil, nil, nil, err
 		}
-		objects, err = injectTLSProfileSyncSidecar(objects, tlsSyncImage, c.chartConfig.SecurityContext)
-		if err != nil {
-			return nil, nil, nil, err
+		if tlsSyncImage == "" {
+			klog.Warningf("Skipping tls-profile-sync sidecar injection: environment variable %s is not set",
+				constants.TLSProfileSyncImageEnvVarName)
+		} else {
+			objects, err = injectTLSProfileSyncSidecar(objects, tlsSyncImage, c.chartConfig.SecurityContext)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			tlsRBACBytes, err := filesToTemplateBytes(tlsProfileSyncRBACFiles, c.chartConfig)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			additionalManifestsBytes = append(additionalManifestsBytes, tlsRBACBytes...)
 		}
-		tlsRBACBytes, err := filesToTemplateBytes(tlsProfileSyncRBACFiles, c.chartConfig)
-		if err != nil {
-			return nil, nil, nil, err
-		}
-		additionalManifestsBytes = append(additionalManifestsBytes, tlsRBACBytes...)
 	}
 
 	crdBytes := AggregateObjects(crds)
