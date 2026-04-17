@@ -195,9 +195,7 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 	var appliedManifestWorkEvictionGracePeriod string
 
 	switch installMode {
-	case operatorv1.InstallModeHosted, operatorv1.InstallModeSingletonHosted:
-		// do nothing
-	case operatorv1.InstallModeDefault, operatorv1.InstallModeSingleton:
+	case operatorv1.InstallModeHosted, operatorv1.InstallModeSingletonHosted, operatorv1.InstallModeDefault, operatorv1.InstallModeSingleton:
 		if c.klusterletConfig != nil {
 			kcRegistries = c.klusterletConfig.Spec.Registries
 			kcNodePlacement = c.klusterletConfig.Spec.NodePlacement
