@@ -198,6 +198,15 @@ func TestInjectTLSProfileSyncSidecar(t *testing.T) {
 			*sidecar.SecurityContext.RunAsNonRoot != true {
 			t.Error("sidecar security context not set correctly")
 		}
+		if len(sidecar.Resources.Limits) != 0 {
+			t.Errorf("sidecar limits = %v, want none", sidecar.Resources.Limits)
+		}
+		if got := sidecar.Resources.Requests.Memory().String(); got != "32Mi" {
+			t.Errorf("sidecar memory request = %q, want 32Mi", got)
+		}
+		if got := sidecar.Resources.Requests.Cpu().String(); got != "10m" {
+			t.Errorf("sidecar cpu request = %q, want 10m", got)
+		}
 	})
 
 	t.Run("no deployment in objects", func(t *testing.T) {
