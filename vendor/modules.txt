@@ -1458,12 +1458,12 @@ open-cluster-management.io/api/feature
 open-cluster-management.io/api/operator/v1
 open-cluster-management.io/api/work/v1
 open-cluster-management.io/api/work/v1alpha1
-# open-cluster-management.io/ocm v1.1.1-0.20260128054152-9d1a993e2c6f
+# open-cluster-management.io/ocm v1.2.1
 ## explicit; go 1.25.0
 open-cluster-management.io/ocm/deploy/cluster-manager/chart
 open-cluster-management.io/ocm/deploy/klusterlet/chart
 open-cluster-management.io/ocm/pkg/operator/helpers/chart
-# open-cluster-management.io/sdk-go v1.1.1-0.20260127092137-c07e0fafa331
+# open-cluster-management.io/sdk-go v1.2.0
 ## explicit; go 1.25.0
 open-cluster-management.io/sdk-go/pkg/cloudevents/generic/options
 open-cluster-management.io/sdk-go/pkg/cloudevents/generic/options/cert
