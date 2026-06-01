@@ -103,7 +103,7 @@ require (
 	github.com/spf13/cobra v1.7.0 // indirect
 	go.mongodb.org/mongo-driver v1.7.5 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.51.0 // indirect
+	golang.org/x/crypto v0.52.0 // indirect
 	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/oauth2 v0.28.0 // indirect
