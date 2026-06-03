@@ -516,6 +516,19 @@ func ManifestsEqual(newManifests, oldManifests []workv1.Manifest) bool {
 	return true
 }
 
+func ManifestConfigsEqual(newConfigs, oldConfigs []workv1.ManifestConfigOption) bool {
+	if len(newConfigs) != len(oldConfigs) {
+		return false
+	}
+
+	for i := range newConfigs {
+		if !equality.Semantic.DeepEqual(newConfigs[i], oldConfigs[i]) {
+			return false
+		}
+	}
+	return true
+}
+
 // ApplyResources apply resources, includes: serviceaccount, secret, deployment, clusterrole, clusterrolebinding,
 // crdv1, manifestwork and klusterlet
 func ApplyResources(clientHolder *ClientHolder, recorder events.Recorder,
@@ -669,6 +682,9 @@ func applyManifestWork(workClient workclient.Interface, recorder events.Recorder
 	modified := ptr.To(false)
 	resourcemerge.EnsureObjectMeta(modified, &existing.ObjectMeta, required.ObjectMeta)
 	if !ManifestsEqual(existing.Spec.Workload.Manifests, required.Spec.Workload.Manifests) {
+		*modified = true
+	}
+	if !ManifestConfigsEqual(existing.Spec.ManifestConfigs, required.Spec.ManifestConfigs) {
 		*modified = true
 	}
 
