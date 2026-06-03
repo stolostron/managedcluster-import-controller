@@ -890,6 +890,100 @@ func assertManagedClusterManifestWorksAvailable(clusterName string) {
 	time.Sleep(10 * time.Second)
 }
 
+func assertManagedClusterManifestWorksReadOnly(clusterName string) {
+	ginkgo.By(fmt.Sprintf("Managed cluster %s manifest works should have ReadOnly configs", clusterName), func() {
+		start := time.Now()
+		gomega.Eventually(func() error {
+			klusterletCRDsName := fmt.Sprintf("%s-klusterlet-crds", clusterName)
+			klusterletName := fmt.Sprintf("%s-klusterlet", clusterName)
+			manifestWorks := hubWorkClient.WorkV1().ManifestWorks(clusterName)
+
+			// Check klusterlet-crds ManifestWork
+			klusterletCRDs, err := manifestWorks.Get(context.TODO(), klusterletCRDsName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			if len(klusterletCRDs.Spec.ManifestConfigs) == 0 {
+				return fmt.Errorf("klusterlet-crds ManifestWork has no ManifestConfigs")
+			}
+			for i, config := range klusterletCRDs.Spec.ManifestConfigs {
+				if config.UpdateStrategy == nil {
+					return fmt.Errorf("klusterlet-crds ManifestConfig %d has nil UpdateStrategy", i)
+				}
+				if config.UpdateStrategy.Type != workv1.UpdateStrategyTypeReadOnly {
+					return fmt.Errorf("klusterlet-crds ManifestConfig %d has UpdateStrategy %s, expected ReadOnly",
+						i, config.UpdateStrategy.Type)
+				}
+			}
+
+			// Check klusterlet ManifestWork
+			klusterlet, err := manifestWorks.Get(context.TODO(), klusterletName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			if len(klusterlet.Spec.ManifestConfigs) == 0 {
+				return fmt.Errorf("klusterlet ManifestWork has no ManifestConfigs")
+			}
+			for i, config := range klusterlet.Spec.ManifestConfigs {
+				if config.UpdateStrategy == nil {
+					return fmt.Errorf("klusterlet ManifestConfig %d has nil UpdateStrategy", i)
+				}
+				if config.UpdateStrategy.Type != workv1.UpdateStrategyTypeReadOnly {
+					return fmt.Errorf("klusterlet ManifestConfig %d has UpdateStrategy %s, expected ReadOnly",
+						i, config.UpdateStrategy.Type)
+				}
+			}
+
+			return nil
+		}, 2*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		util.Logf("assert managed cluster manifestworks ReadOnly configs spending time: %.2f seconds", time.Since(start).Seconds())
+	})
+}
+
+func assertManagedClusterManifestWorksNotReadOnly(clusterName string) {
+	ginkgo.By(fmt.Sprintf("Managed cluster %s manifest works should not have ReadOnly configs", clusterName), func() {
+		start := time.Now()
+		gomega.Eventually(func() error {
+			klusterletCRDsName := fmt.Sprintf("%s-klusterlet-crds", clusterName)
+			klusterletName := fmt.Sprintf("%s-klusterlet", clusterName)
+			manifestWorks := hubWorkClient.WorkV1().ManifestWorks(clusterName)
+
+			// Check klusterlet-crds ManifestWork
+			klusterletCRDs, err := manifestWorks.Get(context.TODO(), klusterletCRDsName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			// ManifestConfigs should be empty (nil) when annotation is not set
+			if len(klusterletCRDs.Spec.ManifestConfigs) != 0 {
+				// If configs exist, make sure they're not ReadOnly
+				for i, config := range klusterletCRDs.Spec.ManifestConfigs {
+					if config.UpdateStrategy != nil && config.UpdateStrategy.Type == workv1.UpdateStrategyTypeReadOnly {
+						return fmt.Errorf("klusterlet-crds ManifestConfig %d still has ReadOnly strategy", i)
+					}
+				}
+			}
+
+			// Check klusterlet ManifestWork
+			klusterlet, err := manifestWorks.Get(context.TODO(), klusterletName, metav1.GetOptions{})
+			if err != nil {
+				return err
+			}
+			// ManifestConfigs should be empty (nil) when annotation is not set
+			if len(klusterlet.Spec.ManifestConfigs) != 0 {
+				// If configs exist, make sure they're not ReadOnly
+				for i, config := range klusterlet.Spec.ManifestConfigs {
+					if config.UpdateStrategy != nil && config.UpdateStrategy.Type == workv1.UpdateStrategyTypeReadOnly {
+						return fmt.Errorf("klusterlet ManifestConfig %d still has ReadOnly strategy", i)
+					}
+				}
+			}
+
+			return nil
+		}, 2*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		util.Logf("assert managed cluster manifestworks not ReadOnly spending time: %.2f seconds", time.Since(start).Seconds())
+	})
+}
+
 func assertHostedManagedClusterManifestWorksAvailable(clusterName, hostingClusterName string) {
 	assertManagedClusterFinalizer(clusterName,
 		"managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup")
