@@ -36,8 +36,7 @@ func getTLSProfileSyncImage(
 ) (string, error) {
 	defaultImage := os.Getenv(constants.TLSProfileSyncImageEnvVarName)
 	if defaultImage == "" {
-		return "", fmt.Errorf("environment variable %s not defined",
-			constants.TLSProfileSyncImageEnvVarName)
+		return "", nil
 	}
 
 	if len(kcRegistries) != 0 {
