@@ -898,7 +898,7 @@ func IsHostedCluster(cluster *clusterv1.ManagedCluster) bool {
 
 func ValidateKlusterletMode(mode operatorv1.InstallMode) error {
 	if mode == operatorv1.InstallModeHosted && !features.DefaultMutableFeatureGate.Enabled(features.KlusterletHostedMode) {
-		return fmt.Errorf("featurn gate %s is not enabled", features.KlusterletHostedMode)
+		return fmt.Errorf("feature gate %s is not enabled", features.KlusterletHostedMode)
 	}
 	return nil
 }
