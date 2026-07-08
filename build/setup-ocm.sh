@@ -14,7 +14,7 @@ OCM_VERSION=${OCM_VERSION:-main}
 
 function wait_deployment() {
   set +e
-  for((i=0;i<30;i++));
+  for((i=0;i<60;i++));
   do
     ${KUBECTL} -n $1 get deploy $2
     if [ 0 -eq $? ]; then
@@ -24,6 +24,20 @@ function wait_deployment() {
     sleep 1
   done
   set -e
+
+  if ! ${KUBECTL} -n $1 get deploy $2 &>/dev/null; then
+    echo "####### DIAGNOSTIC: deployment $1/$2 not found after 60s #######"
+    echo "=== Pods in namespace $1 ==="
+    ${KUBECTL} -n $1 get pods -o wide || true
+    echo "=== Pod details in namespace $1 ==="
+    ${KUBECTL} -n $1 describe pods || true
+    echo "=== Cluster Manager operator logs ==="
+    ${KUBECTL} -n open-cluster-management logs -l app=cluster-manager --tail=200 || true
+    echo "=== ClusterManager CR status ==="
+    ${KUBECTL} get clustermanagers -o yaml || true
+    echo "####### END DIAGNOSTIC #######"
+    exit 1
+  fi
 }
 
 echo "###### deploy ocm"
