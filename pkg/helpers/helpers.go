@@ -75,6 +75,15 @@ const (
 	tolerationsAnnotation  = "open-cluster-management/tolerations"
 )
 
+const (
+	kubeconfigDefaultCluster = "default-cluster"
+	kubeconfigDefaultAuth    = "default-auth"
+	kubeconfigDefaultContext = "default-context"
+
+	// clusterSingletonName is the name of the OpenShift Infrastructure/APIServer singleton CR.
+	clusterSingletonName = "cluster"
+)
+
 // DeployOnOCP is set once at the beginning
 var DeployOnOCP bool = true
 
@@ -253,18 +262,18 @@ func buildImportClient(config *clientcmdapi.Config) (reconcile.Result, *ClientHo
 
 func buildKubeConfigFileWithToken(apiURL, token string) *clientcmdapi.Config {
 	return &clientcmdapi.Config{
-		Clusters: map[string]*clientcmdapi.Cluster{"default-cluster": {
+		Clusters: map[string]*clientcmdapi.Cluster{kubeconfigDefaultCluster: {
 			Server:                apiURL,
 			InsecureSkipTLSVerify: true,
 		}},
-		AuthInfos: map[string]*clientcmdapi.AuthInfo{"default-auth": {
+		AuthInfos: map[string]*clientcmdapi.AuthInfo{kubeconfigDefaultAuth: {
 			Token: token,
 		}},
-		Contexts: map[string]*clientcmdapi.Context{"default-context": {
-			Cluster:  "default-cluster",
-			AuthInfo: "default-auth",
+		Contexts: map[string]*clientcmdapi.Context{kubeconfigDefaultContext: {
+			Cluster:  kubeconfigDefaultCluster,
+			AuthInfo: kubeconfigDefaultAuth,
 		}},
-		CurrentContext: "default-context",
+		CurrentContext: kubeconfigDefaultContext,
 	}
 }
 
@@ -1171,7 +1180,7 @@ func ParseKubeConfigData(kubeConfigData []byte) (
 		proxyURL = cluster.ProxyURL
 	}
 
-	if authInfo, ok := config.AuthInfos["default-auth"]; ok {
+	if authInfo, ok := config.AuthInfos[kubeconfigDefaultAuth]; ok {
 		token = authInfo.Token
 	}
 

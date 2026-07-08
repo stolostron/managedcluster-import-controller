@@ -148,7 +148,7 @@ func (i *ImportHelper) Import(backupRestore bool, cluster *clusterv1.ManagedClus
 	}
 
 	// ensure the klusterlet manifest works exist
-	workSelector := labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: "true"})
+	workSelector := labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: constants.LabelValueTrue})
 	manifestWorks, err := i.informerHolder.KlusterletWorkLister.ManifestWorks(clusterName).List(workSelector)
 	if err != nil && !errors.IsNotFound(err) {
 		return reconcile.Result{},

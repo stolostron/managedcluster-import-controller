@@ -195,6 +195,11 @@ const (
 )
 
 const (
+	// LabelValueTrue is the string "true" used as a label or annotation value.
+	LabelValueTrue = "true"
+)
+
+const (
 	DefaultBootstrapHubKubeConfigSecretName = "bootstrap-hub-kubeconfig" // #nosec G101
 )
 

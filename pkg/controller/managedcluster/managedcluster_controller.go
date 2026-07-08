@@ -176,7 +176,7 @@ func ensureAddonHostingAnnotation(modified *bool, cluster *clusterv1.ManagedClus
 	hostingClusterName := annotations[constants.HostingClusterNameAnnotation]
 	addonHostingClusterName, existed := annotations[addonv1alpha1.HostingClusterNameAnnotationKey]
 
-	if !helpers.IsHostedCluster(cluster) || enabledHostedAddon != "true" || hostingClusterName == "" {
+	if !helpers.IsHostedCluster(cluster) || enabledHostedAddon != constants.LabelValueTrue || hostingClusterName == "" {
 		if existed {
 			delete(cluster.Annotations, addonv1alpha1.HostingClusterNameAnnotationKey)
 			*modified = true

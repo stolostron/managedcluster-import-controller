@@ -90,7 +90,7 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	workSelector := labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: "true"})
+	workSelector := labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: constants.LabelValueTrue})
 	manifestWorks, err := r.informerHolder.KlusterletWorkLister.ManifestWorks(managedClusterName).List(workSelector)
 	if err != nil {
 		return reconcile.Result{}, err
@@ -153,7 +153,7 @@ func createManifestWorks(
 				Name:      fmt.Sprintf("%s-%s", managedCluster.Name, constants.KlusterletCRDsSuffix),
 				Namespace: managedCluster.Name,
 				Labels: map[string]string{
-					constants.KlusterletWorksLabel: "true",
+					constants.KlusterletWorksLabel: constants.LabelValueTrue,
 				},
 				Annotations: map[string]string{
 					// make sure the crd manifestWork is the last to be deleted.
@@ -189,7 +189,7 @@ func createManifestWorks(
 			Name:      fmt.Sprintf("%s-%s", managedCluster.Name, constants.KlusterletSuffix),
 			Namespace: managedCluster.Name,
 			Labels: map[string]string{
-				constants.KlusterletWorksLabel: "true",
+				constants.KlusterletWorksLabel: constants.LabelValueTrue,
 			},
 		},
 		Spec: workv1.ManifestWorkSpec{

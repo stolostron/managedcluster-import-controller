@@ -140,7 +140,7 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 
-		_, err = w.Write(content)
+		_, err = w.Write(content) //nolint:gosec // G705: content is generated import YAML, not user-controlled input
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}

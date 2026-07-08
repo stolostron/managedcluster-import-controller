@@ -292,7 +292,7 @@ func (f *FlightCtlManager) isFlightCtlEnabledAndHealthy() error {
 			},
 		},
 	}
-	resp, err := client.Get(healthEndpoint)
+	resp, err := client.Get(healthEndpoint) //nolint:gosec // G704: URL is from operator-configured FlightCtl endpoint, not user input
 	if err != nil {
 		return fmt.Errorf("failed to perform health check: %v", err)
 	}
