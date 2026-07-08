@@ -21,9 +21,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: "1.25"
+          go-version-file: go.mod
 
       - name: E2E Tests (Core)
         run: OCM_VERSION=${{ github.base_ref }} make e2e-test-core
@@ -106,9 +106,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: "1.25"
+          go-version-file: go.mod
 
       - name: E2E Tests (Misc)
         run: OCM_VERSION=${{ github.base_ref }} make e2e-test-misc
@@ -191,9 +191,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
-          go-version: "1.25"
+          go-version-file: go.mod
 
       - name: E2E Tests (Hosted)
         run: OCM_VERSION=${{ github.base_ref }} make e2e-test-hosted
