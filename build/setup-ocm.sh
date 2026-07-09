@@ -17,7 +17,7 @@ function debug_and_exit() {
   echo "=== Pods in open-cluster-management ==="
   ${KUBECTL} -n open-cluster-management get pods -o wide --ignore-not-found
   echo "=== Pod details in open-cluster-management ==="
-  ${KUBECTL} -n open-cluster-management describe pods --ignore-not-found
+  ${KUBECTL} -n open-cluster-management describe pods || true
   echo "=== Pods in open-cluster-management-hub ==="
   ${KUBECTL} -n open-cluster-management-hub get pods -o wide --ignore-not-found
   echo "=== Cluster Manager operator logs ==="
