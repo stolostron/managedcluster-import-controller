@@ -42,15 +42,24 @@ function wait_deployment() {
 
 echo "###### deploy ocm"
 
-go mod tidy
-go mod vendor
-
 BUILD_DIR="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 REPO_DIR="$(dirname "$BUILD_DIR")"
 HELM="${REPO_DIR}/_output/helm"
 
+#
+# We are specifically overriding images with stolostron built images, so also use the stolostron repo
+# to get the ocm helm charts for cluster-manager, ensuring the chart RBAC and operator image are
+# always from the same version.
+#
+OCM_CHART_DIR="${REPO_DIR}/_output/ocm"
+rm -rf ${OCM_CHART_DIR}
+git clone --depth 1 --branch $OCM_VERSION --filter=blob:none --sparse \
+  https://github.com/stolostron/ocm.git ${OCM_CHART_DIR}
+cd ${OCM_CHART_DIR}
+git sparse-checkout set deploy/cluster-manager/chart
+cd ${REPO_DIR}
 
-${HELM} upgrade --install cluster-manager vendor/open-cluster-management.io/ocm/deploy/cluster-manager/chart/cluster-manager \
+${HELM} upgrade --install cluster-manager ${OCM_CHART_DIR}/deploy/cluster-manager/chart/cluster-manager \
 --namespace=open-cluster-management --create-namespace --set replicaCount=1,images.registry="quay.io/stolostron",images.tag=$OCM_VERSION
 
 
