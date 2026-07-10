@@ -12,18 +12,20 @@ set -o nounset
 KUBECTL=${KUBECTL:-kubectl}
 OCM_VERSION=${OCM_VERSION:-main}
 
-function wait_deployment() {
-  set +e
-  for((i=0;i<30;i++));
-  do
-    ${KUBECTL} -n $1 get deploy $2
-    if [ 0 -eq $? ]; then
-      break
-    fi
-    echo "sleep 1 second to wait deployment $1/$2 to exist: $i"
-    sleep 1
-  done
-  set -e
+function debug_and_exit() {
+  echo "::group::####### DIAGNOSTIC: OCM setup failure #######"
+  echo "=== Pods in open-cluster-management ==="
+  ${KUBECTL} -n open-cluster-management get pods -o wide --ignore-not-found
+  echo "=== Pod details in open-cluster-management ==="
+  ${KUBECTL} -n open-cluster-management describe pods || true
+  echo "=== Pods in open-cluster-management-hub ==="
+  ${KUBECTL} -n open-cluster-management-hub get pods -o wide --ignore-not-found
+  echo "=== Cluster Manager operator logs ==="
+  ${KUBECTL} -n open-cluster-management logs -l app=cluster-manager --tail=200 || true
+  echo "=== ClusterManager CR status ==="
+  ${KUBECTL} get clustermanagers -o yaml --ignore-not-found
+  echo "::endgroup::"
+  exit 1
 }
 
 BUILD_DIR="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
@@ -49,13 +51,10 @@ make deploy-hub-operator apply-hub-cr -C "$WORK_DIR/_repo_ocm"
 
 rm -rf "$WORK_DIR/_repo_ocm"
 
-wait_deployment open-cluster-management cluster-manager
-${KUBECTL} -n open-cluster-management rollout status deploy cluster-manager --timeout=120s
-
-wait_deployment open-cluster-management-hub cluster-manager-registration-controller
-${KUBECTL} -n open-cluster-management-hub rollout status deploy cluster-manager-registration-controller --timeout=120s
-${KUBECTL} -n open-cluster-management-hub rollout status deploy cluster-manager-registration-webhook --timeout=120s
-${KUBECTL} -n open-cluster-management-hub rollout status deploy cluster-manager-work-webhook --timeout=120s
+${KUBECTL} wait -n open-cluster-management-hub --for=create deployment/cluster-manager-registration-controller --timeout=60s || debug_and_exit
+${KUBECTL} -n open-cluster-management-hub rollout status deployment/cluster-manager-registration-controller --timeout=120s || debug_and_exit
+${KUBECTL} -n open-cluster-management-hub rollout status deployment/cluster-manager-registration-webhook --timeout=120s || debug_and_exit
+${KUBECTL} -n open-cluster-management-hub rollout status deployment/cluster-manager-work-webhook --timeout=120s || debug_and_exit
 
 # scale replicas to save resources, after the hub are installed, we don't need
 # the cluster-manager and placement-controller for the e2e test
