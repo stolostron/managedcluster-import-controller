@@ -41,6 +41,16 @@ import (
 const (
 	apiServerInternalEndpoint   = "https://kubernetes.default.svc:443"
 	apiServerInternalEndpointCA = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+
+	// clusterSingletonName is the name of the OpenShift Infrastructure/APIServer singleton CR.
+	clusterSingletonName = "cluster"
+
+	// caBundleCRTKey is the first key checked when looking for CA data in a ConfigMap.
+	caBundleCRTKey = "ca-bundle.crt"
+	// caCRTKey is the standard CA certificate key name in a ConfigMap or Secret.
+	caCRTKey = "ca.crt"
+	// tlsCRTKey is the TLS certificate key name in a Secret.
+	tlsCRTKey = "tls.crt"
 )
 
 // create kubeconfig for bootstrap
@@ -246,7 +256,7 @@ func GetKubeAPIServerAddress(ctx context.Context, client client.Client,
 	}
 
 	infraConfig := &ocinfrav1.Infrastructure{}
-	err := client.Get(ctx, types.NamespacedName{Name: "cluster"}, infraConfig)
+	err := client.Get(ctx, types.NamespacedName{Name: clusterSingletonName}, infraConfig)
 	if err == nil {
 		return infraConfig.Status.APIServerURL, nil
 	}
@@ -272,7 +282,7 @@ func GetKubeconfigClusterName(ctx context.Context, client client.Client) (string
 	}
 
 	infraConfig := &ocinfrav1.Infrastructure{}
-	err := client.Get(ctx, types.NamespacedName{Name: "cluster"}, infraConfig)
+	err := client.Get(ctx, types.NamespacedName{Name: clusterSingletonName}, infraConfig)
 	if err == nil {
 		return string(infraConfig.UID), nil
 	}
@@ -422,7 +432,7 @@ func autoDetectCAData(ctx context.Context, clientHolder *helpers.ClientHolder, k
 
 func getKubeRootCABundle(ctx context.Context, clientHolder *helpers.ClientHolder,
 	caNamespace string) ([]byte, error) {
-	return getCABundleFromConfigmap(ctx, clientHolder, caNamespace, "kube-root-ca.crt", "ca.crt")
+	return getCABundleFromConfigmap(ctx, clientHolder, caNamespace, "kube-root-ca.crt", caCRTKey)
 }
 
 func getCABundleFromConfigmap(ctx context.Context, clientHolder *helpers.ClientHolder,
@@ -433,7 +443,7 @@ func getCABundleFromConfigmap(ctx context.Context, clientHolder *helpers.ClientH
 	}
 
 	if len(caKeys) == 0 {
-		caKeys = []string{"ca-bundle.crt", "ca.crt", "tls.crt"}
+		caKeys = []string{caBundleCRTKey, caCRTKey, tlsCRTKey}
 	}
 
 	for _, key := range caKeys {
@@ -449,7 +459,7 @@ func getCABundleFromConfigmap(ctx context.Context, clientHolder *helpers.ClientH
 // returns the first one which has a name matches the given dnsName
 func getKubeAPIServerSecretName(ctx context.Context, client client.Client, dnsName string) (string, error) {
 	apiserver := &ocinfrav1.APIServer{}
-	if err := client.Get(ctx, types.NamespacedName{Name: "cluster"}, apiserver); err != nil {
+	if err := client.Get(ctx, types.NamespacedName{Name: clusterSingletonName}, apiserver); err != nil {
 		if helpers.ResourceIsNotFound(err) {
 			klog.Info("Ignore ocp apiserver, it is not found")
 			return "", nil
@@ -502,7 +512,7 @@ func getCustomKubeAPIServerCertificate(ctx context.Context, kubeClient kubernete
 		return nil, err
 	}
 
-	res, ok := secret.Data["tls.crt"]
+	res, ok := secret.Data[tlsCRTKey]
 	if !ok {
 		return nil, fmt.Errorf("failed to find data[tls.crt] in secret openshift-config/%s", secretName)
 	}

@@ -20,12 +20,18 @@ import (
 
 const klusterletDeploymentName = "klusterlet"
 
+const (
+	vendorLabelOpenShift    = "OpenShift"
+	deploymentKind          = "Deployment"
+	tlsProfileSyncContainer = "tls-profile-sync"
+)
+
 // isManagedClusterOpenShift returns true if the managed cluster is an OpenShift cluster.
 func isManagedClusterOpenShift(mc *clusterv1.ManagedCluster) bool {
 	if mc == nil {
 		return false
 	}
-	return mc.Labels["vendor"] == "OpenShift"
+	return mc.Labels["vendor"] == vendorLabelOpenShift
 }
 
 // getTLSProfileSyncImage returns the tls-profile-sync sidecar image, applying registry
@@ -65,7 +71,7 @@ func injectTLSProfileSyncSidecar(
 		if err := yaml.Unmarshal(obj, u); err != nil {
 			continue
 		}
-		if u.GetKind() != "Deployment" || u.GetName() != klusterletDeploymentName {
+		if u.GetKind() != deploymentKind || u.GetName() != klusterletDeploymentName {
 			continue
 		}
 
@@ -75,7 +81,7 @@ func injectTLSProfileSyncSidecar(
 		}
 
 		sidecar := corev1.Container{
-			Name:            "tls-profile-sync",
+			Name:            tlsProfileSyncContainer,
 			Image:           image,
 			ImagePullPolicy: corev1.PullIfNotPresent,
 			Command:         []string{"/usr/local/bin/tls-profile-sync"},

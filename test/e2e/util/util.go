@@ -342,7 +342,7 @@ func NewAutoImportSecret(kubeClient kubernetes.Interface, clusterName string, mo
 
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "auto-import-secret",
+			Name:      constants.AutoImportSecretName,
 			Namespace: clusterName,
 		},
 		Data: map[string][]byte{

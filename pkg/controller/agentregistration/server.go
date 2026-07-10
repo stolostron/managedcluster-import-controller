@@ -17,6 +17,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/validation"
 	"k8s.io/klog/v2"
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 
@@ -64,6 +65,15 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 		var err error
 		urlparams := strings.Split(r.URL.Path, "/")
 		clusterID := urlparams[len(urlparams)-1]
+
+		// Validate clusterID conforms to Kubernetes DNS subdomain rules (RFC 1123).
+		// ManagedCluster names follow the full subdomain format (up to 253 chars),
+		// not just a single DNS label (63 chars). This ensures the value is safe
+		// to embed in generated YAML manifests.
+		if errs := validation.IsDNS1123Subdomain(clusterID); len(errs) > 0 {
+			http.Error(w, fmt.Sprintf("invalid cluster name %q: %s", clusterID, strings.Join(errs, "; ")), http.StatusBadRequest)
+			return
+		}
 
 		klusterletconfigName := r.URL.Query().Get("klusterletconfig")
 		durationStr := r.URL.Query().Get("duration")
@@ -140,7 +150,8 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 
-		_, err = w.Write(content)
+		w.Header().Set("Content-Type", "application/yaml")
+		_, err = w.Write(content) //nolint:gosec // G705: clusterID is validated as a DNS label above; Content-Type is application/yaml so browsers will not render as HTML
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}

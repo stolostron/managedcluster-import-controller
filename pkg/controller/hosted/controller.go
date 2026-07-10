@@ -38,6 +38,8 @@ var manifestFiles embed.FS
 
 var klusterletHostedExternalKubeconfig = "manifests/external_managed_secret.yaml"
 
+const readyToApplyStatusFeedback = "ReadyToApply-status"
+
 var log = logf.Log.WithName(ControllerName)
 
 // ReconcileHosted reconciles the Hosted mode ManagedClusters of the ManifestWorks object
@@ -313,7 +315,7 @@ func (r *ReconcileHosted) externalManagedKubeconfigCreated(
 		}
 
 		for _, fb := range manifest.StatusFeedbacks.Values {
-			if fb.Name == "ReadyToApply-status" &&
+			if fb.Name == readyToApplyStatusFeedback &&
 				fb.Value.String != nil && strings.EqualFold(*fb.Value.String, "True") {
 				return true, nil
 			}
@@ -388,7 +390,7 @@ func createHostingManifestWork(managedClusterName string,
 									Path: `.status.conditions[?(@.type=="ReadyToApply")].reason`,
 								},
 								{
-									Name: "ReadyToApply-status",
+									Name: readyToApplyStatusFeedback,
 									Path: `.status.conditions[?(@.type=="ReadyToApply")].status`,
 								},
 								{

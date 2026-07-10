@@ -35,6 +35,14 @@ const (
 	// Upstream OCM components watch this ConfigMap to get TLS settings without
 	// depending on OpenShift APIs.
 	ConfigMapName = "ocm-tls-profile"
+
+	// clusterSingletonName is the name of the OpenShift APIServer singleton CR.
+	clusterSingletonName = "cluster"
+
+	// ConfigMap data keys written by buildConfigMapData.
+	configMapKeyMinTLSVersion = "minTLSVersion"
+	configMapKeyCipherSuites  = "cipherSuites"
+	configMapKeyProfileType   = "profileType"
 )
 
 // Run starts the tls-profile-sync sidecar using the controller-runtime pattern.
@@ -124,7 +132,7 @@ func Run(ctx context.Context) error {
 		handler.TypedEnqueueRequestsFromMapFunc(
 			func(_ context.Context, cm *corev1.ConfigMap) []reconcile.Request {
 				if cm.Name == ConfigMapName && cm.Namespace == namespace {
-					return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: "cluster"}}}
+					return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: clusterSingletonName}}}
 				}
 				return nil
 			},
@@ -149,7 +157,7 @@ func (r *tlsProfileSyncReconciler) Reconcile(
 	ctx context.Context, req reconcile.Request,
 ) (reconcile.Result, error) {
 	// Only care about the "cluster" singleton
-	if req.Name != "cluster" {
+	if req.Name != clusterSingletonName {
 		return reconcile.Result{}, nil
 	}
 
@@ -170,7 +178,7 @@ func (r *tlsProfileSyncReconciler) Reconcile(
 
 	klog.Infof("Synced ConfigMap %s/%s: minTLSVersion=%s, profileType=%s",
 		r.namespace, ConfigMapName,
-		data["minTLSVersion"], data["profileType"])
+		data[configMapKeyMinTLSVersion], data[configMapKeyProfileType])
 
 	return reconcile.Result{}, nil
 }
@@ -240,9 +248,9 @@ func buildConfigMapData(profile *configv1.TLSSecurityProfile) map[string]string 
 	cipherSuites := libgocrypto.OpenSSLToIANACipherSuites(profileSpec.Ciphers)
 
 	return map[string]string{
-		"minTLSVersion": minTLSVersion,
-		"cipherSuites":  strings.Join(cipherSuites, ","),
-		"profileType":   profileType,
+		configMapKeyMinTLSVersion: minTLSVersion,
+		configMapKeyCipherSuites:  strings.Join(cipherSuites, ","),
+		configMapKeyProfileType:   profileType,
 	}
 }
 
