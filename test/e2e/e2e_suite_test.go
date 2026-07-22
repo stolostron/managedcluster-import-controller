@@ -906,6 +906,10 @@ func assertManagedClusterManifestWorksReadOnly(clusterName string) {
 			if len(klusterletCRDs.Spec.ManifestConfigs) == 0 {
 				return fmt.Errorf("klusterlet-crds ManifestWork has no ManifestConfigs")
 			}
+			if len(klusterletCRDs.Spec.ManifestConfigs) != len(klusterletCRDs.Spec.Workload.Manifests) {
+				return fmt.Errorf("klusterlet-crds ManifestWork has %d ManifestConfigs but %d manifests — every manifest must have a config",
+					len(klusterletCRDs.Spec.ManifestConfigs), len(klusterletCRDs.Spec.Workload.Manifests))
+			}
 			for i, config := range klusterletCRDs.Spec.ManifestConfigs {
 				if config.UpdateStrategy == nil {
 					return fmt.Errorf("klusterlet-crds ManifestConfig %d has nil UpdateStrategy", i)
@@ -913,6 +917,10 @@ func assertManagedClusterManifestWorksReadOnly(clusterName string) {
 				if config.UpdateStrategy.Type != workv1.UpdateStrategyTypeReadOnly {
 					return fmt.Errorf("klusterlet-crds ManifestConfig %d has UpdateStrategy %s, expected ReadOnly",
 						i, config.UpdateStrategy.Type)
+				}
+				if config.ResourceIdentifier.Resource == "" {
+					return fmt.Errorf("klusterlet-crds ManifestConfig %d has empty Resource field — work-agent resourceMatch will never match this config",
+						i)
 				}
 			}
 
@@ -924,6 +932,10 @@ func assertManagedClusterManifestWorksReadOnly(clusterName string) {
 			if len(klusterlet.Spec.ManifestConfigs) == 0 {
 				return fmt.Errorf("klusterlet ManifestWork has no ManifestConfigs")
 			}
+			if len(klusterlet.Spec.ManifestConfigs) != len(klusterlet.Spec.Workload.Manifests) {
+				return fmt.Errorf("klusterlet ManifestWork has %d ManifestConfigs but %d manifests — every manifest must have a config",
+					len(klusterlet.Spec.ManifestConfigs), len(klusterlet.Spec.Workload.Manifests))
+			}
 			for i, config := range klusterlet.Spec.ManifestConfigs {
 				if config.UpdateStrategy == nil {
 					return fmt.Errorf("klusterlet ManifestConfig %d has nil UpdateStrategy", i)
@@ -931,6 +943,10 @@ func assertManagedClusterManifestWorksReadOnly(clusterName string) {
 				if config.UpdateStrategy.Type != workv1.UpdateStrategyTypeReadOnly {
 					return fmt.Errorf("klusterlet ManifestConfig %d has UpdateStrategy %s, expected ReadOnly",
 						i, config.UpdateStrategy.Type)
+				}
+				if config.ResourceIdentifier.Resource == "" {
+					return fmt.Errorf("klusterlet ManifestConfig %d has empty Resource field — work-agent resourceMatch will never match this config",
+						i)
 				}
 			}
 

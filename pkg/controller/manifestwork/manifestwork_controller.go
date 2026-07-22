@@ -224,6 +224,25 @@ func createManifestWorks(
 // If disable-auto-import annotation is set on the ManagedCluster, all manifests are marked ReadOnly
 // to prevent work-agent from creating or updating them. This prevents the DR restore race condition
 // where work-agent (connected to backup hub) overwrites resources that the restore hub just pushed.
+//
+// The Resource field in ResourceIdentifier is populated using meta.UnsafeGuessKindToResource, which
+// applies standard English pluralization rules to the Kind name. This works correctly for all types
+// currently included in the klusterlet ManifestWorks:
+//
+//   - Namespace          -> namespaces
+//   - ClusterRole        -> clusterroles
+//   - ClusterRoleBinding -> clusterrolebindings
+//   - PriorityClass      -> priorityclasses
+//   - Secret             -> secrets
+//   - ServiceAccount     -> serviceaccounts
+//   - Deployment         -> deployments
+//   - Klusterlet         -> klusterlets
+//   - CustomResourceDefinition -> customresourcedefinitions
+//
+// If a new type is added to the klusterlet ManifestWorks, verify that
+// meta.UnsafeGuessKindToResource produces the correct plural resource name for it.
+// If it does not, the ReadOnly config for that type will silently fail to match in the
+// work-agent and the manifest will fall back to the default Update strategy.
 func buildManifestConfigs(managedCluster *clusterv1.ManagedCluster, manifests []workv1.Manifest) []workv1.ManifestConfigOption {
 	// Check if auto-import is disabled
 	_, autoImportDisabled := managedCluster.Annotations[apiconstants.DisableAutoImportAnnotation]
@@ -244,10 +263,15 @@ func buildManifestConfigs(managedCluster *clusterv1.ManagedCluster, manifests []
 		}
 
 		gvk := obj.GetObjectKind().GroupVersionKind()
+		// Use UnsafeGuessKindToResource to convert Kind to the plural resource name
+		// (e.g. "Secret" -> "secrets", "PriorityClass" -> "priorityclasses").
+		// The work-agent's resourceMatch function requires an exact match on the Resource
+		// field — leaving it empty causes the ReadOnly config to never match.
+		plural, _ := meta.UnsafeGuessKindToResource(gvk)
 		config := workv1.ManifestConfigOption{
 			ResourceIdentifier: workv1.ResourceIdentifier{
 				Group:     gvk.Group,
-				Resource:  "", // Will be inferred by work-agent from GVK
+				Resource:  plural.Resource,
 				Name:      metadata.GetName(),
 				Namespace: metadata.GetNamespace(),
 			},
