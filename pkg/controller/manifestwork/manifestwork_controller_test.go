@@ -191,7 +191,16 @@ func TestReconcile(t *testing.T) {
 					return
 				}
 
-				// Verify all configs have ReadOnly strategy
+				// Verify the number of configs matches the number of manifests — every
+				// manifest must have a corresponding ReadOnly config.
+				if len(klusterletWork.Spec.ManifestConfigs) != len(klusterletWork.Spec.Workload.Manifests) {
+					t.Errorf("expected %d ManifestConfigs (one per manifest), got %d",
+						len(klusterletWork.Spec.Workload.Manifests), len(klusterletWork.Spec.ManifestConfigs))
+				}
+
+				// Verify all configs have ReadOnly strategy and a non-empty Resource field.
+				// A non-empty Resource field is required for the work-agent's resourceMatch
+				// function to correctly identify and apply the ReadOnly strategy.
 				for i, config := range klusterletWork.Spec.ManifestConfigs {
 					if config.UpdateStrategy == nil {
 						t.Errorf("ManifestConfig %d has nil UpdateStrategy", i)
@@ -200,6 +209,10 @@ func TestReconcile(t *testing.T) {
 					if config.UpdateStrategy.Type != workv1.UpdateStrategyTypeReadOnly {
 						t.Errorf("ManifestConfig %d has UpdateStrategy %s, expected ReadOnly",
 							i, config.UpdateStrategy.Type)
+					}
+					if config.ResourceIdentifier.Resource == "" {
+						t.Errorf("ManifestConfig %d has empty Resource field — work-agent resourceMatch will never match this config",
+							i)
 					}
 				}
 
@@ -215,7 +228,13 @@ func TestReconcile(t *testing.T) {
 					return
 				}
 
-				// Verify CRDs config has ReadOnly strategy
+				// Verify the number of configs matches the number of manifests.
+				if len(crdsWork.Spec.ManifestConfigs) != len(crdsWork.Spec.Workload.Manifests) {
+					t.Errorf("expected %d CRDs ManifestConfigs (one per manifest), got %d",
+						len(crdsWork.Spec.Workload.Manifests), len(crdsWork.Spec.ManifestConfigs))
+				}
+
+				// Verify CRDs configs have ReadOnly strategy and a non-empty Resource field.
 				for i, config := range crdsWork.Spec.ManifestConfigs {
 					if config.UpdateStrategy == nil {
 						t.Errorf("CRDs ManifestConfig %d has nil UpdateStrategy", i)
@@ -224,6 +243,10 @@ func TestReconcile(t *testing.T) {
 					if config.UpdateStrategy.Type != workv1.UpdateStrategyTypeReadOnly {
 						t.Errorf("CRDs ManifestConfig %d has UpdateStrategy %s, expected ReadOnly",
 							i, config.UpdateStrategy.Type)
+					}
+					if config.ResourceIdentifier.Resource == "" {
+						t.Errorf("CRDs ManifestConfig %d has empty Resource field — work-agent resourceMatch will never match this config",
+							i)
 					}
 				}
 			},
