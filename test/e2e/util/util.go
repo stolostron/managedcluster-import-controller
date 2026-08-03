@@ -39,6 +39,25 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers/imageregistry"
 )
 
+const (
+	autoImportSecretName        = "auto-import-secret" // #nosec G101 -- resource name, not a credential
+	clusterDeploymentSecretName = "clusterdeployment-secret"
+	kubeconfigKey               = "kubeconfig"
+	tokenKey                    = "token"
+	serverKey                   = "server"
+
+	apiVersionKey                = "apiVersion"
+	kindKey                      = "kind"
+	metadataKey                  = "metadata"
+	nameKey                      = "name"
+	namespaceKey                 = "namespace"
+	specKey                      = "spec"
+	typeKey                      = "type"
+	serviceKey                   = "service"
+	servicePublishingStrategyKey = "servicePublishingStrategy"
+	routeType                    = "Route"
+)
+
 type Label struct {
 	key   string
 	value string
@@ -296,7 +315,7 @@ func InstallClusterDeployment(kubeClient kubernetes.Interface, dynamicClient dyn
 	}
 
 	clusterDeployment = clusterDeployment.DeepCopy()
-	if err := unstructured.SetNestedField(clusterDeployment.Object, true, "spec", "installed"); err != nil {
+	if err := unstructured.SetNestedField(clusterDeployment.Object, true, specKey, "installed"); err != nil {
 		return err
 	}
 
@@ -342,11 +361,11 @@ func NewAutoImportSecret(kubeClient kubernetes.Interface, clusterName string, mo
 
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "auto-import-secret",
+			Name:      autoImportSecretName,
 			Namespace: clusterName,
 		},
 		Data: map[string][]byte{
-			"kubeconfig": secret.Data["kubeconfig"],
+			kubeconfigKey: secret.Data[kubeconfigKey],
 		},
 	}, nil
 }
@@ -359,12 +378,12 @@ func NewAutoImportSecretWithToken(kubeClient kubernetes.Interface, dynamicClient
 
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "auto-import-secret",
+			Name:      autoImportSecretName,
 			Namespace: clusterName,
 		},
 		Data: map[string][]byte{
-			"token":  token,
-			"server": server,
+			tokenKey:  token,
+			serverKey: server,
 		},
 	}, nil
 }
@@ -377,15 +396,15 @@ func NewRestoreAutoImportSecret(kubeClient kubernetes.Interface, dynamicClient d
 
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "auto-import-secret",
+			Name:      autoImportSecretName,
 			Namespace: clusterName,
 			Labels: map[string]string{
-				"cluster.open-cluster-management.io/restore-auto-import-secret": "true",
+				"cluster.open-cluster-management.io/restore-auto-import-secret": constants.TrueString,
 			},
 		},
 		Data: map[string][]byte{
-			"token":  token,
-			"server": server,
+			tokenKey:  token,
+			serverKey: server,
 		},
 	}, nil
 }
@@ -398,12 +417,12 @@ func NewInvalidAutoImportSecret(kubeClient kubernetes.Interface, dynamicClient d
 
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "auto-import-secret",
+			Name:      autoImportSecretName,
 			Namespace: clusterName,
 		},
 		Data: map[string][]byte{
-			"token":  token,
-			"server": server,
+			tokenKey:  token,
+			serverKey: server,
 		},
 	}, nil
 }
@@ -422,7 +441,7 @@ func NewExternalManagedKubeconfigSecret(kubeClient kubernetes.Interface, cluster
 			Namespace: fmt.Sprintf("klusterlet-%s", clusterName),
 		},
 		Data: map[string][]byte{
-			"kubeconfig": secret.Data["kubeconfig"],
+			kubeconfigKey: secret.Data[kubeconfigKey],
 		},
 	}, nil
 }
@@ -434,7 +453,7 @@ func NewManagedClient(kubeClient kubernetes.Interface) (kubernetes.Interface, er
 		return nil, err
 	}
 
-	kubeconfigRaw, ok := secret.Data["kubeconfig"]
+	kubeconfigRaw, ok := secret.Data[kubeconfigKey]
 	if !ok {
 		return nil, fmt.Errorf("no kubeconfig data in the secret")
 	}
@@ -534,11 +553,11 @@ func newClusterDeploymentImportSecret(kubeClient kubernetes.Interface, clusterNa
 
 	return &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "clusterdeployment-secret",
+			Name:      clusterDeploymentSecretName,
 			Namespace: clusterName,
 		},
 		Data: map[string][]byte{
-			"kubeconfig": secret.Data["kubeconfig"],
+			kubeconfigKey: secret.Data[kubeconfigKey],
 		},
 	}, nil
 }
@@ -574,19 +593,19 @@ func getServerAndToken(kubeClient kubernetes.Interface, dynamicClient dynamic.In
 		return nil, nil, fmt.Errorf("failed to get apiServerURL in infrastructures cluster: %v, %v", found, err)
 	}
 
-	return []byte(apiServer), tokenSecret.Data["token"], nil
+	return []byte(apiServer), tokenSecret.Data[tokenKey], nil
 }
 
 func newCAPICluster(namespace, name string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
-			"apiVersion": "cluster.x-k8s.io/v1beta1",
-			"kind":       "Cluster",
-			"metadata": map[string]interface{}{
-				"name":      name,
-				"namespace": namespace,
+			apiVersionKey: "cluster.x-k8s.io/v1beta1",
+			kindKey:       "Cluster",
+			metadataKey: map[string]interface{}{
+				nameKey:      name,
+				namespaceKey: namespace,
 			},
-			"spec": map[string]interface{}{},
+			specKey: map[string]interface{}{},
 		},
 	}
 }
@@ -594,13 +613,13 @@ func newCAPICluster(namespace, name string) *unstructured.Unstructured {
 func newHostedCluster(namespace, name string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
-			"apiVersion": "hypershift.openshift.io/v1beta1",
-			"kind":       "HostedCluster",
-			"metadata": map[string]interface{}{
-				"name":      name,
-				"namespace": namespace,
+			apiVersionKey: "hypershift.openshift.io/v1beta1",
+			kindKey:       "HostedCluster",
+			metadataKey: map[string]interface{}{
+				nameKey:      name,
+				namespaceKey: namespace,
 			},
-			"spec": map[string]interface{}{
+			specKey: map[string]interface{}{
 				// 05622387-d157-4e41-8ac4-7c9708030ac0
 				// 01234567-abcd-efgh-ijkl-098765432100
 				"clusterID":                    "05622387-d157-4e41-8ac4-7c9708030ac0",
@@ -611,7 +630,7 @@ func newHostedCluster(namespace, name string) *unstructured.Unstructured {
 				"fips":    false,
 				"infraID": "hcp-" + namespace + "-" + name,
 				"platform": map[string]interface{}{
-					"type": "AWS",
+					typeKey: "AWS",
 					"aws": map[string]interface{}{
 						"cloudProviderConfig": map[string]interface{}{
 							"subnet": map[string]interface{}{
@@ -636,34 +655,34 @@ func newHostedCluster(namespace, name string) *unstructured.Unstructured {
 					"image": "quay.io/openshift-release-dev/ocp-release:4.17.2-multi",
 				},
 				"sshKey": map[string]interface{}{
-					"name": "test-ssh-key",
+					nameKey: "test-ssh-key",
 				},
 				"pullSecret": map[string]interface{}{
-					"name": "hcp-zj1-pull-secret",
+					nameKey: "hcp-zj1-pull-secret",
 				},
 				"services": []map[string]interface{}{
 					{
-						"service": "APIServer",
-						"servicePublishingStrategy": map[string]interface{}{
-							"type": "LoadBalancer",
+						serviceKey: "APIServer",
+						servicePublishingStrategyKey: map[string]interface{}{
+							typeKey: "LoadBalancer",
 						},
 					},
 					{
-						"service": "Ignition",
-						"servicePublishingStrategy": map[string]interface{}{
-							"type": "Route",
+						serviceKey: "Ignition",
+						servicePublishingStrategyKey: map[string]interface{}{
+							typeKey: routeType,
 						},
 					},
 					{
-						"service": "Konnectivity",
-						"servicePublishingStrategy": map[string]interface{}{
-							"type": "Route",
+						serviceKey: "Konnectivity",
+						servicePublishingStrategyKey: map[string]interface{}{
+							typeKey: routeType,
 						},
 					},
 					{
-						"service": "OAuthServer",
-						"servicePublishingStrategy": map[string]interface{}{
-							"type": "Route",
+						serviceKey: "OAuthServer",
+						servicePublishingStrategyKey: map[string]interface{}{
+							typeKey: routeType,
 						},
 					},
 				},
@@ -675,41 +694,41 @@ func newHostedCluster(namespace, name string) *unstructured.Unstructured {
 func newClusterdeployment(clusterName string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{
 		Object: map[string]interface{}{
-			"apiVersion": "hive.openshift.io/v1",
-			"kind":       "ClusterDeployment",
-			"metadata": map[string]interface{}{
-				"name":      clusterName,
-				"namespace": clusterName,
+			apiVersionKey: "hive.openshift.io/v1",
+			kindKey:       "ClusterDeployment",
+			metadataKey: map[string]interface{}{
+				nameKey:      clusterName,
+				namespaceKey: clusterName,
 			},
-			"spec": map[string]interface{}{
+			specKey: map[string]interface{}{
 				"baseDomain":  "fake-domain.red-chesterfield.com",
 				"clusterName": clusterName,
 				"installed":   false,
 				"platform": map[string]interface{}{
 					"aws": map[string]interface{}{
 						"credentialsSecretRef": map[string]interface{}{
-							"name": "fake-mycluster-aws-creds",
+							nameKey: "fake-mycluster-aws-creds",
 						},
 						"region": "us-east-1",
 					},
 				},
 				"provisioning": map[string]interface{}{
 					"imageSetRef": map[string]interface{}{
-						"name": "fake-hive-clusterimageset",
+						nameKey: "fake-hive-clusterimageset",
 					},
 					"installConfigSecretRef": map[string]interface{}{
-						"name": "fake-hive-install-config",
+						nameKey: "fake-hive-install-config",
 					},
 					"sshPrivateKeySecretRef": map[string]interface{}{
-						"name": "fake-hive-ssh-private-key",
+						nameKey: "fake-hive-ssh-private-key",
 					},
 				},
 				"clusterMetadata": map[string]interface{}{
 					"adminKubeconfigSecretRef": map[string]interface{}{
-						"name": "clusterdeployment-secret",
+						nameKey: clusterDeploymentSecretName,
 					},
 					"adminPasswordSecretRef": map[string]interface{}{
-						"name": "clusterdeployment-secret",
+						nameKey: clusterDeploymentSecretName,
 					},
 					"clusterID": "my-cluster-id",
 					"infraID":   "my-infra-id",

@@ -62,6 +62,7 @@ var reservedClusterClaimSuffixes = []string{
 const (
 	grpcRouteName   = "grpc-server"
 	grpcCAConfigmap = "ca-bundle-configmap"
+	grpcAuthType    = "grpc"
 
 	// grpcServiceName is the LoadBalancer Service name that exposes the gRPC server on non-OpenShift clusters.
 	// The cluster-manager operator automatically creates this service in the "open-cluster-management-hub" namespace.
@@ -371,7 +372,7 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 	if c.klusterletConfig != nil && c.klusterletConfig.Spec.RegistrationDriver != nil {
 		c.chartConfig.Klusterlet.RegistrationConfiguration.RegistrationDriver = *c.klusterletConfig.Spec.RegistrationDriver
 
-		if c.klusterletConfig.Spec.RegistrationDriver.AuthType == "grpc" {
+		if c.klusterletConfig.Spec.RegistrationDriver.AuthType == grpcAuthType {
 			// TODO: support MultiHubBootstrapHubKubeConfigs here
 			_, _, _, _, tokenString, _, err := helpers.ParseKubeConfigData([]byte(c.chartConfig.BootstrapHubKubeConfig))
 			if err != nil {

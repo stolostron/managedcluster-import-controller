@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"time"
 
@@ -250,6 +251,15 @@ func (f *FlightCtlManager) isFlightCtlEnabledAndHealthy() error {
 		return fmt.Errorf("healthEndpoint not found in flightctl-discovery configmap")
 	}
 
+	// Validate the health endpoint URL to ensure only HTTPS requests are made.
+	parsedHealthEndpoint, err := url.Parse(healthEndpoint)
+	if err != nil {
+		return fmt.Errorf("invalid healthEndpoint %q: %v", healthEndpoint, err)
+	}
+	if parsedHealthEndpoint.Scheme != "https" {
+		return fmt.Errorf("invalid healthEndpoint %q: only https scheme is allowed", healthEndpoint)
+	}
+
 	// Get the flightctl namespace from the ConfigMap
 	flightctlNamespace, ok := cm.Data["namespace"]
 	if !ok || flightctlNamespace == "" {
@@ -292,7 +302,9 @@ func (f *FlightCtlManager) isFlightCtlEnabledAndHealthy() error {
 			},
 		},
 	}
-	resp, err := client.Get(healthEndpoint)
+	// The endpoint is validated above to be an https URL and originates from a
+	// cluster-admin managed ConfigMap, not from end-user request input.
+	resp, err := client.Get(parsedHealthEndpoint.String()) // #nosec G704 -- validated admin-provided https endpoint
 	if err != nil {
 		return fmt.Errorf("failed to perform health check: %v", err)
 	}

@@ -70,6 +70,9 @@ const (
 	HostedClusterLabel       = "import.open-cluster-management.io/hosted-cluster"
 )
 
+// TrueString is the string representation of the boolean true value used in labels and annotations.
+const TrueString = "true"
+
 const (
 	CreatedViaAnnotation = "open-cluster-management/created-via"
 	CreatedViaAI         = "assisted-installer"
