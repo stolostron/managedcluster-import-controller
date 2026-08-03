@@ -1,6 +1,6 @@
 module github.com/stolostron/managedcluster-import-controller
 
-go 1.25.0
+go 1.26.0
 
 // TODO: @xuezhaojun need to switch to the official flightctl lib once it's ready.
 replace github.com/flightctl/flightctl/lib => github.com/xuezhaojun/flightctl/lib v0.0.0-20241125124411-7eec33f53a61
@@ -30,7 +30,7 @@ require (
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
 	open-cluster-management.io/api v1.2.0
-	open-cluster-management.io/sdk-go v1.1.1-0.20260127092137-c07e0fafa331
+	open-cluster-management.io/sdk-go v1.2.0
 	sigs.k8s.io/controller-runtime v0.22.4
 )
 
@@ -41,7 +41,7 @@ require (
 	github.com/openshift/hypershift/api v0.0.0-20241022184855-1fa7be0211e4
 	github.com/sethvargo/go-password v0.2.0
 	github.com/stretchr/testify v1.11.1
-	open-cluster-management.io/ocm v1.1.1-0.20260128054152-9d1a993e2c6f
+	open-cluster-management.io/ocm v1.2.1
 	sigs.k8s.io/cluster-api v1.9.3
 	sigs.k8s.io/yaml v1.6.0
 )

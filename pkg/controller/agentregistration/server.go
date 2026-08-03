@@ -141,7 +141,11 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
 
-		_, err = w.Write(content)
+		w.Header().Set("Content-Type", "application/yaml")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		// content is server-generated klusterlet YAML manifests, served with a
+		// non-HTML Content-Type and nosniff, so it cannot be interpreted as HTML.
+		_, err = w.Write(content) // #nosec G705 -- server-generated YAML, not reflected user input
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
