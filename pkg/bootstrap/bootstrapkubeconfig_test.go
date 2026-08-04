@@ -1521,7 +1521,7 @@ func TestGetBootstrapToken(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-bootstrap-sa-token-abc123",
 						Namespace: "test-cluster",
-						Labels: map[string]string{
+						Labels: map[string]string{ // #nosec G101 -- test label, not a credential
 							"kubernetes.io/legacy-token-invalid-since": "2024-01-01T00:00:00Z",
 						},
 					},
@@ -1565,7 +1565,7 @@ func TestGetBootstrapToken(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test-bootstrap-sa-token-abc123",
 						Namespace: "test-cluster",
-						Labels: map[string]string{
+						Labels: map[string]string{ // #nosec G101 -- test label, not a credential
 							"kubernetes.io/legacy-token-invalid-since": "2099-01-01T00:00:00Z",
 						},
 					},
