@@ -42,10 +42,9 @@ const (
 	apiServerInternalEndpoint   = "https://kubernetes.default.svc:443"
 	apiServerInternalEndpointCA = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 
-	clusterResourceName = "cluster"
-	caBundleCrtKey      = "ca-bundle.crt"
-	caCrtKey            = "ca.crt"
-	tlsCrtKey           = "tls.crt"
+	caBundleCrtKey = "ca-bundle.crt"
+	caCrtKey       = "ca.crt"
+	tlsCrtKey      = "tls.crt"
 )
 
 // create kubeconfig for bootstrap
@@ -251,7 +250,7 @@ func GetKubeAPIServerAddress(ctx context.Context, client client.Client,
 	}
 
 	infraConfig := &ocinfrav1.Infrastructure{}
-	err := client.Get(ctx, types.NamespacedName{Name: clusterResourceName}, infraConfig)
+	err := client.Get(ctx, types.NamespacedName{Name: constants.ClusterResourceName}, infraConfig)
 	if err == nil {
 		return infraConfig.Status.APIServerURL, nil
 	}
@@ -277,7 +276,7 @@ func GetKubeconfigClusterName(ctx context.Context, client client.Client) (string
 	}
 
 	infraConfig := &ocinfrav1.Infrastructure{}
-	err := client.Get(ctx, types.NamespacedName{Name: clusterResourceName}, infraConfig)
+	err := client.Get(ctx, types.NamespacedName{Name: constants.ClusterResourceName}, infraConfig)
 	if err == nil {
 		return string(infraConfig.UID), nil
 	}
@@ -454,7 +453,7 @@ func getCABundleFromConfigmap(ctx context.Context, clientHolder *helpers.ClientH
 // returns the first one which has a name matches the given dnsName
 func getKubeAPIServerSecretName(ctx context.Context, client client.Client, dnsName string) (string, error) {
 	apiserver := &ocinfrav1.APIServer{}
-	if err := client.Get(ctx, types.NamespacedName{Name: clusterResourceName}, apiserver); err != nil {
+	if err := client.Get(ctx, types.NamespacedName{Name: constants.ClusterResourceName}, apiserver); err != nil {
 		if helpers.ResourceIsNotFound(err) {
 			klog.Info("Ignore ocp apiserver, it is not found")
 			return "", nil

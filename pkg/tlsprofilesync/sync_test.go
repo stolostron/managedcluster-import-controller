@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	configv1 "github.com/openshift/api/config/v1"
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -91,16 +92,16 @@ func TestBuildConfigMapData(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			data := buildConfigMapData(tt.profile)
 
-			if data["profileType"] != tt.wantProfileType {
-				t.Errorf("profileType = %q, want %q", data["profileType"], tt.wantProfileType)
+			if data[profileTypeKey] != tt.wantProfileType {
+				t.Errorf("profileType = %q, want %q", data[profileTypeKey], tt.wantProfileType)
 			}
-			if data["minTLSVersion"] != tt.wantMinVersion {
-				t.Errorf("minTLSVersion = %q, want %q", data["minTLSVersion"], tt.wantMinVersion)
+			if data[minTLSVersionKey] != tt.wantMinVersion {
+				t.Errorf("minTLSVersion = %q, want %q", data[minTLSVersionKey], tt.wantMinVersion)
 			}
-			hasCiphers := data["cipherSuites"] != ""
+			hasCiphers := data[cipherSuitesKey] != ""
 			if hasCiphers != tt.wantHasCiphers {
 				t.Errorf("hasCiphers = %v, want %v (cipherSuites=%q)",
-					hasCiphers, tt.wantHasCiphers, data["cipherSuites"])
+					hasCiphers, tt.wantHasCiphers, data[cipherSuitesKey])
 			}
 		})
 	}
@@ -111,7 +112,7 @@ func TestBuildConfigMapData_CiphersAreIANA(t *testing.T) {
 		Type: configv1.TLSProfileIntermediateType,
 	})
 
-	ciphers := data["cipherSuites"]
+	ciphers := data[cipherSuitesKey]
 	if ciphers == "" {
 		t.Fatal("expected cipher suites for Intermediate profile")
 	}
@@ -166,9 +167,9 @@ func TestSyncConfigMap_CreateAndUpdate(t *testing.T) {
 
 	// First sync should create the ConfigMap
 	data := map[string]string{
-		"minTLSVersion": "VersionTLS12",
-		"cipherSuites":  "TLS_AES_128_GCM_SHA256",
-		"profileType":   "Intermediate",
+		minTLSVersionKey: "VersionTLS12",
+		cipherSuitesKey:  "TLS_AES_128_GCM_SHA256",
+		profileTypeKey:   "Intermediate",
 	}
 	if err := reconciler.syncConfigMap(ctx, data); err != nil {
 		t.Fatalf("create failed: %v", err)
@@ -178,15 +179,15 @@ func TestSyncConfigMap_CreateAndUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get after create failed: %v", err)
 	}
-	if cm.Data["minTLSVersion"] != "VersionTLS12" {
-		t.Errorf("minTLSVersion = %q, want VersionTLS12", cm.Data["minTLSVersion"])
+	if cm.Data[minTLSVersionKey] != "VersionTLS12" {
+		t.Errorf("minTLSVersion = %q, want VersionTLS12", cm.Data[minTLSVersionKey])
 	}
 
 	// Second sync should update the ConfigMap
 	data2 := map[string]string{
-		"minTLSVersion": "VersionTLS13",
-		"cipherSuites":  "",
-		"profileType":   "Modern",
+		minTLSVersionKey: "VersionTLS13",
+		cipherSuitesKey:  "",
+		profileTypeKey:   "Modern",
 	}
 	if err := reconciler.syncConfigMap(ctx, data2); err != nil {
 		t.Fatalf("update failed: %v", err)
@@ -196,11 +197,11 @@ func TestSyncConfigMap_CreateAndUpdate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get after update failed: %v", err)
 	}
-	if cm.Data["minTLSVersion"] != "VersionTLS13" {
-		t.Errorf("minTLSVersion = %q, want VersionTLS13", cm.Data["minTLSVersion"])
+	if cm.Data[minTLSVersionKey] != "VersionTLS13" {
+		t.Errorf("minTLSVersion = %q, want VersionTLS13", cm.Data[minTLSVersionKey])
 	}
-	if cm.Data["profileType"] != "Modern" {
-		t.Errorf("profileType = %q, want Modern", cm.Data["profileType"])
+	if cm.Data[profileTypeKey] != "Modern" {
+		t.Errorf("profileType = %q, want Modern", cm.Data[profileTypeKey])
 	}
 }
 
@@ -214,9 +215,9 @@ func TestSyncConfigMap_ExistingConfigMap(t *testing.T) {
 			Namespace: namespace,
 		},
 		Data: map[string]string{
-			"minTLSVersion": "VersionTLS12",
-			"cipherSuites":  "old-cipher",
-			"profileType":   "Intermediate",
+			minTLSVersionKey: "VersionTLS12",
+			cipherSuitesKey:  "old-cipher",
+			profileTypeKey:   "Intermediate",
 		},
 	}
 	fakeClient := fake.NewSimpleClientset(existing)
@@ -227,9 +228,9 @@ func TestSyncConfigMap_ExistingConfigMap(t *testing.T) {
 	}
 
 	data := map[string]string{
-		"minTLSVersion": "VersionTLS13",
-		"cipherSuites":  "",
-		"profileType":   "Modern",
+		minTLSVersionKey: "VersionTLS13",
+		cipherSuitesKey:  "",
+		profileTypeKey:   "Modern",
 	}
 	if err := reconciler.syncConfigMap(ctx, data); err != nil {
 		t.Fatalf("update failed: %v", err)
@@ -239,8 +240,8 @@ func TestSyncConfigMap_ExistingConfigMap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get failed: %v", err)
 	}
-	if cm.Data["profileType"] != "Modern" {
-		t.Errorf("profileType = %q, want Modern", cm.Data["profileType"])
+	if cm.Data[profileTypeKey] != "Modern" {
+		t.Errorf("profileType = %q, want Modern", cm.Data[profileTypeKey])
 	}
 }
 
@@ -256,7 +257,7 @@ func TestReconcile_ModernProfile(t *testing.T) {
 	namespace := "test-ns"
 
 	apiServer := &configv1.APIServer{
-		ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+		ObjectMeta: metav1.ObjectMeta{Name: constants.ClusterResourceName},
 		Spec: configv1.APIServerSpec{
 			TLSSecurityProfile: &configv1.TLSSecurityProfile{
 				Type: configv1.TLSProfileModernType,
@@ -272,7 +273,7 @@ func TestReconcile_ModernProfile(t *testing.T) {
 	}
 
 	result, err := r.Reconcile(ctx, reconcile.Request{
-		NamespacedName: types.NamespacedName{Name: "cluster"},
+		NamespacedName: types.NamespacedName{Name: constants.ClusterResourceName},
 	})
 	if err != nil {
 		t.Fatalf("Reconcile() error: %v", err)
@@ -286,11 +287,11 @@ func TestReconcile_ModernProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ConfigMap not created: %v", err)
 	}
-	if cm.Data["profileType"] != "Modern" {
-		t.Errorf("profileType = %q, want Modern", cm.Data["profileType"])
+	if cm.Data[profileTypeKey] != "Modern" {
+		t.Errorf("profileType = %q, want Modern", cm.Data[profileTypeKey])
 	}
-	if cm.Data["minTLSVersion"] != "VersionTLS13" {
-		t.Errorf("minTLSVersion = %q, want VersionTLS13", cm.Data["minTLSVersion"])
+	if cm.Data[minTLSVersionKey] != "VersionTLS13" {
+		t.Errorf("minTLSVersion = %q, want VersionTLS13", cm.Data[minTLSVersionKey])
 	}
 }
 
@@ -331,7 +332,7 @@ func TestReconcile_APIServerNotFound(t *testing.T) {
 	}
 
 	result, err := r.Reconcile(ctx, reconcile.Request{
-		NamespacedName: types.NamespacedName{Name: "cluster"},
+		NamespacedName: types.NamespacedName{Name: constants.ClusterResourceName},
 	})
 	if err != nil {
 		t.Fatalf("Reconcile() should not error on not-found: %v", err)
@@ -353,7 +354,7 @@ func TestReconcile_UpdatesExistingConfigMap(t *testing.T) {
 	namespace := "test-ns"
 
 	apiServer := &configv1.APIServer{
-		ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+		ObjectMeta: metav1.ObjectMeta{Name: constants.ClusterResourceName},
 		Spec: configv1.APIServerSpec{
 			TLSSecurityProfile: &configv1.TLSSecurityProfile{
 				Type: configv1.TLSProfileModernType,
@@ -367,8 +368,8 @@ func TestReconcile_UpdatesExistingConfigMap(t *testing.T) {
 			Namespace: namespace,
 		},
 		Data: map[string]string{
-			"minTLSVersion": "VersionTLS12",
-			"profileType":   "Intermediate",
+			minTLSVersionKey: "VersionTLS12",
+			profileTypeKey:   "Intermediate",
 		},
 	}
 
@@ -380,7 +381,7 @@ func TestReconcile_UpdatesExistingConfigMap(t *testing.T) {
 	}
 
 	_, err := r.Reconcile(ctx, reconcile.Request{
-		NamespacedName: types.NamespacedName{Name: "cluster"},
+		NamespacedName: types.NamespacedName{Name: constants.ClusterResourceName},
 	})
 	if err != nil {
 		t.Fatalf("Reconcile() error: %v", err)
@@ -391,11 +392,11 @@ func TestReconcile_UpdatesExistingConfigMap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get ConfigMap: %v", err)
 	}
-	if cm.Data["profileType"] != "Modern" {
-		t.Errorf("profileType = %q, want Modern", cm.Data["profileType"])
+	if cm.Data[profileTypeKey] != "Modern" {
+		t.Errorf("profileType = %q, want Modern", cm.Data[profileTypeKey])
 	}
-	if cm.Data["minTLSVersion"] != "VersionTLS13" {
-		t.Errorf("minTLSVersion = %q, want VersionTLS13", cm.Data["minTLSVersion"])
+	if cm.Data[minTLSVersionKey] != "VersionTLS13" {
+		t.Errorf("minTLSVersion = %q, want VersionTLS13", cm.Data[minTLSVersionKey])
 	}
 }
 

@@ -435,7 +435,7 @@ func createManagedKubeconfigManifestWork(managedClusterName string, importSecret
 	isLocalCluster := false
 	if hostingCluster != nil && hostingCluster.Labels != nil {
 		localClusterValue, exists := hostingCluster.Labels[constants.SelfManagedLabel]
-		if exists && localClusterValue == "true" {
+		if exists && localClusterValue == constants.TrueString {
 			isLocalCluster = true
 		}
 	}

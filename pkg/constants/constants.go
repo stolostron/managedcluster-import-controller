@@ -73,6 +73,10 @@ const (
 // TrueString is the string representation of the boolean true value used in labels and annotations.
 const TrueString = "true"
 
+// ClusterResourceName is the singleton name used by OpenShift cluster-scoped
+// resources such as Infrastructure and APIServer.
+const ClusterResourceName = "cluster"
+
 const (
 	CreatedViaAnnotation = "open-cluster-management/created-via"
 	CreatedViaAI         = "assisted-installer"

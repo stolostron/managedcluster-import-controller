@@ -36,7 +36,7 @@ func TestIsManagedClusterOpenShift(t *testing.T) {
 			name: "vendor OpenShift",
 			mc: &clusterv1.ManagedCluster{
 				ObjectMeta: metav1.ObjectMeta{
-					Labels: map[string]string{"vendor": "OpenShift"},
+					Labels: map[string]string{"vendor": vendorOpenShift},
 				},
 			},
 			want: true,
@@ -137,7 +137,7 @@ func TestInjectTLSProfileSyncSidecar(t *testing.T) {
 
 	t.Run("injects sidecar into klusterlet deployment", func(t *testing.T) {
 		deployment := &appsv1.Deployment{
-			TypeMeta: metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+			TypeMeta: metav1.TypeMeta{Kind: kindDeployment, APIVersion: "apps/v1"},
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "klusterlet",
 				Namespace: "open-cluster-management-agent",
@@ -179,7 +179,7 @@ func TestInjectTLSProfileSyncSidecar(t *testing.T) {
 		}
 
 		sidecar := modified.Spec.Template.Spec.Containers[1]
-		if sidecar.Name != "tls-profile-sync" {
+		if sidecar.Name != tlsProfileSyncName {
 			t.Errorf("sidecar name = %q, want tls-profile-sync", sidecar.Name)
 		}
 		if sidecar.Image != "quay.io/ocm/import-controller:v1" {
@@ -226,7 +226,7 @@ func TestInjectTLSProfileSyncSidecar(t *testing.T) {
 
 	t.Run("non-klusterlet deployment is not modified", func(t *testing.T) {
 		deployment := &appsv1.Deployment{
-			TypeMeta:   metav1.TypeMeta{Kind: "Deployment", APIVersion: "apps/v1"},
+			TypeMeta:   metav1.TypeMeta{Kind: kindDeployment, APIVersion: "apps/v1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "other-deployment"},
 			Spec: appsv1.DeploymentSpec{
 				Template: corev1.PodTemplateSpec{

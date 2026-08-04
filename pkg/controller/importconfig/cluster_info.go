@@ -235,7 +235,7 @@ func isSelfManaged(managedCluster *clusterv1.ManagedCluster) bool {
 	if managedCluster == nil {
 		return false
 	}
-	if value := managedCluster.Labels[constants.SelfManagedLabel]; strings.EqualFold(value, "true") {
+	if value := managedCluster.Labels[constants.SelfManagedLabel]; strings.EqualFold(value, constants.TrueString) {
 		return true
 	}
 	return false

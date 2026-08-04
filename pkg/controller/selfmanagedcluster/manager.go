@@ -74,7 +74,7 @@ func Add(ctx context.Context,
 						// case 1: handle the label changed and new self managed label is true
 						newLabels := e.ObjectNew.GetLabels()
 						if !equality.Semantic.DeepEqual(e.ObjectOld.GetLabels(), newLabels) &&
-							strings.EqualFold(newLabels[constants.SelfManagedLabel], "true") {
+							strings.EqualFold(newLabels[constants.SelfManagedLabel], constants.TrueString) {
 							return true
 						}
 

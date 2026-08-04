@@ -86,7 +86,7 @@ func (r *ReconcileLocalCluster) Reconcile(ctx context.Context, request reconcile
 	}
 
 	if selfManaged, ok := managedCluster.Labels[constants.SelfManagedLabel]; !ok ||
-		!strings.EqualFold(selfManaged, "true") {
+		!strings.EqualFold(selfManaged, constants.TrueString) {
 		return reconcile.Result{}, nil
 	}
 

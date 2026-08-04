@@ -11,6 +11,7 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 	libgocrypto "github.com/openshift/library-go/pkg/crypto"
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,6 +36,11 @@ const (
 	// Upstream OCM components watch this ConfigMap to get TLS settings without
 	// depending on OpenShift APIs.
 	ConfigMapName = "ocm-tls-profile"
+
+	minTLSVersionKey       = "minTLSVersion"
+	cipherSuitesKey        = "cipherSuites"
+	profileTypeKey         = "profileType"
+	tlsProfileSyncCtrlName = "tls-profile-sync"
 )
 
 // Run starts the tls-profile-sync sidecar using the controller-runtime pattern.
@@ -101,7 +107,7 @@ func Run(ctx context.Context) error {
 		namespace:  namespace,
 	}
 
-	c, err := controller.New("tls-profile-sync", mgr, controller.Options{
+	c, err := controller.New(tlsProfileSyncCtrlName, mgr, controller.Options{
 		Reconciler: reconciler,
 	})
 	if err != nil {
@@ -124,7 +130,7 @@ func Run(ctx context.Context) error {
 		handler.TypedEnqueueRequestsFromMapFunc(
 			func(_ context.Context, cm *corev1.ConfigMap) []reconcile.Request {
 				if cm.Name == ConfigMapName && cm.Namespace == namespace {
-					return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: "cluster"}}}
+					return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: constants.ClusterResourceName}}}
 				}
 				return nil
 			},
@@ -148,8 +154,8 @@ type tlsProfileSyncReconciler struct {
 func (r *tlsProfileSyncReconciler) Reconcile(
 	ctx context.Context, req reconcile.Request,
 ) (reconcile.Result, error) {
-	// Only care about the "cluster" singleton
-	if req.Name != "cluster" {
+	// Only care about the cluster singleton
+	if req.Name != constants.ClusterResourceName {
 		return reconcile.Result{}, nil
 	}
 
@@ -170,7 +176,7 @@ func (r *tlsProfileSyncReconciler) Reconcile(
 
 	klog.Infof("Synced ConfigMap %s/%s: minTLSVersion=%s, profileType=%s",
 		r.namespace, ConfigMapName,
-		data["minTLSVersion"], data["profileType"])
+		data[minTLSVersionKey], data[profileTypeKey])
 
 	return reconcile.Result{}, nil
 }
@@ -240,9 +246,9 @@ func buildConfigMapData(profile *configv1.TLSSecurityProfile) map[string]string 
 	cipherSuites := libgocrypto.OpenSSLToIANACipherSuites(profileSpec.Ciphers)
 
 	return map[string]string{
-		"minTLSVersion": minTLSVersion,
-		"cipherSuites":  strings.Join(cipherSuites, ","),
-		"profileType":   profileType,
+		minTLSVersionKey: minTLSVersion,
+		cipherSuitesKey:  strings.Join(cipherSuites, ","),
+		profileTypeKey:   profileType,
 	}
 }
 

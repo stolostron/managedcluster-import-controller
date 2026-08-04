@@ -121,7 +121,7 @@ func RunAgentRegistrationServer(ctx context.Context, port int, clientHolder *hel
 		}
 
 		klusterletClusterAnnotations := map[string]string{
-			"agent.open-cluster-management.io/create-with-default-klusterletaddonconfig": "true",
+			"agent.open-cluster-management.io/create-with-default-klusterletaddonconfig": constants.TrueString,
 		}
 		if klusterletconfigName != "" {
 			// This annotation will finanlly be added on the managedcluster which created by the agent side.

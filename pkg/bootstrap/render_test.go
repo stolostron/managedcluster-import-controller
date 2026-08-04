@@ -1153,7 +1153,7 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 			).WithManagedCluster(&v1.ManagedCluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:   "test-ocp",
-					Labels: map[string]string{"vendor": "OpenShift"},
+					Labels: map[string]string{"vendor": vendorOpenShift},
 				},
 			}).WithoutImagePullSecretGenerate(),
 			validateFunc: func(t *testing.T, objs, crds []runtime.Object) {
@@ -1171,7 +1171,7 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 								len(o.Spec.Template.Spec.Containers))
 						}
 						sidecar := o.Spec.Template.Spec.Containers[1]
-						if sidecar.Name != "tls-profile-sync" {
+						if sidecar.Name != tlsProfileSyncName {
 							t.Errorf("sidecar name = %q, want tls-profile-sync", sidecar.Name)
 						}
 						if sidecar.Image !=

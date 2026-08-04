@@ -10,6 +10,7 @@ import (
 
 	ocinfrav1 "github.com/openshift/api/config/v1"
 	tlsprofile "github.com/stolostron/cluster-lifecycle-api/helpers/tlsprofile"
+	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -30,7 +31,7 @@ func GetTLSConfigForServer(runtimeClient client.Reader) *tls.Config {
 	defer cancel()
 
 	apiServer := &ocinfrav1.APIServer{}
-	if err := runtimeClient.Get(ctx, client.ObjectKey{Name: "cluster"}, apiServer); err != nil {
+	if err := runtimeClient.Get(ctx, client.ObjectKey{Name: constants.ClusterResourceName}, apiServer); err != nil {
 		klog.V(4).Infof("Failed to get hub APIServer for TLS config, using TLS 1.2 fallback: %v", err)
 		return &tls.Config{
 			MinVersion: tls.VersionTLS12,
