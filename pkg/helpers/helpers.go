@@ -87,6 +87,10 @@ const (
 // DeployOnOCP is set once at the beginning
 var DeployOnOCP bool = true
 
+// EnableKlusterletNetworkPolicies controls whether the NetworkPolicies feature gate
+// is set on Klusterlet CRs created for managed clusters.
+var EnableKlusterletNetworkPolicies bool = false
+
 var (
 	genericScheme = runtime.NewScheme()
 	genericCodecs = serializer.NewCodecFactory(genericScheme)
