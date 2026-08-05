@@ -1362,19 +1362,8 @@ func TestKlusterletNetworkPoliciesFeatureGate(t *testing.T) {
 	for _, tc := range testcases {
 		t.Run(tc.name, func(t *testing.T) {
 			helpers.EnableKlusterletNetworkPolicies = tc.enabled
-			os.Setenv(constants.DefaultImagePullSecretEnvVarName, "test-image-pull-secret")
 
-			kubeClient := kubefake.NewSimpleClientset(
-				&corev1.Secret{
-					ObjectMeta: metav1.ObjectMeta{
-						Name: "test-image-pull-secret",
-					},
-					Data: map[string][]byte{
-						corev1.DockerConfigJsonKey: []byte("fake-token"),
-					},
-					Type: corev1.SecretTypeDockerConfigJson,
-				},
-			)
+			kubeClient := kubefake.NewSimpleClientset()
 
 			clientHolder := &helpers.ClientHolder{
 				KubeClient: kubeClient,
@@ -1390,7 +1379,7 @@ func TestKlusterletNetworkPoliciesFeatureGate(t *testing.T) {
 				operatorv1.InstallModeDefault,
 				"test",
 				[]byte("bootstrap kubeconfig"),
-			)
+			).WithoutImagePullSecretGenerate()
 
 			manifestsBytes, _, _, err := config.Generate(context.Background(), clientHolder)
 			if err != nil {
