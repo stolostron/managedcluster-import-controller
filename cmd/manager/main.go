@@ -126,6 +126,8 @@ func main() {
 	_ = flightctlServer
 	pflag.StringVar(&leaderElectionNamespace, "leader-election-namespace", "", "required when the process is not running in cluster")
 	pflag.BoolVar(&helpers.DeployOnOCP, "deploy-on-ocp", true, "used to deploy the controller on OCP or not")
+	pflag.BoolVar(&helpers.EnableKlusterletNetworkPolicies, "enable-klusterlet-network-policies", false,
+		"enable NetworkPolicies feature gate on Klusterlet CRs for managed clusters")
 	pflag.Float32Var(&QPS, "kube-api-qps", 50, "QPS indicates the maximum QPS to the master from this client")
 	pflag.IntVar(&Burst, "kube-api-burst", 100, "Burst indicates the maximum burst for throttle")
 	pflag.CommandLine.SetNormalizeFunc(utilflag.WordSepNormalizeFunc)
@@ -134,6 +136,14 @@ func main() {
 
 	logs.AddFlags(pflag.CommandLine)
 	pflag.Parse()
+
+	if !pflag.CommandLine.Changed("enable-klusterlet-network-policies") {
+		if envVal, exists := os.LookupEnv("ENABLE_KLUSTERLET_NETWORK_POLICIES"); exists {
+			if val, err := strconv.ParseBool(envVal); err == nil {
+				helpers.EnableKlusterletNetworkPolicies = val
+			}
+		}
+	}
 
 	logs.InitLogs()
 	exitCode := 0

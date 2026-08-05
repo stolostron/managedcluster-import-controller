@@ -307,6 +307,17 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 		}
 	}
 
+	// NetworkPolicies is an operator-internal feature gate (not in DefaultSpokeRegistrationFeatureGates),
+	// so it bypasses the KlusterletConfig dispatch and is set directly from the CLI flag / env var.
+	if helpers.EnableKlusterletNetworkPolicies {
+		c.chartConfig.Klusterlet.RegistrationConfiguration.FeatureGates = append(
+			c.chartConfig.Klusterlet.RegistrationConfiguration.FeatureGates,
+			operatorv1.FeatureGate{
+				Feature: "NetworkPolicies",
+				Mode:    operatorv1.FeatureGateModeTypeEnable,
+			})
+	}
+
 	// MultipleHubs
 	// Doesn't affect on the local-cluster.
 	// Using MultipleHubs can control the bootstrap kubeConfig secret/secrets easier.
