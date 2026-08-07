@@ -1387,16 +1387,32 @@ func TestKlusterletNetworkPoliciesFeatureGate(t *testing.T) {
 			}
 
 			var foundGate bool
+			var foundNetworkPolicyRule bool
 			for _, yamlBytes := range helpers.SplitYamls(manifestsBytes) {
 				obj := helpers.MustCreateObject(yamlBytes)
-				klusterlet, ok := obj.(*operatorv1.Klusterlet)
-				if !ok {
-					continue
-				}
-				if klusterlet.Spec.RegistrationConfiguration != nil {
-					for _, fg := range klusterlet.Spec.RegistrationConfiguration.FeatureGates {
-						if fg.Feature == "NetworkPolicies" && fg.Mode == operatorv1.FeatureGateModeTypeEnable {
-							foundGate = true
+				switch o := obj.(type) {
+				case *operatorv1.Klusterlet:
+					if o.Spec.RegistrationConfiguration != nil {
+						for _, fg := range o.Spec.RegistrationConfiguration.FeatureGates {
+							if fg.Feature == "NetworkPolicies" && fg.Mode == operatorv1.FeatureGateModeTypeEnable {
+								foundGate = true
+							}
+						}
+					}
+				case *rbacv1.ClusterRole:
+					if o.Name != "klusterlet" {
+						continue
+					}
+					for _, rule := range o.Rules {
+						for _, group := range rule.APIGroups {
+							if group != "networking.k8s.io" {
+								continue
+							}
+							for _, resource := range rule.Resources {
+								if resource == "networkpolicies" {
+									foundNetworkPolicyRule = true
+								}
+							}
 						}
 					}
 				}
@@ -1407,6 +1423,11 @@ func TestKlusterletNetworkPoliciesFeatureGate(t *testing.T) {
 			}
 			if !tc.expectGateSet && foundGate {
 				t.Error("expected NetworkPolicies feature gate to NOT be set on Klusterlet, but it was found")
+			}
+			// ClusterRole must always include networkpolicies RBAC so enabling the
+			// feature gate does not fail with ManagementClusterResourceApplyFailed.
+			if !foundNetworkPolicyRule {
+				t.Error("expected klusterlet ClusterRole to include networking.k8s.io/networkpolicies permissions")
 			}
 		})
 	}
