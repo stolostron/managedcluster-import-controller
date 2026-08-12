@@ -1338,6 +1338,101 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 
 }
 
+func TestKlusterletNetworkPoliciesFeatureGate(t *testing.T) {
+	originalVal := helpers.EnableKlusterletNetworkPolicies
+	defer func() { helpers.EnableKlusterletNetworkPolicies = originalVal }()
+
+	testcases := []struct {
+		name           string
+		enabled        bool
+		expectGateSet  bool
+	}{
+		{
+			name:          "NetworkPolicies feature gate is set when enabled",
+			enabled:       true,
+			expectGateSet: true,
+		},
+		{
+			name:          "NetworkPolicies feature gate is not set when disabled",
+			enabled:       false,
+			expectGateSet: false,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.name, func(t *testing.T) {
+			helpers.EnableKlusterletNetworkPolicies = tc.enabled
+
+			kubeClient := kubefake.NewSimpleClientset()
+
+			clientHolder := &helpers.ClientHolder{
+				KubeClient: kubeClient,
+				RuntimeClient: fake.NewClientBuilder().WithScheme(testscheme).WithObjects(
+					&corev1.Namespace{
+						ObjectMeta: metav1.ObjectMeta{Name: "test"},
+					},
+				).Build(),
+				ImageRegistryClient: imageregistry.NewClient(kubeClient),
+			}
+
+			config := NewKlusterletManifestsConfig(
+				operatorv1.InstallModeDefault,
+				"test",
+				[]byte("bootstrap kubeconfig"),
+			).WithoutImagePullSecretGenerate()
+
+			manifestsBytes, _, _, err := config.Generate(context.Background(), clientHolder)
+			if err != nil {
+				t.Fatalf("Failed to generate klusterlet manifests: %v", err)
+			}
+
+			var foundGate bool
+			var foundNetworkPolicyRule bool
+			for _, yamlBytes := range helpers.SplitYamls(manifestsBytes) {
+				obj := helpers.MustCreateObject(yamlBytes)
+				switch o := obj.(type) {
+				case *operatorv1.Klusterlet:
+					if o.Spec.RegistrationConfiguration != nil {
+						for _, fg := range o.Spec.RegistrationConfiguration.FeatureGates {
+							if fg.Feature == "NetworkPolicies" && fg.Mode == operatorv1.FeatureGateModeTypeEnable {
+								foundGate = true
+							}
+						}
+					}
+				case *rbacv1.ClusterRole:
+					if o.Name != "klusterlet" {
+						continue
+					}
+					for _, rule := range o.Rules {
+						for _, group := range rule.APIGroups {
+							if group != "networking.k8s.io" {
+								continue
+							}
+							for _, resource := range rule.Resources {
+								if resource == "networkpolicies" {
+									foundNetworkPolicyRule = true
+								}
+							}
+						}
+					}
+				}
+			}
+
+			if tc.expectGateSet && !foundGate {
+				t.Error("expected NetworkPolicies feature gate to be set on Klusterlet, but it was not found")
+			}
+			if !tc.expectGateSet && foundGate {
+				t.Error("expected NetworkPolicies feature gate to NOT be set on Klusterlet, but it was found")
+			}
+			// ClusterRole must always include networkpolicies RBAC so enabling the
+			// feature gate does not fail with ManagementClusterResourceApplyFailed.
+			if !foundNetworkPolicyRule {
+				t.Error("expected klusterlet ClusterRole to include networking.k8s.io/networkpolicies permissions")
+			}
+		})
+	}
+}
+
 func TestBuildGRPCConfigData(t *testing.T) {
 	testcases := []struct {
 		name               string
