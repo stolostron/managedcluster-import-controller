@@ -102,6 +102,23 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	if _, autoImportDisabled := managedCluster.Annotations[apiconstants.DisableAutoImportAnnotation]; autoImportDisabled && len(manifestWorks) > 0 {
+		reqLogger.V(5).Info("Auto-import disabled, ensuring ReadOnly configs on existing ManifestWorks")
+		for _, mw := range manifestWorks {
+			desiredConfigs := buildManifestConfigs(managedCluster, mw.Spec.Workload.Manifests)
+			if helpers.ManifestConfigsEqual(mw.Spec.ManifestConfigs, desiredConfigs) {
+				continue
+			}
+			updated := mw.DeepCopy()
+			updated.Spec.ManifestConfigs = desiredConfigs
+			if _, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(updated.Namespace).Update(
+				ctx, updated, metav1.UpdateOptions{}); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+		return reconcile.Result{}, nil
+	}
+
 	// apply klusterlet manifest works from import secret
 	// Note: create the klusterlet manifest works before importing cluster to avoid the klusterlet applied manifest
 	// works are deleted from managed cluster if the restored hub has same host with the backup hub in the
