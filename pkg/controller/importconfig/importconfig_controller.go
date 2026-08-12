@@ -71,11 +71,6 @@ func (r *ReconcileImportConfig) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
-	if _, autoImportDisabled := managedCluster.Annotations[apiconstants.DisableAutoImportAnnotation]; autoImportDisabled {
-		reqLogger.V(5).Info("Auto-import disabled, skipping import secret regeneration")
-		return reconcile.Result{}, nil
-	}
-
 	klusterletconfigName := managedCluster.GetAnnotations()[apiconstants.AnnotationKlusterletConfig]
 
 	// Get the merged KlusterletConfig, it merges the user assigned KlusterletConfig with the global KlusterletConfig.
