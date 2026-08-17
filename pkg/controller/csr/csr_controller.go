@@ -102,6 +102,12 @@ func (r *ReconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 		return reconcile.Result{}, err
 	}
 
+	if !helpers.ValidateClusterCSRRequest(csr, clusterName) {
+		reqLogger.Info("Skipping CSR auto-approval: signerName or certificate Subject failed validation",
+			"cluster", clusterName, "signerName", csr.Spec.SignerName)
+		return reconcile.Result{}, nil
+	}
+
 	reqLogger.Info("Reconciling CSR")
 
 	csr = csr.DeepCopy()
