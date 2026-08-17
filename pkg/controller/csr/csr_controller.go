@@ -40,7 +40,8 @@ func getApprovalType(csr *certificatesv1.CertificateSigningRequest) string {
 }
 
 func validUsername(csr *certificatesv1.CertificateSigningRequest, clusterName string) bool {
-	return csr.Spec.Username == fmt.Sprintf(userNameSignature, clusterName, helpers.GetBootstrapSAName(clusterName))
+	return csr.Spec.Username == fmt.Sprintf(userNameSignature, clusterName, helpers.GetBootstrapSAName(clusterName)) ||
+		csr.Spec.Username == fmt.Sprintf(userNameSignature, helpers.HubNamespace, helpers.GRPCSAName)
 }
 
 // isValidUnapprovedBootstrapCSR checks if the CSR:
@@ -115,6 +116,15 @@ func (r *ReconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 	}
 
 	if !shouldApprove {
+		return reconcile.Result{}, nil
+	}
+
+	// Require OCM agent Subject + allowed signerName before Approve.
+	// Do not Deny — leave the CSR pending for other approvers / operators.
+	clusterName := helpers.GetClusterName(csr)
+	if !helpers.ValidateClusterCSRRequest(csr, clusterName) {
+		reqLogger.Info("Skipping CSR auto-approval: signerName or certificate Subject failed validation",
+			"cluster", clusterName, "signerName", csr.Spec.SignerName)
 		return reconcile.Result{}, nil
 	}
 
