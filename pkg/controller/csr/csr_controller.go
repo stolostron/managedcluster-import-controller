@@ -118,6 +118,15 @@ func (r *ReconcileCSR) Reconcile(ctx context.Context, request reconcile.Request)
 		return reconcile.Result{}, nil
 	}
 
+	// Require OCM agent Subject + allowed signerName before Approve.
+	// Do not Deny — leave the CSR pending for other approvers / operators.
+	clusterName := helpers.GetClusterName(csr)
+	if !helpers.ValidateClusterCSRRequest(csr, clusterName) {
+		reqLogger.Info("Skipping CSR auto-approval: signerName or certificate Subject failed validation",
+			"cluster", clusterName, "signerName", csr.Spec.SignerName)
+		return reconcile.Result{}, nil
+	}
+
 	reqLogger.V(5).Info("Reconciling CSR")
 
 	csr = csr.DeepCopy()
