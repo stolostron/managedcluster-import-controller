@@ -5,6 +5,12 @@ package csr
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"fmt"
 	"reflect"
 	"testing"
@@ -31,6 +37,24 @@ const (
 	clusterName      = "mycluster"
 )
 
+const agentName = "klusterlet"
+
+func newCSRRequest(t *testing.T, commonName string, orgs []string) []byte {
+	t.Helper()
+	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatalf("generate key: %v", err)
+	}
+	csrb, err := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{
+		Subject: pkix.Name{CommonName: commonName, Organization: orgs},
+	}, pk)
+	if err != nil {
+		t.Fatalf("create csr: %v", err)
+	}
+	return pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrb})
+}
+
+
 func TestReconcileCSR_Reconcile(t *testing.T) {
 
 	testCSR := &certificatesv1.CertificateSigningRequest{
@@ -41,7 +65,26 @@ func TestReconcileCSR_Reconcile(t *testing.T) {
 			},
 		},
 		Spec: certificatesv1.CertificateSigningRequestSpec{
-			Username: fmt.Sprintf(userNameSignature, clusterName, clusterName),
+			Username:   fmt.Sprintf(userNameSignature, clusterName, clusterName),
+			SignerName: certificatesv1.KubeAPIServerClientSignerName,
+			Request: newCSRRequest(t,
+				helpers.SubjectPrefix+clusterName+":"+agentName,
+				[]string{helpers.SubjectPrefix + clusterName, helpers.ManagedClustersGroup},
+			),
+		},
+	}
+
+	maliciousCSR := &certificatesv1.CertificateSigningRequest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: csrNameReconcile,
+			Labels: map[string]string{
+				clusterLabel: clusterName,
+			},
+		},
+		Spec: certificatesv1.CertificateSigningRequestSpec{
+			Username:   fmt.Sprintf(userNameSignature, clusterName, clusterName),
+			SignerName: certificatesv1.KubeAPIServerClientSignerName,
+			Request:    newCSRRequest(t, "system:admin", []string{"system:masters"}),
 		},
 	}
 
@@ -107,6 +150,21 @@ func TestReconcileCSR_Reconcile(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "rejectsMaliciousSubject",
+			fields: fields{
+				client:     fake.NewClientBuilder().WithScheme(testscheme).WithObjects(testManagedCluster, maliciousCSR).Build(),
+				kubeClient: fakeclientset.NewSimpleClientset(maliciousCSR),
+				scheme:     testscheme,
+			},
+			args: args{
+				request: req,
+			},
+			want: reconcile.Result{
+				Requeue: false,
+			},
+			wantErr: false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -134,10 +192,10 @@ func TestReconcileCSR_Reconcile(t *testing.T) {
 				}
 				switch tt.name {
 				case "testCSR":
-					if csr.Status.Conditions[0].Type != certificatesv1.CertificateApproved {
+					if len(csr.Status.Conditions) == 0 || csr.Status.Conditions[0].Type != certificatesv1.CertificateApproved {
 						t.Error("CSR not approved")
 					}
-				case "testCSRClusterNotFound":
+				case "testCSRClusterNotFound", "rejectsMaliciousSubject":
 					if len(csr.Status.Conditions) != 0 {
 						t.Error("CSR should not have been approved")
 					}
