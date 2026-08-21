@@ -79,7 +79,7 @@ var DeployOnOCP bool = true
 
 var v1APIExtensionMinVersion = versionutil.MustParseGeneric("v1.16.0")
 
-var crdGroupKind = schema.GroupKind{Group: "apiextensions.k8s.io", Kind: "CustomResourceDefinition"}
+var crdGroupKind = schema.GroupKind{Group: "apiextensions.k8s.io", Kind: "CustomResourceDefinition"} //nolint:goconst
 
 var (
 	genericScheme = runtime.NewScheme()
@@ -254,14 +254,14 @@ func buildKubeConfigFileWithToken(apiURL, token string) *clientcmdapi.Config {
 			Server:                apiURL,
 			InsecureSkipTLSVerify: true,
 		}},
-		AuthInfos: map[string]*clientcmdapi.AuthInfo{"default-auth": {
+		AuthInfos: map[string]*clientcmdapi.AuthInfo{"default-auth": { //nolint:goconst
 			Token: token,
 		}},
-		Contexts: map[string]*clientcmdapi.Context{"default-context": {
+		Contexts: map[string]*clientcmdapi.Context{"default-context": { //nolint:goconst
 			Cluster:  "default-cluster",
 			AuthInfo: "default-auth",
 		}},
-		CurrentContext: "default-context",
+		CurrentContext: "default-context", //nolint:goconst
 	}
 }
 

@@ -355,7 +355,7 @@ func (r *ReconcileHosted) externalManagedKubeconfigCreated(
 		}
 
 		for _, fb := range manifest.StatusFeedbacks.Values {
-			if fb.Name == "ReadyToApply-status" &&
+			if fb.Name == "ReadyToApply-status" && //nolint:goconst
 				fb.Value.String != nil && strings.EqualFold(*fb.Value.String, "True") {
 				return true, nil
 			}

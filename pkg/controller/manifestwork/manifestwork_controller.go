@@ -112,7 +112,7 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{RequeueAfter: 5 * time.Second}, r.deleteAddonsAndWorks(ctx, managedCluster, manifestWorks.Items)
 	}
 
-	workSelector := labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: "true"})
+	workSelector := labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: "true"}) //nolint:goconst
 	manifestWorks, err := r.informerHolder.KlusterletWorkLister.ManifestWorks(managedClusterName).List(workSelector)
 	if err != nil {
 		return reconcile.Result{}, err
