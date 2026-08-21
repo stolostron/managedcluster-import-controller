@@ -51,7 +51,7 @@ check-copyright:
 
 .PHONY: lint
 lint:
-	@bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/open-cluster-management-io/sdk-go/main/ci/lint/run-lint.sh | bash'
+	@export GOLANGCI_LINT_VERSION=v2.12.2 && bash -o pipefail -c 'curl -fsSL https://raw.githubusercontent.com/open-cluster-management-io/sdk-go/main/ci/lint/run-lint.sh | bash'
 
 ENSURE_ENVTEST_SCRIPT_REF ?= main
 ENSURE_ENVTEST_SCRIPT := https://raw.githubusercontent.com/open-cluster-management-io/sdk-go/$(ENSURE_ENVTEST_SCRIPT_REF)/ci/envtest/ensure-envtest.sh
