@@ -371,7 +371,7 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 	if c.klusterletConfig != nil && c.klusterletConfig.Spec.RegistrationDriver != nil {
 		c.chartConfig.Klusterlet.RegistrationConfiguration.RegistrationDriver = *c.klusterletConfig.Spec.RegistrationDriver
 
-		if c.klusterletConfig.Spec.RegistrationDriver.AuthType == "grpc" {
+		if c.klusterletConfig.Spec.RegistrationDriver.AuthType == "grpc" { //nolint:goconst
 			// TODO: support MultiHubBootstrapHubKubeConfigs here
 			_, _, _, _, tokenString, _, err := helpers.ParseKubeConfigData([]byte(c.chartConfig.BootstrapHubKubeConfig))
 			if err != nil {

@@ -112,6 +112,12 @@ linters:
           - goconst
         path: _test\.go$
       - linters:
+          - goconst
+        path: test/e2e/util/util\.go$
+      - linters:
+          - gosec
+        path: _test\.go$
+      - linters:
           - misspell
         text: "contianers"
     paths:

@@ -253,18 +253,18 @@ func buildImportClient(config *clientcmdapi.Config) (reconcile.Result, *ClientHo
 
 func buildKubeConfigFileWithToken(apiURL, token string) *clientcmdapi.Config {
 	return &clientcmdapi.Config{
-		Clusters: map[string]*clientcmdapi.Cluster{"default-cluster": {
+		Clusters: map[string]*clientcmdapi.Cluster{"default-cluster": { //nolint:goconst
 			Server:                apiURL,
 			InsecureSkipTLSVerify: true,
 		}},
-		AuthInfos: map[string]*clientcmdapi.AuthInfo{"default-auth": {
+		AuthInfos: map[string]*clientcmdapi.AuthInfo{"default-auth": { //nolint:goconst
 			Token: token,
 		}},
-		Contexts: map[string]*clientcmdapi.Context{"default-context": {
+		Contexts: map[string]*clientcmdapi.Context{"default-context": { //nolint:goconst
 			Cluster:  "default-cluster",
 			AuthInfo: "default-auth",
 		}},
-		CurrentContext: "default-context",
+		CurrentContext: "default-context", //nolint:goconst
 	}
 }
 

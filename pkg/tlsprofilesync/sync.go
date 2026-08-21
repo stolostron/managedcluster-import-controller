@@ -124,7 +124,7 @@ func Run(ctx context.Context) error {
 		handler.TypedEnqueueRequestsFromMapFunc(
 			func(_ context.Context, cm *corev1.ConfigMap) []reconcile.Request {
 				if cm.Name == ConfigMapName && cm.Namespace == namespace {
-					return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: "cluster"}}}
+					return []reconcile.Request{{NamespacedName: types.NamespacedName{Name: "cluster"}}} //nolint:goconst
 				}
 				return nil
 			},
@@ -240,9 +240,9 @@ func buildConfigMapData(profile *configv1.TLSSecurityProfile) map[string]string 
 	cipherSuites := libgocrypto.OpenSSLToIANACipherSuites(profileSpec.Ciphers)
 
 	return map[string]string{
-		"minTLSVersion": minTLSVersion,
-		"cipherSuites":  strings.Join(cipherSuites, ","),
-		"profileType":   profileType,
+		"minTLSVersion": minTLSVersion,                   //nolint:goconst
+		"cipherSuites":  strings.Join(cipherSuites, ","), //nolint:goconst
+		"profileType":   profileType,                     //nolint:goconst
 	}
 }
 

@@ -292,7 +292,7 @@ func (f *FlightCtlManager) isFlightCtlEnabledAndHealthy() error {
 			},
 		},
 	}
-	resp, err := client.Get(healthEndpoint)
+	resp, err := client.Get(healthEndpoint) // #nosec G704 -- admin-configured https endpoint
 	if err != nil {
 		return fmt.Errorf("failed to perform health check: %v", err)
 	}
