@@ -30,7 +30,7 @@ func GetTLSConfigForServer(runtimeClient client.Reader) *tls.Config {
 	defer cancel()
 
 	apiServer := &ocinfrav1.APIServer{}
-	if err := runtimeClient.Get(ctx, client.ObjectKey{Name: "cluster"}, apiServer); err != nil {
+	if err := runtimeClient.Get(ctx, client.ObjectKey{Name: "cluster"}, apiServer); err != nil { //nolint:goconst
 		klog.V(4).Infof("Failed to get hub APIServer for TLS config, using TLS 1.2 fallback: %v", err)
 		return &tls.Config{
 			MinVersion: tls.VersionTLS12,

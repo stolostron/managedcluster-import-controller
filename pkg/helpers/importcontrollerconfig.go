@@ -57,7 +57,7 @@ func (c *ImportControllerConfig) GenerateImportConfig() (bool, error) {
 		return false, err
 	}
 
-	if cm.Data[constants.ClusterImportConfig] == "true" {
+	if cm.Data[constants.ClusterImportConfig] == "true" { //nolint:goconst
 		return true, nil
 	}
 	return false, nil
