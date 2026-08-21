@@ -88,7 +88,7 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
-	workSelector := labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: "true"})
+	workSelector := labels.SelectorFromSet(map[string]string{constants.KlusterletWorksLabel: "true"}) //nolint:goconst
 	manifestWorks, err := r.informerHolder.KlusterletWorkLister.ManifestWorks(managedClusterName).List(workSelector)
 	if err != nil {
 		return reconcile.Result{}, err
