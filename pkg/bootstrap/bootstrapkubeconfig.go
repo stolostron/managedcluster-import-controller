@@ -240,7 +240,7 @@ func GetKubeAPIServerAddress(ctx context.Context, client client.Client,
 	}
 
 	infraConfig := &ocinfrav1.Infrastructure{}
-	err := client.Get(ctx, types.NamespacedName{Name: "cluster"}, infraConfig)
+	err := client.Get(ctx, types.NamespacedName{Name: "cluster"}, infraConfig) //nolint:goconst
 	if err == nil {
 		return infraConfig.Status.APIServerURL, nil
 	}
@@ -266,7 +266,7 @@ func GetKubeconfigClusterName(ctx context.Context, client client.Client) (string
 	}
 
 	infraConfig := &ocinfrav1.Infrastructure{}
-	err := client.Get(ctx, types.NamespacedName{Name: "cluster"}, infraConfig)
+	err := client.Get(ctx, types.NamespacedName{Name: "cluster"}, infraConfig) //nolint:goconst
 	if err == nil {
 		return string(infraConfig.UID), nil
 	}
@@ -420,7 +420,7 @@ func getCABundleFromConfigmap(ctx context.Context, clientHolder *helpers.ClientH
 	}
 
 	if len(caKeys) == 0 {
-		caKeys = []string{"ca-bundle.crt", "ca.crt", "tls.crt"}
+		caKeys = []string{"ca-bundle.crt", "ca.crt", "tls.crt"} //nolint:goconst
 	}
 
 	for _, key := range caKeys {
