@@ -9,7 +9,7 @@ COPY $REMOTE_SOURCE $REMOTE_SOURCE_DIR/app/
 WORKDIR $REMOTE_SOURCE_DIR/app
 RUN BUILD_OUTPUT_DIR=${REMOTE_SOURCE_DIR}/app make build
 
-FROM registry.access.redhat.com/ubi9/ubi-minimal:latest
+FROM registry.redhat.io/ubi9/ubi-minimal-pqc:latest
 LABEL \
       name="multicluster-engine/managedcluster-import-controller-rhel9" \
       summary="managedcluster-import-controller" \
