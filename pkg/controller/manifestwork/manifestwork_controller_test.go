@@ -11,6 +11,7 @@ import (
 	testinghelpers "github.com/stolostron/managedcluster-import-controller/pkg/helpers/testing"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 
@@ -153,6 +154,268 @@ func TestReconcile(t *testing.T) {
 				}
 				if len(manifestWorks.Items) != 2 {
 					t.Errorf("expected one work, but failed %d", len(manifestWorks.Items))
+				}
+			},
+		},
+		{
+			name: "disable-auto-import annotation set - ManifestWorks have ReadOnly configs",
+			startObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							apiconstants.DisableAutoImportAnnotation: "",
+						},
+						Finalizers: []string{constants.ManifestWorkFinalizer},
+					},
+				},
+			},
+			works: []runtime.Object{},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+			},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface) {
+				// Check klusterlet ManifestWork
+				klusterletWork, err := workClient.WorkV1().ManifestWorks("test").Get(context.TODO(), "test-klusterlet", v1.GetOptions{})
+				if err != nil {
+					t.Errorf("failed to get klusterlet ManifestWork: %v", err)
+					return
+				}
+
+				if len(klusterletWork.Spec.ManifestConfigs) == 0 {
+					t.Errorf("expected ManifestConfigs to be set, got none")
+					return
+				}
+
+				// Verify the number of configs matches the number of manifests — every
+				// manifest must have a corresponding ReadOnly config.
+				if len(klusterletWork.Spec.ManifestConfigs) != len(klusterletWork.Spec.Workload.Manifests) {
+					t.Errorf("expected %d ManifestConfigs (one per manifest), got %d",
+						len(klusterletWork.Spec.Workload.Manifests), len(klusterletWork.Spec.ManifestConfigs))
+				}
+
+				// Verify all configs have ReadOnly strategy and a non-empty Resource field.
+				// A non-empty Resource field is required for the work-agent's resourceMatch
+				// function to correctly identify and apply the ReadOnly strategy.
+				for i, config := range klusterletWork.Spec.ManifestConfigs {
+					if config.UpdateStrategy == nil {
+						t.Errorf("ManifestConfig %d has nil UpdateStrategy", i)
+						continue
+					}
+					if config.UpdateStrategy.Type != workv1.UpdateStrategyTypeReadOnly {
+						t.Errorf("ManifestConfig %d has UpdateStrategy %s, expected ReadOnly",
+							i, config.UpdateStrategy.Type)
+					}
+					if config.ResourceIdentifier.Resource == "" {
+						t.Errorf("ManifestConfig %d has empty Resource field — work-agent resourceMatch will never match this config",
+							i)
+					}
+				}
+
+				// Check CRDs ManifestWork
+				crdsWork, err := workClient.WorkV1().ManifestWorks("test").Get(context.TODO(), "test-klusterlet-crds", v1.GetOptions{})
+				if err != nil {
+					t.Errorf("failed to get CRDs ManifestWork: %v", err)
+					return
+				}
+
+				if len(crdsWork.Spec.ManifestConfigs) == 0 {
+					t.Errorf("expected CRDs ManifestConfigs to be set, got none")
+					return
+				}
+
+				// Verify the number of configs matches the number of manifests.
+				if len(crdsWork.Spec.ManifestConfigs) != len(crdsWork.Spec.Workload.Manifests) {
+					t.Errorf("expected %d CRDs ManifestConfigs (one per manifest), got %d",
+						len(crdsWork.Spec.Workload.Manifests), len(crdsWork.Spec.ManifestConfigs))
+				}
+
+				// Verify CRDs configs have ReadOnly strategy and a non-empty Resource field.
+				for i, config := range crdsWork.Spec.ManifestConfigs {
+					if config.UpdateStrategy == nil {
+						t.Errorf("CRDs ManifestConfig %d has nil UpdateStrategy", i)
+						continue
+					}
+					if config.UpdateStrategy.Type != workv1.UpdateStrategyTypeReadOnly {
+						t.Errorf("CRDs ManifestConfig %d has UpdateStrategy %s, expected ReadOnly",
+							i, config.UpdateStrategy.Type)
+					}
+					if config.ResourceIdentifier.Resource == "" {
+						t.Errorf("CRDs ManifestConfig %d has empty Resource field — work-agent resourceMatch will never match this config",
+							i)
+					}
+				}
+			},
+		},
+		{
+			name: "no disable-auto-import annotation - ManifestWorks have no ManifestConfigs",
+			startObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: v1.ObjectMeta{
+						Name:       "test",
+						Finalizers: []string{constants.ManifestWorkFinalizer},
+					},
+				},
+			},
+			works: []runtime.Object{},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+			},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface) {
+				// Check klusterlet ManifestWork
+				klusterletWork, err := workClient.WorkV1().ManifestWorks("test").Get(context.TODO(), "test-klusterlet", v1.GetOptions{})
+				if err != nil {
+					t.Errorf("failed to get klusterlet ManifestWork: %v", err)
+					return
+				}
+
+				if len(klusterletWork.Spec.ManifestConfigs) != 0 {
+					t.Errorf("expected no ManifestConfigs, got %d", len(klusterletWork.Spec.ManifestConfigs))
+				}
+
+				// Check CRDs ManifestWork
+				crdsWork, err := workClient.WorkV1().ManifestWorks("test").Get(context.TODO(), "test-klusterlet-crds", v1.GetOptions{})
+				if err != nil {
+					t.Errorf("failed to get CRDs ManifestWork: %v", err)
+					return
+				}
+
+				if len(crdsWork.Spec.ManifestConfigs) != 0 {
+					t.Errorf("expected no CRDs ManifestConfigs, got %d", len(crdsWork.Spec.ManifestConfigs))
+				}
+			},
+		},
+		{
+			name: "disable-auto-import with existing works - applies ReadOnly without overwriting manifests",
+			startObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							apiconstants.DisableAutoImportAnnotation: "",
+						},
+						Finalizers: []string{constants.ManifestWorkFinalizer},
+					},
+				},
+			},
+			works: func() []runtime.Object {
+				// Build ManifestWorks as if they were created without the annotation (no ManifestConfigs)
+				clusterWithoutAnnotation := &clusterv1.ManagedCluster{
+					ObjectMeta: v1.ObjectMeta{Name: "test"},
+				}
+				return createManifestWorks(clusterWithoutAnnotation, testinghelpers.GetImportSecret("test"))
+			}(),
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+			},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface) {
+				klusterletWork, err := workClient.WorkV1().ManifestWorks("test").Get(context.TODO(), "test-klusterlet", v1.GetOptions{})
+				if err != nil {
+					t.Errorf("failed to get klusterlet ManifestWork: %v", err)
+					return
+				}
+
+				if len(klusterletWork.Spec.ManifestConfigs) == 0 {
+					t.Errorf("expected ReadOnly ManifestConfigs to be applied, got none")
+					return
+				}
+
+				if len(klusterletWork.Spec.ManifestConfigs) != len(klusterletWork.Spec.Workload.Manifests) {
+					t.Errorf("expected %d ManifestConfigs (one per manifest), got %d",
+						len(klusterletWork.Spec.Workload.Manifests), len(klusterletWork.Spec.ManifestConfigs))
+				}
+
+				for i, config := range klusterletWork.Spec.ManifestConfigs {
+					if config.UpdateStrategy == nil || config.UpdateStrategy.Type != workv1.UpdateStrategyTypeReadOnly {
+						t.Errorf("ManifestConfig %d expected ReadOnly strategy", i)
+					}
+					if config.ResourceIdentifier.Resource == "" {
+						t.Errorf("ManifestConfig %d has empty Resource field", i)
+					}
+				}
+
+				crdsWork, err := workClient.WorkV1().ManifestWorks("test").Get(context.TODO(), "test-klusterlet-crds", v1.GetOptions{})
+				if err != nil {
+					t.Errorf("failed to get CRDs ManifestWork: %v", err)
+					return
+				}
+
+				if len(crdsWork.Spec.ManifestConfigs) == 0 {
+					t.Errorf("expected CRDs ReadOnly ManifestConfigs to be applied, got none")
+					return
+				}
+
+				for i, config := range crdsWork.Spec.ManifestConfigs {
+					if config.UpdateStrategy == nil || config.UpdateStrategy.Type != workv1.UpdateStrategyTypeReadOnly {
+						t.Errorf("CRDs ManifestConfig %d expected ReadOnly strategy", i)
+					}
+				}
+			},
+		},
+		{
+			name: "disable-auto-import with existing ReadOnly works - no update needed",
+			startObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							apiconstants.DisableAutoImportAnnotation: "",
+						},
+						Finalizers: []string{constants.ManifestWorkFinalizer},
+					},
+				},
+			},
+			works: func() []runtime.Object {
+				// Build ManifestWorks as if they were created WITH the annotation (ReadOnly configs)
+				clusterWithAnnotation := &clusterv1.ManagedCluster{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							apiconstants.DisableAutoImportAnnotation: "",
+						},
+					},
+				}
+				return createManifestWorks(clusterWithAnnotation, testinghelpers.GetImportSecret("test"))
+			}(),
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+			},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface) {
+				klusterletWork, err := workClient.WorkV1().ManifestWorks("test").Get(context.TODO(), "test-klusterlet", v1.GetOptions{})
+				if err != nil {
+					t.Errorf("failed to get klusterlet ManifestWork: %v", err)
+					return
+				}
+
+				if len(klusterletWork.Spec.ManifestConfigs) == 0 {
+					t.Errorf("expected ManifestConfigs to remain set")
+					return
+				}
+
+				for i, config := range klusterletWork.Spec.ManifestConfigs {
+					if config.UpdateStrategy == nil || config.UpdateStrategy.Type != workv1.UpdateStrategyTypeReadOnly {
+						t.Errorf("ManifestConfig %d expected ReadOnly strategy to remain", i)
+					}
 				}
 			},
 		},
