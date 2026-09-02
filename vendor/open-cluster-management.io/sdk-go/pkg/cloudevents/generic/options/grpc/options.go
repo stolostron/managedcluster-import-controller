@@ -32,6 +32,7 @@ type GRPCDialer struct {
 	KeepAliveOptions KeepAliveOptions
 	TLSConfig        *tls.Config
 	Token            string
+	ExtraDialOpts    []grpc.DialOption
 	mu               sync.Mutex       // Mutex to protect the connection.
 	conn             *grpc.ClientConn // Cached gRPC client connection.
 }
@@ -71,12 +72,14 @@ func (d *GRPCDialer) Dial() (*grpc.ClientConn, error) {
 			perRPCCred := oauth.TokenSource{
 				TokenSource: oauth2.StaticTokenSource(&oauth2.Token{
 					AccessToken: d.Token,
-				})}
+				}),
+			}
 			// Add per-RPC credentials to the dial options.
 			dialOpts = append(dialOpts, grpc.WithPerRPCCredentials(perRPCCred))
 		}
 
 		// Establish a TLS connection to the gRPC server.
+		dialOpts = append(dialOpts, d.ExtraDialOpts...)
 		conn, err := grpc.NewClient(d.URL, dialOpts...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to connect to grpc server %s, %v", d.URL, err)
@@ -89,8 +92,8 @@ func (d *GRPCDialer) Dial() (*grpc.ClientConn, error) {
 
 	// Insecure connection option; should not be used in production.
 	dialOpts = append(dialOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	dialOpts = append(dialOpts, d.ExtraDialOpts...)
 	conn, err := grpc.NewClient(d.URL, dialOpts...)
-
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to grpc server %s, %v", d.URL, err)
 	}
@@ -166,7 +169,7 @@ func LoadConfig(configPath string) (*GRPCConfig, error) {
 		return nil, err
 	}
 
-	if err := config.CertConfig.EmbedCerts(); err != nil {
+	if err := config.EmbedCerts(); err != nil {
 		return nil, err
 	}
 
@@ -184,7 +187,7 @@ func BuildGRPCOptionsFromFlags(configPath string) (*GRPCOptions, error) {
 		return nil, fmt.Errorf("url is required")
 	}
 
-	if err := config.CertConfig.Validate(); err != nil {
+	if err := config.Validate(); err != nil {
 		return nil, err
 	}
 
@@ -229,7 +232,7 @@ func BuildGRPCOptionsFromFlags(configPath string) (*GRPCOptions, error) {
 	// If token or client certs are provided, set up TLS configuration for the gRPC connection,
 	// the certificates will be reloaded periodically.
 	// Note: setting token requires authority certificates
-	if token != "" || config.CertConfig.HasCerts() {
+	if token != "" || config.HasCerts() {
 		options.Dialer.TLSConfig, err = cert.AutoLoadTLSConfig(
 			config.CertConfig,
 			func() (*cert.CertConfig, error) {
@@ -296,7 +299,7 @@ func (o *GRPCOptions) GetCloudEventsProtocol(ctx context.Context, errorHandler f
 		}
 	}()
 
-	opts := []protocol.Option{}
+	opts := make([]protocol.Option, 0, len(clientOpts))
 	opts = append(opts, clientOpts...)
 	return protocol.NewProtocol(conn, opts...)
 }
