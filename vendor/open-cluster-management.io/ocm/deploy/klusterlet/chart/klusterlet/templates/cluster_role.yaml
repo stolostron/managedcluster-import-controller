@@ -69,8 +69,6 @@ rules:
 - apiGroups: ["work.open-cluster-management.io"]
   resources: ["appliedmanifestworks"]
   verbs: ["list", "update", "patch"]
-# Allow the registration-operator to manage NetworkPolicies when the
-# NetworkPolicies feature gate is enabled.
 - apiGroups: ["networking.k8s.io"]
   resources: ["networkpolicies"]
   verbs: ["create", "get", "list", "update", "watch", "patch", "delete"]
