@@ -58,8 +58,8 @@ github.com/flightctl/flightctl/lib/reqid
 # github.com/fxamacker/cbor/v2 v2.7.0
 ## explicit; go 1.17
 github.com/fxamacker/cbor/v2
-# github.com/getkin/kin-openapi v0.131.0
-## explicit; go 1.22.5
+# github.com/getkin/kin-openapi v0.144.0
+## explicit; go 1.25
 github.com/getkin/kin-openapi/openapi3
 # github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 ## explicit
@@ -88,8 +88,8 @@ github.com/go-openapi/analysis/internal/flatten/sortref
 # github.com/go-openapi/errors v0.22.0
 ## explicit; go 1.20
 github.com/go-openapi/errors
-# github.com/go-openapi/jsonpointer v0.21.0
-## explicit; go 1.20
+# github.com/go-openapi/jsonpointer v0.22.5
+## explicit; go 1.24.0
 github.com/go-openapi/jsonpointer
 # github.com/go-openapi/jsonreference v0.21.0
 ## explicit; go 1.20
@@ -107,6 +107,9 @@ github.com/go-openapi/strfmt
 # github.com/go-openapi/swag v0.23.0
 ## explicit; go 1.20
 github.com/go-openapi/swag
+# github.com/go-openapi/swag/jsonname v0.25.5
+## explicit; go 1.24.0
+github.com/go-openapi/swag/jsonname
 # github.com/go-openapi/validate v0.24.0
 ## explicit; go 1.20
 github.com/go-openapi/validate
@@ -227,9 +230,6 @@ github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.2
 ## explicit; go 1.12
 github.com/modern-go/reflect2
-# github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
-## explicit
-github.com/mohae/deepcopy
 # github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
 ## explicit
 github.com/munnerz/goautoneg
@@ -237,11 +237,11 @@ github.com/munnerz/goautoneg
 ## explicit; go 1.20
 github.com/oapi-codegen/runtime
 github.com/oapi-codegen/runtime/types
-# github.com/oasdiff/yaml v0.0.0-20250309154309-f31be36b4037
-## explicit; go 1.22.5
+# github.com/oasdiff/yaml v0.1.1
+## explicit; go 1.25
 github.com/oasdiff/yaml
-# github.com/oasdiff/yaml3 v0.0.0-20250309153720-d2182401db90
-## explicit; go 1.22.5
+# github.com/oasdiff/yaml3 v0.0.14
+## explicit; go 1.25
 github.com/oasdiff/yaml3
 # github.com/oklog/ulid v1.3.1
 ## explicit
@@ -427,9 +427,6 @@ github.com/openshift/library-go/pkg/operator/resource/resourcehelper
 github.com/openshift/library-go/pkg/operator/resource/resourcemerge
 github.com/openshift/library-go/pkg/operator/resource/resourceread
 github.com/openshift/library-go/pkg/operator/v1helpers
-# github.com/perimeterx/marshmallow v1.1.5
-## explicit; go 1.17
-github.com/perimeterx/marshmallow
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
@@ -459,6 +456,10 @@ github.com/prometheus/procfs/internal/util
 github.com/samber/lo
 github.com/samber/lo/internal/constraints
 github.com/samber/lo/internal/rand
+# github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
+## explicit; go 1.21
+github.com/santhosh-tekuri/jsonschema/v6
+github.com/santhosh-tekuri/jsonschema/v6/kind
 # github.com/sethvargo/go-password v0.2.0
 ## explicit; go 1.14
 github.com/sethvargo/go-password/password
@@ -577,12 +578,19 @@ golang.org/x/text/encoding/korean
 golang.org/x/text/encoding/simplifiedchinese
 golang.org/x/text/encoding/traditionalchinese
 golang.org/x/text/encoding/unicode
+golang.org/x/text/feature/plural
 golang.org/x/text/internal
+golang.org/x/text/internal/catmsg
+golang.org/x/text/internal/format
 golang.org/x/text/internal/language
 golang.org/x/text/internal/language/compact
+golang.org/x/text/internal/number
+golang.org/x/text/internal/stringset
 golang.org/x/text/internal/tag
 golang.org/x/text/internal/utf8internal
 golang.org/x/text/language
+golang.org/x/text/message
+golang.org/x/text/message/catalog
 golang.org/x/text/runes
 golang.org/x/text/secure/bidirule
 golang.org/x/text/secure/precis
