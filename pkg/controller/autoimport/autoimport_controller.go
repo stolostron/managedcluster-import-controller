@@ -108,15 +108,6 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		return reconcile.Result{}, err
 	}
 	reqLogger.Info("Auto import strategy is fetched", "managedCluster", managedCluster.Name, "AutoImportStrategy", autoImportStrategy)
-	importSucceeded := meta.IsStatusConditionTrue(managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
-	if !immediateImport && autoImportStrategy == apiconstants.AutoImportStrategyImportOnly && importSucceeded {
-		reqLogger.Info("Auto import is skipped due to the auto import strategy",
-			"managedCluster", managedCluster.Name,
-			"autoImportStrategy", autoImportStrategy,
-			"importSucceeded", importSucceeded,
-		)
-		return reconcile.Result{}, nil
-	}
 
 	autoImportSecret, err := r.informerHolder.AutoImportSecretLister.Secrets(managedClusterName).Get(constants.AutoImportSecretName)
 	if errors.IsNotFound(err) {
@@ -131,6 +122,26 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	backupRestore := false
 	if v, ok := autoImportSecret.Labels[constants.LabelAutoImportRestore]; ok && strings.EqualFold(v, "true") {
 		backupRestore = true
+	}
+
+	importSucceeded := meta.IsStatusConditionTrue(managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+	if !immediateImport && autoImportStrategy == apiconstants.AutoImportStrategyImportOnly && importSucceeded {
+		if backupRestore {
+			reqLogger.Info("Auto import proceeds for backup restore despite import succeeded",
+				"managedCluster", managedCluster.Name,
+				"backupRestore", backupRestore,
+				"importSucceeded", importSucceeded,
+				"autoImportStrategy", autoImportStrategy,
+			)
+		} else {
+			reqLogger.Info("Auto import is skipped due to the auto import strategy",
+				"managedCluster", managedCluster.Name,
+				"backupRestore", backupRestore,
+				"autoImportStrategy", autoImportStrategy,
+				"importSucceeded", importSucceeded,
+			)
+			return reconcile.Result{}, nil
+		}
 	}
 
 	generateClientHolderFunc, err := r.getGenerateClientHolderFuncFromAutoImportSecret(managedClusterName, autoImportSecret)
