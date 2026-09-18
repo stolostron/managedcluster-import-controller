@@ -1006,6 +1006,90 @@ func TestReconcile(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "disable-auto-import annotation set - import secret still created",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							apiconstants.DisableAutoImportAnnotation: "",
+						},
+					},
+				},
+				&configv1.Infrastructure{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "cluster",
+					},
+				},
+			},
+			runtimeObjs: []runtime.Object{
+				&corev1.ServiceAccount{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa",
+						Namespace: "test",
+					},
+					Secrets: []corev1.ObjectReference{
+						{
+							Name:      "test-bootstrap-sa-token-5pw5c",
+							Namespace: "test",
+						},
+					},
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-bootstrap-sa-token-5pw5c",
+						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"token": []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeServiceAccountToken,
+				},
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      os.Getenv("DEFAULT_IMAGE_PULL_SECRET"),
+						Namespace: os.Getenv("POD_NAMESPACE"),
+					},
+					Data: map[string][]byte{
+						corev1.DockerConfigJsonKey: []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeDockerConfigJson,
+				},
+				&corev1.ConfigMap{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "kube-root-ca.crt",
+						Namespace: "test",
+					},
+					Data: map[string]string{
+						"ca.crt": string(rootCACertData),
+					},
+				},
+			},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, client runtimeclient.Client, kubeClient kubernetes.Interface) {
+				_, err := kubeClient.CoreV1().ServiceAccounts("test").Get(
+					context.TODO(), "test-bootstrap-sa", metav1.GetOptions{})
+				if err != nil {
+					t.Errorf("expected bootstrap SA to exist: %v", err)
+				}
+
+				_, err = kubeClient.CoreV1().Secrets("test").Get(
+					context.TODO(), "test-import", metav1.GetOptions{})
+				if err != nil {
+					t.Errorf("expected import secret to exist even with disable-auto-import: %v", err)
+				}
+			},
+		},
 	}
 
 	for _, c := range cases {
