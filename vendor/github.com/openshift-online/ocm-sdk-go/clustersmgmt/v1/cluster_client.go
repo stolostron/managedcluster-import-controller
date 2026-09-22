@@ -169,6 +169,16 @@ func (c *ClusterClient) Autoscaler() *AutoscalerClient {
 	)
 }
 
+// BreakGlassCredentials returns the target 'break_glass_credentials' resource.
+//
+// Reference to the resource that manages the break glass credentials.
+func (c *ClusterClient) BreakGlassCredentials() *BreakGlassCredentialsClient {
+	return NewBreakGlassCredentialsClient(
+		c.transport,
+		path.Join(c.path, "break_glass_credentials"),
+	)
+}
+
 // Clusterdeployment returns the target 'clusterdeployment' resource.
 //
 // Reference to the resource that manages the cluster deployment.
@@ -204,6 +214,16 @@ func (c *ClusterClient) DeleteProtection() *DeleteProtectionClient {
 	return NewDeleteProtectionClient(
 		c.transport,
 		path.Join(c.path, "delete_protection"),
+	)
+}
+
+// ExternalAuthConfig returns the target 'external_auth_config' resource.
+//
+// Reference to the resource that manages the external authentication configuration.
+func (c *ClusterClient) ExternalAuthConfig() *ExternalAuthConfigClient {
+	return NewExternalAuthConfigClient(
+		c.transport,
+		path.Join(c.path, "external_auth_config"),
 	)
 }
 
@@ -255,6 +275,16 @@ func (c *ClusterClient) IdentityProviders() *IdentityProvidersClient {
 	)
 }
 
+// ImageMirrors returns the target 'image_mirrors' resource.
+//
+// Reference to the resource that manages image mirror configurations for the cluster.
+func (c *ClusterClient) ImageMirrors() *ImageMirrorsClient {
+	return NewImageMirrorsClient(
+		c.transport,
+		path.Join(c.path, "image_mirrors"),
+	)
+}
+
 // InflightChecks returns the target 'inflight_checks' resource.
 //
 // Reference to the resource that manages the collection of inflight checks.
@@ -280,6 +310,14 @@ func (c *ClusterClient) KubeletConfig() *KubeletConfigClient {
 	return NewKubeletConfigClient(
 		c.transport,
 		path.Join(c.path, "kubelet_config"),
+	)
+}
+
+// KubeletConfigs returns the target 'kubelet_configs' resource.
+func (c *ClusterClient) KubeletConfigs() *KubeletConfigsClient {
+	return NewKubeletConfigsClient(
+		c.transport,
+		path.Join(c.path, "kubelet_configs"),
 	)
 }
 
@@ -323,6 +361,14 @@ func (c *ClusterClient) MetricQueries() *MetricQueriesClient {
 	)
 }
 
+// Migrations returns the target 'cluster_migrations' resource.
+func (c *ClusterClient) Migrations() *ClusterMigrationsClient {
+	return NewClusterMigrationsClient(
+		c.transport,
+		path.Join(c.path, "migrations"),
+	)
+}
+
 // NodePools returns the target 'node_pools' resource.
 //
 // Reference to the resource that manages the collection of node pool resources.
@@ -330,16 +376,6 @@ func (c *ClusterClient) NodePools() *NodePoolsClient {
 	return NewNodePoolsClient(
 		c.transport,
 		path.Join(c.path, "node_pools"),
-	)
-}
-
-// Product returns the target 'product' resource.
-//
-// Reference to the resource that manages the product type of the cluster
-func (c *ClusterClient) Product() *ProductClient {
-	return NewProductClient(
-		c.transport,
-		path.Join(c.path, "product"),
 	)
 }
 

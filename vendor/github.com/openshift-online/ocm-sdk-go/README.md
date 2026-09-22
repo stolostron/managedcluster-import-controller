@@ -6,6 +6,14 @@
 This project contains a Go library that simplifies the use of the _OCM_
 API, available in `api.openshift.com`.
 
+## Quick Start
+
+```bash
+make generate         # Regenerate SDK code from model
+make ginkgo-install   # Install test runner
+make lint             # Run linters
+```
+
 ## Usage
 
 To use it import the `github.com/openshift-online/ocm-sdk-go` package, and then
@@ -105,6 +113,11 @@ to the clients for the services that are part of the API.
 **errors**
 
 Contains the `Error` type that is used by the SDK to report errors.
+
+**accesstransparency/v1** 
+
+This package contains the types and clients for version 1 of the access
+transparency service.
 
 **accountsmgmt/v1**
 
@@ -284,3 +297,13 @@ and copying the internal representation into it.
 
 See also the command-line tool https://github.com/openshift-online/ocm-cli built
 on top of this SDK.
+
+## FedRAMP
+
+The OCM SDK fully supports the OCM FedRAMP environment. Additional `TokenURL`, `URL`, and `Client` configuration is required in order to make the connection. An example implementation for the OCM FedRAMP environment can be found in the [examples](examples/fedramp_auth.go) directory.
+
+## Installation
+
+```bash
+go get github.com/openshift-online/ocm-sdk-go
+```
