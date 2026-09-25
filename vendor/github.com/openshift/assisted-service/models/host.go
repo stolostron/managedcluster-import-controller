@@ -37,6 +37,9 @@ type Host struct {
 	// Format: uuid
 	ClusterID *strfmt.UUID `json:"cluster_id,omitempty" gorm:"foreignkey:Cluster"`
 
+	// Indicate that connection to assisted service was timed out when soft timeout is enabled.
+	ConnectionTimedOut bool `json:"connection_timed_out,omitempty"`
+
 	// connectivity
 	Connectivity string `json:"connectivity,omitempty" gorm:"type:text"`
 
@@ -62,6 +65,9 @@ type Host struct {
 
 	// The domain name resolution result.
 	DomainNameResolutions string `json:"domain_name_resolutions,omitempty" gorm:"type:text"`
+
+	// The host's BMC credentials that will be used in TNF.
+	FencingCredentials string `json:"fencing_credentials,omitempty" gorm:"type:text"`
 
 	// free addresses
 	FreeAddresses string `json:"free_addresses,omitempty" gorm:"type:text"`
