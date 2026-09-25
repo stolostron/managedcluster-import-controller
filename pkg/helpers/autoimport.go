@@ -30,7 +30,7 @@ func DeleteAutoImportSecret(ctx context.Context, kubeClient kubernetes.Interface
 	secret *corev1.Secret, recorder events.Recorder) error {
 	if _, ok := secret.Annotations[constants.AnnotationKeepingAutoImportSecret]; ok {
 		recorder.Eventf("AutoImportSecretSaved",
-			fmt.Sprintf("The auto import secret %s/%s is saved", secret.Namespace, secret.Name))
+			"The auto import secret %s/%s is saved", secret.Namespace, secret.Name)
 		return nil
 	}
 
@@ -40,7 +40,7 @@ func DeleteAutoImportSecret(ctx context.Context, kubeClient kubernetes.Interface
 	}
 
 	recorder.Eventf("AutoImportSecretDeleted",
-		fmt.Sprintf("The auto import secret %s/%s is deleted", secret.Namespace, secret.Name))
+		"The auto import secret %s/%s is deleted", secret.Namespace, secret.Name)
 	return nil
 }
 

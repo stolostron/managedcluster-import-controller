@@ -976,7 +976,7 @@ func ForceDeleteManagedClusterAddon(
 	}
 
 	recorder.Eventf("ManagedClusterAddonForceDeleted",
-		fmt.Sprintf("The managedClusterAddon %s/%s is force deleted", addon.Namespace, addon.Name))
+		"The managedClusterAddon %s/%s is force deleted", addon.Namespace, addon.Name)
 	return nil
 }
 
