@@ -48,11 +48,13 @@ func NewReconcileResourceCleanup(
 // From MCE 2.9, ResourceCleanup featureGate is enabled in registration controller, and the addons and manifestWorks in
 // the cluster ns will be deleted by the registration controller except the manifestWorks in the hosting cluster ns.
 // This controller doing these jobs:
-//  1. if cluster is not found, will check the cluster ns, and force delete all addons, manifestoWorks and workRoleBinding.
+//  1. if cluster is not found, will check the cluster ns, and force delete all addons and manifestWorks.
+//     The work RoleBinding is removed after those manifestWorks are gone.
 //  2. if cluster is available, force delete the klusterletCRD manifestWork after there is no addons and other manifestWorks,
 //     delete the manifestWorks in the hosting cluster ns if the cluster is hosted mode.
-//  3. if cluster is unavailable, force delete all addons, manifestWorks and workRoleBinding in the cluster ns,
-//     and the manifestWorks in the hosting cluster ns if the cluster is hosted mode.
+//  3. if cluster is unavailable, force delete all addons and manifestWorks in the cluster ns. The work-agent
+//     finalizer is kept until the force-delete grace period, and the work RoleBinding is removed once the
+//     manifestWorks are gone. Hosting-cluster manifestWorks are deleted when the cluster is hosted.
 var _ reconcile.Reconciler = &ReconcileResourceCleanup{}
 
 func (r *ReconcileResourceCleanup) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
@@ -198,7 +200,17 @@ func (r *ReconcileResourceCleanup) orphanCleanup(ctx context.Context, clusterNam
 
 	errs = appendIfErr(errs, helpers.ForceDeleteAllManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, clusterName, r.recorder))
 	errs = appendIfErr(errs, r.forceDeleteManifestWorks(ctx, clusterName))
-	errs = appendIfErr(errs, helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, clusterName, r.recorder))
+
+	// Wait to clean up the RoleBinding until the ManifestWorks are deleted,
+	// otherwise we won't be able to clean them up on a subsequent reconcile.
+	manifestWorks, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(clusterName).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	if len(manifestWorks.Items) == 0 {
+		errs = appendIfErr(errs, helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, clusterName, r.recorder))
+	}
+
 	return utilerrors.NewAggregate(errs)
 }
 
@@ -229,7 +241,15 @@ func (r *ReconcileResourceCleanup) forceCleanup(ctx context.Context, cluster *cl
 		errs = appendIfErr(errs, r.deleteHostingManifestWorks(ctx, hostingCluster, cluster.Name))
 	}
 
-	errs = appendIfErr(errs, helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, cluster.Name, r.recorder))
+	// Wait to clean up the RoleBinding until the ManifestWorks are deleted,
+	// otherwise we won't be able to clean them up on a subsequent reconcile.
+	manifestWorks, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(cluster.Name).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	if len(manifestWorks.Items) == 0 {
+		errs = appendIfErr(errs, helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, cluster.Name, r.recorder))
+	}
 
 	return utilerrors.NewAggregate(errs)
 }

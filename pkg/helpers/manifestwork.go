@@ -7,6 +7,8 @@ package helpers
 import (
 	"context"
 	"fmt"
+	"slices"
+	"time"
 
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
@@ -25,6 +27,8 @@ import (
 )
 
 type WorkSelector func(string, workv1.ManifestWork) bool
+
+const ManifestWorkForceDeleteGracePeriod = 5 * time.Minute
 
 // AssertManifestWorkFinalizer add/remove manifest finalizer for a managed cluster,
 // this func will send request to api server to update managed cluster.
@@ -72,7 +76,11 @@ func ForceDeleteAllManifestWorks(ctx context.Context, workClient workclient.Inte
 	return nil
 }
 
-// ForceDeleteManifestWork will delete the manifestwork regardless of finalizers.
+// ForceDeleteManifestWork deletes the manifest work. Finalizers other than
+// cluster.open-cluster-management.io/manifest-work-cleanup are removed immediately
+// so the work agent can still clean up applied resources. That finalizer is kept
+// until ManifestWorkForceDeleteGracePeriod has elapsed since the work's
+// deletionTimestamp, then it is removed.
 func ForceDeleteManifestWork(ctx context.Context, workClient workclient.Interface, recorder events.Recorder,
 	namespace, name string) error {
 	_, err := workClient.WorkV1().ManifestWorks(namespace).Get(ctx, name, metav1.GetOptions{})
@@ -100,7 +108,26 @@ func ForceDeleteManifestWork(ctx context.Context, workClient workclient.Interfac
 		return err
 	}
 
-	// if the manifest work is not deleted, force remove its finalizers
+	// If the manifest work is not deleted but the grace period has not elapsed,
+	// retain the manifest work finalizer
+	retainManifestWorkFinalizer := !manifestWork.DeletionTimestamp.IsZero() &&
+		time.Since(manifestWork.DeletionTimestamp.Time) < ManifestWorkForceDeleteGracePeriod &&
+		slices.Contains(manifestWork.Finalizers, workv1.ManifestWorkFinalizer)
+
+	if retainManifestWorkFinalizer {
+		if len(manifestWork.Finalizers) == 1 {
+			return nil
+		}
+		patch := "{\"metadata\": {\"finalizers\":[\"" + workv1.ManifestWorkFinalizer + "\"]}}"
+		if _, err = workClient.WorkV1().ManifestWorks(namespace).Patch(ctx, name, types.MergePatchType,
+			[]byte(patch), metav1.PatchOptions{}); err != nil && !errors.IsNotFound(err) {
+			return err
+		}
+		return nil
+	}
+
+	// If the manifest work is not deleted after the grace period has elapsed,
+	// remove all of its finalizers
 	if len(manifestWork.Finalizers) != 0 {
 		patch := "{\"metadata\": {\"finalizers\":[]}}"
 		if _, err = workClient.WorkV1().ManifestWorks(namespace).Patch(ctx, name, types.MergePatchType,
@@ -111,6 +138,7 @@ func ForceDeleteManifestWork(ctx context.Context, workClient workclient.Interfac
 
 	recorder.Eventf("ManifestWorksForceDeleted",
 		fmt.Sprintf("The manifest work %s/%s is force deleted", manifestWork.Namespace, manifestWork.Name))
+
 	return nil
 }
 
