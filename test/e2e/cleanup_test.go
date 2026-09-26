@@ -72,7 +72,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
 			// check the work has added finalizer before detaching the cluster
-			assertManifestworkFinalizer(localClusterName, manifestwork.Name, "cluster.open-cluster-management.io/manifest-work-cleanup")
+			assertManifestworkFinalizer(localClusterName, manifestwork.Name, workv1.ManifestWorkFinalizer)
 			addon := &v1alpha1.ManagedClusterAddOn{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-addon",
@@ -119,6 +119,9 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 				return nil
 			}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
 			gomega.Eventually(func() error {
+				if err := releaseWorkAgentFinalizers(localClusterName); err != nil {
+					return err
+				}
 				allManifestWorks, err := hubWorkClient.WorkV1().ManifestWorks(localClusterName).List(context.TODO(), metav1.ListOptions{})
 				if err != nil {
 					if errors.IsNotFound(err) {
@@ -130,7 +133,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 					return fmt.Errorf("manifestworks still exist: %v", allManifestWorks.Items)
 				}
 				return nil
-			}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
+			}, manifestWorkCleanupTimeout, 5*time.Second).ShouldNot(gomega.HaveOccurred())
 
 			gomega.Eventually(func() error {
 				_, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), localClusterName, metav1.GetOptions{})
@@ -141,7 +144,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 					return fmt.Errorf("cluster still exists")
 				}
 				return err
-			}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
+			}, manifestWorkCleanupTimeout, 5*time.Second).ShouldNot(gomega.HaveOccurred())
 			gomega.Eventually(func() error {
 				_, err := hubKubeClient.CoreV1().Namespaces().Get(context.TODO(), localClusterName, metav1.GetOptions{})
 				if errors.IsNotFound(err) {
@@ -151,7 +154,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 					return fmt.Errorf("cluster namespace still exists")
 				}
 				return err
-			}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
+			}, manifestWorkCleanupTimeout, 5*time.Second).ShouldNot(gomega.HaveOccurred())
 		})
 
 		ginkgo.It("Should delete addons and manifestWorks by force", func() {
@@ -240,6 +243,9 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 
 			ginkgo.By("the manifestworks should be deleted", func() {
 				gomega.Eventually(func() error {
+					if err := releaseWorkAgentFinalizers(localClusterName); err != nil {
+						return err
+					}
 					allManifestWorks, err := hubWorkClient.WorkV1().ManifestWorks(localClusterName).List(context.TODO(), metav1.ListOptions{})
 					if err != nil {
 						if errors.IsNotFound(err) {
@@ -251,7 +257,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 						return fmt.Errorf("manifestworks still exist: %v", allManifestWorks.Items)
 					}
 					return nil
-				}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
+				}, manifestWorkCleanupTimeout, 5*time.Second).ShouldNot(gomega.HaveOccurred())
 			})
 
 			ginkgo.By("the managed cluster should be deleted", func() {
@@ -264,7 +270,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 						return fmt.Errorf("cluster still exists")
 					}
 					return err
-				}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
+				}, manifestWorkCleanupTimeout, 5*time.Second).ShouldNot(gomega.HaveOccurred())
 			})
 
 			ginkgo.By("the managed cluster namespace should be deleted", func() {
@@ -277,12 +283,11 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 						return fmt.Errorf("cluster namespace still exists")
 					}
 					return err
-				}, 1*time.Minute, 5*time.Second).ShouldNot(gomega.HaveOccurred())
+				}, manifestWorkCleanupTimeout, 5*time.Second).ShouldNot(gomega.HaveOccurred())
 			})
 
 		})
 
-		// This case will take about several minutes to wait for the cluster state to become unavailable,
 		ginkgo.It("should keep the ns when infraenv exists", func() {
 			// Wait for leader election before deleting the ManagedCluster. The initial
 			// import always triggers a rolling update, and the new pod must be leader
@@ -323,6 +328,9 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
 			gomega.Eventually(func() error {
+				if err := releaseWorkAgentFinalizers(managedClusterName); err != nil {
+					return err
+				}
 				_, err := hubClusterClient.ClusterV1().ManagedClusters().Get(context.TODO(), managedClusterName, metav1.GetOptions{})
 				if err != nil {
 					if errors.IsNotFound(err) {
@@ -331,7 +339,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 					return err
 				}
 				return fmt.Errorf("expected no cluster, but got %v", managedClusterName)
-			}, 60*time.Second, 3*time.Second).ShouldNot(gomega.HaveOccurred())
+			}, manifestWorkCleanupTimeout, 3*time.Second).ShouldNot(gomega.HaveOccurred())
 
 			checkCount := 0
 			gomega.Eventually(func() error {

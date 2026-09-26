@@ -22,6 +22,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -38,6 +39,7 @@ var (
 	testEnv          *envtest.Environment
 	k8sClient        kubernetes.Interface
 	hubDynamicClient dynamic.Interface
+	workClient       workclient.Interface
 	runtimeClient    client.Client
 	setupLog         = ctrl.Log.WithName("test")
 )
@@ -58,6 +60,7 @@ var _ = ginkgo.BeforeSuite(func() {
 			filepath.Join("../../../", "test", "e2e", "resources", "hypershift"),
 			filepath.Join("../../../", "test", "e2e", "resources", "ocm"),
 			filepath.Join("../../../", "test", "e2e", "resources", "capi"),
+			filepath.Join("../../../", "vendor", "open-cluster-management.io", "api", "work", "v1"),
 		},
 	}
 
@@ -90,6 +93,9 @@ var _ = ginkgo.BeforeSuite(func() {
 	hubDynamicClient, err = dynamic.NewForConfig(cfg)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 
+	workClient, err = workclient.NewForConfig(cfg)
+	gomega.Expect(err).NotTo(gomega.HaveOccurred())
+
 	mgr, err := ctrl.NewManager(cfg, opts)
 	gomega.Expect(err).NotTo(gomega.HaveOccurred())
 	runtimeClient = mgr.GetClient()
@@ -98,6 +104,7 @@ var _ = ginkgo.BeforeSuite(func() {
 		RuntimeClient:    runtimeClient,
 		RuntimeAPIReader: mgr.GetAPIReader(),
 		KubeClient:       k8sClient,
+		WorkClient:       workClient,
 	}
 
 	err = Add(context.TODO(), mgr, clientHolder)

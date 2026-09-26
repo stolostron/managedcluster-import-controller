@@ -16,6 +16,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/rand"
+	workv1 "open-cluster-management.io/api/work/v1"
 
 	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
@@ -209,6 +210,8 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", g
 			assertManagedClusterAvailableUnknown(managedClusterName)
 		})
 
+		assertKlusterletRemoved()
+
 		ginkgo.By(fmt.Sprintf("Should recover the managed cluster %s once the immediate-import annotation is added", managedClusterName), func() {
 			err := util.SetImmediateImportAnnotation(hubClusterClient, managedClusterName, "")
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
@@ -383,7 +386,7 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", g
 		assertManagedClusterImportSecretApplied(testcluster)
 		assertManagedClusterAvailable(testcluster)
 		klusterletName := fmt.Sprintf("%s-klusterlet", testcluster)
-		assertManifestworkFinalizer(testcluster, klusterletName, "cluster.open-cluster-management.io/manifest-work-cleanup")
+		assertManifestworkFinalizer(testcluster, klusterletName, workv1.ManifestWorkFinalizer)
 
 		AssertKlusterletNamespace(testcluster, "klusterlet-local", "open-cluster-management-local")
 

@@ -2,6 +2,7 @@ package resourcecleanup
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -18,6 +19,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
+	clienttesting "k8s.io/client-go/testing"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	workfake "open-cluster-management.io/api/client/work/clientset/versioned/fake"
 	workinformers "open-cluster-management.io/api/client/work/informers/externalversions"
@@ -43,14 +45,16 @@ func init() {
 }
 
 func TestReconcile(t *testing.T) {
+	expired := metav1.NewTime(time.Now().Add(-helpers.ManifestWorkForceDeleteGracePeriod - time.Second))
 	cases := []struct {
-		name           string
-		request        reconcile.Request
-		runtimeObjects []client.Object
-		kubeObjects    []runtime.Object
-		works          []runtime.Object
-		requeue        bool
-		validateFunc   func(t *testing.T, clientHolder *helpers.ClientHolder)
+		name                       string
+		request                    reconcile.Request
+		runtimeObjects             []client.Object
+		kubeObjects                []runtime.Object
+		works                      []runtime.Object
+		gracefulManifestWorkDelete bool
+		requeue                    bool
+		validateFunc               func(t *testing.T, clientHolder *helpers.ClientHolder)
 	}{
 		{
 			name:    "default cluster is deleting and no resources",
@@ -184,12 +188,71 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			requeue: false,
+			gracefulManifestWorkDelete: true,
+			requeue:                    true,
+			validateFunc: func(t *testing.T, clientHolder *helpers.ClientHolder) {
+				managedCluster := &clusterv1.ManagedCluster{}
+				if err := clientHolder.RuntimeClient.Get(context.TODO(),
+					types.NamespacedName{Name: "test"}, managedCluster); err != nil {
+					t.Errorf("expected cluster to remain within the grace period, but got error: %v", err)
+				}
+				works, err := clientHolder.WorkClient.WorkV1().ManifestWorks("test").List(context.TODO(), metav1.ListOptions{})
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if len(works.Items) != 1 || len(works.Items[0].Finalizers) != 1 ||
+					works.Items[0].Finalizers[0] != workv1.ManifestWorkFinalizer {
+					t.Errorf("expected the agent finalizer to remain, got %v", works.Items)
+				}
+			},
+		},
+		{
+			name:    "default cluster is deleting and klustereletCRD work is deleting past the grace period",
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}},
+			runtimeObjects: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "test",
+						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
+						DeletionTimestamp: &now,
+					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: true,
+					},
+				},
+			},
+			kubeObjects: []runtime.Object{
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "test-klusterlet-crds",
+						Namespace:         "test",
+						DeletionTimestamp: &expired,
+						Finalizers:        []string{workv1.ManifestWorkFinalizer},
+					},
+					Status: workv1.ManifestWorkStatus{
+						Conditions: []metav1.Condition{
+							metav1.Condition{
+								Type:   workv1.WorkDeleting,
+								Status: metav1.ConditionTrue,
+							},
+						},
+					},
+				},
+			},
+			gracefulManifestWorkDelete: true,
+			requeue:                    false,
 			validateFunc: func(t *testing.T, clientHolder *helpers.ClientHolder) {
 				managedCluster := &clusterv1.ManagedCluster{}
 				if err := clientHolder.RuntimeClient.Get(context.TODO(),
 					types.NamespacedName{Name: "test"}, managedCluster); !errors.IsNotFound(err) {
 					t.Errorf("expected no cluster,but got error: %v", err)
+				}
+				works, _ := clientHolder.WorkClient.WorkV1().ManifestWorks("test").List(context.TODO(), metav1.ListOptions{})
+				if len(works.Items) != 0 {
+					t.Errorf("expected no work,but got %v", len(works.Items))
 				}
 			},
 		},
@@ -926,6 +989,256 @@ func TestReconcile(t *testing.T) {
 				}
 			},
 		},
+		{
+			name:    "cluster is Unavailable and agent finalizer is within the grace period",
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}},
+			runtimeObjects: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "test",
+						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
+						DeletionTimestamp: &now,
+					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: true,
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:   clusterv1.ManagedClusterConditionAvailable,
+								Status: metav1.ConditionUnknown,
+							}},
+					},
+				},
+			},
+			kubeObjects: []runtime.Object{
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{
+					Name:       "open-cluster-management:managedcluster:test:work",
+					Namespace:  "test",
+					Finalizers: []string{workv1.ManifestWorkFinalizer},
+				}},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{ObjectMeta: metav1.ObjectMeta{
+					Name: "work1", Namespace: "test",
+					Finalizers: []string{workv1.ManifestWorkFinalizer, "test"}}},
+			},
+			gracefulManifestWorkDelete: true,
+			requeue:                    true,
+			validateFunc: func(t *testing.T, clientHolder *helpers.ClientHolder) {
+				managedCluster := &clusterv1.ManagedCluster{}
+				if err := clientHolder.RuntimeClient.Get(context.TODO(),
+					types.NamespacedName{Name: "test"}, managedCluster); err != nil {
+					t.Errorf("expected cluster to remain, but got error: %v", err)
+				}
+				works, err := clientHolder.WorkClient.WorkV1().ManifestWorks("test").List(context.TODO(), metav1.ListOptions{})
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if len(works.Items) != 1 || len(works.Items[0].Finalizers) != 1 ||
+					works.Items[0].Finalizers[0] != workv1.ManifestWorkFinalizer {
+					t.Errorf("expected only the agent finalizer to remain, got %v", works.Items)
+				}
+				if _, err := clientHolder.KubeClient.RbacV1().RoleBindings("test").Get(context.TODO(),
+					"open-cluster-management:managedcluster:test:work", metav1.GetOptions{}); err != nil {
+					t.Errorf("expected work rolebinding to remain, but got %v", err)
+				}
+			},
+		},
+		{
+			name:    "cluster is Unavailable and agent finalizer is past the grace period",
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}},
+			runtimeObjects: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:              "test",
+						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
+						DeletionTimestamp: &now,
+					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: true,
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:   clusterv1.ManagedClusterConditionAvailable,
+								Status: metav1.ConditionUnknown,
+							}},
+					},
+				},
+			},
+			kubeObjects: []runtime.Object{
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{
+					Name:       "open-cluster-management:managedcluster:test:work",
+					Namespace:  "test",
+					Finalizers: []string{workv1.ManifestWorkFinalizer},
+				}},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{ObjectMeta: metav1.ObjectMeta{
+					Name: "work1", Namespace: "test",
+					DeletionTimestamp: &expired,
+					Finalizers:        []string{workv1.ManifestWorkFinalizer}}},
+			},
+			gracefulManifestWorkDelete: true,
+			requeue:                    false,
+			validateFunc: func(t *testing.T, clientHolder *helpers.ClientHolder) {
+				managedCluster := &clusterv1.ManagedCluster{}
+				if err := clientHolder.RuntimeClient.Get(context.TODO(),
+					types.NamespacedName{Name: "test"}, managedCluster); !errors.IsNotFound(err) {
+					t.Errorf("expected no cluster,but got error: %v", err)
+				}
+				works, _ := clientHolder.WorkClient.WorkV1().ManifestWorks("test").List(context.TODO(), metav1.ListOptions{})
+				if len(works.Items) != 0 {
+					t.Errorf("expected no work,but got %v", len(works.Items))
+				}
+				if _, err := clientHolder.KubeClient.RbacV1().RoleBindings("test").Get(context.TODO(),
+					"open-cluster-management:managedcluster:test:work", metav1.GetOptions{}); !errors.IsNotFound(err) {
+					t.Errorf("expected no work rolebinding, but got %v", err)
+				}
+			},
+		},
+		{
+			name:    "hosted cluster is Unavailable and agent finalizer is within the grace period",
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}},
+			runtimeObjects: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
+							constants.HostingClusterNameAnnotation:   "hosting",
+						},
+						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
+						DeletionTimestamp: &now,
+					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: true,
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:   clusterv1.ManagedClusterConditionAvailable,
+								Status: metav1.ConditionUnknown,
+							}},
+					},
+				},
+			},
+			kubeObjects: []runtime.Object{
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{
+					Name:       "open-cluster-management:managedcluster:test:work",
+					Namespace:  "test",
+					Finalizers: []string{workv1.ManifestWorkFinalizer},
+				}},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{ObjectMeta: metav1.ObjectMeta{
+					Name: "work1", Namespace: "test",
+					Finalizers: []string{workv1.ManifestWorkFinalizer, "test"}}},
+				&workv1.ManifestWork{ObjectMeta: metav1.ObjectMeta{
+					Name:       helpers.HostedKlusterletManifestWorkName("test"),
+					Namespace:  "hosting",
+					Finalizers: []string{workv1.ManifestWorkFinalizer},
+					Labels:     map[string]string{constants.HostedClusterLabel: "test"}}},
+			},
+			gracefulManifestWorkDelete: true,
+			requeue:                    true,
+			validateFunc: func(t *testing.T, clientHolder *helpers.ClientHolder) {
+				managedCluster := &clusterv1.ManagedCluster{}
+				if err := clientHolder.RuntimeClient.Get(context.TODO(),
+					types.NamespacedName{Name: "test"}, managedCluster); err != nil {
+					t.Errorf("expected cluster to remain, but got error: %v", err)
+				}
+				works, err := clientHolder.WorkClient.WorkV1().ManifestWorks("test").List(context.TODO(), metav1.ListOptions{})
+				if err != nil {
+					t.Errorf("unexpected error: %v", err)
+				}
+				if len(works.Items) != 1 || len(works.Items[0].Finalizers) != 1 ||
+					works.Items[0].Finalizers[0] != workv1.ManifestWorkFinalizer {
+					t.Errorf("expected only the agent finalizer to remain, got %v", works.Items)
+				}
+				hostingWork, err := clientHolder.WorkClient.WorkV1().ManifestWorks("hosting").Get(context.TODO(),
+					helpers.HostedKlusterletManifestWorkName("test"), metav1.GetOptions{})
+				if err != nil {
+					t.Errorf("expected hosting klusterlet work to remain, but got %v", err)
+				} else if !hostingWork.DeletionTimestamp.IsZero() {
+					t.Errorf("expected hosting klusterlet work to stay undeleted, got deletionTimestamp %v", hostingWork.DeletionTimestamp)
+				}
+				if _, err := clientHolder.KubeClient.RbacV1().RoleBindings("test").Get(context.TODO(),
+					"open-cluster-management:managedcluster:test:work", metav1.GetOptions{}); err != nil {
+					t.Errorf("expected work rolebinding to remain, but got %v", err)
+				}
+			},
+		},
+		{
+			name:    "hosted cluster is Unavailable and agent finalizer is past the grace period",
+			request: reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}},
+			runtimeObjects: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
+							constants.HostingClusterNameAnnotation:   "hosting",
+						},
+						Finalizers:        []string{constants.ImportFinalizer, constants.ManifestWorkFinalizer},
+						DeletionTimestamp: &now,
+					},
+					Spec: clusterv1.ManagedClusterSpec{
+						HubAcceptsClient: true,
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:   clusterv1.ManagedClusterConditionAvailable,
+								Status: metav1.ConditionUnknown,
+							}},
+					},
+				},
+			},
+			kubeObjects: []runtime.Object{
+				&corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}},
+				&rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{
+					Name:       "open-cluster-management:managedcluster:test:work",
+					Namespace:  "test",
+					Finalizers: []string{workv1.ManifestWorkFinalizer},
+				}},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{ObjectMeta: metav1.ObjectMeta{
+					Name: "work1", Namespace: "test",
+					DeletionTimestamp: &expired,
+					Finalizers:        []string{workv1.ManifestWorkFinalizer}}},
+				&workv1.ManifestWork{ObjectMeta: metav1.ObjectMeta{
+					Name:      helpers.HostedKlusterletManifestWorkName("test"),
+					Namespace: "hosting",
+					Labels:    map[string]string{constants.HostedClusterLabel: "test"}}},
+			},
+			gracefulManifestWorkDelete: true,
+			requeue:                    false,
+			validateFunc: func(t *testing.T, clientHolder *helpers.ClientHolder) {
+				managedCluster := &clusterv1.ManagedCluster{}
+				if err := clientHolder.RuntimeClient.Get(context.TODO(),
+					types.NamespacedName{Name: "test"}, managedCluster); !errors.IsNotFound(err) {
+					t.Errorf("expected no cluster,but got error: %v", err)
+				}
+				works, _ := clientHolder.WorkClient.WorkV1().ManifestWorks("test").List(context.TODO(), metav1.ListOptions{})
+				if len(works.Items) != 0 {
+					t.Errorf("expected no spoke work,but got %v", len(works.Items))
+				}
+				works, _ = clientHolder.WorkClient.WorkV1().ManifestWorks("hosting").List(context.TODO(), metav1.ListOptions{})
+				if len(works.Items) != 0 {
+					t.Errorf("expected no hosting work,but got %v", len(works.Items))
+				}
+				if _, err := clientHolder.KubeClient.RbacV1().RoleBindings("test").Get(context.TODO(),
+					"open-cluster-management:managedcluster:test:work", metav1.GetOptions{}); !errors.IsNotFound(err) {
+					t.Errorf("expected no work rolebinding, but got %v", err)
+				}
+			},
+		},
 	}
 
 	for _, c := range cases {
@@ -942,6 +1255,9 @@ func TestReconcile(t *testing.T) {
 				WithStatusSubresource(c.runtimeObjects...).Build()
 
 			workClient := workfake.NewSimpleClientset(c.works...)
+			if c.gracefulManifestWorkDelete {
+				withGracefulManifestWorkDeletion(workClient)
+			}
 			workInformerFactory := workinformers.NewSharedInformerFactory(workClient, 10*time.Minute)
 			workInformer := workInformerFactory.Work().V1().ManifestWorks().Informer()
 			for _, work := range c.works {
@@ -976,4 +1292,130 @@ func TestReconcile(t *testing.T) {
 			c.validateFunc(t, clientHolder)
 		})
 	}
+}
+
+func TestReconcileNamespaceWatchConfirmsLiveCluster(t *testing.T) {
+	ctx := context.TODO()
+	cluster := &clusterv1.ManagedCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: "test"},
+		Spec:       clusterv1.ManagedClusterSpec{HubAcceptsClient: true},
+	}
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}}
+	roleBindingName := "open-cluster-management:managedcluster:test:work"
+	roleBinding := &rbacv1.RoleBinding{ObjectMeta: metav1.ObjectMeta{
+		Name:       roleBindingName,
+		Namespace:  "test",
+		Finalizers: []string{"test"},
+	}}
+	work := &workv1.ManifestWork{ObjectMeta: metav1.ObjectMeta{
+		Name:       "test",
+		Namespace:  "test",
+		Finalizers: []string{"test"},
+	}}
+
+	cacheClient := fake.NewClientBuilder().WithScheme(testScheme).Build()
+	apiReader := fake.NewClientBuilder().WithScheme(testScheme).WithObjects(cluster).Build()
+	kubeClient := kubefake.NewSimpleClientset(ns, roleBinding)
+	workClient := workfake.NewSimpleClientset(work)
+	clientHolder := &helpers.ClientHolder{
+		RuntimeClient:    cacheClient,
+		RuntimeAPIReader: apiReader,
+		KubeClient:       kubeClient,
+		WorkClient:       workClient,
+	}
+	r := NewReconcileResourceCleanup(
+		clientHolder,
+		eventstesting.NewTestingEventRecorder(t),
+		helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
+	)
+	request := reconcile.Request{NamespacedName: types.NamespacedName{
+		Namespace: fromNamespaceWatch,
+		Name:      "test",
+	}}
+
+	result, err := r.Reconcile(ctx, request)
+	if err != nil {
+		t.Fatalf("live cluster should skip orphan cleanup, got %v", err)
+	}
+	if result.RequeueAfter != 0 {
+		t.Fatalf("expected no requeue, got %v", result.RequeueAfter)
+	}
+	if _, err := kubeClient.RbacV1().RoleBindings("test").Get(ctx, roleBindingName, metav1.GetOptions{}); err != nil {
+		t.Fatalf("rolebinding should remain while the live cluster exists, got %v", err)
+	}
+	if _, err := workClient.WorkV1().ManifestWorks("test").Get(ctx, "test", metav1.GetOptions{}); err != nil {
+		t.Fatalf("manifestwork should remain while the live cluster exists, got %v", err)
+	}
+
+	clientHolder.RuntimeAPIReader = errClient{}
+	if _, err := r.Reconcile(ctx, request); err == nil {
+		t.Fatal("expected the live reader error to be returned")
+	}
+	if _, err := kubeClient.RbacV1().RoleBindings("test").Get(ctx, roleBindingName, metav1.GetOptions{}); err != nil {
+		t.Fatalf("rolebinding should remain when the live read fails, got %v", err)
+	}
+
+	clientHolder.RuntimeAPIReader = fake.NewClientBuilder().WithScheme(testScheme).Build()
+	if _, err := r.Reconcile(ctx, request); err != nil {
+		t.Fatalf("missing live cluster should run orphan cleanup, got %v", err)
+	}
+	if _, err := kubeClient.RbacV1().RoleBindings("test").Get(ctx, roleBindingName, metav1.GetOptions{}); !errors.IsNotFound(err) {
+		t.Fatalf("expected rolebinding to be deleted, got %v", err)
+	}
+}
+
+// withGracefulManifestWorkDeletion makes the fake work client keep objects that
+// still have finalizers, matching apiserver delete behavior.
+func withGracefulManifestWorkDeletion(clientset *workfake.Clientset) {
+	clientset.PrependReactor("delete", "manifestworks", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		del := action.(clienttesting.DeleteAction)
+		obj, err := clientset.Tracker().Get(del.GetResource(), del.GetNamespace(), del.GetName())
+		if err != nil {
+			return true, nil, err
+		}
+		work, ok := obj.(*workv1.ManifestWork)
+		if !ok {
+			return false, nil, nil
+		}
+		if len(work.Finalizers) == 0 {
+			err = clientset.Tracker().Delete(del.GetResource(), del.GetNamespace(), del.GetName())
+			return true, nil, err
+		}
+		if work.DeletionTimestamp.IsZero() {
+			now := metav1.Now()
+			work.DeletionTimestamp = &now
+			if err = clientset.Tracker().Update(del.GetResource(), work, del.GetNamespace()); err != nil {
+				return true, nil, err
+			}
+		}
+		return true, work, nil
+	})
+	clientset.PrependReactor("patch", "manifestworks", func(action clienttesting.Action) (bool, runtime.Object, error) {
+		patch := action.(clienttesting.PatchAction)
+		var body struct {
+			Metadata struct {
+				Finalizers []string `json:"finalizers"`
+			} `json:"metadata"`
+		}
+		if err := json.Unmarshal(patch.GetPatch(), &body); err != nil {
+			return true, nil, err
+		}
+		obj, err := clientset.Tracker().Get(patch.GetResource(), patch.GetNamespace(), patch.GetName())
+		if err != nil {
+			return true, nil, err
+		}
+		work, ok := obj.(*workv1.ManifestWork)
+		if !ok {
+			return false, nil, nil
+		}
+		work.Finalizers = body.Metadata.Finalizers
+		if len(work.Finalizers) == 0 {
+			err = clientset.Tracker().Delete(patch.GetResource(), patch.GetNamespace(), patch.GetName())
+			return true, nil, err
+		}
+		if err = clientset.Tracker().Update(patch.GetResource(), work, patch.GetNamespace()); err != nil {
+			return true, nil, err
+		}
+		return true, work, nil
+	})
 }

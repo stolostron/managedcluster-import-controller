@@ -390,7 +390,7 @@ var _ = ginkgo.Describe("Importing and detaching a managed cluster with hosted m
 					return err
 				}
 				return fmt.Errorf("expected no addon manifestwork, but got %v", manifestwork.Name)
-			}, 30*time.Second, 3*time.Second).ShouldNot(gomega.HaveOccurred())
+			}, manifestWorkCleanupTimeout, 3*time.Second).ShouldNot(gomega.HaveOccurred())
 		})
 	})
 })

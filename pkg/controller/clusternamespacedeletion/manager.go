@@ -171,9 +171,10 @@ func Add(ctx context.Context,
 			}),
 		).
 		Complete(&ReconcileClusterNamespaceDeletion{
-			client:    clientHolder.RuntimeClient,
-			apiReader: clientHolder.RuntimeAPIReader,
-			recorder:  helpers.NewEventRecorder(clientHolder.KubeClient, ControllerName),
+			client:     clientHolder.RuntimeClient,
+			apiReader:  clientHolder.RuntimeAPIReader,
+			workClient: clientHolder.WorkClient,
+			recorder:   helpers.NewEventRecorder(clientHolder.KubeClient, ControllerName),
 		})
 
 	return err
