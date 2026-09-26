@@ -23,7 +23,6 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/agentregistration"
-	"github.com/stolostron/managedcluster-import-controller/pkg/controller/flightctl"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/importconfig"
 	"github.com/stolostron/managedcluster-import-controller/pkg/features"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
@@ -350,9 +349,6 @@ func main() {
 	// with involvedObject set to the ManagedCluster.
 	mcRecorder := helpers.NewManagedClusterEventRecorder(ctx, clientHolder.KubeClient)
 
-	// Init flightctlManager
-	flightctlManager := flightctl.NewFlightCtlManager(clientHolder, clusterIngressDomain)
-
 	setupLog.Info("Registering Controllers")
 	if err := controller.AddToManager(
 		ctx,
@@ -374,7 +370,6 @@ func main() {
 			ManagedClusterInformer:   managedclusterInformer,
 		},
 		componentNamespace,
-		flightctlManager,
 		mcRecorder,
 	); err != nil {
 		setupLog.Error(err, "failed to register controller")
@@ -403,7 +398,6 @@ func main() {
 	hostedWorksInformerF.WaitForCacheSync(ctx.Done())
 	klusterletconfigInformerF.WaitForCacheSync(ctx.Done())
 	managedclusterInformerF.WaitForCacheSync(ctx.Done())
-	go flightctlManager.StartReconcileFlightCtlResources(ctx)
 
 	// Start the agent-registratioin server
 	if features.DefaultMutableFeatureGate.Enabled(features.AgentRegistration) {

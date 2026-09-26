@@ -20,9 +20,6 @@ github.com/Masterminds/sprig/v3
 # github.com/RangelReale/osincli v0.0.0-20160924135400-fababb0555f2
 ## explicit
 github.com/RangelReale/osincli
-# github.com/apapsch/go-jsonmerge/v2 v2.0.0
-## explicit; go 1.12
-github.com/apapsch/go-jsonmerge/v2
 # github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2
 ## explicit; go 1.13
 github.com/asaskevich/govalidator
@@ -73,12 +70,6 @@ github.com/emicklei/go-restful/v3/log
 ## explicit; go 1.18
 github.com/evanphx/json-patch/v5
 github.com/evanphx/json-patch/v5/internal/json
-# github.com/flightctl/flightctl/lib v0.0.0 => github.com/xuezhaojun/flightctl/lib v0.0.0-20241125124411-7eec33f53a61
-## explicit; go 1.22.5
-github.com/flightctl/flightctl/lib/api/client
-github.com/flightctl/flightctl/lib/apipublic/v1alpha1
-github.com/flightctl/flightctl/lib/cli
-github.com/flightctl/flightctl/lib/reqid
 # github.com/fsnotify/fsnotify v1.9.0
 ## explicit; go 1.17
 github.com/fsnotify/fsnotify
@@ -86,16 +77,9 @@ github.com/fsnotify/fsnotify/internal
 # github.com/fxamacker/cbor/v2 v2.9.0
 ## explicit; go 1.20
 github.com/fxamacker/cbor/v2
-# github.com/getkin/kin-openapi v0.144.0
-## explicit; go 1.25
-github.com/getkin/kin-openapi/openapi3
 # github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 ## explicit
 github.com/ghodss/yaml
-# github.com/go-chi/chi v1.5.5
-## explicit; go 1.16
-github.com/go-chi/chi
-github.com/go-chi/chi/middleware
 # github.com/go-logr/logr v1.4.3
 ## explicit; go 1.18
 github.com/go-logr/logr
@@ -301,16 +285,6 @@ github.com/modern-go/reflect2
 # github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
 ## explicit
 github.com/munnerz/goautoneg
-# github.com/oapi-codegen/runtime v1.1.1
-## explicit; go 1.20
-github.com/oapi-codegen/runtime
-github.com/oapi-codegen/runtime/types
-# github.com/oasdiff/yaml v0.1.1
-## explicit; go 1.25
-github.com/oasdiff/yaml
-# github.com/oasdiff/yaml3 v0.0.14
-## explicit; go 1.25
-github.com/oasdiff/yaml3
 # github.com/oklog/ulid v1.3.1
 ## explicit
 github.com/oklog/ulid
@@ -555,11 +529,6 @@ github.com/prometheus/common/model
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
-# github.com/samber/lo v1.47.0
-## explicit; go 1.18
-github.com/samber/lo
-github.com/samber/lo/internal/constraints
-github.com/samber/lo/internal/rand
 # github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 ## explicit; go 1.21
 github.com/santhosh-tekuri/jsonschema/v6
@@ -596,10 +565,6 @@ github.com/stolostron/cluster-lifecycle-api/helpers/klusterletconfig
 github.com/stolostron/cluster-lifecycle-api/helpers/localcluster
 github.com/stolostron/cluster-lifecycle-api/helpers/tlsprofile
 github.com/stolostron/cluster-lifecycle-api/klusterletconfig/v1alpha1
-# github.com/stretchr/testify v1.11.1
-## explicit; go 1.17
-github.com/stretchr/testify/assert
-github.com/stretchr/testify/assert/yaml
 # github.com/x448/float16 v0.8.4
 ## explicit; go 1.11
 github.com/x448/float16
@@ -1582,6 +1547,5 @@ sigs.k8s.io/structured-merge-diff/v6/value
 ## explicit; go 1.22
 sigs.k8s.io/yaml
 sigs.k8s.io/yaml/goyaml.v3
-# github.com/flightctl/flightctl/lib => github.com/xuezhaojun/flightctl/lib v0.0.0-20241125124411-7eec33f53a61
 # github.com/openshift/assisted-service/models => github.com/openshift/assisted-service/models v0.0.0-20230831114549-1922eda29cf8
 # github.com/openshift/assisted-service/api => github.com/openshift/assisted-service/api v0.0.0-20230831114549-1922eda29cf8
