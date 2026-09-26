@@ -72,7 +72,7 @@ var _ = ginkgo.Describe("test cleanup resource after a cluster is detached", gin
 			gomega.Expect(err).ToNot(gomega.HaveOccurred())
 
 			// check the work has added finalizer before detaching the cluster
-			assertManifestworkFinalizer(localClusterName, manifestwork.Name, "cluster.open-cluster-management.io/manifest-work-cleanup")
+			assertManifestworkFinalizer(localClusterName, manifestwork.Name, workv1.ManifestWorkFinalizer)
 			addon := &v1alpha1.ManagedClusterAddOn{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-addon",

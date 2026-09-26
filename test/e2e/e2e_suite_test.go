@@ -848,17 +848,17 @@ func assertManagedClusterManifestWorks(clusterName string) {
 		util.Logf("assert managed cluster manifestworks spending time: %.2f seconds", time.Since(start).Seconds())
 	})
 
-	assertManagedClusterFinalizer(clusterName, "managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup")
+	assertManagedClusterFinalizer(clusterName, constants.ManifestWorkFinalizer)
 }
 
 func assertManagedClusterManifestWorksAvailable(clusterName string) {
-	assertManagedClusterFinalizer(clusterName, "managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup")
+	assertManagedClusterFinalizer(clusterName, constants.ManifestWorkFinalizer)
 
 	klusterletCRDsName := fmt.Sprintf("%s-klusterlet-crds", clusterName)
 	klusterletName := fmt.Sprintf("%s-klusterlet", clusterName)
 
-	assertManifestworkFinalizer(clusterName, klusterletCRDsName, "cluster.open-cluster-management.io/manifest-work-cleanup")
-	assertManifestworkFinalizer(clusterName, klusterletName, "cluster.open-cluster-management.io/manifest-work-cleanup")
+	assertManifestworkFinalizer(clusterName, klusterletCRDsName, workv1.ManifestWorkFinalizer)
+	assertManifestworkFinalizer(clusterName, klusterletName, workv1.ManifestWorkFinalizer)
 
 	ginkgo.By(fmt.Sprintf("Managed cluster %s manifest works should be available", clusterName), func() {
 		start := time.Now()
@@ -1002,10 +1002,10 @@ func assertManagedClusterManifestWorksNotReadOnly(clusterName string) {
 
 func assertHostedManagedClusterManifestWorksAvailable(clusterName, hostingClusterName string) {
 	assertManagedClusterFinalizer(clusterName,
-		"managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup")
+		constants.ManifestWorkFinalizer)
 
 	klusterletName := fmt.Sprintf("%s-hosted-klusterlet", clusterName)
-	assertManifestworkFinalizer(hostingClusterName, klusterletName, "cluster.open-cluster-management.io/manifest-work-cleanup")
+	assertManifestworkFinalizer(hostingClusterName, klusterletName, workv1.ManifestWorkFinalizer)
 
 	ginkgo.By(fmt.Sprintf("Hosted managed cluster %s manifest works should be available", clusterName), func() {
 		start := time.Now()
