@@ -34,7 +34,7 @@ func Add(ctx context.Context,
 			builder.WithPredicates(predicate.Funcs{
 				GenericFunc: func(e event.GenericEvent) bool { return !e.Object.GetDeletionTimestamp().IsZero() },
 				DeleteFunc:  func(e event.DeleteEvent) bool { return true },
-				CreateFunc:  func(e event.CreateEvent) bool { return false },
+				CreateFunc:  func(e event.CreateEvent) bool { return !e.Object.GetDeletionTimestamp().IsZero() },
 				UpdateFunc: func(e event.UpdateEvent) bool {
 					// prevent losing the event when cluster is deleting
 					return !e.ObjectNew.GetDeletionTimestamp().IsZero()
