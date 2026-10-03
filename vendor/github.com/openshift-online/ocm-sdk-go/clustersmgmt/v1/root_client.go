@@ -81,6 +81,16 @@ func (c *Client) DNSDomains() *DNSDomainsClient {
 	)
 }
 
+// GCP returns the target 'GCP' resource.
+//
+// Reference to the resource that manages the collection of gcp endpoints.
+func (c *Client) GCP() *GCPClient {
+	return NewGCPClient(
+		c.transport,
+		path.Join(c.path, "gcp"),
+	)
+}
+
 // GCPInquiries returns the target 'GCP_inquiries' resource.
 //
 // Reference to the resource that manages the collection of gcp inquiries.
@@ -121,6 +131,16 @@ func (c *Client) Clusters() *ClustersClient {
 	)
 }
 
+// DeletedClusters returns the target 'deleted_clusters' resource.
+//
+// Reference to the resource that manages the collection of deleted clusters.
+func (c *Client) DeletedClusters() *DeletedClustersClient {
+	return NewDeletedClustersClient(
+		c.transport,
+		path.Join(c.path, "deleted_clusters"),
+	)
+}
+
 // Environment returns the target 'environment' resource.
 //
 // Reference to the resource that manages the environment.
@@ -158,6 +178,26 @@ func (c *Client) LimitedSupportReasonTemplates() *LimitedSupportReasonTemplatesC
 	return NewLimitedSupportReasonTemplatesClient(
 		c.transport,
 		path.Join(c.path, "limited_support_reason_templates"),
+	)
+}
+
+// LoadBalancerQuotaValues returns the target 'load_balancer_quota_values' resource.
+//
+// Reference to the resource that manages the load balancer quota values.
+func (c *Client) LoadBalancerQuotaValues() *LoadBalancerQuotaValuesClient {
+	return NewLoadBalancerQuotaValuesClient(
+		c.transport,
+		path.Join(c.path, "load_balancer_quota_values"),
+	)
+}
+
+// LogForwarding returns the target 'log_forwarding' resource.
+//
+// Reference to log forwarding related resources.
+func (c *Client) LogForwarding() *LogForwardingClient {
+	return NewLogForwardingClient(
+		c.transport,
+		path.Join(c.path, "log_forwarding"),
 	)
 }
 
@@ -218,6 +258,36 @@ func (c *Client) ProvisionShards() *ProvisionShardsClient {
 	return NewProvisionShardsClient(
 		c.transport,
 		path.Join(c.path, "provision_shards"),
+	)
+}
+
+// RegisterCluster returns the target 'register_cluster' resource.
+//
+// Reference to cluster registration for externally provisioned clusters.
+func (c *Client) RegisterCluster() *RegisterClusterClient {
+	return NewRegisterClusterClient(
+		c.transport,
+		path.Join(c.path, "register_cluster"),
+	)
+}
+
+// RegistryAllowlists returns the target 'registry_allowlists' resource.
+//
+// Reference to the resource that manages the collection of registry allowlists.
+func (c *Client) RegistryAllowlists() *RegistryAllowlistsClient {
+	return NewRegistryAllowlistsClient(
+		c.transport,
+		path.Join(c.path, "registry_allowlists"),
+	)
+}
+
+// StorageQuotaValues returns the target 'storage_quota_values' resource.
+//
+// Reference to the resource that manages the storage quota values.
+func (c *Client) StorageQuotaValues() *StorageQuotaValuesClient {
+	return NewStorageQuotaValuesClient(
+		c.transport,
+		path.Join(c.path, "storage_quota_values"),
 	)
 }
 

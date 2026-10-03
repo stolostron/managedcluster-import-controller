@@ -27,12 +27,18 @@ type HostUpdateParams struct {
 	// Allows changing the host's skip_formatting_disks parameter
 	DisksSkipFormatting []*DiskSkipFormattingParams `json:"disks_skip_formatting"`
 
+	// The host's BMC credentials that will be used in TNF.
+	FencingCredentials *FencingCredentialsParams `json:"fencing_credentials,omitempty"`
+
 	// host name
 	HostName *string `json:"host_name,omitempty"`
 
 	// host role
-	// Enum: [auto-assign master worker]
+	// Enum: [auto-assign master arbiter worker]
 	HostRole *string `json:"host_role,omitempty"`
+
+	// JSON-formatted string of additional HTTP headers when fetching the ignition.
+	IgnitionEndpointHTTPHeaders []*IgnitionEndpointHTTPHeadersParams `json:"ignition_endpoint_http_headers"`
 
 	// A string which will be used as Authorization Bearer token to fetch the ignition from ignition_endpoint_url.
 	IgnitionEndpointToken *string `json:"ignition_endpoint_token,omitempty"`
@@ -56,7 +62,15 @@ func (m *HostUpdateParams) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
+	if err := m.validateFencingCredentials(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validateHostRole(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateIgnitionEndpointHTTPHeaders(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -122,11 +136,30 @@ func (m *HostUpdateParams) validateDisksSkipFormatting(formats strfmt.Registry) 
 	return nil
 }
 
+func (m *HostUpdateParams) validateFencingCredentials(formats strfmt.Registry) error {
+	if swag.IsZero(m.FencingCredentials) { // not required
+		return nil
+	}
+
+	if m.FencingCredentials != nil {
+		if err := m.FencingCredentials.Validate(formats); err != nil {
+			if ve, ok := err.(*errors.Validation); ok {
+				return ve.ValidateName("fencing_credentials")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("fencing_credentials")
+			}
+			return err
+		}
+	}
+
+	return nil
+}
+
 var hostUpdateParamsTypeHostRolePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["auto-assign","master","worker"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["auto-assign","master","arbiter","worker"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -141,6 +174,9 @@ const (
 
 	// HostUpdateParamsHostRoleMaster captures enum value "master"
 	HostUpdateParamsHostRoleMaster string = "master"
+
+	// HostUpdateParamsHostRoleArbiter captures enum value "arbiter"
+	HostUpdateParamsHostRoleArbiter string = "arbiter"
 
 	// HostUpdateParamsHostRoleWorker captures enum value "worker"
 	HostUpdateParamsHostRoleWorker string = "worker"
@@ -162,6 +198,32 @@ func (m *HostUpdateParams) validateHostRole(formats strfmt.Registry) error {
 	// value enum
 	if err := m.validateHostRoleEnum("host_role", "body", *m.HostRole); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (m *HostUpdateParams) validateIgnitionEndpointHTTPHeaders(formats strfmt.Registry) error {
+	if swag.IsZero(m.IgnitionEndpointHTTPHeaders) { // not required
+		return nil
+	}
+
+	for i := 0; i < len(m.IgnitionEndpointHTTPHeaders); i++ {
+		if swag.IsZero(m.IgnitionEndpointHTTPHeaders[i]) { // not required
+			continue
+		}
+
+		if m.IgnitionEndpointHTTPHeaders[i] != nil {
+			if err := m.IgnitionEndpointHTTPHeaders[i].Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("ignition_endpoint_http_headers" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("ignition_endpoint_http_headers" + "." + strconv.Itoa(i))
+				}
+				return err
+			}
+		}
+
 	}
 
 	return nil
@@ -205,6 +267,14 @@ func (m *HostUpdateParams) ContextValidate(ctx context.Context, formats strfmt.R
 		res = append(res, err)
 	}
 
+	if err := m.contextValidateFencingCredentials(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateIgnitionEndpointHTTPHeaders(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.contextValidateNodeLabels(ctx, formats); err != nil {
 		res = append(res, err)
 	}
@@ -245,6 +315,42 @@ func (m *HostUpdateParams) contextValidateDisksSkipFormatting(ctx context.Contex
 					return ve.ValidateName("disks_skip_formatting" + "." + strconv.Itoa(i))
 				} else if ce, ok := err.(*errors.CompositeError); ok {
 					return ce.ValidateName("disks_skip_formatting" + "." + strconv.Itoa(i))
+				}
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *HostUpdateParams) contextValidateFencingCredentials(ctx context.Context, formats strfmt.Registry) error {
+
+	if m.FencingCredentials != nil {
+		if err := m.FencingCredentials.ContextValidate(ctx, formats); err != nil {
+			if ve, ok := err.(*errors.Validation); ok {
+				return ve.ValidateName("fencing_credentials")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("fencing_credentials")
+			}
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (m *HostUpdateParams) contextValidateIgnitionEndpointHTTPHeaders(ctx context.Context, formats strfmt.Registry) error {
+
+	for i := 0; i < len(m.IgnitionEndpointHTTPHeaders); i++ {
+
+		if m.IgnitionEndpointHTTPHeaders[i] != nil {
+			if err := m.IgnitionEndpointHTTPHeaders[i].ContextValidate(ctx, formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("ignition_endpoint_http_headers" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("ignition_endpoint_http_headers" + "." + strconv.Itoa(i))
 				}
 				return err
 			}

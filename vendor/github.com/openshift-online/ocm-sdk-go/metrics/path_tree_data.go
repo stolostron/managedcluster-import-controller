@@ -22,6 +22,18 @@ package metrics // github.com/openshift-online/ocm-sdk-go/metrics
 // pathTreeData is the JSON representation of the tree of URL paths.
 var pathTreeData = `{
   "api": {
+    "access_transparency": {
+      "v1": {
+        "access_protection": null,
+        "access_requests": {
+          "-": {
+            "decisions": {
+              "-": null
+            }
+          }
+        }
+      }
+    },
     "accounts_mgmt": {
       "v1": {
         "access_token": null,
@@ -45,6 +57,9 @@ var pathTreeData = `{
           "-": null
         },
         "current_account": null,
+        "default_capabilities": {
+          "-": null
+        },
         "deleted_subscriptions": null,
         "feature_toggles": {
           "-": {
@@ -52,10 +67,15 @@ var pathTreeData = `{
           }
         },
         "labels": null,
-        "notify": null,
         "notify_details": null,
         "organizations": {
           "-": {
+            "account_group_assignments": {
+              "-": null
+            },
+            "account_groups": {
+              "-": null
+            },
             "labels": {
               "-": null
             },
@@ -96,7 +116,6 @@ var pathTreeData = `{
             "labels": {
               "-": null
             },
-            "notify": null,
             "reserved_resources": {
               "-": null
             },
@@ -138,6 +157,44 @@ var pathTreeData = `{
         }
       }
     },
+    "aro_hcp": {
+      "v1alpha1": {
+        "clusters": {
+          "-": {
+            "autoscaler": null,
+            "control_plane_upgrade_policies": {
+              "-": null
+            },
+            "external_auth_config": {
+              "external_auths": {
+                "-": null
+              }
+            },
+            "inflight_checks": {
+              "-": null
+            },
+            "node_pools": {
+              "-": {
+                "status": null,
+                "upgrade_policies": {
+                  "-": null
+                }
+              }
+            },
+            "provision_shard": null,
+            "resources": null,
+            "status": null
+          }
+        },
+        "managed_identities_requirements": null,
+        "provision_shards": {
+          "-": null
+        },
+        "versions": {
+          "-": null
+        }
+      }
+    },
     "authorizations": {
       "v1": {
         "access_review": null,
@@ -166,6 +223,7 @@ var pathTreeData = `{
         },
         "aws_inquiries": {
           "machine_types": null,
+          "oidc_thumbprint": null,
           "regions": null,
           "sts_account_roles": null,
           "sts_credential_requests": null,
@@ -200,19 +258,31 @@ var pathTreeData = `{
                 "principals": {
                   "-": null
                 }
-              }
+              },
+              "role_policy_bindings": null
             },
             "aws_infrastructure_access_role_grants": {
               "-": null
             },
+            "break_glass_credentials": {
+              "-": null
+            },
             "clusterdeployment": null,
             "control_plane": {
+              "log_forwarders": {
+                "-": null
+              },
               "upgrade_policies": {
                 "-": null
               }
             },
             "credentials": null,
             "delete_protection": null,
+            "external_auth_config": {
+              "external_auths": {
+                "-": null
+              }
+            },
             "external_configuration": {
               "labels": {
                 "-": null
@@ -244,6 +314,9 @@ var pathTreeData = `{
                 }
               }
             },
+            "image_mirrors": {
+              "-": null
+            },
             "inflight_checks": {
               "-": null
             },
@@ -251,6 +324,9 @@ var pathTreeData = `{
               "-": null
             },
             "kubelet_config": null,
+            "kubelet_configs": {
+              "-": null
+            },
             "limited_support_reasons": {
               "-": null
             },
@@ -268,19 +344,14 @@ var pathTreeData = `{
               "nodes": null,
               "socket_total_by_node_roles_os": null
             },
+            "migrations": {
+              "-": null
+            },
             "node_pools": {
               "-": {
                 "upgrade_policies": {
                   "-": null
                 }
-              }
-            },
-            "product": {
-              "minimal_versions": {
-                "-": null
-              },
-              "technology_previews": {
-                "-": null
               }
             },
             "provision_shard": null,
@@ -304,6 +375,9 @@ var pathTreeData = `{
             "vpc": null
           }
         },
+        "deleted_clusters": {
+          "-": null
+        },
         "dns_domains": {
           "-": null
         },
@@ -311,6 +385,25 @@ var pathTreeData = `{
         "events": null,
         "flavours": {
           "-": null
+        },
+        "gcp": {
+          "firewall_rule_templates": {
+            "-": {
+              "profiles": {
+                "-": null
+              }
+            }
+          },
+          "firewall_rules": {
+            "-": {
+              "status": null
+            }
+          },
+          "wif_configs": {
+            "-": {
+              "status": null
+            }
+          }
         },
         "gcp_inquiries": {
           "encryption_keys": null,
@@ -321,6 +414,11 @@ var pathTreeData = `{
         },
         "limited_support_reason_templates": {
           "-": null
+        },
+        "load_balancer_quota_values": null,
+        "log_forwarding": {
+          "applications": null,
+          "groups": null
         },
         "machine_types": {
           "-": null
@@ -347,9 +445,12 @@ var pathTreeData = `{
         "provision_shards": {
           "-": null
         },
-        "trusted_ip_addresses": {
+        "register_cluster": null,
+        "registry_allowlists": {
           "-": null
         },
+        "storage_quota_values": null,
+        "trusted_ip_addresses": null,
         "version_gates": {
           "-": null
         },
@@ -358,6 +459,7 @@ var pathTreeData = `{
         }
       }
     },
+    "dependencymagnet": {},
     "job_queue": {
       "v1": {
         "queues": {
