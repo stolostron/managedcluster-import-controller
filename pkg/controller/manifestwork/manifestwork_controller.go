@@ -9,11 +9,13 @@ import (
 
 	"github.com/ghodss/yaml"
 	"github.com/openshift/library-go/pkg/operator/events"
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -100,6 +102,23 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 
+	if _, autoImportDisabled := managedCluster.Annotations[apiconstants.DisableAutoImportAnnotation]; autoImportDisabled && len(manifestWorks) > 0 {
+		reqLogger.V(5).Info("Auto-import disabled, ensuring ReadOnly configs on existing ManifestWorks")
+		for _, mw := range manifestWorks {
+			desiredConfigs := buildManifestConfigs(managedCluster, mw.Spec.Workload.Manifests)
+			if helpers.ManifestConfigsEqual(mw.Spec.ManifestConfigs, desiredConfigs) {
+				continue
+			}
+			updated := mw.DeepCopy()
+			updated.Spec.ManifestConfigs = desiredConfigs
+			if _, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(updated.Namespace).Update(
+				ctx, updated, metav1.UpdateOptions{}); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+		return reconcile.Result{}, nil
+	}
+
 	// apply klusterlet manifest works from import secret
 	// Note: create the klusterlet manifest works before importing cluster to avoid the klusterlet applied manifest
 	// works are deleted from managed cluster if the restored hub has same host with the backup hub in the
@@ -141,6 +160,10 @@ func createManifestWorks(
 			panic(err)
 		}
 
+		crdManifests := []workv1.Manifest{
+			{RawExtension: runtime.RawExtension{Raw: jsonData}},
+		}
+
 		crdWork := &workv1.ManifestWork{
 			TypeMeta: metav1.TypeMeta{},
 			ObjectMeta: metav1.ObjectMeta{
@@ -156,10 +179,9 @@ func createManifestWorks(
 			},
 			Spec: workv1.ManifestWorkSpec{
 				Workload: workv1.ManifestsTemplate{
-					Manifests: []workv1.Manifest{
-						{RawExtension: runtime.RawExtension{Raw: jsonData}},
-					},
+					Manifests: crdManifests,
 				},
+				ManifestConfigs: buildManifestConfigs(managedCluster, crdManifests),
 			},
 		}
 
@@ -191,6 +213,7 @@ func createManifestWorks(
 			Workload: workv1.ManifestsTemplate{
 				Manifests: manifests,
 			},
+			ManifestConfigs: buildManifestConfigs(managedCluster, manifests),
 			DeleteOption: &workv1.DeleteOption{
 				PropagationPolicy: workv1.DeletePropagationPolicyTypeOrphan,
 			},
@@ -212,4 +235,50 @@ func createManifestWorks(
 	}
 
 	return works
+}
+
+func buildManifestConfigs(managedCluster *clusterv1.ManagedCluster, manifests []workv1.Manifest) []workv1.ManifestConfigOption {
+	// Check if auto-import is disabled
+	_, autoImportDisabled := managedCluster.Annotations[apiconstants.DisableAutoImportAnnotation]
+	if !autoImportDisabled {
+		// No special config needed - use default Update strategy
+		return nil
+	}
+
+	// Build ReadOnly configs for all manifests
+	configs := make([]workv1.ManifestConfigOption, 0, len(manifests))
+	for _, manifest := range manifests {
+		obj := helpers.MustCreateObject(manifest.Raw)
+		if obj == nil {
+			log.Error(nil, "Empty manifest raw data, skipping ReadOnly config")
+			continue
+		}
+		metadata, err := meta.Accessor(obj)
+		if err != nil {
+			// Skip if we can't get metadata
+			log.Error(err, "Failed to get metadata for manifest, skipping ReadOnly config")
+			continue
+		}
+
+		gvk := obj.GetObjectKind().GroupVersionKind()
+		// Use UnsafeGuessKindToResource to convert Kind to the plural resource name
+		// (e.g. "Secret" -> "secrets", "PriorityClass" -> "priorityclasses").
+		// The work-agent's resourceMatch function requires an exact match on the Resource
+		// field — leaving it empty causes the ReadOnly config to never match.
+		plural, _ := meta.UnsafeGuessKindToResource(gvk)
+		config := workv1.ManifestConfigOption{
+			ResourceIdentifier: workv1.ResourceIdentifier{
+				Group:     gvk.Group,
+				Resource:  plural.Resource,
+				Name:      metadata.GetName(),
+				Namespace: metadata.GetNamespace(),
+			},
+			UpdateStrategy: &workv1.UpdateStrategy{
+				Type: workv1.UpdateStrategyTypeReadOnly,
+			},
+		}
+		configs = append(configs, config)
+	}
+
+	return configs
 }
