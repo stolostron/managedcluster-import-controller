@@ -156,6 +156,121 @@ func TestReconcile(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "disable-auto-import annotation set - ManifestWorks have ReadOnly configs",
+			startObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							"import.open-cluster-management.io/disable-auto-import": "",
+						},
+						Finalizers: []string{constants.ManifestWorkFinalizer},
+					},
+				},
+			},
+			works: []runtime.Object{},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+			},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface) {
+				// Check klusterlet ManifestWork
+				klusterletWork, err := workClient.WorkV1().ManifestWorks("test").Get(context.TODO(), "test-klusterlet", v1.GetOptions{})
+				if err != nil {
+					t.Errorf("failed to get klusterlet ManifestWork: %v", err)
+					return
+				}
+
+				if len(klusterletWork.Spec.ManifestConfigs) == 0 {
+					t.Errorf("expected ManifestConfigs to be set, got none")
+					return
+				}
+
+				// Verify all configs have ReadOnly strategy
+				for i, config := range klusterletWork.Spec.ManifestConfigs {
+					if config.UpdateStrategy == nil {
+						t.Errorf("ManifestConfig %d has nil UpdateStrategy", i)
+						continue
+					}
+					if config.UpdateStrategy.Type != workv1.UpdateStrategyTypeReadOnly {
+						t.Errorf("ManifestConfig %d has UpdateStrategy %s, expected ReadOnly",
+							i, config.UpdateStrategy.Type)
+					}
+				}
+
+				// Check CRDs ManifestWork
+				crdsWork, err := workClient.WorkV1().ManifestWorks("test").Get(context.TODO(), "test-klusterlet-crds", v1.GetOptions{})
+				if err != nil {
+					t.Errorf("failed to get CRDs ManifestWork: %v", err)
+					return
+				}
+
+				if len(crdsWork.Spec.ManifestConfigs) == 0 {
+					t.Errorf("expected CRDs ManifestConfigs to be set, got none")
+					return
+				}
+
+				// Verify CRDs config has ReadOnly strategy
+				for i, config := range crdsWork.Spec.ManifestConfigs {
+					if config.UpdateStrategy == nil {
+						t.Errorf("CRDs ManifestConfig %d has nil UpdateStrategy", i)
+						continue
+					}
+					if config.UpdateStrategy.Type != workv1.UpdateStrategyTypeReadOnly {
+						t.Errorf("CRDs ManifestConfig %d has UpdateStrategy %s, expected ReadOnly",
+							i, config.UpdateStrategy.Type)
+					}
+				}
+			},
+		},
+		{
+			name: "no disable-auto-import annotation - ManifestWorks have no ManifestConfigs",
+			startObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: v1.ObjectMeta{
+						Name:       "test",
+						Finalizers: []string{constants.ManifestWorkFinalizer},
+					},
+				},
+			},
+			works: []runtime.Object{},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+			},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface) {
+				// Check klusterlet ManifestWork
+				klusterletWork, err := workClient.WorkV1().ManifestWorks("test").Get(context.TODO(), "test-klusterlet", v1.GetOptions{})
+				if err != nil {
+					t.Errorf("failed to get klusterlet ManifestWork: %v", err)
+					return
+				}
+
+				if len(klusterletWork.Spec.ManifestConfigs) != 0 {
+					t.Errorf("expected no ManifestConfigs, got %d", len(klusterletWork.Spec.ManifestConfigs))
+				}
+
+				// Check CRDs ManifestWork
+				crdsWork, err := workClient.WorkV1().ManifestWorks("test").Get(context.TODO(), "test-klusterlet-crds", v1.GetOptions{})
+				if err != nil {
+					t.Errorf("failed to get CRDs ManifestWork: %v", err)
+					return
+				}
+
+				if len(crdsWork.Spec.ManifestConfigs) != 0 {
+					t.Errorf("expected no CRDs ManifestConfigs, got %d", len(crdsWork.Spec.ManifestConfigs))
+				}
+			},
+		},
 	}
 
 	for _, c := range cases {
@@ -201,3 +316,4 @@ func TestReconcile(t *testing.T) {
 		})
 	}
 }
+
