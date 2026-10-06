@@ -16,7 +16,6 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/clusterdeployment"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/clusternamespacedeletion"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/csr"
-	"github.com/stolostron/managedcluster-import-controller/pkg/controller/flightctl"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/hosted"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/importconfig"
 	"github.com/stolostron/managedcluster-import-controller/pkg/controller/importstatus"
@@ -38,14 +37,9 @@ func AddToManager(ctx context.Context,
 	clientHolder *helpers.ClientHolder,
 	informerHolder *source.InformerHolder,
 	componentNamespace string,
-	flightctlManager *flightctl.FlightCtlManager,
 	mcRecorder kevents.EventRecorder) error {
 
-	extraCSRApprovalConditions := []func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error){
-		func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error) {
-			return flightctlManager.IsManagedClusterAFlightctlDevice(ctx, helpers.GetClusterName(csr))
-		},
-	}
+	extraCSRApprovalConditions := []func(ctx context.Context, csr *certificatesv1.CertificateSigningRequest) (bool, error){}
 
 	AddToManagerFuncs := []struct {
 		ControllerName string
@@ -108,12 +102,6 @@ func AddToManager(ctx context.Context,
 			resourcecleanup.ControllerName,
 			func() error {
 				return resourcecleanup.Add(ctx, manager, clientHolder, mcRecorder)
-			},
-		},
-		{
-			flightctl.ManagedClusterControllerName,
-			func() error {
-				return flightctl.AddManagedClusterController(ctx, manager, flightctlManager, clientHolder)
 			},
 		},
 	}
