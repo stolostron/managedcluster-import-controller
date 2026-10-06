@@ -189,26 +189,104 @@ If the `ConfigMap` or the key does not exist, the system uses the default strate
 
 Several annotations on the `ManagedCluster` resource can be used to control the auto-import behavior.
 
-## `import.open-cluster-management.io/disable-auto-import: "true"`
+## `import.open-cluster-management.io/disable-auto-import`
 
-Introduced in ACM 2.10, this annotation stops the import-controller from attempting to import a `ManagedCluster`.
+Introduced in ACM 2.10. The import-controller honors this annotation when the key is present. The value is ignored, so `''` and `"true"` have the same effect. The business continuity procedure sets an empty value.
 
-The behavior when the annotation is removed depends on the ACM version and the auto-import strategy. In ACM 2.14 and later, an import is initiated only if the `ManagedClusterImportSucceeded` condition is not `True` or if the strategy is `ImportAndSync`.
+While the annotation is present on a `ManagedCluster`, auto-import is disabled unconditionally. The auto-import strategy, the `ManagedClusterImportSucceeded` condition, and `immediate-import` do not override it.
 
-### Comparison: `spec.hubAcceptsClient: false` vs. `disable-auto-import: "true"`
+*   The import-controller does not apply klusterlet manifests to that cluster. This covers Hive, `auto-import-secret`, and local-cluster import.
+*   The manifestwork controller sets `updateStrategy.type: ReadOnly` on every manifest in the `<cluster>-klusterlet` and `<cluster>-klusterlet-crds` ManifestWorks. The work-agent does not create or update those objects.
 
-The table below outlines the differences that occur after setting `spec.hubAcceptsClient` to `false` or adding the annotation `disable-auto-import: "true"` to a `ManagedCluster` that has already joined the hub and is currently in an available state.
+The cluster stays connected if it was already imported. The annotation does not detach it.
 
-| Setting                     | Auto-Import Disabled                                                                              | Disconnection from Hub                                                                                                   | Cluster State           | Behavior on Removal                                                                                             |
-| --------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ----------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `disable-auto-import: "true"` | Yes, the import-controller will not attempt to import the cluster.                                 | No, the cluster remains connected if it was already imported.                                                            | No change               | Whether an auto-import process is triggered depends on the auto-import strategy and the current state of the `ManagedClusterImportSucceeded` condition.           |
-| `hubAcceptsClient: false`   | No, the auto-import process may still be initiated, but the registration cannot be completed because of insufficient permissions. | Partial; certificate rotation and lease renewal stop, but the work agent continues to communicate until its client certificate expires. | Becomes "Unknown" after ~5 minutes. | No auto-import process will be triggered. However, the cluster may eventually appear as available if the klusterlet remains installed and the bootstrap hub kubeconfig is still valid. |
+Removing the annotation requeues the import reconcilers and clears those `ReadOnly` ManifestConfigs. In ACM 2.14 and later, those reconcilers apply klusterlet manifests only when `ManagedClusterImportSucceeded` is not `True` or the strategy is `ImportAndSync`. The auto-import reconciler also needs `auto-import-secret`. That secret is deleted after a successful import unless it has `managedcluster-import-controller.open-cluster-management.io/keeping-auto-import-secret`. The Hive reconciler uses the Hive admin kubeconfig and does not need `auto-import-secret`.
+
+### True disaster recovery, with the primary hub down
+
+`disable-auto-import` is unnecessary for a failover while the primary hub is down, when that hub uses `ImportOnly`.
+
+Two paths on the primary hub can write `bootstrap-hub-kubeconfig` on the spoke. The import-controller writes it with the managed-cluster client. The work-agent on the spoke writes it by applying the klusterlet ManifestWork it reads from the hub it is registered to. While the primary hub is down, the import-controller is not running, and the spoke cannot read that hub's ManifestWorks.
+
+The restore hub writes `bootstrap-hub-kubeconfig`. The registration agent connects to the restore hub, and the work-agent then applies ManifestWorks from the restore hub.
+
+When the primary hub starts again, `ImportOnly` skips the import-controller apply because `ManagedClusterImportSucceeded` is already `True`. The spoke's work-agent is connected to the restore hub and applies that hub's ManifestWorks. The spoke stays registered to the restore hub.
+
+This is the state after the spoke has switched. If the primary hub starts while the spoke's work-agent is still connected to it, that work-agent can still apply the primary hub's klusterlet ManifestWork and copy the old bootstrap secret back. `ImportOnly` does not change the ManifestWork update strategy.
+
+Under `ImportAndSync`, the Hive and local-cluster reconcilers apply klusterlet manifests again after the primary hub starts. A Hive cluster still has its admin kubeconfig, so that apply can write the primary hub bootstrap secret back onto the spoke. A cluster imported with `auto-import-secret` does not get that re-apply: the secret is deleted after a successful import unless it has the keeping annotation, and the auto-import reconciler returns when the secret is missing.
+
+Use `ImportOnly` on the primary hub for this recovery path. A fresh hub uses `ImportOnly` by default. A hub upgraded from before MCE 2.9 keeps `ImportAndSync` until `import-controller-config` is changed.
+
+### Both hubs active during a disaster recovery test
+
+The annotation matters when the primary hub stays up, as in a disaster recovery simulation. Both hubs then try to manage the same clusters.
+
+The restore hub writes `bootstrap-hub-kubeconfig` on the managed cluster so the registration agent connects to the restore hub. Until that agent restarts, the work-agent on the managed cluster is still connected to the primary hub and resyncs the klusterlet ManifestWork from there. That ManifestWork still contains the primary hub bootstrap secret. With the default `Update` strategy, the work-agent copies that secret back, and the cluster returns to the primary hub.
+
+`ImportOnly` leaves this path in place. It only skips the import-controller's direct apply after `ManagedClusterImportSucceeded` is `True`. The klusterlet ManifestWorks remain on the primary hub, and the work-agent still applies them.
+
+Before the restore, set the annotation on the **primary hub** for every `ManagedCluster` that should move:
+
+```yaml
+metadata:
+  annotations:
+    import.open-cluster-management.io/disable-auto-import: ''
+```
+
+On the primary hub this has two results:
+
+1.  The import-controller does not re-apply klusterlet manifests or refresh the bootstrap secret for that cluster.
+2.  The klusterlet ManifestWorks become `ReadOnly`, so the work-agent that is still connected to the primary hub does not overwrite the bootstrap secret the restore hub just wrote.
+
+The managed cluster then stays with the restore hub while the primary hub is still running. Leave the annotation on the primary hub until that hub should manage the cluster again. Do not set it on the restore hub for clusters that hub should import.
+
+This is the "Disable the automatic import for managed clusters" step in [Run the restore operation while the primary hub cluster is active](https://docs.redhat.com/en/documentation/red_hat_advanced_cluster_management_for_kubernetes/2.17/html/business_continuity/business-cont-overview#keep-hub-active-restore).
+
+### Comparison with `spec.hubAcceptsClient: false`
+
+`disable-auto-import` and `spec.hubAcceptsClient: false` are for a cluster that has already joined and is Available. They do different jobs. An empty `disable-auto-import` value behaves the same as `"true"`.
+
+While the setting is applied:
+
+| | `disable-auto-import` | `hubAcceptsClient: false` |
+| --- | --- | --- |
+| Purpose | Stop this hub from pushing klusterlet manifests. | Stop this hub from accepting the klusterlet. |
+| Hub applies manifests | Stopped unconditionally. Strategy, import status, and `immediate-import` do not override it. Klusterlet ManifestWorks are `ReadOnly`. | Still attempted. Registration cannot finish, because the hub no longer grants the agent access. |
+| Spoke connection | Stays connected. | The hub removes the registration-agent and work-agent cluster role bindings, so those agents lose permission to call this hub. With the `MultipleHubs` feature, the registration agent restarts and selects another bootstrap kubeconfig. |
+| `ManagedCluster` status | Stays Available. | `Available` becomes `Unknown` after 5 lease intervals. The default lease interval is 60 seconds, so the default is about 5 minutes. |
+
+When the setting is undone:
+
+| | Remove `disable-auto-import` | Set `hubAcceptsClient: true` |
+| --- | --- | --- |
+| Auto-import | Starts only when `ManagedClusterImportSucceeded` is not `True`, or the strategy is `ImportAndSync`. | Does not start. |
+| ManifestWorks | `ReadOnly` is cleared. The work-agent applies klusterlet manifests again. | Unchanged by this field. |
+| Spoke connection | Unchanged. The cluster was still connected. | Setting the field to `true` recreates the agent RBAC. The cluster can become Available again while the klusterlet is still installed and its hub client certificate is still valid. |
 
 ## `import.open-cluster-management.io/immediate-import`
 
-Introduced in ACM 2.14, adding this annotation (with an empty value) to a `ManagedCluster` resource triggers an immediate import process, regardless of the configured auto-import strategy.
+Introduced in ACM 2.14. An empty value forces the hub to apply klusterlet manifests for that `ManagedCluster` again.
 
-*   If the import succeeds, the annotation's value is updated to `Completed`.
-*   If the import fails, the controller will retry with an exponential backoff.
+Only an empty value starts an import. The import-controller ignores every other value.
 
-**Note**: This annotation has no effect if the `disable-auto-import` annotation is present.
+| Value | Effect |
+| --- | --- |
+| `''` | Starts an import on the next reconcile. |
+| `Completed` | Ignored. The hub has finished the import this annotation requested. |
+| Any other non-empty value | Ignored. |
+
+The auto-import, Hive, and local-cluster reconcilers watch `ManagedCluster` updates. While the value is empty, an update of that `ManagedCluster` enqueues a reconcile. After the value is `Completed`, this annotation no longer enqueues a reconcile.
+
+An empty value changes the `ImportOnly` check:
+
+*   Under `ImportOnly`, the hub stops applying klusterlet manifests once `ManagedClusterImportSucceeded` is `True`. An empty `immediate-import` skips that check when an import reconciler observes it, so that reconciler applies the manifests again on a cluster that is already imported. The import-status controller sets the value to `Completed` as soon as the `<cluster>-klusterlet` ManifestWork is available. On a cluster that is already imported, that ManifestWork is already available, so import-status can set `Completed` on the same update that added the empty value. If that update lands before an import reconciler runs, `ImportOnly` skips the re-apply.
+*   Under `ImportAndSync`, the hub already reapplies when the auto-import secret or a klusterlet ManifestWork changes. The empty annotation is how to start that apply from a `ManagedCluster` update alone.
+
+The apply uses the same credentials as a normal auto-import: the `auto-import-secret`, the Hive admin kubeconfig, or the hub client for the local cluster. The import-controller waits until the klusterlet ManifestWorks exist, then applies the import manifests on the managed cluster.
+
+`disable-auto-import` is checked first and disables auto-import unconditionally. While it is present, the reconcile returns before `immediate-import` is read. An empty `immediate-import` does not start an import, and it does not clear `ReadOnly` on the klusterlet ManifestWorks.
+
+When the klusterlet ManifestWork is available, the import-status controller sets the annotation value to `Completed`. The key stays on the `ManagedCluster`. The controller does not delete it. If the annotation is missing or already `Completed`, that update does nothing.
+
+While the value stays empty, a failed apply is retried. After the value is `Completed`, `ImportOnly` again skips a cluster whose import has succeeded. To force another import, set the value back to an empty string.
