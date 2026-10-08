@@ -202,6 +202,11 @@ func (in *KlusterletConfigSpec) DeepCopyInto(out *KlusterletConfigSpec) {
 		*out = new(v1.AddOnRegistrationDriver)
 		(*in).DeepCopyInto(*out)
 	}
+	if in.ResourceRequirements != nil {
+		in, out := &in.ResourceRequirements, &out.ResourceRequirements
+		*out = new(v1.ResourceRequirement)
+		(*in).DeepCopyInto(*out)
+	}
 	return
 }
 

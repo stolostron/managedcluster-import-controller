@@ -1207,3 +1207,18 @@ func ValidateClusterImportConfigSecret(secret *corev1.Secret) error {
 
 	return nil
 }
+
+// IsHiveInstalled returns true when the Hive ClusterDeployment CRD is present on
+// the hub cluster. Controllers that watch ClusterDeployment must be skipped when
+// Hive is not installed to avoid controller-runtime informer sync timeouts.
+func IsHiveInstalled(ctx context.Context, apiExtensionsClient apiextensionsclient.Interface) (bool, error) {
+	_, err := apiExtensionsClient.ApiextensionsV1().CustomResourceDefinitions().Get(
+		ctx, "clusterdeployments.hive.openshift.io", metav1.GetOptions{})
+	if errors.IsNotFound(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
