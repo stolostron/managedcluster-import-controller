@@ -83,6 +83,7 @@ var map_KlusterletConfigSpec = map[string]string{
 	"workStatusSyncInterval":                 "WorkStatusSyncInterval is the interval for the work agent to check the status of ManifestWorks. Larger value means less frequent status sync and less api calls to the managed cluster, vice versa. The value(x) should be: 5s <= x <= 1h.",
 	"registrationDriver":                     "This provides driver details required to register with hub",
 	"addOnKubeClientRegistrationDriver":      "This provides driver details required to register add-ons with hub for kubeClient type",
+	"resourceRequirements":                   "ResourceRequirements specify QoS classes of deployments managed by the klusterlet. It applies to all the containers in the klusterlet agent deployments (registration-agent, work-agent). If not set, the default resource requirements will be used.",
 }
 
 func (KlusterletConfigSpec) SwaggerDoc() map[string]string {
