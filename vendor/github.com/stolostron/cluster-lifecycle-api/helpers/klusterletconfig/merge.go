@@ -27,6 +27,7 @@ var klusterletConfigMergeFuncs map[string]func(base, override interface{}) (inte
 	"MultipleHubsConfig":                     override,
 	"RegistrationDriver":                     override,
 	"AddOnKubeClientRegistrationDriver":      override,
+	"ResourceRequirements":                   override,
 }
 
 func override(base, toMerge interface{}) (interface{}, error) {

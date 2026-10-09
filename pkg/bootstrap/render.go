@@ -209,6 +209,12 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 		return nil, nil, nil, fmt.Errorf("invalid install mode: %s", installMode)
 	}
 
+	// ResourceRequirements: apply from KlusterletConfig to the Klusterlet CR spec if set.
+	// This overrides the default shipped values and is rendered into the ManifestWork.
+	if c.klusterletConfig != nil && c.klusterletConfig.Spec.ResourceRequirements != nil {
+		c.chartConfig.Klusterlet.ResourceRequirement = c.klusterletConfig.Spec.ResourceRequirements.DeepCopy()
+	}
+
 	c.chartConfig.NoOperator = installNoOperator(installMode, c.klusterletConfig)
 
 	var managedClusterAnnotations map[string]string

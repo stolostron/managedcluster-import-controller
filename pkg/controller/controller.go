@@ -28,6 +28,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 	certificatesv1 "k8s.io/api/certificates/v1"
 	kevents "k8s.io/client-go/tools/events"
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 
@@ -78,12 +79,30 @@ func AddToManager(ctx context.Context,
 		{
 			clusterdeployment.ControllerName,
 			func() error {
+				installed, err := helpers.IsHiveInstalled(ctx, clientHolder.APIExtensionsClient)
+				if err != nil {
+					return fmt.Errorf("failed to check if Hive is installed: %w", err)
+				}
+				if !installed {
+					ctrl.Log.Info("Hive ClusterDeployment CRD not found, skipping clusterdeployment controller")
+					return nil
+				}
 				return clusterdeployment.Add(ctx, manager, clientHolder, informerHolder, mcRecorder, componentNamespace)
 			},
 		},
 		{
 			clusternamespacedeletion.ControllerName,
-			func() error { return clusternamespacedeletion.Add(ctx, manager, clientHolder) },
+			func() error {
+				installed, err := helpers.IsHiveInstalled(ctx, clientHolder.APIExtensionsClient)
+				if err != nil {
+					return fmt.Errorf("failed to check if Hive is installed: %w", err)
+				}
+				if !installed {
+					ctrl.Log.Info("Hive ClusterDeployment CRD not found, skipping clusternamespacedeletion controller")
+					return nil
+				}
+				return clusternamespacedeletion.Add(ctx, manager, clientHolder)
+			},
 		},
 		{
 			importstatus.ControllerName,
