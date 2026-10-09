@@ -55,13 +55,15 @@ func TestReconcile(t *testing.T) {
 	defer apiServer.Stop()
 
 	cases := []struct {
-		name                    string
-		objs                    []client.Object
-		works                   []runtime.Object
-		secrets                 []runtime.Object
-		autoImportStrategy      string
-		expectedErr             bool
-		expectedConditionReason string
+		name                       string
+		objs                       []client.Object
+		works                      []runtime.Object
+		secrets                    []runtime.Object
+		autoImportStrategy         string
+		expectedErr                bool
+		expectedConditionReason      string
+		expectedClusterDeployPause   bool // whether ClusterDeployment should be paused after reconcile
+		expectedClusterDeployUnpause bool // whether ClusterDeployment should be unpaused after reconcile
 	}{
 		{
 			name:    "no clusterdeployment",
@@ -70,7 +72,7 @@ func TestReconcile(t *testing.T) {
 			secrets: []runtime.Object{},
 		},
 		{
-			name: "no cluster",
+			name: "no cluster - clusterdeployment should be paused",
 			objs: []client.Object{
 				&hivev1.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
@@ -82,8 +84,89 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			works:   []runtime.Object{},
-			secrets: []runtime.Object{},
+			works:                      []runtime.Object{},
+			secrets:                    []runtime.Object{},
+			expectedClusterDeployPause: true,
+		},
+		{
+			name: "cluster is being deleted - clusterdeployment should be paused",
+			objs: []client.Object{
+				func() *clusterv1.ManagedCluster {
+					mc := testinghelpers.NewManagedClusterBuilder("test").Build()
+					now := metav1.Now()
+					mc.DeletionTimestamp = &now
+					mc.Finalizers = []string{constants.ImportFinalizer}
+					return mc
+				}(),
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+					},
+				},
+			},
+			works:                      []runtime.Object{},
+			secrets:                    []runtime.Object{},
+			expectedClusterDeployPause: true,
+		},
+		{
+			name: "cluster is being deleted - clusterdeployment already paused",
+			objs: []client.Object{
+				func() *clusterv1.ManagedCluster {
+					mc := testinghelpers.NewManagedClusterBuilder("test").Build()
+					now := metav1.Now()
+					mc.DeletionTimestamp = &now
+					mc.Finalizers = []string{constants.ImportFinalizer}
+					return mc
+				}(),
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+						Annotations: map[string]string{
+							constants.HiveReconcilePauseAnnotation: "true",
+						},
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+					},
+				},
+			},
+			works:                      []runtime.Object{},
+			secrets:                    []runtime.Object{},
+			expectedClusterDeployPause: true,
+		},
+		{
+			name: "cluster re-imported - clusterdeployment should be unpaused",
+			objs: []client.Object{
+				testinghelpers.NewManagedClusterBuilder("test").Build(),
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+						Annotations: map[string]string{
+							constants.HiveReconcilePauseAnnotation: "true",
+						},
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+					},
+				},
+			},
+			works: []runtime.Object{},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: "test",
+					},
+				},
+			},
+			expectedClusterDeployUnpause: true,
 		},
 		{
 			name: "auto import disabled",
@@ -396,6 +479,35 @@ func TestReconcile(t *testing.T) {
 				if condition != nil && condition.Reason != c.expectedConditionReason {
 					t.Errorf("name %v : expect condition reason %s, got %s, message: %s",
 						c.name, c.expectedConditionReason, condition.Reason, condition.Message)
+				}
+			}
+
+			// Verify ClusterDeployment pause annotation
+			if c.expectedClusterDeployPause {
+				cd := &hivev1.ClusterDeployment{}
+				err = r.client.Get(context.TODO(), types.NamespacedName{Name: "test", Namespace: "test"}, cd)
+				if err != nil {
+					t.Errorf("name %v : get clusterdeployment error: %v", c.name, err)
+				} else {
+					pauseVal, hasPause := cd.Annotations[constants.HiveReconcilePauseAnnotation]
+					if !hasPause || pauseVal != "true" {
+						t.Errorf("name %v : expected ClusterDeployment to have %s=true annotation, got: %v",
+							c.name, constants.HiveReconcilePauseAnnotation, cd.Annotations)
+					}
+				}
+			}
+
+			// Verify ClusterDeployment unpause annotation removed
+			if c.expectedClusterDeployUnpause {
+				cd := &hivev1.ClusterDeployment{}
+				err = r.client.Get(context.TODO(), types.NamespacedName{Name: "test", Namespace: "test"}, cd)
+				if err != nil {
+					t.Errorf("name %v : get clusterdeployment error: %v", c.name, err)
+				} else {
+					if _, hasPause := cd.Annotations[constants.HiveReconcilePauseAnnotation]; hasPause {
+						t.Errorf("name %v : expected ClusterDeployment to NOT have %s annotation after unpause, got: %v",
+							c.name, constants.HiveReconcilePauseAnnotation, cd.Annotations)
+					}
 				}
 			}
 		})
