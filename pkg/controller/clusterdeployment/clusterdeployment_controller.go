@@ -98,15 +98,25 @@ func (r *ReconcileClusterDeployment) Reconcile(
 	managedCluster := &clusterv1.ManagedCluster{}
 	err = r.client.Get(ctx, types.NamespacedName{Name: clusterName}, managedCluster)
 	if errors.IsNotFound(err) {
-		// the managed cluster could be deleted, do nothing
-		return reconcile.Result{}, nil
+		// the managed cluster could be deleted, pause the ClusterDeployment to stop
+		// Hive from reconciling SyncSets and other resources on the detached cluster.
+		return reconcile.Result{}, r.pauseClusterDeployment(ctx, clusterDeployment)
 	}
 	if err != nil {
 		return reconcile.Result{}, err
 	}
 
 	if !managedCluster.DeletionTimestamp.IsZero() {
-		return reconcile.Result{}, nil
+		// the managed cluster is being deleted (detached), pause the ClusterDeployment
+		// to stop Hive from reconciling SyncSets and other resources.
+		return reconcile.Result{}, r.pauseClusterDeployment(ctx, clusterDeployment)
+	}
+
+	// The managed cluster exists and is not being deleted.
+	// If the ClusterDeployment was previously paused (e.g., during a prior detach),
+	// unpause it to allow Hive to resume reconciliation for the re-imported cluster.
+	if err := r.unpauseClusterDeployment(ctx, clusterDeployment); err != nil {
+		return reconcile.Result{}, err
 	}
 
 	if _, autoImportDisabled := managedCluster.Annotations[apiconstants.DisableAutoImportAnnotation]; autoImportDisabled {
@@ -259,5 +269,92 @@ func (r *ReconcileClusterDeployment) removeImportFinalizer(
 
 	r.recorder.Eventf("ClusterDeploymentFinalizerRemoved",
 		"The clusterdeployment %s finalizer %s is removed", clusterDeployment.Name, constants.ImportFinalizer)
+	return nil
+}
+
+// pauseClusterDeployment adds the hive.openshift.io/reconcile-pause annotation to the
+// ClusterDeployment to stop Hive from reconciling SyncSets and other resources.
+// This is called when a ManagedCluster is being deleted (detached) to ensure that
+// the old hub no longer manages the cluster after detachment.
+// See: https://github.com/openshift/hive/pull/1927
+func (r *ReconcileClusterDeployment) pauseClusterDeployment(
+	ctx context.Context, clusterDeployment *hivev1.ClusterDeployment) error {
+
+	// Check if already paused - don't override existing pause regardless of who set it
+	if clusterDeployment.Annotations != nil {
+		if val, ok := clusterDeployment.Annotations[constants.HiveReconcilePauseAnnotation]; ok && val == constants.LabelValueTrue {
+			log.V(5).Info("ClusterDeployment is already paused, skipping",
+				"clusterDeployment", clusterDeployment.Name)
+			return nil
+		}
+	}
+
+	patch := client.MergeFrom(clusterDeployment.DeepCopy())
+
+	if clusterDeployment.Annotations == nil {
+		clusterDeployment.Annotations = make(map[string]string)
+	}
+	clusterDeployment.Annotations[constants.HiveReconcilePauseAnnotation] = constants.LabelValueTrue
+	// Set ownership marker so we only unpause what we paused
+	clusterDeployment.Annotations[constants.HiveReconcilePauseOwnerAnnotation] = constants.LabelValueTrue
+
+	if err := r.client.Patch(ctx, clusterDeployment, patch); err != nil {
+		return err
+	}
+
+	log.Info("ClusterDeployment paused to stop Hive reconciliation on detach",
+		"clusterDeployment", clusterDeployment.Name)
+	r.recorder.Eventf("ClusterDeploymentPaused",
+		"The clusterdeployment %s is paused to stop Hive reconciliation after managed cluster detach",
+		clusterDeployment.Name)
+	return nil
+}
+
+// unpauseClusterDeployment removes the hive.openshift.io/reconcile-pause annotation from the
+// ClusterDeployment to allow Hive to resume reconciliation.
+// This is called when a ManagedCluster is re-imported (exists and is not being deleted)
+// to ensure Hive can manage the cluster again.
+// The pause is only removed if this controller set it (ownership marker is present),
+// preserving any operator-set pauses.
+func (r *ReconcileClusterDeployment) unpauseClusterDeployment(
+	ctx context.Context, clusterDeployment *hivev1.ClusterDeployment) error {
+
+	// Check if not paused
+	if clusterDeployment.Annotations == nil {
+		return nil
+	}
+	if _, ok := clusterDeployment.Annotations[constants.HiveReconcilePauseAnnotation]; !ok {
+		// Pause annotation is absent - clean up orphaned owner marker if present
+		if _, hasOwner := clusterDeployment.Annotations[constants.HiveReconcilePauseOwnerAnnotation]; hasOwner {
+			patch := client.MergeFrom(clusterDeployment.DeepCopy())
+			delete(clusterDeployment.Annotations, constants.HiveReconcilePauseOwnerAnnotation)
+			if err := r.client.Patch(ctx, clusterDeployment, patch); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	// Only unpause if we set the pause (ownership marker is present)
+	// This preserves operator-set pauses that we didn't create
+	if _, ok := clusterDeployment.Annotations[constants.HiveReconcilePauseOwnerAnnotation]; !ok {
+		log.V(5).Info("ClusterDeployment is paused but not by this controller, preserving pause",
+			"clusterDeployment", clusterDeployment.Name)
+		return nil
+	}
+
+	patch := client.MergeFrom(clusterDeployment.DeepCopy())
+	delete(clusterDeployment.Annotations, constants.HiveReconcilePauseAnnotation)
+	delete(clusterDeployment.Annotations, constants.HiveReconcilePauseOwnerAnnotation)
+
+	if err := r.client.Patch(ctx, clusterDeployment, patch); err != nil {
+		return err
+	}
+
+	log.Info("ClusterDeployment unpaused to allow Hive reconciliation on re-import",
+		"clusterDeployment", clusterDeployment.Name)
+	r.recorder.Eventf("ClusterDeploymentUnpaused",
+		"The clusterdeployment %s is unpaused to allow Hive reconciliation after managed cluster re-import",
+		clusterDeployment.Name)
 	return nil
 }
