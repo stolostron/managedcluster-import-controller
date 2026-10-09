@@ -5,6 +5,7 @@ package clusterdeployment
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -55,13 +56,16 @@ func TestReconcile(t *testing.T) {
 	defer apiServer.Stop()
 
 	cases := []struct {
-		name                    string
-		objs                    []client.Object
-		works                   []runtime.Object
-		secrets                 []runtime.Object
-		autoImportStrategy      string
-		expectedErr             bool
-		expectedConditionReason string
+		name                       string
+		objs                       []client.Object
+		works                           []runtime.Object
+		secrets                         []runtime.Object
+		autoImportStrategy              string
+		expectedErr                     bool
+		expectedConditionReason         string
+		expectedClusterDeployPause      bool // whether ClusterDeployment should be paused after reconcile
+		expectedClusterDeployPauseOwner bool // whether ClusterDeployment should have the pause owner annotation
+		expectedClusterDeployUnpause    bool // whether ClusterDeployment should be unpaused after reconcile
 	}{
 		{
 			name:    "no clusterdeployment",
@@ -70,7 +74,7 @@ func TestReconcile(t *testing.T) {
 			secrets: []runtime.Object{},
 		},
 		{
-			name: "no cluster",
+			name: "no cluster - clusterdeployment should be paused",
 			objs: []client.Object{
 				&hivev1.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
@@ -82,8 +86,155 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
+			works:                           []runtime.Object{},
+			secrets:                         []runtime.Object{},
+			expectedClusterDeployPause:      true,
+			expectedClusterDeployPauseOwner: true,
+		},
+		{
+			name: "cluster is being deleted - clusterdeployment should be paused",
+			objs: []client.Object{
+				func() *clusterv1.ManagedCluster {
+					mc := testinghelpers.NewManagedClusterBuilder("test").Build()
+					now := metav1.Now()
+					mc.DeletionTimestamp = &now
+					mc.Finalizers = []string{constants.ImportFinalizer}
+					return mc
+				}(),
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+					},
+				},
+			},
+			works:                           []runtime.Object{},
+			secrets:                         []runtime.Object{},
+			expectedClusterDeployPause:      true,
+			expectedClusterDeployPauseOwner: true,
+		},
+		{
+			name: "cluster is being deleted - clusterdeployment already paused",
+			objs: []client.Object{
+				func() *clusterv1.ManagedCluster {
+					mc := testinghelpers.NewManagedClusterBuilder("test").Build()
+					now := metav1.Now()
+					mc.DeletionTimestamp = &now
+					mc.Finalizers = []string{constants.ImportFinalizer}
+					return mc
+				}(),
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+						Annotations: map[string]string{
+							constants.HiveReconcilePauseAnnotation:      constants.LabelValueTrue,
+							constants.HiveReconcilePauseOwnerAnnotation: constants.LabelValueTrue,
+						},
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+					},
+				},
+			},
+			works:                           []runtime.Object{},
+			secrets:                         []runtime.Object{},
+			expectedClusterDeployPause:      true,
+			expectedClusterDeployPauseOwner: true,
+		},
+		{
+			name: "cluster is being deleted - operator pause with alternative boolean not overwritten",
+			objs: []client.Object{
+				func() *clusterv1.ManagedCluster {
+					mc := testinghelpers.NewManagedClusterBuilder("test").Build()
+					now := metav1.Now()
+					mc.DeletionTimestamp = &now
+					mc.Finalizers = []string{constants.ImportFinalizer}
+					return mc
+				}(),
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+						Annotations: map[string]string{
+							// Operator set pause with "True" (capitalized) - should be recognized
+							// as already paused and not overwritten with our ownership marker
+							constants.HiveReconcilePauseAnnotation: "True",
+						},
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+					},
+				},
+			},
 			works:   []runtime.Object{},
 			secrets: []runtime.Object{},
+			// Pause should remain but we should NOT add owner marker since we didn't set it
+			expectedClusterDeployPause: true,
+		},
+		{
+			name: "cluster re-imported - clusterdeployment should be unpaused",
+			objs: []client.Object{
+				testinghelpers.NewManagedClusterBuilder("test").Build(),
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+						Annotations: map[string]string{
+							constants.HiveReconcilePauseAnnotation:      constants.LabelValueTrue,
+							constants.HiveReconcilePauseOwnerAnnotation: constants.LabelValueTrue,
+						},
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+					},
+				},
+			},
+			works: []runtime.Object{},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: "test",
+					},
+				},
+			},
+			expectedClusterDeployUnpause: true,
+		},
+		{
+			name: "cluster re-imported - operator-set pause should be preserved",
+			objs: []client.Object{
+				testinghelpers.NewManagedClusterBuilder("test").Build(),
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+						Annotations: map[string]string{
+							// Pause set by operator (no owner annotation) should be preserved
+							constants.HiveReconcilePauseAnnotation: constants.LabelValueTrue,
+						},
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+					},
+				},
+			},
+			works: []runtime.Object{},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: "test",
+					},
+				},
+			},
+			// Pause should NOT be removed since we didn't set it (no owner annotation)
+			expectedClusterDeployPause: true,
 		},
 		{
 			name: "auto import disabled",
@@ -396,6 +547,56 @@ func TestReconcile(t *testing.T) {
 				if condition != nil && condition.Reason != c.expectedConditionReason {
 					t.Errorf("name %v : expect condition reason %s, got %s, message: %s",
 						c.name, c.expectedConditionReason, condition.Reason, condition.Message)
+				}
+			}
+
+			// Verify ClusterDeployment pause annotation
+			if c.expectedClusterDeployPause {
+				cd := &hivev1.ClusterDeployment{}
+				err = r.client.Get(context.TODO(), types.NamespacedName{Name: "test", Namespace: "test"}, cd)
+				if err != nil {
+					t.Errorf("name %v : get clusterdeployment error: %v", c.name, err)
+				} else {
+					pauseVal, hasPause := cd.Annotations[constants.HiveReconcilePauseAnnotation]
+					// Use strconv.ParseBool to match Hive's boolean parsing semantics
+					paused, parseErr := strconv.ParseBool(pauseVal)
+					if !hasPause || parseErr != nil || !paused {
+						t.Errorf("name %v : expected ClusterDeployment to have %s with truthy value, got: %v",
+							c.name, constants.HiveReconcilePauseAnnotation, cd.Annotations)
+					}
+					// Verify owner annotation presence matches expectation
+					_, hasOwner := cd.Annotations[constants.HiveReconcilePauseOwnerAnnotation]
+					if c.expectedClusterDeployPauseOwner {
+						ownerVal := cd.Annotations[constants.HiveReconcilePauseOwnerAnnotation]
+						if !hasOwner || ownerVal != constants.LabelValueTrue {
+							t.Errorf("name %v : expected ClusterDeployment to have %s=true annotation, got: %v",
+								c.name, constants.HiveReconcilePauseOwnerAnnotation, cd.Annotations)
+						}
+					} else {
+						// For operator-set pauses, verify no ownership annotation is present
+						if hasOwner {
+							t.Errorf("name %v : expected ClusterDeployment to NOT have %s annotation (operator-set pause), got: %v",
+								c.name, constants.HiveReconcilePauseOwnerAnnotation, cd.Annotations)
+						}
+					}
+				}
+			}
+
+			// Verify ClusterDeployment unpause annotation removed
+			if c.expectedClusterDeployUnpause {
+				cd := &hivev1.ClusterDeployment{}
+				err = r.client.Get(context.TODO(), types.NamespacedName{Name: "test", Namespace: "test"}, cd)
+				if err != nil {
+					t.Errorf("name %v : get clusterdeployment error: %v", c.name, err)
+				} else {
+					if _, hasPause := cd.Annotations[constants.HiveReconcilePauseAnnotation]; hasPause {
+						t.Errorf("name %v : expected ClusterDeployment to NOT have %s annotation after unpause, got: %v",
+							c.name, constants.HiveReconcilePauseAnnotation, cd.Annotations)
+					}
+					if _, hasOwner := cd.Annotations[constants.HiveReconcilePauseOwnerAnnotation]; hasOwner {
+						t.Errorf("name %v : expected ClusterDeployment to NOT have %s annotation after unpause, got: %v",
+							c.name, constants.HiveReconcilePauseOwnerAnnotation, cd.Annotations)
+					}
 				}
 			}
 		})
