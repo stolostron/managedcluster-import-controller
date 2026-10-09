@@ -78,6 +78,16 @@ const (
 	CreatedViaHypershift = "hypershift"
 )
 
+const (
+	// HiveReconcilePauseAnnotation is the annotation key used to pause Hive reconciliation
+	// on a ClusterDeployment. When set to "true", Hive controllers will stop reconciling
+	// the ClusterDeployment and its associated resources (e.g., SyncSets).
+	// This is used during cluster detach to prevent the old hub from continuing to
+	// manage the cluster after it has been detached.
+	// See: https://github.com/openshift/hive/pull/1927
+	HiveReconcilePauseAnnotation = "hive.openshift.io/reconcile-pause"
+)
+
 // NOSONAR-START
 /* #nosec */
 const (
