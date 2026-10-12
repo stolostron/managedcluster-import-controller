@@ -12,6 +12,7 @@ import (
 	"github.com/go-openapi/strfmt"
 	"github.com/go-openapi/swag"
 	"github.com/go-openapi/validate"
+	"github.com/lib/pq"
 )
 
 // MonitoredOperator monitored operator
@@ -19,9 +20,15 @@ import (
 // swagger:model monitored-operator
 type MonitoredOperator struct {
 
+	// List of identifier of the bundles associated with the operator. Can be empty.
+	Bundles pq.StringArray `json:"bundles" gorm:"type:text[]"`
+
 	// The cluster that this operator is associated with.
 	// Format: uuid
 	ClusterID strfmt.UUID `json:"cluster_id,omitempty" gorm:"primaryKey"`
+
+	// Whether the operator can't be installed without being required by another operator.
+	DependencyOnly bool `json:"dependency_only,omitempty"`
 
 	// Unique name of the operator.
 	Name string `json:"name,omitempty" gorm:"primaryKey"`
@@ -34,6 +41,9 @@ type MonitoredOperator struct {
 
 	// Blob of operator-dependent parameters that are required for installation.
 	Properties string `json:"properties,omitempty" gorm:"type:text"`
+
+	// IDs of the bundles this operator was selected through. Empty for standalone selections. An operator can belong to multiple bundles.
+	SourceBundles pq.StringArray `json:"source_bundles" gorm:"type:text[]"`
 
 	// status
 	Status OperatorStatus `json:"status,omitempty"`

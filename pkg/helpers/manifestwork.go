@@ -136,8 +136,7 @@ func ForceDeleteManifestWork(ctx context.Context, workClient workclient.Interfac
 	}
 
 	recorder.Eventf("ManifestWorksForceDeleted",
-		fmt.Sprintf("The manifest work %s/%s is force deleted", manifestWork.Namespace, manifestWork.Name))
-
+		"The manifest work %s/%s is force deleted", manifestWork.Namespace, manifestWork.Name)
 	return nil
 }
 
@@ -205,7 +204,7 @@ func ForceDeleteWorkRoleBinding(ctx context.Context, kubeClient kubernetes.Inter
 	}
 
 	recorder.Eventf("workRoleBindingDeleted",
-		fmt.Sprintf("The manifest work roleBinding %s/%s is force deleted", clusterName, workRoleBindingName))
+		"The manifest work roleBinding %s/%s is force deleted", clusterName, workRoleBindingName)
 	return nil
 }
 

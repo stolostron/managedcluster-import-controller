@@ -9,8 +9,10 @@ import (
 
 // CSISnapshotControllerSpecApplyConfiguration represents a declarative configuration of the CSISnapshotControllerSpec type for use
 // with apply.
+//
+// CSISnapshotControllerSpec is the specification of the desired behavior of the CSISnapshotController operator.
 type CSISnapshotControllerSpecApplyConfiguration struct {
-	OperatorSpecApplyConfiguration `json:",inline"`
+	OperatorSpecApplyConfiguration `json:""`
 }
 
 // CSISnapshotControllerSpecApplyConfiguration constructs a declarative configuration of the CSISnapshotControllerSpec type for use with

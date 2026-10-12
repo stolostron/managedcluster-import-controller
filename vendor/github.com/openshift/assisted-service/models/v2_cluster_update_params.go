@@ -24,10 +24,6 @@ type V2ClusterUpdateParams struct {
 	// A comma-separated list of NTP sources (name or IP) going to be added to all the hosts.
 	AdditionalNtpSource *string `json:"additional_ntp_source,omitempty"`
 
-	// (DEPRECATED) The virtual IP used to reach the OpenShift cluster's API.
-	// Pattern: ^(?:(?:(?:[0-9]{1,3}\.){3}[0-9]{1,3})|(?:(?:[0-9a-fA-F]*:[0-9a-fA-F]*){2,}))?$
-	APIVip *string `json:"api_vip,omitempty"`
-
 	// The domain name used to reach the OpenShift cluster API.
 	APIVipDNSName *string `json:"api_vip_dns_name,omitempty"`
 
@@ -49,6 +45,9 @@ type V2ClusterUpdateParams struct {
 	// Cluster networks that are associated with this cluster.
 	ClusterNetworks []*ClusterNetwork `json:"cluster_networks"`
 
+	// Specifies the required number of control plane nodes that should be part of the cluster.
+	ControlPlaneCount *int64 `json:"control_plane_count,omitempty"`
+
 	// Installation disks encryption mode and host roles to be applied.
 	DiskEncryption *DiskEncryption `json:"disk_encryption,omitempty" gorm:"embedded;embeddedPrefix:disk_encryption_"`
 
@@ -62,19 +61,18 @@ type V2ClusterUpdateParams struct {
 	//
 	HTTPSProxy *string `json:"https_proxy,omitempty"`
 
-	// Enable/disable hyperthreading on master nodes, worker nodes, or all nodes.
-	// Enum: [masters workers all none]
+	// Enable/disable hyperthreading on master nodes, arbiter nodes, worker nodes, or a combination of them.
+	// Enum: [none masters arbiters workers masters,arbiters masters,workers arbiters,workers masters,arbiters,workers all]
 	Hyperthreading *string `json:"hyperthreading,omitempty"`
 
 	// Explicit ignition endpoint overrides the default ignition endpoint.
 	IgnitionEndpoint *IgnitionEndpoint `json:"ignition_endpoint,omitempty" gorm:"embedded;embeddedPrefix:ignition_endpoint_"`
 
-	// (DEPRECATED) The virtual IP used for cluster ingress traffic.
-	// Pattern: ^(?:(?:(?:[0-9]{1,3}\.){3}[0-9]{1,3})|(?:(?:[0-9a-fA-F]*:[0-9a-fA-F]*){2,}))?$
-	IngressVip *string `json:"ingress_vip,omitempty"`
-
 	// The virtual IPs used for cluster ingress traffic. Enter one IP address for single-stack clusters, or up to two for dual-stack clusters (at most one IP address per IP stack used). The order of stacks should be the same as order of subnets in Cluster Networks, Service Networks, and Machine Networks.
 	IngressVips []*IngressVip `json:"ingress_vips"`
+
+	// load balancer
+	LoadBalancer *LoadBalancer `json:"load_balancer,omitempty" gorm:"embedded;embeddedPrefix:load_balancer_"`
 
 	// A CIDR that all hosts belonging to the cluster should have an interfaces with IP address that belongs to this CIDR. The api_vip belongs to this CIDR.
 	// Pattern: ^(?:(?:(?:[0-9]{1,3}\.){3}[0-9]{1,3}\/(?:(?:[0-9])|(?:[1-2][0-9])|(?:3[0-2])))|(?:(?:[0-9a-fA-F]*:[0-9a-fA-F]*){2,})/(?:(?:[0-9])|(?:[1-9][0-9])|(?:1[0-1][0-9])|(?:12[0-8])))$
@@ -89,14 +87,34 @@ type V2ClusterUpdateParams struct {
 	Name *string `json:"name,omitempty"`
 
 	// The desired network type used.
-	// Enum: [OpenShiftSDN OVNKubernetes]
+	// - OVNKubernetes: Default CNI for OpenShift (recommended)
+	// - OpenShiftSDN: Legacy SDN (deprecated in newer versions)
+	// - CiscoACI: Cisco ACI CNI (requires custom manifests)
+	// - Cilium: Isovalent Cilium CNI (requires custom manifests)
+	// - Calico: Tigera Calico CNI (requires custom manifests)
+	// - None: No CNI - user must provide custom CNI manifests
+	// Note: Third-party CNIs (CiscoACI, Cilium, Calico, None) require uploading
+	// CNI manifests via the custom manifests API before installation.
+	//
+	// Enum: [OpenShiftSDN OVNKubernetes CiscoACI Cilium Calico None]
 	NetworkType *string `json:"network_type,omitempty"`
 
 	// An "*" or a comma-separated list of destination domain names, domains, IP addresses, or other network CIDRs to exclude from proxying.
 	NoProxy *string `json:"no_proxy,omitempty"`
 
-	// List of OLM operators to be installed.
+	// A comma-separated list of NTP sources (name or IP) to be used as the only NTP configuration for the cluster hosts.
+	NtpSources *string `json:"ntp_sources,omitempty"`
+
+	// List of standalone OLM operators to be installed (not part of any bundle).
+	// For the full list of supported operators, check the endpoint `/v2/supported-operators`:
+	//
 	OlmOperators []*OperatorCreateParams `json:"olm_operators"`
+
+	// List of operator bundles selected by the user with their optional operator choices.
+	// The backend expands bundles into their required operators, adds selected optional operators,
+	// resolves all dependencies, and tracks bundle membership via source_bundles on monitored operators.
+	//
+	OperatorBundles []*BundleCreateParams `json:"operator_bundles"`
 
 	// platform
 	Platform *Platform `json:"platform,omitempty" gorm:"embedded;embeddedPrefix:platform_"`
@@ -131,10 +149,6 @@ type V2ClusterUpdateParams struct {
 func (m *V2ClusterUpdateParams) Validate(formats strfmt.Registry) error {
 	var res []error
 
-	if err := m.validateAPIVip(formats); err != nil {
-		res = append(res, err)
-	}
-
 	if err := m.validateAPIVips(formats); err != nil {
 		res = append(res, err)
 	}
@@ -163,11 +177,11 @@ func (m *V2ClusterUpdateParams) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
-	if err := m.validateIngressVip(formats); err != nil {
+	if err := m.validateIngressVips(formats); err != nil {
 		res = append(res, err)
 	}
 
-	if err := m.validateIngressVips(formats); err != nil {
+	if err := m.validateLoadBalancer(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -191,6 +205,10 @@ func (m *V2ClusterUpdateParams) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
+	if err := m.validateOperatorBundles(formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.validatePlatform(formats); err != nil {
 		res = append(res, err)
 	}
@@ -206,18 +224,6 @@ func (m *V2ClusterUpdateParams) Validate(formats strfmt.Registry) error {
 	if len(res) > 0 {
 		return errors.CompositeValidationError(res...)
 	}
-	return nil
-}
-
-func (m *V2ClusterUpdateParams) validateAPIVip(formats strfmt.Registry) error {
-	if swag.IsZero(m.APIVip) { // not required
-		return nil
-	}
-
-	if err := validate.Pattern("api_vip", "body", *m.APIVip, `^(?:(?:(?:[0-9]{1,3}\.){3}[0-9]{1,3})|(?:(?:[0-9a-fA-F]*:[0-9a-fA-F]*){2,}))?$`); err != nil {
-		return err
-	}
-
 	return nil
 }
 
@@ -324,7 +330,7 @@ var v2ClusterUpdateParamsTypeHyperthreadingPropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["masters","workers","all","none"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["none","masters","arbiters","workers","masters,arbiters","masters,workers","arbiters,workers","masters,arbiters,workers","all"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -334,17 +340,32 @@ func init() {
 
 const (
 
+	// V2ClusterUpdateParamsHyperthreadingNone captures enum value "none"
+	V2ClusterUpdateParamsHyperthreadingNone string = "none"
+
 	// V2ClusterUpdateParamsHyperthreadingMasters captures enum value "masters"
 	V2ClusterUpdateParamsHyperthreadingMasters string = "masters"
+
+	// V2ClusterUpdateParamsHyperthreadingArbiters captures enum value "arbiters"
+	V2ClusterUpdateParamsHyperthreadingArbiters string = "arbiters"
 
 	// V2ClusterUpdateParamsHyperthreadingWorkers captures enum value "workers"
 	V2ClusterUpdateParamsHyperthreadingWorkers string = "workers"
 
+	// V2ClusterUpdateParamsHyperthreadingMastersArbiters captures enum value "masters,arbiters"
+	V2ClusterUpdateParamsHyperthreadingMastersArbiters string = "masters,arbiters"
+
+	// V2ClusterUpdateParamsHyperthreadingMastersWorkers captures enum value "masters,workers"
+	V2ClusterUpdateParamsHyperthreadingMastersWorkers string = "masters,workers"
+
+	// V2ClusterUpdateParamsHyperthreadingArbitersWorkers captures enum value "arbiters,workers"
+	V2ClusterUpdateParamsHyperthreadingArbitersWorkers string = "arbiters,workers"
+
+	// V2ClusterUpdateParamsHyperthreadingMastersArbitersWorkers captures enum value "masters,arbiters,workers"
+	V2ClusterUpdateParamsHyperthreadingMastersArbitersWorkers string = "masters,arbiters,workers"
+
 	// V2ClusterUpdateParamsHyperthreadingAll captures enum value "all"
 	V2ClusterUpdateParamsHyperthreadingAll string = "all"
-
-	// V2ClusterUpdateParamsHyperthreadingNone captures enum value "none"
-	V2ClusterUpdateParamsHyperthreadingNone string = "none"
 )
 
 // prop value enum
@@ -387,18 +408,6 @@ func (m *V2ClusterUpdateParams) validateIgnitionEndpoint(formats strfmt.Registry
 	return nil
 }
 
-func (m *V2ClusterUpdateParams) validateIngressVip(formats strfmt.Registry) error {
-	if swag.IsZero(m.IngressVip) { // not required
-		return nil
-	}
-
-	if err := validate.Pattern("ingress_vip", "body", *m.IngressVip, `^(?:(?:(?:[0-9]{1,3}\.){3}[0-9]{1,3})|(?:(?:[0-9a-fA-F]*:[0-9a-fA-F]*){2,}))?$`); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (m *V2ClusterUpdateParams) validateIngressVips(formats strfmt.Registry) error {
 	if swag.IsZero(m.IngressVips) { // not required
 		return nil
@@ -420,6 +429,25 @@ func (m *V2ClusterUpdateParams) validateIngressVips(formats strfmt.Registry) err
 			}
 		}
 
+	}
+
+	return nil
+}
+
+func (m *V2ClusterUpdateParams) validateLoadBalancer(formats strfmt.Registry) error {
+	if swag.IsZero(m.LoadBalancer) { // not required
+		return nil
+	}
+
+	if m.LoadBalancer != nil {
+		if err := m.LoadBalancer.Validate(formats); err != nil {
+			if ve, ok := err.(*errors.Validation); ok {
+				return ve.ValidateName("load_balancer")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("load_balancer")
+			}
+			return err
+		}
 	}
 
 	return nil
@@ -483,7 +511,7 @@ var v2ClusterUpdateParamsTypeNetworkTypePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["OpenShiftSDN","OVNKubernetes"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["OpenShiftSDN","OVNKubernetes","CiscoACI","Cilium","Calico","None"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -498,6 +526,18 @@ const (
 
 	// V2ClusterUpdateParamsNetworkTypeOVNKubernetes captures enum value "OVNKubernetes"
 	V2ClusterUpdateParamsNetworkTypeOVNKubernetes string = "OVNKubernetes"
+
+	// V2ClusterUpdateParamsNetworkTypeCiscoACI captures enum value "CiscoACI"
+	V2ClusterUpdateParamsNetworkTypeCiscoACI string = "CiscoACI"
+
+	// V2ClusterUpdateParamsNetworkTypeCilium captures enum value "Cilium"
+	V2ClusterUpdateParamsNetworkTypeCilium string = "Cilium"
+
+	// V2ClusterUpdateParamsNetworkTypeCalico captures enum value "Calico"
+	V2ClusterUpdateParamsNetworkTypeCalico string = "Calico"
+
+	// V2ClusterUpdateParamsNetworkTypeNone captures enum value "None"
+	V2ClusterUpdateParamsNetworkTypeNone string = "None"
 )
 
 // prop value enum
@@ -537,6 +577,32 @@ func (m *V2ClusterUpdateParams) validateOlmOperators(formats strfmt.Registry) er
 					return ve.ValidateName("olm_operators" + "." + strconv.Itoa(i))
 				} else if ce, ok := err.(*errors.CompositeError); ok {
 					return ce.ValidateName("olm_operators" + "." + strconv.Itoa(i))
+				}
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *V2ClusterUpdateParams) validateOperatorBundles(formats strfmt.Registry) error {
+	if swag.IsZero(m.OperatorBundles) { // not required
+		return nil
+	}
+
+	for i := 0; i < len(m.OperatorBundles); i++ {
+		if swag.IsZero(m.OperatorBundles[i]) { // not required
+			continue
+		}
+
+		if m.OperatorBundles[i] != nil {
+			if err := m.OperatorBundles[i].Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("operator_bundles" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("operator_bundles" + "." + strconv.Itoa(i))
 				}
 				return err
 			}
@@ -628,11 +694,19 @@ func (m *V2ClusterUpdateParams) ContextValidate(ctx context.Context, formats str
 		res = append(res, err)
 	}
 
+	if err := m.contextValidateLoadBalancer(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.contextValidateMachineNetworks(ctx, formats); err != nil {
 		res = append(res, err)
 	}
 
 	if err := m.contextValidateOlmOperators(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateOperatorBundles(ctx, formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -742,6 +816,22 @@ func (m *V2ClusterUpdateParams) contextValidateIngressVips(ctx context.Context, 
 	return nil
 }
 
+func (m *V2ClusterUpdateParams) contextValidateLoadBalancer(ctx context.Context, formats strfmt.Registry) error {
+
+	if m.LoadBalancer != nil {
+		if err := m.LoadBalancer.ContextValidate(ctx, formats); err != nil {
+			if ve, ok := err.(*errors.Validation); ok {
+				return ve.ValidateName("load_balancer")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("load_balancer")
+			}
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (m *V2ClusterUpdateParams) contextValidateMachineNetworks(ctx context.Context, formats strfmt.Registry) error {
 
 	for i := 0; i < len(m.MachineNetworks); i++ {
@@ -772,6 +862,26 @@ func (m *V2ClusterUpdateParams) contextValidateOlmOperators(ctx context.Context,
 					return ve.ValidateName("olm_operators" + "." + strconv.Itoa(i))
 				} else if ce, ok := err.(*errors.CompositeError); ok {
 					return ce.ValidateName("olm_operators" + "." + strconv.Itoa(i))
+				}
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *V2ClusterUpdateParams) contextValidateOperatorBundles(ctx context.Context, formats strfmt.Registry) error {
+
+	for i := 0; i < len(m.OperatorBundles); i++ {
+
+		if m.OperatorBundles[i] != nil {
+			if err := m.OperatorBundles[i].ContextValidate(ctx, formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("operator_bundles" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("operator_bundles" + "." + strconv.Itoa(i))
 				}
 				return err
 			}

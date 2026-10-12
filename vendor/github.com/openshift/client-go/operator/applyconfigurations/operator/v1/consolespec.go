@@ -9,13 +9,32 @@ import (
 
 // ConsoleSpecApplyConfiguration represents a declarative configuration of the ConsoleSpec type for use
 // with apply.
+//
+// ConsoleSpec is the specification of the desired behavior of the Console.
 type ConsoleSpecApplyConfiguration struct {
-	OperatorSpecApplyConfiguration `json:",inline"`
-	Customization                  *ConsoleCustomizationApplyConfiguration `json:"customization,omitempty"`
-	Providers                      *ConsoleProvidersApplyConfiguration     `json:"providers,omitempty"`
-	Route                          *ConsoleConfigRouteApplyConfiguration   `json:"route,omitempty"`
-	Plugins                        []string                                `json:"plugins,omitempty"`
-	Ingress                        *IngressApplyConfiguration              `json:"ingress,omitempty"`
+	OperatorSpecApplyConfiguration `json:""`
+	// customization is used to optionally provide a small set of
+	// customization options to the web console.
+	Customization *ConsoleCustomizationApplyConfiguration `json:"customization,omitempty"`
+	// providers contains configuration for using specific service providers.
+	Providers *ConsoleProvidersApplyConfiguration `json:"providers,omitempty"`
+	// route contains hostname and secret reference that contains the serving certificate.
+	// If a custom route is specified, a new route will be created with the
+	// provided hostname, under which console will be available.
+	// In case of custom hostname uses the default routing suffix of the cluster,
+	// the Secret specification for a serving certificate will not be needed.
+	// In case of custom hostname points to an arbitrary domain, manual DNS configurations steps are necessary.
+	// The default console route will be maintained to reserve the default hostname
+	// for console if the custom route is removed.
+	// If not specified, default route will be used.
+	// DEPRECATED
+	Route *ConsoleConfigRouteApplyConfiguration `json:"route,omitempty"`
+	// plugins defines a list of enabled console plugin names.
+	Plugins []string `json:"plugins,omitempty"`
+	// ingress allows to configure the alternative ingress for the console.
+	// This field is intended for clusters without ingress capability,
+	// where access to routes is not possible.
+	Ingress *ConsoleIngressApplyConfiguration `json:"ingress,omitempty"`
 }
 
 // ConsoleSpecApplyConfiguration constructs a declarative configuration of the ConsoleSpec type for use with
@@ -101,7 +120,7 @@ func (b *ConsoleSpecApplyConfiguration) WithPlugins(values ...string) *ConsoleSp
 // WithIngress sets the Ingress field in the declarative configuration to the given value
 // and returns the receiver, so that objects can be built by chaining "With" function invocations.
 // If called multiple times, the Ingress field is set to the value of the last call.
-func (b *ConsoleSpecApplyConfiguration) WithIngress(value *IngressApplyConfiguration) *ConsoleSpecApplyConfiguration {
+func (b *ConsoleSpecApplyConfiguration) WithIngress(value *ConsoleIngressApplyConfiguration) *ConsoleSpecApplyConfiguration {
 	b.Ingress = value
 	return b
 }

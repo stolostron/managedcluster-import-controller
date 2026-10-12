@@ -29,7 +29,7 @@ import (
 	. "github.com/onsi/ginkgo/v2/dsl/core" // nolint
 	. "github.com/onsi/gomega"             // nolint
 
-	_ "github.com/jackc/pgx/v4/stdlib" // nolint
+	_ "github.com/lib/pq" // nolint
 )
 
 // DatabaseServer knows how to start a PostgreSQL database server inside a container, and how to
@@ -120,7 +120,7 @@ func MakeDatabaseServer() *DatabaseServer {
 		"postgres://postgres:%s@%s:%s/postgres?sslmode=disable",
 		password, host, port,
 	)
-	handle, err := sql.Open("pgx", url)
+	handle, err := sql.Open("postgres", url)
 	Expect(err).ToNot(HaveOccurred())
 	Eventually(handle.Ping, 10, 1).ShouldNot(HaveOccurred())
 
@@ -202,7 +202,7 @@ func (d *Database) MakeHandle() *sql.DB {
 		"postgres://%s:%s@%s:%s/%s?sslmode=disable",
 		d.user, d.password, d.server.host, d.server.port, d.name,
 	)
-	handle, err := sql.Open("pgx", url)
+	handle, err := sql.Open("postgres", url)
 	Expect(err).ToNot(HaveOccurred())
 	return handle
 }

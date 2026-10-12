@@ -9,14 +9,13 @@ import (
 	"testing"
 	"time"
 
-	configv1 "github.com/openshift/api/config/v1"
 	"github.com/go-logr/logr"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	configv1 "github.com/openshift/api/config/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/events"
 	"k8s.io/client-go/tools/record"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -24,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
+	"sigs.k8s.io/controller-runtime/pkg/recorder"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/conversion"
 )
@@ -139,24 +139,24 @@ func (f *fakeManager) GetScheme() *runtime.Scheme {
 func (f *fakeManager) GetConfig() *rest.Config                              { return nil }
 func (f *fakeManager) GetCache() cache.Cache                                { return nil }
 func (f *fakeManager) GetFieldIndexer() client.FieldIndexer                 { return nil }
-func (f *fakeManager) GetEventRecorder(name string) events.EventRecorder    { return nil }
+func (f *fakeManager) GetEventRecorder(name string) recorder.EventRecorder  { return nil }
 func (f *fakeManager) GetEventRecorderFor(name string) record.EventRecorder { return nil }
 func (f *fakeManager) GetRESTMapper() meta.RESTMapper                       { return nil }
-func (f *fakeManager) GetAPIReader() client.Reader                 { return nil }
-func (f *fakeManager) Start(ctx context.Context) error             { return nil }
-func (f *fakeManager) Add(manager.Runnable) error                  { return nil }
-func (f *fakeManager) Elected() <-chan struct{}                    { return nil }
+func (f *fakeManager) GetAPIReader() client.Reader                          { return nil }
+func (f *fakeManager) Start(ctx context.Context) error                      { return nil }
+func (f *fakeManager) Add(manager.Runnable) error                           { return nil }
+func (f *fakeManager) Elected() <-chan struct{}                             { return nil }
 func (f *fakeManager) AddMetricsServerExtraHandler(path string, handler http.Handler) error {
 	return nil
 }
 func (f *fakeManager) AddHealthzCheck(name string, check healthz.Checker) error { return nil }
 func (f *fakeManager) AddReadyzCheck(name string, check healthz.Checker) error  { return nil }
-func (f *fakeManager) GetWebhookServer() webhook.Server           { return nil }
-func (f *fakeManager) GetLogger() logr.Logger                      { return logr.Discard() }
+func (f *fakeManager) GetWebhookServer() webhook.Server                         { return nil }
+func (f *fakeManager) GetLogger() logr.Logger                                   { return logr.Discard() }
 func (f *fakeManager) GetControllerOptions() config.Controller {
 	return config.Controller{}
 }
-func (f *fakeManager) GetHTTPClient() *http.Client              { return nil }
+func (f *fakeManager) GetHTTPClient() *http.Client               { return nil }
 func (f *fakeManager) GetConverterRegistry() conversion.Registry { return nil }
 func (f *fakeManager) GetResourceGroupIdentifier(schema.GroupResource) string {
 	return ""
