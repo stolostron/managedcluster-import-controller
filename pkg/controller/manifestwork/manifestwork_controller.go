@@ -9,11 +9,13 @@ import (
 
 	"github.com/ghodss/yaml"
 	"github.com/openshift/library-go/pkg/operator/events"
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -141,6 +143,10 @@ func createManifestWorks(
 			panic(err)
 		}
 
+		crdManifests := []workv1.Manifest{
+			{RawExtension: runtime.RawExtension{Raw: jsonData}},
+		}
+
 		crdWork := &workv1.ManifestWork{
 			TypeMeta: metav1.TypeMeta{},
 			ObjectMeta: metav1.ObjectMeta{
@@ -156,10 +162,9 @@ func createManifestWorks(
 			},
 			Spec: workv1.ManifestWorkSpec{
 				Workload: workv1.ManifestsTemplate{
-					Manifests: []workv1.Manifest{
-						{RawExtension: runtime.RawExtension{Raw: jsonData}},
-					},
+					Manifests: crdManifests,
 				},
+				ManifestConfigs: buildManifestConfigs(managedCluster, crdManifests),
 			},
 		}
 
@@ -191,6 +196,7 @@ func createManifestWorks(
 			Workload: workv1.ManifestsTemplate{
 				Manifests: manifests,
 			},
+			ManifestConfigs: buildManifestConfigs(managedCluster, manifests),
 			DeleteOption: &workv1.DeleteOption{
 				PropagationPolicy: workv1.DeletePropagationPolicyTypeOrphan,
 			},
@@ -212,4 +218,45 @@ func createManifestWorks(
 	}
 
 	return works
+}
+
+// buildManifestConfigs creates ManifestConfigs for all manifests in the ManifestWork.
+// If disable-auto-import annotation is set on the ManagedCluster, all manifests are marked ReadOnly
+// to prevent work-agent from creating or updating them. This prevents the DR restore race condition
+// where work-agent (connected to backup hub) overwrites resources that the restore hub just pushed.
+func buildManifestConfigs(managedCluster *clusterv1.ManagedCluster, manifests []workv1.Manifest) []workv1.ManifestConfigOption {
+	// Check if auto-import is disabled
+	_, autoImportDisabled := managedCluster.Annotations[apiconstants.DisableAutoImportAnnotation]
+	if !autoImportDisabled {
+		// No special config needed - use default Update strategy
+		return nil
+	}
+
+	// Build ReadOnly configs for all manifests
+	configs := make([]workv1.ManifestConfigOption, 0, len(manifests))
+	for _, manifest := range manifests {
+		obj := helpers.MustCreateObject(manifest.Raw)
+		metadata, err := meta.Accessor(obj)
+		if err != nil {
+			// Skip if we can't get metadata
+			log.Error(err, "Failed to get metadata for manifest, skipping ReadOnly config")
+			continue
+		}
+
+		gvk := obj.GetObjectKind().GroupVersionKind()
+		config := workv1.ManifestConfigOption{
+			ResourceIdentifier: workv1.ResourceIdentifier{
+				Group:     gvk.Group,
+				Resource:  "", // Will be inferred by work-agent from GVK
+				Name:      metadata.GetName(),
+				Namespace: metadata.GetNamespace(),
+			},
+			UpdateStrategy: &workv1.UpdateStrategy{
+				Type: workv1.UpdateStrategyTypeReadOnly,
+			},
+		}
+		configs = append(configs, config)
+	}
+
+	return configs
 }

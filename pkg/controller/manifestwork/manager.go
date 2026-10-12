@@ -7,6 +7,7 @@ import (
 	"context"
 	"strings"
 
+	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
@@ -73,7 +74,25 @@ func Add(ctx context.Context,
 				GenericFunc: func(e event.GenericEvent) bool { return isDefaultModeObject(e.Object) },
 				DeleteFunc:  func(e event.DeleteEvent) bool { return isDefaultModeObject(e.Object) },
 				CreateFunc:  func(e event.CreateEvent) bool { return isDefaultModeObject(e.Object) },
-				UpdateFunc:  func(e event.UpdateEvent) bool { return isDefaultModeObject(e.ObjectNew) },
+				UpdateFunc: func(e event.UpdateEvent) bool {
+					if !isDefaultModeObject(e.ObjectNew) {
+						return false
+					}
+
+					// Trigger reconciliation when disable-auto-import annotation is added or removed
+					// so that ManifestWorks can be updated with ReadOnly configs
+					oldAnnotations := e.ObjectOld.GetAnnotations()
+					newAnnotations := e.ObjectNew.GetAnnotations()
+					_, oldAutoImportDisabled := oldAnnotations[apiconstants.DisableAutoImportAnnotation]
+					_, newAutoImportDisabled := newAnnotations[apiconstants.DisableAutoImportAnnotation]
+
+					if oldAutoImportDisabled != newAutoImportDisabled {
+						// Annotation added or removed - reconcile to update ManifestWork configs
+						return true
+					}
+
+					return false
+				},
 			}),
 		).
 		WatchesRawSource(
