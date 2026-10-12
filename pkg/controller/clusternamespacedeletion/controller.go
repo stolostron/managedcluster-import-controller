@@ -17,8 +17,10 @@ import (
 	clustercontroller "github.com/stolostron/managedcluster-import-controller/pkg/controller/managedcluster"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
+	workclient "open-cluster-management.io/api/client/work/clientset/versioned"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
 	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -30,6 +32,10 @@ var (
 	log                        = logf.Log.WithName(ControllerName)
 	podDeletionGracePeriod     = 10 * time.Second
 	hostedClusterRequeuePeriod = 1 * time.Minute
+	// manifestWorkRequeuePeriod retries namespace deletion while ManifestWorks remain.
+	// Resource cleanup keeps those works, and the work RoleBinding, until the
+	// force-delete grace period ends.
+	manifestWorkRequeuePeriod = 10 * time.Second
 )
 
 const (
@@ -43,10 +49,12 @@ const (
 // 2. no clusterdeployment in the ns
 // 3. no infraenv in the ns
 // 4. no active jobs in the ns
+// 5. no manifestworks in the ns
 type ReconcileClusterNamespaceDeletion struct {
-	client    client.Client
-	apiReader client.Reader
-	recorder  events.Recorder
+	client     client.Client
+	apiReader  client.Reader
+	workClient workclient.Interface
+	recorder   events.Recorder
 }
 
 // blank assignment to verify that ReconcileManagedCluster implements reconcile.Reconciler
@@ -116,6 +124,19 @@ func (r *ReconcileClusterNamespaceDeletion) Reconcile(ctx context.Context, reque
 	if len(addons.Items) > 0 {
 		reqLogger.Info(fmt.Sprintf("Waiting for addons, there are %d addon in namespace %s", len(addons.Items), ns.Name))
 		return reconcile.Result{}, nil
+	}
+
+	// Resource cleanup leaves ManifestWorks in place during the force-delete grace
+	// period and removes the work RoleBinding only after they are gone. Deleting the
+	// namespace before that cascades to a RoleBinding that has no finalizer.
+	manifestWorks, err := r.workClient.WorkV1().ManifestWorks(ns.Name).List(ctx, metav1.ListOptions{})
+	if err != nil && !errors.IsNotFound(err) && !strings.Contains(err.Error(), "no matches for kind") {
+		return reconcile.Result{}, err
+	}
+	if manifestWorks != nil && len(manifestWorks.Items) > 0 {
+		reqLogger.Info(fmt.Sprintf("Waiting for manifestworks, there are %d manifestworks in namespace %s",
+			len(manifestWorks.Items), ns.Name))
+		return reconcile.Result{RequeueAfter: manifestWorkRequeuePeriod}, nil
 	}
 
 	hostedclusters := &hyperv1beta1.HostedClusterList{}

@@ -6,6 +6,7 @@ package e2e
 import (
 	"context"
 	"crypto/x509"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/user"
@@ -28,6 +29,7 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	k8sruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
@@ -545,6 +547,131 @@ func assertHostedManagedClusterDeleted(clusterName, managementCluster string) {
 	assertHostedManagedClusterDeletedFromSpoke(clusterName, managementCluster)
 }
 
+const (
+	// manifestWorkCleanupTimeout covers a force detach. The import controller keeps the
+	// work-agent finalizer until ManifestWorkForceDeleteGracePeriod has elapsed, then
+	// removes the ManagedCluster finalizers and deletes the cluster namespace.
+	// releaseWorkAgentFinalizers usually finishes the wait sooner; this remains the ceiling.
+	manifestWorkCleanupTimeout = helpers.ManifestWorkForceDeleteGracePeriod + 2*time.Minute
+
+	klusterletCRDName = "klusterlets.operator.open-cluster-management.io"
+)
+
+// releaseWorkAgentFinalizers removes the work-agent finalizer from deleting
+// ManifestWorks after the spoke klusterlet namespace and CRD are gone. The
+// controller keeps that finalizer for the force-delete grace period so a
+// disconnected agent can finish cleanup. In these tests the agent is local: it
+// deletes those resources and then exits before updating the hub.
+func releaseWorkAgentFinalizers(namespace string) error {
+	gone, err := spokeKlusterletGone()
+	if err != nil || !gone {
+		return err
+	}
+
+	works, err := hubWorkClient.WorkV1().ManifestWorks(namespace).List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	for i := range works.Items {
+		work := &works.Items[i]
+		if work.DeletionTimestamp.IsZero() || time.Since(work.DeletionTimestamp.Time) < 15*time.Second {
+			continue
+		}
+
+		remaining := make([]string, 0, len(work.Finalizers))
+		found := false
+		for _, finalizer := range work.Finalizers {
+			if finalizer == workv1.ManifestWorkFinalizer {
+				found = true
+				continue
+			}
+			remaining = append(remaining, finalizer)
+		}
+		if !found {
+			continue
+		}
+
+		patch, err := json.Marshal(map[string]any{
+			"metadata": map[string]any{
+				"finalizers": remaining,
+			},
+		})
+		if err != nil {
+			return err
+		}
+		_, err = hubWorkClient.WorkV1().ManifestWorks(namespace).Patch(
+			context.TODO(), work.Name, types.MergePatchType, patch, metav1.PatchOptions{})
+		if err != nil && !errors.IsNotFound(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+func spokeKlusterletGone() (bool, error) {
+	_, err := hubKubeClient.CoreV1().Namespaces().Get(
+		context.TODO(), constants.DefaultKlusterletNamespace, metav1.GetOptions{})
+	if err == nil {
+		return false, nil
+	}
+	if !errors.IsNotFound(err) {
+		return false, err
+	}
+
+	_, err = crdClient.ApiextensionsV1().CustomResourceDefinitions().Get(
+		context.TODO(), klusterletCRDName, metav1.GetOptions{})
+	if err == nil {
+		return false, nil
+	}
+	if !errors.IsNotFound(err) {
+		return false, err
+	}
+
+	// No-operator installs use this namespace instead of the default agent namespace.
+	_, err = hubKubeClient.CoreV1().Namespaces().Get(
+		context.TODO(), "open-cluster-management-local", metav1.GetOptions{})
+	if err == nil {
+		return false, nil
+	}
+	if !errors.IsNotFound(err) {
+		return false, err
+	}
+	return true, nil
+}
+
+// assertKlusterletRemoved waits until RemoveKlusterlet has finished. Immediate
+// import writes into the agent namespace; applying while that namespace is
+// still terminating leaves the klusterlet without a running registration agent.
+func assertKlusterletRemoved() {
+	ginkgo.By("Should remove the klusterlet and its agent namespace", func() {
+		gomega.Eventually(func() error {
+			klusterlet, err := hubOperatorClient.OperatorV1().Klusterlets().Get(
+				context.TODO(), "klusterlet", metav1.GetOptions{})
+			if err == nil {
+				if klusterlet.DeletionTimestamp.IsZero() {
+					if delErr := util.RemoveKlusterlet(hubOperatorClient, "klusterlet"); delErr != nil && !errors.IsNotFound(delErr) {
+						return delErr
+					}
+				}
+				return fmt.Errorf("klusterlet still exists")
+			}
+			if !errors.IsNotFound(err) {
+				return err
+			}
+
+			_, err = hubKubeClient.CoreV1().Namespaces().Get(
+				context.TODO(), constants.DefaultKlusterletNamespace, metav1.GetOptions{})
+			if errors.IsNotFound(err) {
+				return nil
+			}
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("namespace %s still exists", constants.DefaultKlusterletNamespace)
+		}, 3*time.Minute, 1*time.Second).Should(gomega.Succeed())
+	})
+}
+
 func assertManagedClusterDeletedFromHub(clusterName string) {
 	start := time.Now()
 	ginkgo.By(fmt.Sprintf("Should delete the managed cluster %s", clusterName), func() {
@@ -557,8 +684,15 @@ func assertManagedClusterDeletedFromHub(clusterName string) {
 				return err
 			}
 
+			// The work agent deletes spoke resources, then often exits before it can
+			// take its finalizer off the hub ManifestWorks. Drop that finalizer once
+			// the spoke klusterlet is gone so detach does not sit for the grace period.
+			if err := releaseWorkAgentFinalizers(clusterName); err != nil {
+				return err
+			}
+
 			return fmt.Errorf("managed cluster %s still exists", clusterName)
-		}, 5*time.Minute, 1*time.Second).Should(gomega.Succeed())
+		}, manifestWorkCleanupTimeout, 1*time.Second).Should(gomega.Succeed())
 	})
 	util.Logf("spending time: %.2f seconds", time.Since(start).Seconds())
 
@@ -598,7 +732,6 @@ func assertManagedClusterDeletedFromSpoke() {
 	start = time.Now()
 	ginkgo.By("Should delete the klusterlet crd", func() {
 		gomega.Eventually(func() error {
-			klusterletCRDName := "klusterlets.operator.open-cluster-management.io"
 			_, err := crdClient.ApiextensionsV1().CustomResourceDefinitions().Get(context.TODO(), klusterletCRDName, metav1.GetOptions{})
 			if errors.IsNotFound(err) {
 				return nil
@@ -848,17 +981,17 @@ func assertManagedClusterManifestWorks(clusterName string) {
 		util.Logf("assert managed cluster manifestworks spending time: %.2f seconds", time.Since(start).Seconds())
 	})
 
-	assertManagedClusterFinalizer(clusterName, "managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup")
+	assertManagedClusterFinalizer(clusterName, constants.ManifestWorkFinalizer)
 }
 
 func assertManagedClusterManifestWorksAvailable(clusterName string) {
-	assertManagedClusterFinalizer(clusterName, "managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup")
+	assertManagedClusterFinalizer(clusterName, constants.ManifestWorkFinalizer)
 
 	klusterletCRDsName := fmt.Sprintf("%s-klusterlet-crds", clusterName)
 	klusterletName := fmt.Sprintf("%s-klusterlet", clusterName)
 
-	assertManifestworkFinalizer(clusterName, klusterletCRDsName, "cluster.open-cluster-management.io/manifest-work-cleanup")
-	assertManifestworkFinalizer(clusterName, klusterletName, "cluster.open-cluster-management.io/manifest-work-cleanup")
+	assertManifestworkFinalizer(clusterName, klusterletCRDsName, workv1.ManifestWorkFinalizer)
+	assertManifestworkFinalizer(clusterName, klusterletName, workv1.ManifestWorkFinalizer)
 
 	ginkgo.By(fmt.Sprintf("Managed cluster %s manifest works should be available", clusterName), func() {
 		start := time.Now()
@@ -1002,10 +1135,10 @@ func assertManagedClusterManifestWorksNotReadOnly(clusterName string) {
 
 func assertHostedManagedClusterManifestWorksAvailable(clusterName, hostingClusterName string) {
 	assertManagedClusterFinalizer(clusterName,
-		"managedcluster-import-controller.open-cluster-management.io/manifestwork-cleanup")
+		constants.ManifestWorkFinalizer)
 
 	klusterletName := fmt.Sprintf("%s-hosted-klusterlet", clusterName)
-	assertManifestworkFinalizer(hostingClusterName, klusterletName, "cluster.open-cluster-management.io/manifest-work-cleanup")
+	assertManifestworkFinalizer(hostingClusterName, klusterletName, workv1.ManifestWorkFinalizer)
 
 	ginkgo.By(fmt.Sprintf("Hosted managed cluster %s manifest works should be available", clusterName), func() {
 		start := time.Now()

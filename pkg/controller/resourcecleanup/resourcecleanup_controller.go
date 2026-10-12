@@ -48,20 +48,41 @@ func NewReconcileResourceCleanup(
 // From MCE 2.9, ResourceCleanup featureGate is enabled in registration controller, and the addons and manifestWorks in
 // the cluster ns will be deleted by the registration controller except the manifestWorks in the hosting cluster ns.
 // This controller doing these jobs:
-//  1. if cluster is not found, will check the cluster ns, and force delete all addons, manifestoWorks and workRoleBinding.
+//  1. if cluster is not found, will check the cluster ns, and force delete all addons and manifestWorks.
+//     The work RoleBinding is removed after those manifestWorks are gone. Namespace deletion waits
+//     for the same manifestWorks, so that RoleBinding is not removed by a cascading namespace delete.
+//     A cluster namespace event restarts this cleanup after a process restart, when the grace-period
+//     requeue is gone.
 //  2. if cluster is available, force delete the klusterletCRD manifestWork after there is no addons and other manifestWorks,
 //     delete the manifestWorks in the hosting cluster ns if the cluster is hosted mode.
-//  3. if cluster is unavailable, force delete all addons, manifestWorks and workRoleBinding in the cluster ns,
-//     and the manifestWorks in the hosting cluster ns if the cluster is hosted mode.
+//  3. if cluster is unavailable, force delete all addons and manifestWorks in the cluster ns. The work-agent
+//     finalizer is kept until the force-delete grace period. The work RoleBinding and, for a hosted cluster,
+//     the hosting-cluster manifestWorks are removed once the spoke manifestWorks are gone.
 var _ reconcile.Reconciler = &ReconcileResourceCleanup{}
 
 func (r *ReconcileResourceCleanup) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	reqLogger := log.WithValues("Request.Name", request.Name)
 
 	cluster := &clusterv1.ManagedCluster{}
-	err := r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: request.Name}, cluster)
+	clusterKey := types.NamespacedName{Name: request.Name}
+	var err error
+	// On managed cluster creation, the namespace watch can run before the
+	// ManagedCluster informer has stored the cluster. Confirm with the live
+	// reader before orphan cleanup.
+	if request.Namespace == fromNamespaceWatch {
+		err = r.clientHolder.RuntimeAPIReader.Get(ctx, clusterKey, cluster)
+	} else {
+		err = r.clientHolder.RuntimeClient.Get(ctx, clusterKey, cluster)
+	}
 	if errors.IsNotFound(err) {
-		return reconcile.Result{}, r.orphanCleanup(ctx, request.Name)
+		completed, err := r.orphanCleanup(ctx, request.Name)
+		if err != nil {
+			return reconcile.Result{}, err
+		}
+		if !completed {
+			return reconcile.Result{RequeueAfter: 2 * time.Second}, nil
+		}
+		return reconcile.Result{}, nil
 	}
 	if err != nil {
 		return reconcile.Result{}, err
@@ -91,6 +112,17 @@ func (r *ReconcileResourceCleanup) Reconcile(ctx context.Context, request reconc
 	if completed, err := r.cleanupCompleted(ctx, copyCluster); err != nil || !completed {
 		return reconcile.Result{RequeueAfter: 2 * time.Second}, err
 	}
+
+	// Refresh the ManagedCluster to get the latest finalizers
+	err = r.clientHolder.RuntimeClient.Get(ctx, types.NamespacedName{Name: request.Name}, cluster)
+	if errors.IsNotFound(err) {
+		return reconcile.Result{}, nil
+	}
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	copyCluster.Finalizers = cluster.Finalizers
 
 	// remove finalizers
 	return reconcile.Result{}, r.removeClusterFinalizers(ctx, copyCluster)
@@ -186,20 +218,33 @@ func (r *ReconcileResourceCleanup) deleteHostingManifestWorks(ctx context.Contex
 	return utilerrors.NewAggregate(errs)
 }
 
-func (r *ReconcileResourceCleanup) orphanCleanup(ctx context.Context, clusterName string) error {
+func (r *ReconcileResourceCleanup) orphanCleanup(ctx context.Context, clusterName string) (bool, error) {
 	var errs []error
 	exists, err := r.namespaceExists(ctx, clusterName)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if !exists {
-		return nil
+		return true, nil
 	}
 
 	errs = appendIfErr(errs, helpers.ForceDeleteAllManagedClusterAddons(ctx, r.clientHolder.RuntimeClient, clusterName, r.recorder))
 	errs = appendIfErr(errs, r.forceDeleteManifestWorks(ctx, clusterName))
-	errs = appendIfErr(errs, helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, clusterName, r.recorder))
-	return utilerrors.NewAggregate(errs)
+
+	// Wait to clean up the RoleBinding until the ManifestWorks are deleted,
+	// otherwise we won't be able to clean them up on a subsequent reconcile.
+	manifestWorks, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(clusterName).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return false, err
+	}
+
+	if len(manifestWorks.Items) == 0 {
+		errs = appendIfErr(errs, helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, clusterName, r.recorder))
+	} else {
+		return false, utilerrors.NewAggregate(errs)
+	}
+
+	return len(errs) == 0, utilerrors.NewAggregate(errs)
 }
 
 func (r *ReconcileResourceCleanup) forceCleanup(ctx context.Context, cluster *clusterv1.ManagedCluster) error {
@@ -219,17 +264,28 @@ func (r *ReconcileResourceCleanup) forceCleanup(ctx context.Context, cluster *cl
 	// so need to delete the works in hosting cluster if there is no addon since the hosting addon is not force deleted.
 	// but do not need to force delete the works in hosting cluster because we assume the hosting cluster is always available.
 	hostingCluster, _ := helpers.GetHostingCluster(cluster)
-	if helpers.IsHostedCluster(cluster) && hostingCluster != "" {
+	hosted := helpers.IsHostedCluster(cluster) && hostingCluster != ""
+	if hosted {
 		if addons, err := helpers.ListManagedClusterAddons(ctx,
 			r.clientHolder.RuntimeClient, cluster.Name); err != nil || len(addons.Items) != 0 {
 			appendIfErr(errs, err)
 			return utilerrors.NewAggregate(errs)
 		}
-
-		errs = appendIfErr(errs, r.deleteHostingManifestWorks(ctx, hostingCluster, cluster.Name))
 	}
 
-	errs = appendIfErr(errs, helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, cluster.Name, r.recorder))
+	// Wait to remove the work RoleBinding and hosting-cluster ManifestWorks until the
+	// spoke ManifestWorks are gone. The hosted work agent runs in the hosting klusterlet
+	// and uses this RoleBinding to finish ManifestWork cleanup.
+	manifestWorks, err := r.clientHolder.WorkClient.WorkV1().ManifestWorks(cluster.Name).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return err
+	}
+	if len(manifestWorks.Items) == 0 {
+		if hosted {
+			errs = appendIfErr(errs, r.deleteHostingManifestWorks(ctx, hostingCluster, cluster.Name))
+		}
+		errs = appendIfErr(errs, helpers.ForceDeleteWorkRoleBinding(ctx, r.clientHolder.KubeClient, cluster.Name, r.recorder))
+	}
 
 	return utilerrors.NewAggregate(errs)
 }
