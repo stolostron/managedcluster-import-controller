@@ -30,10 +30,6 @@ type Cluster struct {
 	// Format: uuid
 	AmsSubscriptionID strfmt.UUID `json:"ams_subscription_id,omitempty"`
 
-	// (DEPRECATED) The virtual IP used to reach the OpenShift cluster's API.
-	// Pattern: ^(?:(?:(?:[0-9]{1,3}\.){3}[0-9]{1,3})|(?:(?:[0-9a-fA-F]*:[0-9a-fA-F]*){2,}))$
-	APIVip string `json:"api_vip,omitempty"`
-
 	// The domain name used to reach the OpenShift cluster API.
 	APIVipDNSName *string `json:"api_vip_dns_name,omitempty"`
 
@@ -57,6 +53,9 @@ type Cluster struct {
 
 	// Json formatted string containing the majority groups for connectivity checks.
 	ConnectivityMajorityGroups string `json:"connectivity_majority_groups,omitempty" gorm:"type:text"`
+
+	// Specifies the required number of control plane nodes that should be part of the cluster.
+	ControlPlaneCount int64 `json:"control_plane_count,omitempty"`
 
 	// controller logs collected at
 	// Format: date-time
@@ -89,7 +88,7 @@ type Cluster struct {
 	// JSON-formatted string containing the usage information by feature name
 	FeatureUsage string `json:"feature_usage,omitempty" gorm:"type:text"`
 
-	// Guaranteed availability of the installed cluster. 'Full' installs a Highly-Available cluster
+	// (DEPRECATED) Please use 'control_plane_count' instead. Guaranteed availability of the installed cluster. 'Full' installs a Highly-Available cluster
 	// over multiple master nodes whereas 'None' installs a full cluster over one node.
 	//
 	// Enum: [Full None]
@@ -115,8 +114,8 @@ type Cluster struct {
 	//
 	HTTPSProxy string `json:"https_proxy,omitempty" gorm:"column:https_proxy"`
 
-	// Enable/disable hyperthreading on master nodes, worker nodes, or all nodes
-	// Enum: [masters workers all none]
+	// Enable/disable hyperthreading on master nodes, arbiter nodes, worker nodes, or a combination of them.
+	// Enum: [none masters arbiters workers masters,arbiters masters,workers arbiters,workers masters,arbiters,workers all]
 	Hyperthreading string `json:"hyperthreading,omitempty"`
 
 	// Unique identifier of the object.
@@ -147,10 +146,6 @@ type Cluster struct {
 	// reflect the actual cluster they represent
 	Imported *bool `json:"imported,omitempty"`
 
-	// (DEPRECATED) The virtual IP used for cluster ingress traffic.
-	// Pattern: ^(?:(?:(?:[0-9]{1,3}\.){3}[0-9]{1,3})|(?:(?:[0-9a-fA-F]*:[0-9a-fA-F]*){2,}))$
-	IngressVip string `json:"ingress_vip,omitempty"`
-
 	// The virtual IPs used for cluster ingress traffic. Enter one IP address for single-stack clusters, or up to two for dual-stack clusters (at most one IP address per IP stack used). The order of stacks should be the same as order of subnets in Cluster Networks, Service Networks, and Machine Networks.
 	IngressVips []*IngressVip `json:"ingress_vips" gorm:"foreignkey:ClusterID;references:ID"`
 
@@ -171,10 +166,17 @@ type Cluster struct {
 
 	// Indicates the type of this object. Will be 'Cluster' if this is a complete object,
 	// 'AddHostsCluster' for cluster that add hosts to existing OCP cluster,
+	// 'DisconnectedCluster' for clusters with embedded ignition for offline installation,
 	//
 	// Required: true
-	// Enum: [Cluster AddHostsCluster]
+	// Enum: [Cluster AddHostsCluster DisconnectedCluster]
 	Kind *string `json:"kind"`
+
+	// last installation preparation
+	LastInstallationPreparation LastInstallationPreparation `json:"last-installation-preparation,omitempty" gorm:"embedded;embeddedPrefix:last_installation_preparation_"`
+
+	// load balancer
+	LoadBalancer *LoadBalancer `json:"load_balancer,omitempty" gorm:"embedded;embeddedPrefix:load_balancer_"`
 
 	// The progress of log collection or empty if logs are not applicable
 	LogsInfo LogsState `json:"logs_info,omitempty" gorm:"type:varchar(2048)"`
@@ -193,11 +195,21 @@ type Cluster struct {
 	Name string `json:"name,omitempty"`
 
 	// The desired network type used.
-	// Enum: [OpenShiftSDN OVNKubernetes]
+	// - OVNKubernetes: Default CNI for OpenShift (recommended)
+	// - OpenShiftSDN: Legacy SDN (deprecated in newer versions)
+	// - CiscoACI: Cisco ACI CNI (requires custom manifests)
+	// - Cilium: Isovalent Cilium CNI (requires custom manifests)
+	// - Calico: Tigera Calico CNI (requires custom manifests)
+	// - None: No CNI - user must provide custom CNI manifests
+	//
+	// Enum: [OpenShiftSDN OVNKubernetes CiscoACI Cilium Calico None]
 	NetworkType *string `json:"network_type,omitempty"`
 
 	// A comma-separated list of destination domain names, domains, IP addresses, or other network CIDRs to exclude from proxying.
 	NoProxy string `json:"no_proxy,omitempty"`
+
+	// A comma-separated list of NTP sources (name or IP) to be used as the only NTP configuration for the cluster hosts.
+	NtpSources string `json:"ntp_sources,omitempty"`
 
 	// OpenShift release image URI.
 	OcpReleaseImage string `json:"ocp_release_image,omitempty"`
@@ -209,8 +221,14 @@ type Cluster struct {
 	// Version of the OpenShift cluster.
 	OpenshiftVersion string `json:"openshift_version,omitempty"`
 
+	// Bundles that were selected for this cluster, with the optional operators chosen by the user. Derived from monitored operators' source_bundles. Not persisted directly.
+	OperatorBundles []*BundleCreateParams `json:"operator_bundles" gorm:"-"`
+
 	// org id
 	OrgID string `json:"org_id,omitempty"`
+
+	// Indication if organization soft timeouts is enabled for the cluster.
+	OrgSoftTimeoutsEnabled bool `json:"org_soft_timeouts_enabled,omitempty"`
 
 	// platform
 	Platform *Platform `json:"platform,omitempty" gorm:"embedded;embeddedPrefix:platform_"`
@@ -244,7 +262,7 @@ type Cluster struct {
 
 	// Status of the OpenShift cluster.
 	// Required: true
-	// Enum: [insufficient ready error preparing-for-installation pending-for-input installing finalizing installed adding-hosts cancelled installing-pending-user-action]
+	// Enum: [insufficient ready error preparing-for-installation pending-for-input installing finalizing installed adding-hosts cancelled installing-pending-user-action unmonitored]
 	Status *string `json:"status"`
 
 	// Additional information pertaining to the status of the OpenShift cluster.
@@ -283,10 +301,6 @@ func (m *Cluster) Validate(formats strfmt.Registry) error {
 	var res []error
 
 	if err := m.validateAmsSubscriptionID(formats); err != nil {
-		res = append(res, err)
-	}
-
-	if err := m.validateAPIVip(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -358,10 +372,6 @@ func (m *Cluster) Validate(formats strfmt.Registry) error {
 		res = append(res, err)
 	}
 
-	if err := m.validateIngressVip(formats); err != nil {
-		res = append(res, err)
-	}
-
 	if err := m.validateIngressVips(formats); err != nil {
 		res = append(res, err)
 	}
@@ -375,6 +385,14 @@ func (m *Cluster) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateKind(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateLastInstallationPreparation(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateLoadBalancer(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -399,6 +417,10 @@ func (m *Cluster) Validate(formats strfmt.Registry) error {
 	}
 
 	if err := m.validateOpenshiftClusterID(formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.validateOperatorBundles(formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -446,18 +468,6 @@ func (m *Cluster) validateAmsSubscriptionID(formats strfmt.Registry) error {
 	}
 
 	if err := validate.FormatOf("ams_subscription_id", "body", "uuid", m.AmsSubscriptionID.String(), formats); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (m *Cluster) validateAPIVip(formats strfmt.Registry) error {
-	if swag.IsZero(m.APIVip) { // not required
-		return nil
-	}
-
-	if err := validate.Pattern("api_vip", "body", m.APIVip, `^(?:(?:(?:[0-9]{1,3}\.){3}[0-9]{1,3})|(?:(?:[0-9a-fA-F]*:[0-9a-fA-F]*){2,}))$`); err != nil {
 		return err
 	}
 
@@ -760,7 +770,7 @@ var clusterTypeHyperthreadingPropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["masters","workers","all","none"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["none","masters","arbiters","workers","masters,arbiters","masters,workers","arbiters,workers","masters,arbiters,workers","all"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -770,17 +780,32 @@ func init() {
 
 const (
 
+	// ClusterHyperthreadingNone captures enum value "none"
+	ClusterHyperthreadingNone string = "none"
+
 	// ClusterHyperthreadingMasters captures enum value "masters"
 	ClusterHyperthreadingMasters string = "masters"
+
+	// ClusterHyperthreadingArbiters captures enum value "arbiters"
+	ClusterHyperthreadingArbiters string = "arbiters"
 
 	// ClusterHyperthreadingWorkers captures enum value "workers"
 	ClusterHyperthreadingWorkers string = "workers"
 
+	// ClusterHyperthreadingMastersArbiters captures enum value "masters,arbiters"
+	ClusterHyperthreadingMastersArbiters string = "masters,arbiters"
+
+	// ClusterHyperthreadingMastersWorkers captures enum value "masters,workers"
+	ClusterHyperthreadingMastersWorkers string = "masters,workers"
+
+	// ClusterHyperthreadingArbitersWorkers captures enum value "arbiters,workers"
+	ClusterHyperthreadingArbitersWorkers string = "arbiters,workers"
+
+	// ClusterHyperthreadingMastersArbitersWorkers captures enum value "masters,arbiters,workers"
+	ClusterHyperthreadingMastersArbitersWorkers string = "masters,arbiters,workers"
+
 	// ClusterHyperthreadingAll captures enum value "all"
 	ClusterHyperthreadingAll string = "all"
-
-	// ClusterHyperthreadingNone captures enum value "none"
-	ClusterHyperthreadingNone string = "none"
 )
 
 // prop value enum
@@ -856,18 +881,6 @@ func (m *Cluster) validateImageInfo(formats strfmt.Registry) error {
 	return nil
 }
 
-func (m *Cluster) validateIngressVip(formats strfmt.Registry) error {
-	if swag.IsZero(m.IngressVip) { // not required
-		return nil
-	}
-
-	if err := validate.Pattern("ingress_vip", "body", m.IngressVip, `^(?:(?:(?:[0-9]{1,3}\.){3}[0-9]{1,3})|(?:(?:[0-9a-fA-F]*:[0-9a-fA-F]*){2,}))$`); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (m *Cluster) validateIngressVips(formats strfmt.Registry) error {
 	if swag.IsZero(m.IngressVips) { // not required
 		return nil
@@ -922,7 +935,7 @@ var clusterTypeKindPropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["Cluster","AddHostsCluster"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["Cluster","AddHostsCluster","DisconnectedCluster"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -937,6 +950,9 @@ const (
 
 	// ClusterKindAddHostsCluster captures enum value "AddHostsCluster"
 	ClusterKindAddHostsCluster string = "AddHostsCluster"
+
+	// ClusterKindDisconnectedCluster captures enum value "DisconnectedCluster"
+	ClusterKindDisconnectedCluster string = "DisconnectedCluster"
 )
 
 // prop value enum
@@ -956,6 +972,42 @@ func (m *Cluster) validateKind(formats strfmt.Registry) error {
 	// value enum
 	if err := m.validateKindEnum("kind", "body", *m.Kind); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (m *Cluster) validateLastInstallationPreparation(formats strfmt.Registry) error {
+	if swag.IsZero(m.LastInstallationPreparation) { // not required
+		return nil
+	}
+
+	if err := m.LastInstallationPreparation.Validate(formats); err != nil {
+		if ve, ok := err.(*errors.Validation); ok {
+			return ve.ValidateName("last-installation-preparation")
+		} else if ce, ok := err.(*errors.CompositeError); ok {
+			return ce.ValidateName("last-installation-preparation")
+		}
+		return err
+	}
+
+	return nil
+}
+
+func (m *Cluster) validateLoadBalancer(formats strfmt.Registry) error {
+	if swag.IsZero(m.LoadBalancer) { // not required
+		return nil
+	}
+
+	if m.LoadBalancer != nil {
+		if err := m.LoadBalancer.Validate(formats); err != nil {
+			if ve, ok := err.(*errors.Validation); ok {
+				return ve.ValidateName("load_balancer")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("load_balancer")
+			}
+			return err
+		}
 	}
 
 	return nil
@@ -1046,7 +1098,7 @@ var clusterTypeNetworkTypePropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["OpenShiftSDN","OVNKubernetes"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["OpenShiftSDN","OVNKubernetes","CiscoACI","Cilium","Calico","None"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -1061,6 +1113,18 @@ const (
 
 	// ClusterNetworkTypeOVNKubernetes captures enum value "OVNKubernetes"
 	ClusterNetworkTypeOVNKubernetes string = "OVNKubernetes"
+
+	// ClusterNetworkTypeCiscoACI captures enum value "CiscoACI"
+	ClusterNetworkTypeCiscoACI string = "CiscoACI"
+
+	// ClusterNetworkTypeCilium captures enum value "Cilium"
+	ClusterNetworkTypeCilium string = "Cilium"
+
+	// ClusterNetworkTypeCalico captures enum value "Calico"
+	ClusterNetworkTypeCalico string = "Calico"
+
+	// ClusterNetworkTypeNone captures enum value "None"
+	ClusterNetworkTypeNone string = "None"
 )
 
 // prop value enum
@@ -1091,6 +1155,32 @@ func (m *Cluster) validateOpenshiftClusterID(formats strfmt.Registry) error {
 
 	if err := validate.FormatOf("openshift_cluster_id", "body", "uuid", m.OpenshiftClusterID.String(), formats); err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (m *Cluster) validateOperatorBundles(formats strfmt.Registry) error {
+	if swag.IsZero(m.OperatorBundles) { // not required
+		return nil
+	}
+
+	for i := 0; i < len(m.OperatorBundles); i++ {
+		if swag.IsZero(m.OperatorBundles[i]) { // not required
+			continue
+		}
+
+		if m.OperatorBundles[i] != nil {
+			if err := m.OperatorBundles[i].Validate(formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("operator_bundles" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("operator_bundles" + "." + strconv.Itoa(i))
+				}
+				return err
+			}
+		}
+
 	}
 
 	return nil
@@ -1176,7 +1266,7 @@ var clusterTypeStatusPropEnum []interface{}
 
 func init() {
 	var res []string
-	if err := json.Unmarshal([]byte(`["insufficient","ready","error","preparing-for-installation","pending-for-input","installing","finalizing","installed","adding-hosts","cancelled","installing-pending-user-action"]`), &res); err != nil {
+	if err := json.Unmarshal([]byte(`["insufficient","ready","error","preparing-for-installation","pending-for-input","installing","finalizing","installed","adding-hosts","cancelled","installing-pending-user-action","unmonitored"]`), &res); err != nil {
 		panic(err)
 	}
 	for _, v := range res {
@@ -1218,6 +1308,9 @@ const (
 
 	// ClusterStatusInstallingPendingUserAction captures enum value "installing-pending-user-action"
 	ClusterStatusInstallingPendingUserAction string = "installing-pending-user-action"
+
+	// ClusterStatusUnmonitored captures enum value "unmonitored"
+	ClusterStatusUnmonitored string = "unmonitored"
 )
 
 // prop value enum
@@ -1311,6 +1404,14 @@ func (m *Cluster) ContextValidate(ctx context.Context, formats strfmt.Registry) 
 		res = append(res, err)
 	}
 
+	if err := m.contextValidateLastInstallationPreparation(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateLoadBalancer(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
 	if err := m.contextValidateLogsInfo(ctx, formats); err != nil {
 		res = append(res, err)
 	}
@@ -1320,6 +1421,10 @@ func (m *Cluster) ContextValidate(ctx context.Context, formats strfmt.Registry) 
 	}
 
 	if err := m.contextValidateMonitoredOperators(ctx, formats); err != nil {
+		res = append(res, err)
+	}
+
+	if err := m.contextValidateOperatorBundles(ctx, formats); err != nil {
 		res = append(res, err)
 	}
 
@@ -1489,6 +1594,36 @@ func (m *Cluster) contextValidateIngressVips(ctx context.Context, formats strfmt
 	return nil
 }
 
+func (m *Cluster) contextValidateLastInstallationPreparation(ctx context.Context, formats strfmt.Registry) error {
+
+	if err := m.LastInstallationPreparation.ContextValidate(ctx, formats); err != nil {
+		if ve, ok := err.(*errors.Validation); ok {
+			return ve.ValidateName("last-installation-preparation")
+		} else if ce, ok := err.(*errors.CompositeError); ok {
+			return ce.ValidateName("last-installation-preparation")
+		}
+		return err
+	}
+
+	return nil
+}
+
+func (m *Cluster) contextValidateLoadBalancer(ctx context.Context, formats strfmt.Registry) error {
+
+	if m.LoadBalancer != nil {
+		if err := m.LoadBalancer.ContextValidate(ctx, formats); err != nil {
+			if ve, ok := err.(*errors.Validation); ok {
+				return ve.ValidateName("load_balancer")
+			} else if ce, ok := err.(*errors.CompositeError); ok {
+				return ce.ValidateName("load_balancer")
+			}
+			return err
+		}
+	}
+
+	return nil
+}
+
 func (m *Cluster) contextValidateLogsInfo(ctx context.Context, formats strfmt.Registry) error {
 
 	if err := m.LogsInfo.ContextValidate(ctx, formats); err != nil {
@@ -1533,6 +1668,26 @@ func (m *Cluster) contextValidateMonitoredOperators(ctx context.Context, formats
 					return ve.ValidateName("monitored_operators" + "." + strconv.Itoa(i))
 				} else if ce, ok := err.(*errors.CompositeError); ok {
 					return ce.ValidateName("monitored_operators" + "." + strconv.Itoa(i))
+				}
+				return err
+			}
+		}
+
+	}
+
+	return nil
+}
+
+func (m *Cluster) contextValidateOperatorBundles(ctx context.Context, formats strfmt.Registry) error {
+
+	for i := 0; i < len(m.OperatorBundles); i++ {
+
+		if m.OperatorBundles[i] != nil {
+			if err := m.OperatorBundles[i].ContextValidate(ctx, formats); err != nil {
+				if ve, ok := err.(*errors.Validation); ok {
+					return ve.ValidateName("operator_bundles" + "." + strconv.Itoa(i))
+				} else if ce, ok := err.(*errors.CompositeError); ok {
+					return ce.ValidateName("operator_bundles" + "." + strconv.Itoa(i))
 				}
 				return err
 			}

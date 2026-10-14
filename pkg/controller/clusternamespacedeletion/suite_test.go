@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	capiv1beta1 "sigs.k8s.io/cluster-api/api/v1beta1"
 	"testing"
+
+	capiv1beta1 "sigs.k8s.io/cluster-api/api/core/v1beta1"
 
 	"github.com/onsi/ginkgo/v2"
 	"github.com/onsi/gomega"
