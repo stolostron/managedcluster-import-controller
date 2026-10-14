@@ -28,7 +28,6 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/source"
 	certificatesv1 "k8s.io/api/certificates/v1"
 	kevents "k8s.io/client-go/tools/events"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 )
 

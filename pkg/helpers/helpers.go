@@ -1207,4 +1207,3 @@ func ValidateClusterImportConfigSecret(secret *corev1.Secret) error {
 
 	return nil
 }
-
