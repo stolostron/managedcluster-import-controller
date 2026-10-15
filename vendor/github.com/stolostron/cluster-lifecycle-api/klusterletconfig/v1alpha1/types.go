@@ -116,6 +116,12 @@ type KlusterletConfigSpec struct {
 	// This provides driver details required to register add-ons with hub for kubeClient type
 	// +optional
 	AddOnKubeClientRegistrationDriver *operatorv1.AddOnRegistrationDriver `json:"addOnKubeClientRegistrationDriver,omitempty"`
+
+	// ResourceRequirements specify QoS classes of deployments managed by the klusterlet.
+	// It applies to all the containers in the klusterlet agent deployments (registration-agent, work-agent).
+	// If not set, the default resource requirements will be used.
+	// +optional
+	ResourceRequirements *operatorv1.ResourceRequirement `json:"resourceRequirements,omitempty"`
 }
 
 // KlusterletConfigStatus defines the observed state of KlusterletConfig.
