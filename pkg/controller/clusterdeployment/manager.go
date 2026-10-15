@@ -65,9 +65,21 @@ func Add(ctx context.Context,
 			builder.WithPredicates(
 				predicate.Funcs{
 					GenericFunc: func(e event.GenericEvent) bool { return false },
-					DeleteFunc:  func(e event.DeleteEvent) bool { return false },
-					CreateFunc:  func(e event.CreateEvent) bool { return false },
+					// handle the case where the ManagedCluster is deleted — the ClusterDeployment
+					// must be paused to stop Hive from reconciling the detached cluster.
+					DeleteFunc: func(e event.DeleteEvent) bool { return true },
+					// handle the case where the ManagedCluster is created (re-import) — the
+					// ClusterDeployment must be unpaused if we previously paused it.
+					CreateFunc: func(e event.CreateEvent) bool { return true },
 					UpdateFunc: func(e event.UpdateEvent) bool {
+						// handle the case where the ManagedCluster enters deleting state (detach) —
+						// the ClusterDeployment must be paused to stop Hive reconciliation.
+						oldDeletionTimestamp := e.ObjectOld.GetDeletionTimestamp()
+						newDeletionTimestamp := e.ObjectNew.GetDeletionTimestamp()
+						if oldDeletionTimestamp == nil && newDeletionTimestamp != nil {
+							return true
+						}
+
 						oldAnnotations := e.ObjectOld.GetAnnotations()
 						newAnnotations := e.ObjectNew.GetAnnotations()
 
