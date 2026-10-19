@@ -131,8 +131,8 @@ func TestReconcile(t *testing.T) {
 						Name:      "test",
 						Namespace: "test",
 						Annotations: map[string]string{
-							constants.HiveReconcilePauseAnnotation:      constants.LabelValueTrue,
-							constants.HiveReconcilePauseOwnerAnnotation: constants.LabelValueTrue,
+							constants.HiveSyncsetPauseAnnotation:      constants.LabelValueTrue,
+							constants.HiveSyncsetPauseOwnerAnnotation: constants.LabelValueTrue,
 						},
 					},
 					Spec: hivev1.ClusterDeploymentSpec{
@@ -162,7 +162,7 @@ func TestReconcile(t *testing.T) {
 						Annotations: map[string]string{
 							// Operator set pause with "True" (capitalized) - should be recognized
 							// as already paused and not overwritten with our ownership marker
-							constants.HiveReconcilePauseAnnotation: "True",
+							constants.HiveSyncsetPauseAnnotation: "True",
 						},
 					},
 					Spec: hivev1.ClusterDeploymentSpec{
@@ -184,8 +184,8 @@ func TestReconcile(t *testing.T) {
 						Name:      "test",
 						Namespace: "test",
 						Annotations: map[string]string{
-							constants.HiveReconcilePauseAnnotation:      constants.LabelValueTrue,
-							constants.HiveReconcilePauseOwnerAnnotation: constants.LabelValueTrue,
+							constants.HiveSyncsetPauseAnnotation:      constants.LabelValueTrue,
+							constants.HiveSyncsetPauseOwnerAnnotation: constants.LabelValueTrue,
 						},
 					},
 					Spec: hivev1.ClusterDeploymentSpec{
@@ -215,7 +215,7 @@ func TestReconcile(t *testing.T) {
 						Namespace: "test",
 						Annotations: map[string]string{
 							// Pause set by operator (no owner annotation) should be preserved
-							constants.HiveReconcilePauseAnnotation: constants.LabelValueTrue,
+							constants.HiveSyncsetPauseAnnotation: constants.LabelValueTrue,
 						},
 					},
 					Spec: hivev1.ClusterDeploymentSpec{
@@ -557,26 +557,26 @@ func TestReconcile(t *testing.T) {
 				if err != nil {
 					t.Errorf("name %v : get clusterdeployment error: %v", c.name, err)
 				} else {
-					pauseVal, hasPause := cd.Annotations[constants.HiveReconcilePauseAnnotation]
+					pauseVal, hasPause := cd.Annotations[constants.HiveSyncsetPauseAnnotation]
 					// Use strconv.ParseBool to match Hive's boolean parsing semantics
 					paused, parseErr := strconv.ParseBool(pauseVal)
 					if !hasPause || parseErr != nil || !paused {
 						t.Errorf("name %v : expected ClusterDeployment to have %s with truthy value, got: %v",
-							c.name, constants.HiveReconcilePauseAnnotation, cd.Annotations)
+							c.name, constants.HiveSyncsetPauseAnnotation, cd.Annotations)
 					}
 					// Verify owner annotation presence matches expectation
-					_, hasOwner := cd.Annotations[constants.HiveReconcilePauseOwnerAnnotation]
+					_, hasOwner := cd.Annotations[constants.HiveSyncsetPauseOwnerAnnotation]
 					if c.expectedClusterDeployPauseOwner {
-						ownerVal := cd.Annotations[constants.HiveReconcilePauseOwnerAnnotation]
+						ownerVal := cd.Annotations[constants.HiveSyncsetPauseOwnerAnnotation]
 						if !hasOwner || ownerVal != constants.LabelValueTrue {
 							t.Errorf("name %v : expected ClusterDeployment to have %s=true annotation, got: %v",
-								c.name, constants.HiveReconcilePauseOwnerAnnotation, cd.Annotations)
+								c.name, constants.HiveSyncsetPauseOwnerAnnotation, cd.Annotations)
 						}
 					} else {
 						// For operator-set pauses, verify no ownership annotation is present
 						if hasOwner {
 							t.Errorf("name %v : expected ClusterDeployment to NOT have %s annotation (operator-set pause), got: %v",
-								c.name, constants.HiveReconcilePauseOwnerAnnotation, cd.Annotations)
+								c.name, constants.HiveSyncsetPauseOwnerAnnotation, cd.Annotations)
 						}
 					}
 				}
@@ -589,13 +589,13 @@ func TestReconcile(t *testing.T) {
 				if err != nil {
 					t.Errorf("name %v : get clusterdeployment error: %v", c.name, err)
 				} else {
-					if _, hasPause := cd.Annotations[constants.HiveReconcilePauseAnnotation]; hasPause {
+					if _, hasPause := cd.Annotations[constants.HiveSyncsetPauseAnnotation]; hasPause {
 						t.Errorf("name %v : expected ClusterDeployment to NOT have %s annotation after unpause, got: %v",
-							c.name, constants.HiveReconcilePauseAnnotation, cd.Annotations)
+							c.name, constants.HiveSyncsetPauseAnnotation, cd.Annotations)
 					}
-					if _, hasOwner := cd.Annotations[constants.HiveReconcilePauseOwnerAnnotation]; hasOwner {
+					if _, hasOwner := cd.Annotations[constants.HiveSyncsetPauseOwnerAnnotation]; hasOwner {
 						t.Errorf("name %v : expected ClusterDeployment to NOT have %s annotation after unpause, got: %v",
-							c.name, constants.HiveReconcilePauseOwnerAnnotation, cd.Annotations)
+							c.name, constants.HiveSyncsetPauseOwnerAnnotation, cd.Annotations)
 					}
 				}
 			}
