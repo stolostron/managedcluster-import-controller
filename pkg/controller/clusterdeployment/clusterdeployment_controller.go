@@ -281,7 +281,7 @@ func (r *ReconcileClusterDeployment) removeImportFinalizer(
 	return nil
 }
 
-// pauseClusterDeployment adds the hive.openshift.io/reconcile-pause annotation to the
+// pauseClusterDeployment adds the hive.openshift.io/syncset-pause annotation to the
 // ClusterDeployment to stop Hive from reconciling SyncSets and other resources.
 // This is called when a ManagedCluster is being deleted (detached) to ensure that
 // the old hub no longer manages the cluster after detachment.
@@ -292,7 +292,7 @@ func (r *ReconcileClusterDeployment) pauseClusterDeployment(
 	// Check if already paused - don't override existing pause regardless of who set it.
 	// Use strconv.ParseBool to match Hive's boolean parsing semantics (accepts "True", "TRUE", "1", etc.)
 	if clusterDeployment.Annotations != nil {
-		if val, ok := clusterDeployment.Annotations[constants.HiveReconcilePauseAnnotation]; ok {
+		if val, ok := clusterDeployment.Annotations[constants.HiveSyncsetPauseAnnotation]; ok {
 			if paused, err := strconv.ParseBool(val); err == nil && paused {
 				log.V(5).Info("ClusterDeployment is already paused, skipping",
 					"clusterDeployment", clusterDeployment.Name)
@@ -306,9 +306,9 @@ func (r *ReconcileClusterDeployment) pauseClusterDeployment(
 	if clusterDeployment.Annotations == nil {
 		clusterDeployment.Annotations = make(map[string]string)
 	}
-	clusterDeployment.Annotations[constants.HiveReconcilePauseAnnotation] = constants.LabelValueTrue
+	clusterDeployment.Annotations[constants.HiveSyncsetPauseAnnotation] = constants.LabelValueTrue
 	// Set ownership marker so we only unpause what we paused
-	clusterDeployment.Annotations[constants.HiveReconcilePauseOwnerAnnotation] = constants.LabelValueTrue
+	clusterDeployment.Annotations[constants.HiveSyncsetPauseOwnerAnnotation] = constants.LabelValueTrue
 
 	if err := r.client.Patch(ctx, clusterDeployment, patch); err != nil {
 		return err
@@ -322,7 +322,7 @@ func (r *ReconcileClusterDeployment) pauseClusterDeployment(
 	return nil
 }
 
-// unpauseClusterDeployment removes the hive.openshift.io/reconcile-pause annotation from the
+// unpauseClusterDeployment removes the hive.openshift.io/syncset-pause annotation from the
 // ClusterDeployment to allow Hive to resume reconciliation.
 // This is called when a ManagedCluster is re-imported (exists and is not being deleted)
 // to ensure Hive can manage the cluster again.
@@ -335,11 +335,11 @@ func (r *ReconcileClusterDeployment) unpauseClusterDeployment(
 	if clusterDeployment.Annotations == nil {
 		return nil
 	}
-	if _, ok := clusterDeployment.Annotations[constants.HiveReconcilePauseAnnotation]; !ok {
+	if _, ok := clusterDeployment.Annotations[constants.HiveSyncsetPauseAnnotation]; !ok {
 		// Pause annotation is absent - clean up orphaned owner marker if present
-		if _, hasOwner := clusterDeployment.Annotations[constants.HiveReconcilePauseOwnerAnnotation]; hasOwner {
+		if _, hasOwner := clusterDeployment.Annotations[constants.HiveSyncsetPauseOwnerAnnotation]; hasOwner {
 			patch := client.MergeFrom(clusterDeployment.DeepCopy())
-			delete(clusterDeployment.Annotations, constants.HiveReconcilePauseOwnerAnnotation)
+			delete(clusterDeployment.Annotations, constants.HiveSyncsetPauseOwnerAnnotation)
 			if err := r.client.Patch(ctx, clusterDeployment, patch); err != nil {
 				return err
 			}
@@ -349,15 +349,15 @@ func (r *ReconcileClusterDeployment) unpauseClusterDeployment(
 
 	// Only unpause if we set the pause (ownership marker is present)
 	// This preserves operator-set pauses that we didn't create
-	if _, ok := clusterDeployment.Annotations[constants.HiveReconcilePauseOwnerAnnotation]; !ok {
+	if _, ok := clusterDeployment.Annotations[constants.HiveSyncsetPauseOwnerAnnotation]; !ok {
 		log.V(5).Info("ClusterDeployment is paused but not by this controller, preserving pause",
 			"clusterDeployment", clusterDeployment.Name)
 		return nil
 	}
 
 	patch := client.MergeFrom(clusterDeployment.DeepCopy())
-	delete(clusterDeployment.Annotations, constants.HiveReconcilePauseAnnotation)
-	delete(clusterDeployment.Annotations, constants.HiveReconcilePauseOwnerAnnotation)
+	delete(clusterDeployment.Annotations, constants.HiveSyncsetPauseAnnotation)
+	delete(clusterDeployment.Annotations, constants.HiveSyncsetPauseOwnerAnnotation)
 
 	if err := r.client.Patch(ctx, clusterDeployment, patch); err != nil {
 		return err
