@@ -79,18 +79,20 @@ const (
 )
 
 const (
-	// HiveReconcilePauseAnnotation is the annotation key used to pause Hive reconciliation
-	// on a ClusterDeployment. When set to LabelValueTrue, Hive controllers will stop reconciling
-	// the ClusterDeployment and its associated resources (e.g., SyncSets).
+	// HiveSyncsetPauseAnnotation is the annotation key used to pause Hive SyncSet reconciliation
+	// on a ClusterDeployment. When set to LabelValueTrue, Hive will stop syncing SyncSets,
+	// SelectorSyncSets, and remote MachineSets to the target cluster.
 	// This is used during cluster detach to prevent the old hub from continuing to
 	// manage the cluster after it has been detached.
-	// See: https://github.com/openshift/hive/pull/1927
-	HiveReconcilePauseAnnotation = "hive.openshift.io/reconcile-pause"
+	// Note: This does NOT pause other Hive operations like deprovision, allowing ClusterDeployment
+	// deletion to proceed normally.
+	// See: https://github.com/openshift/hive/blob/master/docs/annotations.md
+	HiveSyncsetPauseAnnotation = "hive.openshift.io/syncset-pause"
 
-	// HiveReconcilePauseOwnerAnnotation is an ownership marker indicating that this controller
-	// set the HiveReconcilePauseAnnotation. When unpausing, the controller only removes the
+	// HiveSyncsetPauseOwnerAnnotation is an ownership marker indicating that this controller
+	// set the HiveSyncsetPauseAnnotation. When unpausing, the controller only removes the
 	// pause annotation if this ownership marker is present, preserving operator-set pauses.
-	HiveReconcilePauseOwnerAnnotation = "managedcluster-import-controller.open-cluster-management.io/hive-pause-owner"
+	HiveSyncsetPauseOwnerAnnotation = "managedcluster-import-controller.open-cluster-management.io/hive-syncset-pause-owner"
 )
 
 // NOSONAR-START
