@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/api/resource"
 	apifeature "open-cluster-management.io/api/feature"
 
 	routev1 "github.com/openshift/api/route/v1"
@@ -38,6 +39,15 @@ func init() {
 	os.Setenv(constants.RegistrationImageEnvVarName, "quay.io/open-cluster-management/registration:latest")
 	os.Setenv(constants.TLSProfileSyncImageEnvVarName,
 		"quay.io/open-cluster-management/managedcluster-import-controller:latest")
+}
+
+// mustParseQuantity parses a resource.Quantity and panics on failure.
+func mustParseQuantity(s string) resource.Quantity {
+	q, err := resource.ParseQuantity(s)
+	if err != nil {
+		panic(err)
+	}
+	return q
 }
 
 func TestKlusterletConfigGenerate(t *testing.T) {
@@ -999,6 +1009,85 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				if klusterlet.Spec.WorkConfiguration.StatusSyncInterval.Duration != 5*time.Second {
 					t.Errorf("the expected StatusSyncInterval of klusterlet is %v, but got %v",
 						5*time.Second, klusterlet.Spec.WorkConfiguration.StatusSyncInterval.Duration)
+				}
+			},
+		},
+		{
+			name: "with resourceRequirements from KlusterletConfig",
+			clientObjs: []runtimeclient.Object{
+				&corev1.Namespace{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test",
+					},
+				},
+			},
+			defaultImagePullSecret: "test-image-pull-secret",
+			runtimeObjs: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-image-pull-secret",
+					},
+					Data: map[string][]byte{
+						corev1.DockerConfigJsonKey: []byte("fake-token"),
+					},
+					Type: corev1.SecretTypeDockerConfigJson,
+				},
+			},
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeDefault,
+				"test", // cluster name
+				[]byte("bootstrap kubeconfig"),
+			).WithKlusterletConfig(&klusterletconfigv1alpha1.KlusterletConfig{
+				Spec: klusterletconfigv1alpha1.KlusterletConfigSpec{
+					ResourceRequirements: &operatorv1.ResourceRequirement{
+						Type: operatorv1.ResourceQosClassResourceRequirement,
+						ResourceRequirements: &corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{
+								corev1.ResourceCPU:    mustParseQuantity("50m"),
+								corev1.ResourceMemory: mustParseQuantity("64Mi"),
+							},
+							Limits: corev1.ResourceList{
+								corev1.ResourceCPU:    mustParseQuantity("200m"),
+								corev1.ResourceMemory: mustParseQuantity("256Mi"),
+							},
+						},
+					},
+				},
+			}),
+			validateFunc: func(t *testing.T, objects, crds []runtime.Object) {
+				testinghelpers.ValidateObjectCount(t, objects, 10)
+				testinghelpers.ValidateCRDs(t, crds, 1)
+				testinghelpers.ValidateKlusterlet(t, objects[7], operatorv1.InstallModeDefault,
+					"klusterlet", "test", constants.DefaultKlusterletNamespace)
+
+				klusterlet, _ := objects[7].(*operatorv1.Klusterlet)
+				if klusterlet.Spec.ResourceRequirement == nil {
+					t.Fatalf("expected klusterlet ResourceRequirement to be set, got nil")
+				}
+				if klusterlet.Spec.ResourceRequirement.Type != operatorv1.ResourceQosClassResourceRequirement {
+					t.Errorf("expected ResourceRequirement type %s, got %s",
+						operatorv1.ResourceQosClassResourceRequirement,
+						klusterlet.Spec.ResourceRequirement.Type)
+				}
+				rr := klusterlet.Spec.ResourceRequirement.ResourceRequirements
+				if rr == nil {
+					t.Fatalf("expected ResourceRequirements to be set, got nil")
+				}
+				gotCPUReq := rr.Requests[corev1.ResourceCPU]
+				if !equality.Semantic.DeepEqual(gotCPUReq, mustParseQuantity("50m")) {
+					t.Errorf("expected CPU request 50m, got %s", gotCPUReq.String())
+				}
+				gotMemReq := rr.Requests[corev1.ResourceMemory]
+				if !equality.Semantic.DeepEqual(gotMemReq, mustParseQuantity("64Mi")) {
+					t.Errorf("expected memory request 64Mi, got %s", gotMemReq.String())
+				}
+				gotCPULim := rr.Limits[corev1.ResourceCPU]
+				if !equality.Semantic.DeepEqual(gotCPULim, mustParseQuantity("200m")) {
+					t.Errorf("expected CPU limit 200m, got %s", gotCPULim.String())
+				}
+				gotMemLim := rr.Limits[corev1.ResourceMemory]
+				if !equality.Semantic.DeepEqual(gotMemLim, mustParseQuantity("256Mi")) {
+					t.Errorf("expected memory limit 256Mi, got %s", gotMemLim.String())
 				}
 			},
 		},

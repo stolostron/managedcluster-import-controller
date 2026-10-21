@@ -19,7 +19,7 @@ require (
 	github.com/openshift/library-go v0.0.0-20261001144932-192662696fc7
 	github.com/sethvargo/go-password v0.4.0
 	github.com/spf13/pflag v1.0.10
-	github.com/stolostron/cluster-lifecycle-api v0.0.0-20260330032750-43755d6ceb09
+	github.com/stolostron/cluster-lifecycle-api v0.0.0-20261016140402-a0759edd9e0d
 	go.uber.org/zap v1.28.0
 	golang.org/x/text v0.43.0
 	k8s.io/api v0.37.1
