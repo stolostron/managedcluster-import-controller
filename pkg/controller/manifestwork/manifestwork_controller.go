@@ -103,7 +103,11 @@ func (r *ReconcileManifestWork) Reconcile(ctx context.Context, request reconcile
 	}
 
 	if _, autoImportDisabled := managedCluster.Annotations[apiconstants.DisableAutoImportAnnotation]; autoImportDisabled && len(manifestWorks) > 0 {
-		reqLogger.V(5).Info("Auto-import disabled, ensuring ReadOnly configs on existing ManifestWorks")
+		if _, allowUpdate := managedCluster.Annotations[constants.AnnotationAllowManifestWorkUpdate]; allowUpdate {
+			reqLogger.V(5).Info("Auto-import disabled and manifest work update allowed, leaving Update strategy")
+		} else {
+			reqLogger.V(5).Info("Auto-import disabled, ensuring ReadOnly configs on existing ManifestWorks")
+		}
 		for _, mw := range manifestWorks {
 			desiredConfigs := buildManifestConfigs(managedCluster, mw.Spec.Workload.Manifests)
 			if helpers.ManifestConfigsEqual(mw.Spec.ManifestConfigs, desiredConfigs) {
@@ -242,6 +246,10 @@ func createManifestWorks(
 // to prevent work-agent from creating or updating them. This prevents the DR restore race condition
 // where work-agent (connected to backup hub) overwrites resources that the restore hub just pushed.
 //
+// import.open-cluster-management.io/allow-manifestwork-update skips ReadOnly and leaves the default
+// Update strategy. The import-secret rebuild above is still skipped when works already exist.
+// Disaster recovery does not set that annotation, so ReadOnly remains immediate there.
+//
 // The Resource field in ResourceIdentifier is populated using meta.UnsafeGuessKindToResource, which
 // applies standard English pluralization rules to the Kind name. This works correctly for all types
 // currently included in the klusterlet ManifestWorks:
@@ -263,7 +271,8 @@ func createManifestWorks(
 func buildManifestConfigs(managedCluster *clusterv1.ManagedCluster, manifests []workv1.Manifest) []workv1.ManifestConfigOption {
 	// Check if auto-import is disabled
 	_, autoImportDisabled := managedCluster.Annotations[apiconstants.DisableAutoImportAnnotation]
-	if !autoImportDisabled {
+	_, allowUpdate := managedCluster.Annotations[constants.AnnotationAllowManifestWorkUpdate]
+	if !autoImportDisabled || allowUpdate {
 		// No special config needed - use default Update strategy
 		return nil
 	}

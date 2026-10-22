@@ -22,6 +22,12 @@ const (
 	// AnnotationRemainNamespace is added to the ns by user to retain the namespace after the cluster is detached.
 	AnnotationRemainNamespace = "open-cluster-management.io/retain-namespace"
 
+	// AnnotationAllowManifestWorkUpdate lets a hive migration apply one klusterlet
+	// ManifestWork update while disable-auto-import is set. While it is present,
+	// existing works stay on the Update strategy. When it is absent,
+	// disable-auto-import still marks those works ReadOnly.
+	AnnotationAllowManifestWorkUpdate = "import.open-cluster-management.io/allow-manifestwork-update"
+
 	// LabelAutoImportRestore is the label key of auto import secret used for backup restore case
 	LabelAutoImportRestore = "cluster.open-cluster-management.io/restore-auto-import-secret"
 )
