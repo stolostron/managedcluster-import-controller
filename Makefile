@@ -9,7 +9,6 @@ export GO111MODULE := on
 export GOPATH      ?=$(shell go env GOPATH)
 export GOHOSTOS    ?=$(shell go env GOHOSTOS)
 export GOHOSTARCH  ?=$(shell go env GOHOSTARCH)
-export GOPACKAGES   = $(shell go list ./... | grep -v /manager | grep -v /bindata  | grep -v /vendor | grep -v /internal | grep -v /build | grep -v /test )
 
 export PROJECT_DIR            = $(shell 'pwd')
 export BUILD_DIR              = $(PROJECT_DIR)/build
