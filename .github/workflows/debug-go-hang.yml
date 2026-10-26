@@ -20,68 +20,64 @@ jobs:
         with:
           go-version: '1.26.0'
 
-      - name: Install strace
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq strace > /dev/null
-
-      - name: Versions
+      - name: Env-var bisect on bare go list
         run: |
-          uname -r
-          make --version | head -1
-          readlink -f /bin/sh
-          go version
-
-      - name: Minimal constructs - the exact real pattern (lazy + exported)
-        run: |
-          run_case() {
-            name=$1; cap=$2
-            echo "===== $name"
+          for kv in "CGO_ENABLED=1" "GO111MODULE=on" "GOFLAGS=" "GOHOSTOS=linux" "GOHOSTARCH=amd64" "GOPATH=/home/runner/go"; do
+            echo "===== env $kv go list ./..."
             start=$(date +%s)
-            if timeout $cap make -f /tmp/Mk.$name > /tmp/out.$name 2>&1; then
-              echo "OK in $(( $(date +%s) - start ))s: $(head -1 /tmp/out.$name)"
+            if timeout 90 env "$kv" go list ./... > /dev/null 2>&1; then
+              echo "OK in $(( $(date +%s) - start ))s"
             else
-              echo "HUNG after $(( $(date +%s) - start ))s (output so far: $(head -c 150 /tmp/out.$name))"
-            fi
-          }
-          # 1: lazy (=) + exported + NOT referenced in recipe -> expands at env construction
-          printf 'export X = $(shell go env GOPATH)\nall: ; @echo DONE-lazyexp\n' > /tmp/Mk.lazyexp
-          # 2: lazy + NOT exported + referenced in recipe
-          printf 'X = $(shell go env GOPATH)\nall: ; @echo DONE-lazyref: $(X)\n' > /tmp/Mk.lazyref
-          # 3: immediate (:=) + exported
-          printf 'export X := $(shell go env GOPATH)\nall: ; @echo DONE-immediate\n' > /tmp/Mk.immediate
-          # 4: ?= form exactly like the Makefile
-          printf 'export X ?= $(shell go env GOPATH)\nall: ; @echo DONE-qmark\n' > /tmp/Mk.qmark
-          # 5: exported lazy go env piped
-          printf 'export X = $(shell go env GOPATH | grep GOPATH)\nall: ; @echo DONE-lazypipe\n' > /tmp/Mk.lazypipe
-          # 6: THE exact GOPACKAGES construct: exported lazy go-list pipeline
-          printf 'export GOPACKAGES = $(shell go list ./... | grep -v /manager | grep -v /bindata | grep -v /vendor | grep -v /internal | grep -v /build | grep -v /test)\nall: ; @echo DONE-realgop\n' > /tmp/Mk.realgop
-          # 7: exported lazy go list, NO pipe
-          printf 'export X = $(shell go list ./...)\nall: ; @echo DONE-golist\n' > /tmp/Mk.golist
-          for c in lazyexp lazyref immediate qmark lazypipe; do run_case $c 120; done
-          run_case golist 300
-          run_case realgop 300
-
-      - name: Bisect the real Makefile (make -n, no recipe execution)
-        run: |
-          for t in build-image e2e-test-core test; do
-            echo "===== make -n $t"
-            start=$(date +%s)
-            if timeout 300 make -n $t > /tmp/maken.$t 2>&1; then
-              echo "OK in $(( $(date +%s) - start ))s ($(wc -l < /tmp/maken.$t) lines printed)"
-            else
-              echo "HUNG after $(( $(date +%s) - start ))s, output lines: $(wc -l < /tmp/maken.$t)"
-              head -3 /tmp/maken.$t
+              echo "HUNG/FAIL after $(( $(date +%s) - start ))s"
             fi
           done
 
-      - name: strace + ps snapshot of the hanging make
+      - name: Shell bisect on the exact pipeline
         run: |
-          strace -f -tt -T -o /tmp/make.strace timeout 240 make -n build-image > /dev/null 2>&1 &
-          strace_pid=$!
-          sleep 45
-          echo "=== process tree at t=45s:"
-          ps -ef --forest | grep -E 'make|go |sh -c|strace' | grep -v grep | head -20
-          wait $strace_pid || true
-          echo "=== make strace: last 30 lines"
-          tail -30 /tmp/make.strace
-          echo "=== slowest syscalls (top 10)"
-          grep -oE '<[0-9]+\.[0-9]+>$' /tmp/make.strace | tr -d '<>' | sort -rn | head -10
+          PIPE='go list ./... | grep -v /manager | grep -v /bindata | grep -v /vendor | grep -v /internal | grep -v /build | grep -v /test'
+          for sh in sh bash; do
+            echo "===== $sh -c pipeline"
+            start=$(date +%s)
+            if timeout 90 $sh -c "$PIPE" > /dev/null 2>&1; then
+              echo "OK in $(( $(date +%s) - start ))s"
+            else
+              echo "HUNG after $(( $(date +%s) - start ))s"
+            fi
+          done
+
+      - name: SHELL bisect in make
+        run: |
+          printf 'SHELL := /bin/bash\nexport GOPACKAGES = $(shell go list ./... | grep -v /manager | grep -v /bindata | grep -v /vendor | grep -v /internal | grep -v /build | grep -v /test)\nall: ; @echo DONE-bashshell\n' > /tmp/Mk.bashshell
+          printf 'SHELL := /bin/sh\nexport GOPACKAGES = $(shell go list ./... | grep -v /manager | grep -v /bindata | grep -v /vendor | grep -v /internal | grep -v /build | grep -v /test)\nall: ; @echo DONE-shshell\n' > /tmp/Mk.shshell
+          for v in bashshell shshell; do
+            echo "===== make -f Mk.$v"
+            start=$(date +%s)
+            if timeout 120 make -f /tmp/Mk.$v > /tmp/out.$v 2>&1; then
+              echo "OK in $(( $(date +%s) - start ))s: $(head -1 /tmp/out.$v)"
+            else
+              echo "HUNG after $(( $(date +%s) - start ))s"
+            fi
+          done
+
+      - name: Override SHELL on the real Makefile
+        run: |
+          for shv in /bin/sh /bin/dash /bin/bash; do
+            echo "===== make -n build-image SHELL=$shv"
+            start=$(date +%s)
+            if timeout 120 make -n build-image SHELL=$shv > /tmp/mk.out 2>&1; then
+              echo "OK in $(( $(date +%s) - start ))s"
+            else
+              echo "HUNG after $(( $(date +%s) - start ))s"
+            fi
+          done
+
+      - name: Full-env reproduction and unfiltered process tree
+        run: |
+          echo "===== make -n build-image (default), ps snapshot at t=30s"
+          timeout 60 make -n build-image > /tmp/mk2.out 2>&1 &
+          mkpid=$!
+          sleep 30
+          ps -ef --forest | sed -n '/make -n build-image/,$p' | head -25
+          wait $mkpid || true
+          echo "===== /tmp usage:"
+          df -h /tmp | tail -1
