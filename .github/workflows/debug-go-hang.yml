@@ -30,58 +30,58 @@ jobs:
           readlink -f /bin/sh
           go version
 
-      - name: Isolate make shell-function variants
+      - name: Minimal constructs - the exact real pattern (lazy + exported)
         run: |
-          mk() { printf "%s\n" "$2" > /tmp/Mk.$1; }
-          # variant: single command, no pipe
-          mk plain 'X := $(shell go env GOPATH)
-          all: ; @echo DONE-plain'
-          # variant: one pipe stage
-          mk pipe1 'X := $(shell go env GOPATH | grep GOPATH)
-          all: ; @echo DONE-pipe1'
-          # variant: two pipe stages
-          mk pipe2 'X := $(shell go env GOPATH | grep GOPATH | grep -v NOMATCH)
-          all: ; @echo DONE-pipe2'
-          # variant: trivial builtin, no pipe
-          mk echo 'X := $(shell echo hello)
-          all: ; @echo DONE-echo'
-          # variant: sleep (no output)
-          mk sleep 'X := $(shell sleep 2)
-          all: ; @echo DONE-sleep'
-          # variant: cat file, no pipe
-          mk cat 'X := $(shell cat go.mod)
-          all: ; @echo DONE-cat'
-          # variant: cat file piped once
-          mk catpipe 'X := $(shell cat go.mod | head -1)
-          all: ; @echo DONE-catpipe'
-          for v in plain pipe1 pipe2 echo sleep cat catpipe; do
-            echo "===== variant: $v"
+          run_case() {
+            name=$1; cap=$2
+            echo "===== $name"
             start=$(date +%s)
-            if timeout 120 make -f /tmp/Mk.$v > /tmp/out.$v 2>&1; then
-              echo "OK in $(( $(date +%s) - start ))s: $(cat /tmp/out.$v | head -1)"
+            if timeout $cap make -f /tmp/Mk.$name > /tmp/out.$name 2>&1; then
+              echo "OK in $(( $(date +%s) - start ))s: $(head -1 /tmp/out.$name)"
             else
-              echo "HUNG/TIMEOUT after $(( $(date +%s) - start ))s (output: $(head -c 200 /tmp/out.$v))"
+              echo "HUNG after $(( $(date +%s) - start ))s (output so far: $(head -c 150 /tmp/out.$name))"
+            fi
+          }
+          # 1: lazy (=) + exported + NOT referenced in recipe -> expands at env construction
+          printf 'export X = $(shell go env GOPATH)\nall: ; @echo DONE-lazyexp\n' > /tmp/Mk.lazyexp
+          # 2: lazy + NOT exported + referenced in recipe
+          printf 'X = $(shell go env GOPATH)\nall: ; @echo DONE-lazyref: $(X)\n' > /tmp/Mk.lazyref
+          # 3: immediate (:=) + exported
+          printf 'export X := $(shell go env GOPATH)\nall: ; @echo DONE-immediate\n' > /tmp/Mk.immediate
+          # 4: ?= form exactly like the Makefile
+          printf 'export X ?= $(shell go env GOPATH)\nall: ; @echo DONE-qmark\n' > /tmp/Mk.qmark
+          # 5: exported lazy go env piped
+          printf 'export X = $(shell go env GOPATH | grep GOPATH)\nall: ; @echo DONE-lazypipe\n' > /tmp/Mk.lazypipe
+          # 6: THE exact GOPACKAGES construct: exported lazy go-list pipeline
+          printf 'export GOPACKAGES = $(shell go list ./... | grep -v /manager | grep -v /bindata | grep -v /vendor | grep -v /internal | grep -v /build | grep -v /test)\nall: ; @echo DONE-realgop\n' > /tmp/Mk.realgop
+          # 7: exported lazy go list, NO pipe
+          printf 'export X = $(shell go list ./...)\nall: ; @echo DONE-golist\n' > /tmp/Mk.golist
+          for c in lazyexp lazyref immediate qmark lazypipe; do run_case $c 120; done
+          run_case golist 300
+          run_case realgop 300
+
+      - name: Bisect the real Makefile (make -n, no recipe execution)
+        run: |
+          for t in build-image e2e-test-core test; do
+            echo "===== make -n $t"
+            start=$(date +%s)
+            if timeout 300 make -n $t > /tmp/maken.$t 2>&1; then
+              echo "OK in $(( $(date +%s) - start ))s ($(wc -l < /tmp/maken.$t) lines printed)"
+            else
+              echo "HUNG after $(( $(date +%s) - start ))s, output lines: $(wc -l < /tmp/maken.$t)"
+              head -3 /tmp/maken.$t
             fi
           done
 
-      - name: The real GOPACKAGES line
+      - name: strace + ps snapshot of the hanging make
         run: |
-          printf 'GOPACKAGES = $(shell go list ./... | grep -v /manager | grep -v /bindata | grep -v /vendor | grep -v /internal | grep -v /build | grep -v /test)\nall: ; @echo DONE-real\n' > /tmp/Mk.real
-          echo "===== variant: real GOPACKAGES pipeline (600s cap)"
-          start=$(date +%s)
-          if timeout 600 make -f /tmp/Mk.real > /tmp/out.real 2>&1; then
-            echo "OK in $(( $(date +%s) - start ))s"
-          else
-            echo "HUNG after $(( $(date +%s) - start ))s"
-          fi
-
-      - name: strace make on a single shell-function expansion
-        run: |
-          printf 'X := $(shell go env GOPATH)\nall: ; @echo DONE\n' > /tmp/Mk.strace
-          strace -f -tt -T -o /tmp/make.strace timeout 300 make -f /tmp/Mk.strace > /dev/null 2>&1 || true
-          echo "=== make strace: last 40 lines"
-          tail -40 /tmp/make.strace
-          echo "=== slowest syscalls (top 10 by duration)"
+          strace -f -tt -T -o /tmp/make.strace timeout 240 make -n build-image > /dev/null 2>&1 &
+          strace_pid=$!
+          sleep 45
+          echo "=== process tree at t=45s:"
+          ps -ef --forest | grep -E 'make|go |sh -c|strace' | grep -v grep | head -20
+          wait $strace_pid || true
+          echo "=== make strace: last 30 lines"
+          tail -30 /tmp/make.strace
+          echo "=== slowest syscalls (top 10)"
           grep -oE '<[0-9]+\.[0-9]+>$' /tmp/make.strace | tr -d '<>' | sort -rn | head -10
-          echo "=== syscall histogram"
-          awk -F'[()]' '/^[0-9]/ {print $2}' /tmp/make.strace | awk '{print $1}' | sort | uniq -c | sort -rn | head -15
