@@ -1,0 +1,97 @@
+name: Debug go hang on ubuntu images
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [debug/go-hang]
+
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version: '1.26.0'
+
+      - name: Install strace
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq strace > /dev/null
+
+      - name: Environment info
+        run: |
+          uname -a
+          head -2 /etc/os-release
+          echo "nproc=$(nproc)"
+          mount | grep -E ' on / | on /home | on /tmp ' || true
+          grep -v '^#' /etc/resolv.conf | head -3 || true
+          cat ~/.config/go/env 2>/dev/null || echo "(no go env file)"
+          go version
+
+      - name: Baseline non-go timings
+        run: |
+          time bash -c 'true'
+          time make --version > /dev/null
+          time git --version
+
+      - name: strace go env GOPATH (the 2-3 min expansion)
+        run: |
+          strace -f -tt -T -o /tmp/goenv.strace timeout 300 go env GOPATH > /dev/null 2>&1 || true
+          echo "=== go env strace: last 30 lines"
+          tail -30 /tmp/goenv.strace
+          echo "=== slowest syscalls (top 10 by duration)"
+          grep -oE '<[0-9]+\.[0-9]+>$' /tmp/goenv.strace | tr -d '<>' | sort -rn | head -10
+
+      - name: Timed bare go probes
+        run: |
+          for cmd in "go version" "go env GOPATH" "go env GOHOSTOS" "go env GOHOSTARCH" "go env"; do
+            echo "===== $cmd"
+            start=$(date +%s)
+            if timeout 180 $cmd > /tmp/probe.out 2>&1; then
+              echo "OK in $(( $(date +%s) - start ))s"
+            else
+              echo "TIMED OUT/FAILED after $(( $(date +%s) - start ))s"
+            fi
+          done
+          echo "===== via sh -c (how make invokes it)"
+          start=$(date +%s); timeout 180 sh -c 'go env GOPATH' > /dev/null 2>&1 && echo "OK in $(( $(date +%s) - start ))s" || echo "TIMED OUT"
+          echo "===== CGO_ENABLED=0"
+          start=$(date +%s); timeout 180 env CGO_ENABLED=0 go env GOPATH > /dev/null 2>&1 && echo "OK in $(( $(date +%s) - start ))s" || echo "TIMED OUT"
+
+      - name: goroutine dump of stuck go list
+        run: |
+          echo "===== go list ./... background, SIGQUIT after 90s"
+          go list ./... > /tmp/golist.out 2>/tmp/golist.quit || true &
+          pid=$!
+          sleep 90
+          if kill -0 $pid 2>/dev/null; then
+            echo "still running after 90s - sending SIGQUIT for goroutine dump"
+            kill -QUIT $pid || true
+            sleep 5
+          else
+            echo "go list finished before 90s"
+          fi
+          wait $pid 2>/dev/null || true
+          echo "=== goroutine dump / stderr:"
+          head -120 /tmp/golist.quit
+          echo "=== stdout lines so far: $(wc -l < /tmp/golist.out 2>/dev/null || echo 0)"
+
+      - name: strace go list (the infinite hang)
+        run: |
+          strace -f -tt -T -o /tmp/golist.strace timeout 420 go list ./... > /dev/null 2>&1 || true
+          echo "=== go list strace: last 40 lines"
+          tail -40 /tmp/golist.strace
+          echo "=== slowest syscalls (top 10 by duration)"
+          grep -oE '<[0-9]+\.[0-9]+>$' /tmp/golist.strace | tr -d '<>' | sort -rn | head -10
+          echo "=== syscall histogram"
+          awk -F'[()]' '/^[0-9]/ {print $2}' /tmp/golist.strace | awk '{print $1}' | sort | uniq -c | sort -rn | head -15
+
+      - name: the exact make expansion path
+        run: |
+          echo "===== make -n test (variable expansion only, 420s cap)"
+          start=$(date +%s); timeout 420 make -n test > /tmp/maken.out 2>&1 && echo "make -n OK in $(( $(date +%s) - start ))s" || { echo "make -n TIMED OUT after $(( $(date +%s) - start ))s"; tail -3 /tmp/maken.out; }
