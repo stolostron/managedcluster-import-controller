@@ -27,7 +27,7 @@ jobs:
         run: |
           uname -r
           make --version | head -1
-          sh -c 'echo /bin/sh -> $(readlink -f /bin/sh)'
+          readlink -f /bin/sh
           go version
 
       - name: Isolate make shell-function variants
