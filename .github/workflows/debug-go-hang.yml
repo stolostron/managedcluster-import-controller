@@ -23,75 +23,65 @@ jobs:
       - name: Install strace
         run: sudo apt-get update -qq && sudo apt-get install -y -qq strace > /dev/null
 
-      - name: Environment info
+      - name: Versions
         run: |
-          uname -a
-          head -2 /etc/os-release
-          echo "nproc=$(nproc)"
-          mount | grep -E ' on / | on /home | on /tmp ' || true
-          grep -v '^#' /etc/resolv.conf | head -3 || true
-          cat ~/.config/go/env 2>/dev/null || echo "(no go env file)"
+          uname -r
+          make --version | head -1
+          sh -c 'echo /bin/sh -> $(readlink -f /bin/sh)'
           go version
 
-      - name: Baseline non-go timings
+      - name: Isolate make shell-function variants
         run: |
-          time bash -c 'true'
-          time make --version > /dev/null
-          time git --version
-
-      - name: strace go env GOPATH (the 2-3 min expansion)
-        run: |
-          strace -f -tt -T -o /tmp/goenv.strace timeout 300 go env GOPATH > /dev/null 2>&1 || true
-          echo "=== go env strace: last 30 lines"
-          tail -30 /tmp/goenv.strace
-          echo "=== slowest syscalls (top 10 by duration)"
-          grep -oE '<[0-9]+\.[0-9]+>$' /tmp/goenv.strace | tr -d '<>' | sort -rn | head -10
-
-      - name: Timed bare go probes
-        run: |
-          for cmd in "go version" "go env GOPATH" "go env GOHOSTOS" "go env GOHOSTARCH" "go env"; do
-            echo "===== $cmd"
+          mk() { printf "%s\n" "$2" > /tmp/Mk.$1; }
+          # variant: single command, no pipe
+          mk plain 'X := $(shell go env GOPATH)
+          all: ; @echo DONE-plain'
+          # variant: one pipe stage
+          mk pipe1 'X := $(shell go env GOPATH | grep GOPATH)
+          all: ; @echo DONE-pipe1'
+          # variant: two pipe stages
+          mk pipe2 'X := $(shell go env GOPATH | grep GOPATH | grep -v NOMATCH)
+          all: ; @echo DONE-pipe2'
+          # variant: trivial builtin, no pipe
+          mk echo 'X := $(shell echo hello)
+          all: ; @echo DONE-echo'
+          # variant: sleep (no output)
+          mk sleep 'X := $(shell sleep 2)
+          all: ; @echo DONE-sleep'
+          # variant: cat file, no pipe
+          mk cat 'X := $(shell cat go.mod)
+          all: ; @echo DONE-cat'
+          # variant: cat file piped once
+          mk catpipe 'X := $(shell cat go.mod | head -1)
+          all: ; @echo DONE-catpipe'
+          for v in plain pipe1 pipe2 echo sleep cat catpipe; do
+            echo "===== variant: $v"
             start=$(date +%s)
-            if timeout 180 $cmd > /tmp/probe.out 2>&1; then
-              echo "OK in $(( $(date +%s) - start ))s"
+            if timeout 120 make -f /tmp/Mk.$v > /tmp/out.$v 2>&1; then
+              echo "OK in $(( $(date +%s) - start ))s: $(cat /tmp/out.$v | head -1)"
             else
-              echo "TIMED OUT/FAILED after $(( $(date +%s) - start ))s"
+              echo "HUNG/TIMEOUT after $(( $(date +%s) - start ))s (output: $(head -c 200 /tmp/out.$v))"
             fi
           done
-          echo "===== via sh -c (how make invokes it)"
-          start=$(date +%s); timeout 180 sh -c 'go env GOPATH' > /dev/null 2>&1 && echo "OK in $(( $(date +%s) - start ))s" || echo "TIMED OUT"
-          echo "===== CGO_ENABLED=0"
-          start=$(date +%s); timeout 180 env CGO_ENABLED=0 go env GOPATH > /dev/null 2>&1 && echo "OK in $(( $(date +%s) - start ))s" || echo "TIMED OUT"
 
-      - name: goroutine dump of stuck go list
+      - name: The real GOPACKAGES line
         run: |
-          echo "===== go list ./... background, SIGQUIT after 90s"
-          go list ./... > /tmp/golist.out 2>/tmp/golist.quit || true &
-          pid=$!
-          sleep 90
-          if kill -0 $pid 2>/dev/null; then
-            echo "still running after 90s - sending SIGQUIT for goroutine dump"
-            kill -QUIT $pid || true
-            sleep 5
+          printf 'GOPACKAGES = $(shell go list ./... | grep -v /manager | grep -v /bindata | grep -v /vendor | grep -v /internal | grep -v /build | grep -v /test)\nall: ; @echo DONE-real\n' > /tmp/Mk.real
+          echo "===== variant: real GOPACKAGES pipeline (600s cap)"
+          start=$(date +%s)
+          if timeout 600 make -f /tmp/Mk.real > /tmp/out.real 2>&1; then
+            echo "OK in $(( $(date +%s) - start ))s"
           else
-            echo "go list finished before 90s"
+            echo "HUNG after $(( $(date +%s) - start ))s"
           fi
-          wait $pid 2>/dev/null || true
-          echo "=== goroutine dump / stderr:"
-          head -120 /tmp/golist.quit
-          echo "=== stdout lines so far: $(wc -l < /tmp/golist.out 2>/dev/null || echo 0)"
 
-      - name: strace go list (the infinite hang)
+      - name: strace make on a single shell-function expansion
         run: |
-          strace -f -tt -T -o /tmp/golist.strace timeout 420 go list ./... > /dev/null 2>&1 || true
-          echo "=== go list strace: last 40 lines"
-          tail -40 /tmp/golist.strace
+          printf 'X := $(shell go env GOPATH)\nall: ; @echo DONE\n' > /tmp/Mk.strace
+          strace -f -tt -T -o /tmp/make.strace timeout 300 make -f /tmp/Mk.strace > /dev/null 2>&1 || true
+          echo "=== make strace: last 40 lines"
+          tail -40 /tmp/make.strace
           echo "=== slowest syscalls (top 10 by duration)"
-          grep -oE '<[0-9]+\.[0-9]+>$' /tmp/golist.strace | tr -d '<>' | sort -rn | head -10
+          grep -oE '<[0-9]+\.[0-9]+>$' /tmp/make.strace | tr -d '<>' | sort -rn | head -10
           echo "=== syscall histogram"
-          awk -F'[()]' '/^[0-9]/ {print $2}' /tmp/golist.strace | awk '{print $1}' | sort | uniq -c | sort -rn | head -15
-
-      - name: the exact make expansion path
-        run: |
-          echo "===== make -n test (variable expansion only, 420s cap)"
-          start=$(date +%s); timeout 420 make -n test > /tmp/maken.out 2>&1 && echo "make -n OK in $(( $(date +%s) - start ))s" || { echo "make -n TIMED OUT after $(( $(date +%s) - start ))s"; tail -3 /tmp/maken.out; }
+          awk -F'[()]' '/^[0-9]/ {print $2}' /tmp/make.strace | awk '{print $1}' | sort | uniq -c | sort -rn | head -15
