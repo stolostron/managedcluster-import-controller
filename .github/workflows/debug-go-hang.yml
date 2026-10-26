@@ -35,7 +35,6 @@ jobs:
             echo "=== cwd:"
             readlink /proc/$CHILD/cwd
             cp /proc/$CHILD/environ /tmp/child-environ 2>/dev/null || echo "no environ"
-            # also capture the parent chain
             PP=$(awk '/^PPid:/{print $2}' /proc/$CHILD/status)
             echo "=== parent $PP cmdline:"
             tr '\0' ' ' < /proc/$PP/cmdline 2>/dev/null; echo
@@ -44,53 +43,47 @@ jobs:
 
       - name: Replay go list with the captured environment
         run: |
-          if [ -f /tmp/child-environ ]; then
-            echo "=== replaying go list with exact captured env (90s cap)"
-            GOPATH_BIN=$(dirname $(command -v go))
-            start=$(date +%s)
-            timeout 90 python3 -c "
-import os, subprocess, sys
-env = {}
-for item in open('/tmp/child-environ','rb').read().split(b'\x00'):
-    if b'=' in item:
-        k, v = item.split(b'=', 1)
-        env[k.decode()] = v.decode()
-p = subprocess.run(['go','list','./...'], env=env, capture_output=True, timeout=85)
-print('exit', p.returncode, 'stdout lines', len(p.stdout.splitlines()))
-" && echo "REPLAY OK in $(( $(date +%s) - start ))s" || echo "REPLAY HUNG/FAILED after $(( $(date +%s) - start ))s"
+          if [ ! -f /tmp/child-environ ]; then echo "no captured environ - skipping"; exit 0; fi
+          start=$(date +%s)
+          if timeout 90 python3 - <<'PYEOF'
+          import subprocess
+          env = {}
+          for item in open('/tmp/child-environ','rb').read().split(b'\x00'):
+              if b'=' in item:
+                  k, v = item.split(b'=', 1)
+                  env[k.decode()] = v.decode()
+          p = subprocess.run(['go','list','./...'], env=env, capture_output=True, timeout=85)
+          print('exit', p.returncode, 'stdout lines', len(p.stdout.splitlines()))
+          PYEOF
+          then
+            echo "REPLAY OK in $(( $(date +%s) - start ))s"
           else
-            echo "no captured environ - skipping"
+            echo "REPLAY HUNG/FAILED after $(( $(date +%s) - start ))s"
           fi
 
       - name: Env-subset bisect via replay
         run: |
-          if [ -f /tmp/child-environ ]; then
-            python3 - <<'EOF'
-import os, subprocess, time
-env = {}
-for item in open('/tmp/child-environ','rb').read().split(b'\x00'):
-    if b'=' in item:
-        k, v = item.split(b'=', 1)
-        env[k.decode()] = v.decode()
-def run(label, e, cap=60):
-    t0 = time.time()
-    try:
-        subprocess.run(['go','list','./...'], env=e, capture_output=True, timeout=cap)
-        print(f"{label}: OK in {time.time()-t0:.1f}s")
-    except subprocess.TimeoutExpired:
-        print(f"{label}: HUNG >{cap}s")
-# full env
-run("full-env", env)
-# drop all GO* vars
-no_go = {k:v for k,v in env.items() if not k.startswith("GO")}
-run("no-GO-vars", no_go)
-# drop MAKE*
-no_make = {k:v for k,v in env.items() if not k.startswith("MAKE")}
-run("no-MAKE-vars", no_make)
-# only GO* + PATH + HOME
-minimal = {k:v for k,v in env.items() if k.startswith("GO") or k in ("PATH","HOME","PWD")}
-run("GO+PATH+HOME-only", minimal)
-# only PATH+HOME
-run("PATH+HOME-only", {k:v for k,v in env.items() if k in ("PATH","HOME","PWD")})
-EOF
-          fi
+          if [ ! -f /tmp/child-environ ]; then echo "no captured environ - skipping"; exit 0; fi
+          python3 - <<'PYEOF'
+          import subprocess, time
+          env = {}
+          for item in open('/tmp/child-environ','rb').read().split(b'\x00'):
+              if b'=' in item:
+                  k, v = item.split(b'=', 1)
+                  env[k.decode()] = v.decode()
+          def run(label, e, cap=60):
+              t0 = time.time()
+              try:
+                  subprocess.run(['go','list','./...'], env=e, capture_output=True, timeout=cap)
+                  print(f"{label}: OK in {time.time()-t0:.1f}s")
+              except subprocess.TimeoutExpired:
+                  print(f"{label}: HUNG >{cap}s")
+          run("full-env", env)
+          no_go = {k:v for k,v in env.items() if not k.startswith("GO")}
+          run("no-GO-vars", no_go)
+          no_make = {k:v for k,v in env.items() if not k.startswith("MAKE")}
+          run("no-MAKE-vars", no_make)
+          minimal = {k:v for k,v in env.items() if k.startswith("GO") or k in ("PATH","HOME","PWD")}
+          run("GO+PATH+HOME-only", minimal)
+          run("PATH+HOME-only", {k:v for k,v in env.items() if k in ("PATH","HOME","PWD")})
+          PYEOF
