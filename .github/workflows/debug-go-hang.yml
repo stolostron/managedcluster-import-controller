@@ -16,74 +16,25 @@ jobs:
         with:
           go-version: '1.26.0'
 
-      - name: Capture the hung child process state
-        run: |
-          timeout 90 make -n build-image > /tmp/mk.out 2>&1 &
-          mkpid=$!
-          sleep 25
-          echo "=== full ps of the tree (unfiltered):"
-          ps -ef wwww --forest | grep -A6 "make -n build-image" | head -12
-          CHILD=$(pgrep -f "go list" | head -1)
-          echo "=== child pid: $CHILD"
-          if [ -n "$CHILD" ]; then
-            echo "=== /proc/$CHILD/cmdline (exact argv):"
-            tr '\0' ' ' < /proc/$CHILD/cmdline; echo
-            echo "=== /proc/$CHILD/status (ppid, state):"
-            grep -E '^(Name|State|Pid|PPid|Threads)' /proc/$CHILD/status
-            echo "=== /proc/$CHILD/fd:"
-            ls -l /proc/$CHILD/fd 2>/dev/null | head -12
-            echo "=== cwd:"
-            readlink /proc/$CHILD/cwd
-            cp /proc/$CHILD/environ /tmp/child-environ 2>/dev/null || echo "no environ"
-            PP=$(awk '/^PPid:/{print $2}' /proc/$CHILD/status)
-            echo "=== parent $PP cmdline:"
-            tr '\0' ' ' < /proc/$PP/cmdline 2>/dev/null; echo
-          fi
-          kill $mkpid 2>/dev/null; wait $mkpid 2>/dev/null || true
+      - name: Install strace
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq strace > /dev/null
 
-      - name: Replay go list with the captured environment
+      - name: What does make exec in a loop (process-event strace)
         run: |
-          if [ ! -f /tmp/child-environ ]; then echo "no captured environ - skipping"; exit 0; fi
-          start=$(date +%s)
-          if timeout 90 python3 - <<'PYEOF'
-          import subprocess
-          env = {}
-          for item in open('/tmp/child-environ','rb').read().split(b'\x00'):
-              if b'=' in item:
-                  k, v = item.split(b'=', 1)
-                  env[k.decode()] = v.decode()
-          p = subprocess.run(['go','list','./...'], env=env, capture_output=True, timeout=85)
-          print('exit', p.returncode, 'stdout lines', len(p.stdout.splitlines()))
-          PYEOF
-          then
-            echo "REPLAY OK in $(( $(date +%s) - start ))s"
-          else
-            echo "REPLAY HUNG/FAILED after $(( $(date +%s) - start ))s"
-          fi
+          strace -f -qq -e trace=execve,exit_group -o /tmp/procs.strace timeout 60 make -n build-image > /dev/null 2>&1 || true
+          echo "=== total execve count: $(grep -c execve /tmp/procs.strace)"
+          echo "=== execve command histogram (top 15):"
+          grep execve /tmp/procs.strace | sed 's/.*execve("\([^"]*\)".*/\1/' | sort | uniq -c | sort -rn | head -15
+          echo "=== first 10 execve lines:"
+          grep execve /tmp/procs.strace | head -10 | cut -c1-170
+          echo "=== last 10 execve lines:"
+          grep execve /tmp/procs.strace | tail -10 | cut -c1-170
 
-      - name: Env-subset bisect via replay
+      - name: make's own debug trace
         run: |
-          if [ ! -f /tmp/child-environ ]; then echo "no captured environ - skipping"; exit 0; fi
-          python3 - <<'PYEOF'
-          import subprocess, time
-          env = {}
-          for item in open('/tmp/child-environ','rb').read().split(b'\x00'):
-              if b'=' in item:
-                  k, v = item.split(b'=', 1)
-                  env[k.decode()] = v.decode()
-          def run(label, e, cap=60):
-              t0 = time.time()
-              try:
-                  subprocess.run(['go','list','./...'], env=e, capture_output=True, timeout=cap)
-                  print(f"{label}: OK in {time.time()-t0:.1f}s")
-              except subprocess.TimeoutExpired:
-                  print(f"{label}: HUNG >{cap}s")
-          run("full-env", env)
-          no_go = {k:v for k,v in env.items() if not k.startswith("GO")}
-          run("no-GO-vars", no_go)
-          no_make = {k:v for k,v in env.items() if not k.startswith("MAKE")}
-          run("no-MAKE-vars", no_make)
-          minimal = {k:v for k,v in env.items() if k.startswith("GO") or k in ("PATH","HOME","PWD")}
-          run("GO+PATH+HOME-only", minimal)
-          run("PATH+HOME-only", {k:v for k,v in env.items() if k in ("PATH","HOME","PWD")})
-          PYEOF
+          timeout 45 make -d -n build-image > /tmp/maked.log 2>&1 || true
+          echo "=== make -d output lines: $(wc -l < /tmp/maked.log)"
+          echo "=== first 40 lines:"
+          head -40 /tmp/maked.log
+          echo "=== last 40 lines:"
+          tail -40 /tmp/maked.log
