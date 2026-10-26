@@ -6,21 +6,18 @@ SHELL := /bin/bash
 export CGO_ENABLED  = 1
 export GOFLAGS ?=
 export GO111MODULE := on
-export GOPATH      ?=$(shell go env GOPATH)
-export GOHOSTOS    ?=$(shell go env GOHOSTOS)
-export GOHOSTARCH  ?=$(shell go env GOHOSTARCH)
-export GOPACKAGES   = $(shell go list ./... | grep -v /manager | grep -v /bindata  | grep -v /vendor | grep -v /internal | grep -v /build | grep -v /test )
+export GOHOSTOS    := $(or $(GOHOSTOS),$(shell go env GOHOSTOS))
+export GOHOSTARCH  := $(or $(GOHOSTARCH),$(shell go env GOHOSTARCH))
+GOPACKAGES   = $(shell go list ./... | grep -v /manager | grep -v /bindata  | grep -v /vendor | grep -v /internal | grep -v /build | grep -v /test )
 
-export PROJECT_DIR            = $(shell 'pwd')
-export BUILD_DIR              = $(PROJECT_DIR)/build
 export BUILD_OUTPUT_DIR       ?= _output
 
-export COMPONENT_NAME ?= $(shell cat ./COMPONENT_NAME 2> /dev/null)
-export COMPONENT_VERSION ?= $(shell cat ./COMPONENT_VERSION 2> /dev/null)
-export SECURITYSCANS_IMAGE_NAME ?= $(shell cat ./COMPONENT_NAME 2> /dev/null)
-export SECURITYSCANS_IMAGE_VERSION ?= $(shell cat ./COMPONENT_VERSION 2> /dev/null)
+export COMPONENT_NAME := $(or $(COMPONENT_NAME),$(shell cat ./COMPONENT_NAME 2> /dev/null))
+export COMPONENT_VERSION := $(or $(COMPONENT_VERSION),$(shell cat ./COMPONENT_VERSION 2> /dev/null))
+export SECURITYSCANS_IMAGE_NAME := $(or $(SECURITYSCANS_IMAGE_NAME),$(shell cat ./COMPONENT_NAME 2> /dev/null))
+export SECURITYSCANS_IMAGE_VERSION := $(or $(SECURITYSCANS_IMAGE_VERSION),$(shell cat ./COMPONENT_VERSION 2> /dev/null))
 
-export DOCKER_FILE        = $(BUILD_DIR)/Dockerfile
+DOCKER_FILE        = $(PWD)/build/Dockerfile
 export DOCKER_IMAGE      ?= $(COMPONENT_NAME)
 export DOCKER_BUILDER    ?= docker
 
