@@ -56,8 +56,8 @@ func TestReconcile(t *testing.T) {
 	defer apiServer.Stop()
 
 	cases := []struct {
-		name                       string
-		objs                       []client.Object
+		name                            string
+		objs                            []client.Object
 		works                           []runtime.Object
 		secrets                         []runtime.Object
 		autoImportStrategy              string
@@ -65,7 +65,8 @@ func TestReconcile(t *testing.T) {
 		expectedConditionReason         string
 		expectedClusterDeployPause      bool // whether ClusterDeployment should be paused after reconcile
 		expectedClusterDeployPauseOwner bool // whether ClusterDeployment should have the pause owner annotation
-		expectedClusterDeployUnpause    bool // whether ClusterDeployment should be unpaused after reconcile
+		expectedClusterDeployUnpause    bool // whether ClusterDeployment should not have the pause annotations after reconcile (unpaused or never paused)
+		expectedClusterDeployObserved   bool // whether ClusterDeployment should have the managed cluster observed marker
 	}{
 		{
 			name:    "no clusterdeployment",
@@ -74,7 +75,29 @@ func TestReconcile(t *testing.T) {
 			secrets: []runtime.Object{},
 		},
 		{
-			name: "no cluster - clusterdeployment should be paused",
+			name: "no cluster, previously imported - clusterdeployment should be paused",
+			objs: []client.Object{
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+						Annotations: map[string]string{
+							// a managed cluster was observed before and is now gone (detached)
+							constants.HiveManagedClusterObservedAnnotation: constants.LabelValueTrue,
+						},
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+					},
+				},
+			},
+			works:                           []runtime.Object{},
+			secrets:                         []runtime.Object{},
+			expectedClusterDeployPause:      true,
+			expectedClusterDeployPauseOwner: true,
+		},
+		{
+			name: "no cluster, never imported - clusterdeployment should not be paused",
 			objs: []client.Object{
 				&hivev1.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
@@ -86,10 +109,80 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
+			works:                        []runtime.Object{},
+			secrets:                      []runtime.Object{},
+			expectedClusterDeployUnpause: true,
+		},
+		{
+			name: "no cluster, unclaimed clusterpool stock - clusterdeployment should not be paused",
+			objs: []client.Object{
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+						ClusterPoolRef: &hivev1.ClusterPoolReference{
+							PoolName:  "test-pool",
+							Namespace: "test-pool-ns",
+						},
+					},
+				},
+			},
+			works:                        []runtime.Object{},
+			secrets:                      []runtime.Object{},
+			expectedClusterDeployUnpause: true,
+		},
+		{
+			name: "no cluster, unclaimed clusterpool stock with pre-existing pause - pause left as-is",
+			objs: []client.Object{
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+						Annotations: map[string]string{
+							// a pause that predates this fix (no released product version
+							// paused pool stock, so there is nothing to heal on upgrade);
+							// the controller leaves it untouched
+							constants.HiveSyncsetPauseAnnotation:      constants.LabelValueTrue,
+							constants.HiveSyncsetPauseOwnerAnnotation: constants.LabelValueTrue,
+						},
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+						ClusterPoolRef: &hivev1.ClusterPoolReference{
+							PoolName:  "test-pool",
+							Namespace: "test-pool-ns",
+						},
+					},
+				},
+			},
 			works:                           []runtime.Object{},
 			secrets:                         []runtime.Object{},
 			expectedClusterDeployPause:      true,
 			expectedClusterDeployPauseOwner: true,
+		},
+		{
+			name: "no cluster, never imported - operator-set pause should be preserved",
+			objs: []client.Object{
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+						Annotations: map[string]string{
+							// pause set by operator (no owner annotation) should be preserved
+							constants.HiveSyncsetPauseAnnotation: constants.LabelValueTrue,
+						},
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+					},
+				},
+			},
+			works:                      []runtime.Object{},
+			secrets:                    []runtime.Object{},
+			expectedClusterDeployPause: true,
 		},
 		{
 			name: "cluster is being deleted - clusterdeployment should be paused",
@@ -115,6 +208,7 @@ func TestReconcile(t *testing.T) {
 			secrets:                         []runtime.Object{},
 			expectedClusterDeployPause:      true,
 			expectedClusterDeployPauseOwner: true,
+			expectedClusterDeployObserved:   true,
 		},
 		{
 			name: "cluster is being deleted - clusterdeployment already paused",
@@ -144,6 +238,7 @@ func TestReconcile(t *testing.T) {
 			secrets:                         []runtime.Object{},
 			expectedClusterDeployPause:      true,
 			expectedClusterDeployPauseOwner: true,
+			expectedClusterDeployObserved:   true,
 		},
 		{
 			name: "cluster is being deleted - operator pause with alternative boolean not overwritten",
@@ -173,7 +268,8 @@ func TestReconcile(t *testing.T) {
 			works:   []runtime.Object{},
 			secrets: []runtime.Object{},
 			// Pause should remain but we should NOT add owner marker since we didn't set it
-			expectedClusterDeployPause: true,
+			expectedClusterDeployPause:    true,
+			expectedClusterDeployObserved: true,
 		},
 		{
 			name: "cluster re-imported - clusterdeployment should be unpaused",
@@ -203,7 +299,8 @@ func TestReconcile(t *testing.T) {
 					},
 				},
 			},
-			expectedClusterDeployUnpause: true,
+			expectedClusterDeployUnpause:  true,
+			expectedClusterDeployObserved: true,
 		},
 		{
 			name: "cluster re-imported - operator-set pause should be preserved",
@@ -234,7 +331,8 @@ func TestReconcile(t *testing.T) {
 				},
 			},
 			// Pause should NOT be removed since we didn't set it (no owner annotation)
-			expectedClusterDeployPause: true,
+			expectedClusterDeployPause:    true,
+			expectedClusterDeployObserved: true,
 		},
 		{
 			name: "auto import disabled",
@@ -579,6 +677,18 @@ func TestReconcile(t *testing.T) {
 								c.name, constants.HiveSyncsetPauseOwnerAnnotation, cd.Annotations)
 						}
 					}
+				}
+			}
+
+			// Verify ClusterDeployment managed cluster observed marker
+			if c.expectedClusterDeployObserved {
+				cd := &hivev1.ClusterDeployment{}
+				err = r.client.Get(context.TODO(), types.NamespacedName{Name: "test", Namespace: "test"}, cd)
+				if err != nil {
+					t.Errorf("name %v : get clusterdeployment error: %v", c.name, err)
+				} else if _, hasObserved := cd.Annotations[constants.HiveManagedClusterObservedAnnotation]; !hasObserved {
+					t.Errorf("name %v : expected ClusterDeployment to have %s annotation, got: %v",
+						c.name, constants.HiveManagedClusterObservedAnnotation, cd.Annotations)
 				}
 			}
 
