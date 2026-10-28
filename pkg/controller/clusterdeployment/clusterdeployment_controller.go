@@ -103,11 +103,27 @@ func (r *ReconcileClusterDeployment) Reconcile(
 		if !clusterDeployment.Spec.Installed {
 			return reconcile.Result{}, nil
 		}
-		// the managed cluster could be deleted, pause the ClusterDeployment to stop
-		// Hive from reconciling SyncSets and other resources on the detached cluster.
-		return reconcile.Result{}, r.pauseClusterDeployment(ctx, clusterDeployment)
+		// The managed cluster is gone. Pause the ClusterDeployment only if a managed cluster
+		// was associated with it before (recorded by the observed marker), i.e. the cluster
+		// was detached, to stop Hive from reconciling SyncSets and other resources on it.
+		if _, observed := clusterDeployment.Annotations[constants.HiveManagedClusterObservedAnnotation]; observed {
+			return reconcile.Result{}, r.pauseClusterDeployment(ctx, clusterDeployment)
+		}
+		// No managed cluster was ever associated with this clusterdeployment (e.g. unclaimed
+		// ClusterPool stock, or a Hive cluster provisioned outside of ACM). It must NOT be
+		// paused: the syncset-pause annotation prevents Hive's clustersync controller from
+		// creating the ClusterSync, which blocks the Ready condition of the ClusterDeployment
+		// from being evaluated, stalling ClusterPools (Ready: 0) and ClusterClaims forever.
+		return reconcile.Result{}, nil
 	}
 	if err != nil {
+		return reconcile.Result{}, err
+	}
+
+	// A managed cluster is associated with this clusterdeployment. Record that fact so a
+	// later reconcile can tell a detach (the managed cluster is deleted) apart from a
+	// clusterdeployment that was never imported.
+	if err := r.setManagedClusterObservedAnnotation(ctx, clusterDeployment); err != nil {
 		return reconcile.Result{}, err
 	}
 
@@ -278,6 +294,35 @@ func (r *ReconcileClusterDeployment) removeImportFinalizer(
 
 	r.recorder.Eventf("ClusterDeploymentFinalizerRemoved",
 		"The clusterdeployment %s finalizer %s is removed", clusterDeployment.Name, constants.ImportFinalizer)
+	return nil
+}
+
+// setManagedClusterObservedAnnotation records on the ClusterDeployment that a ManagedCluster
+// associated with it has been observed by this controller. The marker is what allows a later
+// reconcile, once the ManagedCluster no longer exists, to distinguish a detached cluster
+// (ManagedCluster existed and was deleted) from a ClusterDeployment that never had a
+// ManagedCluster (e.g. unclaimed ClusterPool stock). Only the former should be paused.
+func (r *ReconcileClusterDeployment) setManagedClusterObservedAnnotation(
+	ctx context.Context, clusterDeployment *hivev1.ClusterDeployment) error {
+
+	if _, ok := clusterDeployment.Annotations[constants.HiveManagedClusterObservedAnnotation]; ok {
+		// marker already present, nothing to do
+		return nil
+	}
+
+	patch := client.MergeFrom(clusterDeployment.DeepCopy())
+
+	if clusterDeployment.Annotations == nil {
+		clusterDeployment.Annotations = make(map[string]string)
+	}
+	clusterDeployment.Annotations[constants.HiveManagedClusterObservedAnnotation] = constants.LabelValueTrue
+
+	if err := r.client.Patch(ctx, clusterDeployment, patch); err != nil {
+		return err
+	}
+
+	log.Info("Marked ClusterDeployment as having an associated managed cluster",
+		"clusterDeployment", clusterDeployment.Name)
 	return nil
 }
 

@@ -93,6 +93,14 @@ const (
 	// set the HiveSyncsetPauseAnnotation. When unpausing, the controller only removes the
 	// pause annotation if this ownership marker is present, preserving operator-set pauses.
 	HiveSyncsetPauseOwnerAnnotation = "managedcluster-import-controller.open-cluster-management.io/hive-syncset-pause-owner"
+
+	// HiveManagedClusterObservedAnnotation is a marker on a ClusterDeployment indicating that
+	// a ManagedCluster associated with this ClusterDeployment has been observed by this
+	// controller. Once the ManagedCluster no longer exists, this marker is the evidence that
+	// the ClusterDeployment was imported and then detached (as opposed to a ClusterDeployment
+	// that never had a ManagedCluster, e.g. unclaimed ClusterPool stock), and therefore must
+	// be paused to stop Hive from reconciling the detached cluster.
+	HiveManagedClusterObservedAnnotation = "managedcluster-import-controller.open-cluster-management.io/hive-managedcluster-observed"
 )
 
 // NOSONAR-START
