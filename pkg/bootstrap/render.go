@@ -9,6 +9,7 @@ import (
 	"embed"
 	"fmt"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -58,6 +59,17 @@ var reservedClusterClaimSuffixes = []string{
 	"openshift.io",
 	"open-cluster-management.io",
 }
+
+const (
+	klusterletNamespaceMaxLength = 57
+	klusterletNamespacePrefix    = "open-cluster-management-"
+	klusterletNameMaxLength      = 63
+	klusterletNamePrefix         = "klusterlet-"
+)
+
+// klusterletNamespacePattern is the regex from the Klusterlet CRD for namespace validation.
+var klusterletNamespacePattern = regexp.MustCompile(
+	`^open-cluster-management-[-a-z0-9]*[a-z0-9]$`)
 
 const (
 	grpcAuthType    = "grpc"
@@ -263,8 +275,13 @@ func (c *KlusterletManifestsConfig) Generate(ctx context.Context,
 	c.chartConfig.Tolerations = tolerations
 	c.chartConfig.Klusterlet.NodePlacement.Tolerations = tolerations
 
-	c.chartConfig.Klusterlet.Name, c.chartConfig.Klusterlet.Namespace = getKlusterletNamespaceName(
+	klusterletName, klusterletNamespace, err := getKlusterletNamespaceName(
 		c.klusterletConfig, clusterName, managedClusterAnnotations, installMode)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	c.chartConfig.Klusterlet.Name = klusterletName
+	c.chartConfig.Klusterlet.Namespace = klusterletNamespace
 
 	// WorkAgentConfiguration
 	workAgentConfiguration := operatorv1.WorkAgentConfiguration{}
@@ -577,39 +594,82 @@ func installNoOperator(mode operatorv1.InstallMode, config *klusterletconfigv1al
 	return false
 }
 
-// getKlusterletName returns klusterlet by default, and klusterlet-{cluster name} in hosted mode,
+// getKlusterletNamespaceName returns klusterlet by default, and klusterlet-{cluster name} in hosted mode,
 // and klusterlet-{postfix} if install mode in config is set with postfix.
+// It returns an error when the resulting namespace or klusterlet name exceeds length limits
+// or does not match the Klusterlet CRD pattern instead of silently truncating.
 func getKlusterletNamespaceName(
 	config *klusterletconfigv1alpha1.KlusterletConfig,
-	clusterName string, annotation map[string]string, mode operatorv1.InstallMode) (string, string) {
+	clusterName string, annotation map[string]string,
+	mode operatorv1.InstallMode,
+) (string, string, error) {
 	klusterletName := constants.KlusterletSuffix
 	klusterletNamespace := constants.DefaultKlusterletNamespace
+
 	if mode == operatorv1.InstallModeHosted || mode == operatorv1.InstallModeSingletonHosted {
 		klusterletName = fmt.Sprintf("%s-%s", constants.KlusterletSuffix, clusterName)
 		klusterletNamespace = fmt.Sprintf("open-cluster-management-%s", clusterName)
-		if len(klusterletNamespace) > 57 {
-			klusterletNamespace = klusterletNamespace[:57]
+
+		if err := validateKlusterletNamespace(klusterletNamespace, clusterName); err != nil {
+			return "", "", err
+		}
+
+		if len(klusterletName) > klusterletNameMaxLength {
+			return "", "", fmt.Errorf(
+				"hosted cluster name %q produces klusterlet name %q (%d chars) exceeding the %d-character "+
+					"DNS label limit; use a shorter cluster name (max %d characters)",
+				clusterName, klusterletName,
+				len(klusterletName), klusterletNameMaxLength,
+				klusterletNameMaxLength-len(klusterletNamePrefix))
 		}
 	}
 
 	if v, ok := annotation[constants.KlusterletNamespaceAnnotation]; ok {
 		klusterletNamespace = v
+		if err := validateKlusterletNamespace(klusterletNamespace, clusterName); err != nil {
+			return "", "", err
+		}
 	}
 
 	if config == nil || config.Spec.InstallMode == nil {
-		return klusterletName, klusterletNamespace
+		return klusterletName, klusterletNamespace, nil
 	}
 	if config.Spec.InstallMode.Type != klusterletconfigv1alpha1.InstallModeNoOperator {
-		return klusterletName, klusterletNamespace
+		return klusterletName, klusterletNamespace, nil
 	}
 	if config.Spec.InstallMode.NoOperator == nil {
-		return klusterletName, klusterletNamespace
+		return klusterletName, klusterletNamespace, nil
 	}
 
 	klusterletName = fmt.Sprintf("%s-%s", klusterletName, config.Spec.InstallMode.NoOperator.Postfix)
 	klusterletNamespace = fmt.Sprintf("open-cluster-management-%s", config.Spec.InstallMode.NoOperator.Postfix)
 
-	return klusterletName, klusterletNamespace
+	if err := validateKlusterletNamespace(klusterletNamespace, config.Spec.InstallMode.NoOperator.Postfix); err != nil {
+		return "", "", err
+	}
+
+	return klusterletName, klusterletNamespace, nil
+}
+
+// validateKlusterletNamespace checks that the namespace does not exceed the Klusterlet CRD maximum
+// length and matches the expected pattern.
+func validateKlusterletNamespace(ns, clusterName string) error {
+	if len(ns) > klusterletNamespaceMaxLength {
+		return fmt.Errorf(
+			"hosted cluster name %q produces namespace %q (%d chars) exceeding the %d-character "+
+				"Klusterlet namespace limit; the cluster name portion after %q must be at most %d characters",
+			clusterName, ns, len(ns),
+			klusterletNamespaceMaxLength,
+			klusterletNamespacePrefix,
+			klusterletNamespaceMaxLength-len(klusterletNamespacePrefix))
+	}
+	if !klusterletNamespacePattern.MatchString(ns) {
+		return fmt.Errorf(
+			"namespace %q does not match the Klusterlet CRD pattern; "+
+				"it must start with %q and end with a lowercase letter or digit",
+			ns, klusterletNamespacePrefix)
+	}
+	return nil
 }
 
 func getKlusterletAgentImages(kcRegistries []klusterletconfigv1alpha1.Registries,
