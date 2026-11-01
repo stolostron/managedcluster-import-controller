@@ -21,12 +21,12 @@ require (
 	github.com/stolostron/cluster-lifecycle-api v0.0.0-20251028083736-64a17b44b598
 	go.uber.org/zap v1.27.0
 	golang.org/x/text v0.43.0
-	k8s.io/api v0.35.9
-	k8s.io/apiextensions-apiserver v0.35.9
-	k8s.io/apimachinery v0.35.9
-	k8s.io/apiserver v0.35.9
-	k8s.io/client-go v0.35.9
-	k8s.io/component-base v0.35.9
+	k8s.io/api v0.35.10
+	k8s.io/apiextensions-apiserver v0.35.10
+	k8s.io/apimachinery v0.35.10
+	k8s.io/apiserver v0.35.10
+	k8s.io/client-go v0.35.10
+	k8s.io/component-base v0.35.10
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/utils v0.0.0-20251002143259-bc988d571ff4
 	open-cluster-management.io/api v1.0.1-0.20250911094832-3b7c6bea0358
