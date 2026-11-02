@@ -616,7 +616,7 @@ func getKlusterletNamespaceName(
 
 		if len(klusterletName) > klusterletNameMaxLength {
 			return "", "", fmt.Errorf(
-				"hosted cluster name %q produces klusterlet name %q (%d chars) exceeding the %d-character "+
+				"cluster name %q produces klusterlet name %q (%d chars) exceeding the %d-character "+
 					"DNS label limit; use a shorter cluster name (max %d characters)",
 				clusterName, klusterletName,
 				len(klusterletName), klusterletNameMaxLength,
@@ -656,7 +656,7 @@ func getKlusterletNamespaceName(
 func validateKlusterletNamespace(ns, clusterName string) error {
 	if len(ns) > klusterletNamespaceMaxLength {
 		return fmt.Errorf(
-			"hosted cluster name %q produces namespace %q (%d chars) exceeding the %d-character "+
+			"cluster name %q produces namespace %q (%d chars) exceeding the %d-character "+
 				"Klusterlet namespace limit; the cluster name portion after %q must be at most %d characters",
 			clusterName, ns, len(ns),
 			klusterletNamespaceMaxLength,
