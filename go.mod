@@ -17,12 +17,12 @@ require (
 	github.com/stolostron/cluster-lifecycle-api v0.0.0-20260330032750-43755d6ceb09
 	go.uber.org/zap v1.27.0
 	golang.org/x/text v0.43.0
-	k8s.io/api v0.35.9
-	k8s.io/apiextensions-apiserver v0.35.9
-	k8s.io/apimachinery v0.35.9
-	k8s.io/apiserver v0.35.9
-	k8s.io/client-go v0.35.9
-	k8s.io/component-base v0.35.9
+	k8s.io/api v0.35.10
+	k8s.io/apiextensions-apiserver v0.35.10
+	k8s.io/apimachinery v0.35.10
+	k8s.io/apiserver v0.35.10
+	k8s.io/client-go v0.35.10
+	k8s.io/component-base v0.35.10
 	k8s.io/klog/v2 v2.140.0
 	k8s.io/utils v0.0.0-20260210185600-b8788abfbbc2
 	open-cluster-management.io/api v1.3.1-0.20260709055002-403378b57558
@@ -154,7 +154,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	gorm.io/gorm v1.24.5 // indirect
 	helm.sh/helm/v3 v3.21.1 // indirect
-	k8s.io/kube-aggregator v0.35.9 // indirect
+	k8s.io/kube-aggregator v0.35.10 // indirect
 	k8s.io/kube-openapi v0.0.0-20260319004828-5883c5ee87b9 // indirect
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/kube-storage-version-migrator v0.0.6-0.20230721195810-5c8923c5ff96 // indirect
