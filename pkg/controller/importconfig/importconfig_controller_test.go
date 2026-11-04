@@ -394,7 +394,7 @@ func TestReconcile(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{
 						Name: "test",
 						Annotations: map[string]string{
-							constants.KlusterletNamespaceAnnotation:  "test-ns",
+							constants.KlusterletNamespaceAnnotation:  "open-cluster-management-test-ns",
 							constants.KlusterletDeployModeAnnotation: string(operatorv1.InstallModeHosted),
 						},
 					},
@@ -468,7 +468,7 @@ func TestReconcile(t *testing.T) {
 					}
 					testinghelpers.ValidateObjectCount(t, objs, 3)
 					testinghelpers.ValidateKlusterlet(t, objs[2], operatorv1.InstallModeHosted, "klusterlet-test",
-						"test", "test-ns")
+						"test", "open-cluster-management-test-ns")
 				}
 			},
 		},

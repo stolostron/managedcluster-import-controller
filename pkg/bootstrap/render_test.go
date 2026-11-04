@@ -185,14 +185,69 @@ func TestKlusterletConfigGenerate(t *testing.T) {
 				"loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong-cluster", // cluster name
 				[]byte("bootstrap kubeconfig"),
 			).WithoutImagePullSecretGenerate(),
-			validateFunc: func(t *testing.T, objects, crds []runtime.Object) {
-				testinghelpers.ValidateObjectCount(t, objects, 3)
+			expectError:  true,
+			errorMessage: "exceeding the 57-character",
+		},
+		{
+			name: "hosted with cluster name exceeding namespace limit",
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeHosted,
+				"aaaaaaaaa-bbbbbbbbb-ccccccccc-dddd", // 34 chars — 1 over budget
+				[]byte("bootstrap kubeconfig"),
+			).WithoutImagePullSecretGenerate(),
+			expectError:  true,
+			errorMessage: "exceeding the 57-character",
+		},
+		{
+			name: "hosted with max-length valid cluster name",
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeHosted,
+				"aaaaaaaaa-bbbbbbbbb-ccccccccc-ddd", // 33 chars — exactly at budget
+				[]byte("bootstrap kubeconfig"),
+			).WithoutImagePullSecretGenerate(),
+			validateFunc: func(t *testing.T, objs, crds []runtime.Object) {
+				testinghelpers.ValidateObjectCount(t, objs, 3)
 				testinghelpers.ValidateCRDs(t, crds, 0)
-				testinghelpers.ValidateKlusterlet(t, objects[2], operatorv1.InstallModeHosted,
-					"klusterlet-loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong-cluster",
-					"loooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooooong-cluster",
-					"open-cluster-management-loooooooooooooooooooooooooooooooo")
+				testinghelpers.ValidateKlusterlet(t, objs[2],
+					operatorv1.InstallModeHosted,
+					"klusterlet-aaaaaaaaa-bbbbbbbbb-ccccccccc-ddd",
+					"aaaaaaaaa-bbbbbbbbb-ccccccccc-ddd",
+					"open-cluster-management-aaaaaaaaa-bbbbbbbbb-ccccccccc-ddd")
 			},
+		},
+		{
+			name: "hosted with short cluster name",
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeHosted,
+				"test",
+				[]byte("bootstrap kubeconfig"),
+			).WithoutImagePullSecretGenerate(),
+			validateFunc: func(t *testing.T, objs, crds []runtime.Object) {
+				testinghelpers.ValidateObjectCount(t, objs, 3)
+				testinghelpers.ValidateCRDs(t, crds, 0)
+				testinghelpers.ValidateKlusterlet(t, objs[2],
+					operatorv1.InstallModeHosted,
+					"klusterlet-test", "test",
+					"open-cluster-management-test")
+			},
+		},
+		{
+			name: "hosted with invalid annotation namespace",
+			config: NewKlusterletManifestsConfig(
+				operatorv1.InstallModeHosted,
+				"test",
+				[]byte("bootstrap kubeconfig"),
+			).WithoutImagePullSecretGenerate().WithManagedCluster(
+				&v1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{
+							constants.KlusterletNamespaceAnnotation: "bad-namespace-no-prefix",
+						},
+					},
+				},
+			),
+			expectError:  true,
+			errorMessage: "does not match the Klusterlet CRD pattern",
 		},
 		{
 			name:                   "default customized with managed cluster annotations",
@@ -1432,9 +1487,9 @@ func TestKlusterletNetworkPoliciesFeatureGate(t *testing.T) {
 	defer func() { helpers.EnableKlusterletNetworkPolicies = originalVal }()
 
 	testcases := []struct {
-		name           string
-		enabled        bool
-		expectGateSet  bool
+		name          string
+		enabled       bool
+		expectGateSet bool
 	}{
 		{
 			name:          "NetworkPolicies feature gate is set when enabled",
