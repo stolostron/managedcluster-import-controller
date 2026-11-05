@@ -125,6 +125,8 @@ var _ = ginkgo.Describe("Importing a self managed cluster", ginkgo.Label("core")
 				assertManagedClusterAvailableUnknown(localClusterName)
 			})
 
+			assertKlusterletRemoved()
+
 			ginkgo.By(fmt.Sprintf("Should recover the managed cluster %s once the immediate-import annotation is added", localClusterName), func() {
 				err := util.SetImmediateImportAnnotation(hubClusterClient, localClusterName, "")
 				gomega.Expect(err).ToNot(gomega.HaveOccurred())
