@@ -14,6 +14,9 @@ on:
       - ".tekton/**"
       - "docs/**"
 
+permissions:
+  contents: read
+
 jobs:
   e2e-core:
     runs-on: ubuntu-latest
@@ -27,6 +30,24 @@ jobs:
 
       - name: E2E Tests (Core)
         run: OCM_VERSION=${{ github.base_ref }} make e2e-test-core
+
+      - if: ${{ failure() }}
+        name: Collect Debug Info after Tests Failed
+        run: |
+          ./.github/scripts/debug.sh
+
+  e2e-autoimport:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: go.mod
+
+      - name: E2E Tests (Auto Import)
+        run: OCM_VERSION=${{ github.base_ref }} make e2e-test-autoimport
 
       - if: ${{ failure() }}
         name: Collect Debug Info after Tests Failed

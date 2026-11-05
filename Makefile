@@ -104,7 +104,16 @@ e2e-test-core: build-image ensure-helm
 	@build/setup-ocm.sh
 	@build/setup-import-controller.sh
 	go test -c ./test/e2e -o _output/e2e.test
-	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="core && !agent-registration" --ginkgo.timeout=45m --ginkgo.fail-fast
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="core && !auto-import && !agent-registration" --ginkgo.timeout=45m --ginkgo.fail-fast
+
+## Runs auto-import e2e tests with single cluster
+.PHONY: e2e-test-autoimport
+e2e-test-autoimport: build-image ensure-helm
+	@build/setup-kind-clusters.sh single
+	@build/setup-ocm.sh
+	@build/setup-import-controller.sh
+	go test -c ./test/e2e -o _output/e2e.test
+	_output/e2e.test -test.v -ginkgo.v --ginkgo.label-filter="auto-import" --ginkgo.timeout=45m --ginkgo.fail-fast
 
 ## Runs e2e test for miscellaneous tests with single cluster
 .PHONY: e2e-test-misc
