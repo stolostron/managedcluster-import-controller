@@ -41,7 +41,8 @@ kubectl kustomize $DEPLOY_MANIFESTS \
   | sed -e "s,quay.io/open-cluster-management/registration:latest,$REGISTRATION_IMAGE," \
   -e "s,quay.io/open-cluster-management/work:latest,$WORK_IMAGE," \
   -e "s,quay.io/open-cluster-management/registration-operator:latest,$REGISTRATION_OPERATOR_IMAGE," \
-  -e "s,managedcluster-import-controller:latest,$IMPORT_CONTROLLER_IMAGE_NAME," \
+  -e "s,quay.io/open-cluster-management/managedcluster-import-controller:latest,$IMPORT_CONTROLLER_IMAGE_NAME," \
+  -e "s,image: managedcluster-import-controller:latest,image: $IMPORT_CONTROLLER_IMAGE_NAME," \
   | kubectl apply -f -
 
 sleep 5
