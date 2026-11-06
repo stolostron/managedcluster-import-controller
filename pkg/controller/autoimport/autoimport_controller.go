@@ -102,6 +102,11 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		reqLogger.V(5).Info("Auto import is enabled", "managedCluster", managedCluster.Name)
 	}
 
+	autoImportSecret, err := r.informerHolder.AutoImportSecretLister.Secrets(managedClusterName).Get(constants.AutoImportSecretName)
+	if err != nil && !errors.IsNotFound(err) {
+		return reconcile.Result{}, err
+	}
+
 	immediateImport := helpers.IsImmediateImport(managedCluster.Annotations)
 	autoImportStrategy, err := r.importControllerConfig.GetAutoImportStrategy()
 	if err != nil {
@@ -109,23 +114,66 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	}
 	reqLogger.Info("Auto import strategy is fetched", "managedCluster", managedCluster.Name, "AutoImportStrategy", autoImportStrategy)
 	importSucceeded := meta.IsStatusConditionTrue(managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+	retriggeredImport := false
 	if !immediateImport && autoImportStrategy == apiconstants.AutoImportStrategyImportOnly && importSucceeded {
-		reqLogger.Info("Auto import is skipped due to the auto import strategy",
+		// A managed cluster that is deleted and recreated while the old klusterlet agent is
+		// still running on the spoke can get a stale import success condition: the old agent
+		// reconnects to the recreated managed cluster (the agent identity is scoped to the
+		// cluster name only) and completes the import handshake before the spoke is
+		// reinstalled. An auto import secret created after the import success was recorded
+		// is an explicit request to import the cluster again, so in that case the import
+		// success is stale and must not stop the fresh cluster from being imported.
+		var autoImportSecretCreationTimestamp *metav1.Time
+		if autoImportSecret != nil {
+			autoImportSecretCreationTimestamp = &autoImportSecret.CreationTimestamp
+		}
+		_, staleImportSuccess := managedCluster.Annotations[constants.AnnotationStaleImportSuccess]
+		// If the managed cluster import state success is not stale and the auto import secret is created
+		// after the import success, skip the import (ImportOnly strategy)
+		if !staleImportSuccess && !helpers.ImportSuccessPredates(managedCluster, autoImportSecretCreationTimestamp) {
+			reqLogger.Info("Auto import is skipped due to the auto import strategy",
+				"managedCluster", managedCluster.Name,
+				"autoImportStrategy", autoImportStrategy,
+				"importSucceeded", importSucceeded,
+			)
+			return reconcile.Result{}, nil
+		}
+		retriggeredImport = true
+		if !staleImportSuccess {
+			// Persist that the current ImportSucceeded condition is stale. Without
+			// this, the import status controller can set the ImportSucceeded condition
+			// back to True from the previous incarnation's ManifestWork and refresh its
+			// LastTransitionTime, which would make timestamp-based stale detection
+			// fail and skip the re-import. Cleared after klusterlet resources are applied.
+			if err := helpers.SetStaleImportSuccessAnnotation(ctx, r.client, managedCluster); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+		reqLogger.Info("Auto import is re-triggered since the auto import secret is created after the import success",
 			"managedCluster", managedCluster.Name,
 			"autoImportStrategy", autoImportStrategy,
 			"importSucceeded", importSucceeded,
 		)
-		return reconcile.Result{}, nil
 	}
 
-	autoImportSecret, err := r.informerHolder.AutoImportSecretLister.Secrets(managedClusterName).Get(constants.AutoImportSecretName)
-	if errors.IsNotFound(err) {
+	if autoImportSecret == nil {
 		// the auto import secret could have been deleted, do nothing
-		reqLogger.V(5).Info("Auto import secret not found", "managedCluster", managedCluster.Name)
+		reqLogger.Info("Auto import secret not found", "managedCluster", managedCluster.Name)
+
+		// A re-triggered import may have applied resources and deleted the auto import
+		// secret, but failed to remove the stale import success annotation afterwards
+		// (e.g. the update conflicted): recover by removing the annotation now, so the
+		// import status controller does not block the success status forever.
+		if _, staleImportSuccess := managedCluster.Annotations[constants.AnnotationStaleImportSuccess]; staleImportSuccess {
+			condition := meta.FindStatusCondition(
+				managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+			if condition != nil && helpers.ImportingResourcesApplied(condition) {
+				if err := helpers.RemoveStaleImportSuccessAnnotation(ctx, r.client, managedCluster); err != nil {
+					return reconcile.Result{}, err
+				}
+			}
+		}
 		return reconcile.Result{}, nil
-	}
-	if err != nil {
-		return reconcile.Result{}, err
 	}
 
 	backupRestore := false
@@ -156,10 +204,13 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	r.importHelper = r.importHelper.WithGenerateClientHolderFunc(generateClientHolderFunc)
 	result, condition, modified, iErr := r.importHelper.Import(
 		backupRestore, managedCluster, autoImportSecret)
-	// if resources are applied but NOT modified, will not update the condition, keep the original condition.
-	// This check is to prevent the current controller and import status controller from modifying the
-	// ManagedClusterImportSucceeded condition of the managed cluster in a loop
-	if !helpers.ImportingResourcesApplied(&condition) || modified {
+	// Skip the condition update when resources are already applied and unchanged, so
+	// this controller and the import status controller do not fight over
+	// ManagedClusterImportSucceeded. Re-triggered imports are an exception: always
+	// write the condition so the cluster leaves the stale True state and shows the
+	// current import progress (the stale-import-success annotation still keeps the
+	// re-trigger active until apply finishes).
+	if !helpers.ImportingResourcesApplied(&condition) || modified || retriggeredImport {
 		if err := helpers.UpdateManagedClusterImportCondition(
 			r.client,
 			managedCluster,
@@ -191,6 +242,15 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 
 		// delete secret
 		if err := helpers.DeleteAutoImportSecret(ctx, r.kubeClient, autoImportSecret, r.recorder); err != nil {
+			return reconcile.Result{}, err
+		}
+
+		// The import applied resources and the post-apply cleanup succeeded: remove the
+		// stale import success annotation, so the import success reported from now on is
+		// trusted again. Keep the annotation until the cleanup succeeds, otherwise the
+		// import status controller can restore True from the stale ManifestWork
+		// availability and the ImportOnly strategy skips the remaining work.
+		if err := helpers.RemoveStaleImportSuccessAnnotation(ctx, r.client, managedCluster); err != nil {
 			return reconcile.Result{}, err
 		}
 		return reconcile.Result{}, nil
