@@ -27,6 +27,7 @@ make lint                  # runs the repository's upstream SDK lint script
 make check                 # copyright check and lint
 make e2e-test              # provisions kind/OCM and runs the default e2e suite
 make e2e-test-core         # runs core e2e tests on a single cluster
+make e2e-test-autoimport   # runs auto-import e2e tests on a single cluster
 make e2e-test-misc         # runs miscellaneous e2e tests on a single cluster
 make e2e-test-hosted       # runs hosted-cluster e2e tests
 make e2e-test-prow         # runs agent-registration tests against Prow

@@ -34,15 +34,10 @@ completes, the following race condition can occur:
 
 ### Systematic protection
 
-The leader election check is embedded in three centralized helpers. Each one:
-
-1. Lists klusterlet-agent pods in `open-cluster-management-agent` namespace.
-2. **Deletes all agent pods** to force a restart — this accelerates the rollout
-   by avoiding waiting for the old pod's graceful shutdown and any
-   CrashLoopBackOff delays.
-3. **Deletes the `klusterlet-agent-lock` lease** so the new pod can immediately
-   acquire leadership without waiting for the old lease to expire.
-4. Calls `assertAgentLeaderElection()` to wait for the new pod to become leader.
+The leader election check is embedded in three centralized helpers. Each one
+calls `waitForAgentLeaderIfPresent()`, which lists klusterlet-agent pods in
+`open-cluster-management-agent` and, when any exist, calls
+`assertAgentLeaderElection()`.
 
 The check is skipped when no agent pods exist (e.g., tests without klusterlet
 deployment, or custom namespaces via KlusterletConfig NoOperator mode).
@@ -62,7 +57,8 @@ deployment, or custom namespaces via KlusterletConfig NoOperator mode).
 2. Waits until there is exactly one non-terminating pod.
 3. Checks that the `klusterlet-agent-lock` lease's `HolderIdentity` matches the
    current pod name.
-4. Timeout: 180 seconds (worst-case non-graceful acquisition is ~163s).
+4. Timeout: 4 minutes. One non-graceful acquisition is ~163s, and a rollout that
+   starts during the wait needs another acquisition window.
 
 ### When explicit `assertAgentLeaderElection()` is still needed
 
