@@ -159,13 +159,40 @@ func (r *ReconcileClusterDeployment) Reconcile(
 	}
 	reqLogger.Info("Auto import strategy is fetched", "managedCluster", managedCluster.Name, "AutoImportStrategy", autoImportStrategy)
 	importSucceeded := meta.IsStatusConditionTrue(managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+	retriggeredImport := false
 	if !immediateImport && autoImportStrategy == apiconstants.AutoImportStrategyImportOnly && importSucceeded {
-		reqLogger.Info("Auto import is skipped due to the auto import strategy",
+		// A managed cluster that is deleted and recreated while the old klusterlet agent is
+		// still running on the spoke can get a stale import success condition: the old agent
+		// reconnects to the recreated managed cluster (the agent identity is scoped to the
+		// cluster name only) and completes the import handshake before the spoke is
+		// reinstalled. If the import success predates the completion of the current cluster
+		// installation, it belongs to the previous incarnation of the cluster and must not
+		// stop the new klusterlet from being bootstrapped onto the freshly installed cluster.
+		_, staleImportSuccess := managedCluster.Annotations[constants.AnnotationStaleImportSuccess]
+		if !staleImportSuccess && !helpers.ImportSuccessPredates(managedCluster, clusterDeployment.Status.InstalledTimestamp) {
+			reqLogger.Info("Auto import is skipped due to the auto import strategy",
+				"managedCluster", managedCluster.Name,
+				"autoImportStrategy", autoImportStrategy,
+				"importSucceeded", importSucceeded,
+			)
+			return reconcile.Result{}, nil
+		}
+		retriggeredImport = true
+		if !staleImportSuccess {
+			// Persist that the current ImportSucceeded condition is stale. Without
+			// this, the import status controller can set the ImportSucceeded condition
+			// back to True from the previous incarnation's ManifestWork and refresh its
+			// LastTransitionTime, which would make timestamp-based stale detection
+			// fail and skip the re-import. Cleared after klusterlet resources are applied.
+			if err := helpers.SetStaleImportSuccessAnnotation(ctx, r.client, managedCluster); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+		reqLogger.Info("Auto import is re-triggered since the import success predates the current cluster installation",
 			"managedCluster", managedCluster.Name,
 			"autoImportStrategy", autoImportStrategy,
 			"importSucceeded", importSucceeded,
 		)
-		return reconcile.Result{}, nil
 	}
 
 	if !clusterDeployment.Spec.Installed {
@@ -208,16 +235,27 @@ func (r *ReconcileClusterDeployment) Reconcile(
 	}
 
 	result, condition, modified, iErr := r.importHelper.Import(false, managedCluster, hiveSecret)
-	// if resources are applied but NOT modified, will not update the condition, keep the original condition.
-	// This check is to prevent the current controller and import status controller from modifying the
-	// ManagedClusterImportSucceeded condition of the managed cluster in a loop
-	if !helpers.ImportingResourcesApplied(&condition) || modified {
+	// Skip the condition update when resources are already applied and unchanged, so
+	// this controller and the import status controller do not fight over
+	// ManagedClusterImportSucceeded. Re-triggered imports are an exception: always
+	// write the condition so the cluster leaves the stale True state and shows the
+	// current import progress (the stale-import-success annotation still keeps the
+	// re-trigger active until apply finishes).
+	if !helpers.ImportingResourcesApplied(&condition) || modified || retriggeredImport {
 		if err := helpers.UpdateManagedClusterImportCondition(
 			r.client,
 			managedCluster,
 			condition,
 			r.mcRecorder,
 		); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
+	if helpers.ImportingResourcesApplied(&condition) {
+		// The import applied resources: remove the stale import success annotation, so the
+		// import success reported from now on is trusted again.
+		if err := helpers.RemoveStaleImportSuccessAnnotation(ctx, r.client, managedCluster); err != nil {
 			return reconcile.Result{}, err
 		}
 	}

@@ -24,6 +24,7 @@ import (
 	"k8s.io/client-go/informers"
 	kubefake "k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/ptr"
 	workfake "open-cluster-management.io/api/client/work/clientset/versioned/fake"
 	workinformers "open-cluster-management.io/api/client/work/informers/externalversions"
 	clusterv1 "open-cluster-management.io/api/cluster/v1"
@@ -55,6 +56,7 @@ func TestReconcile(t *testing.T) {
 	}
 	defer apiServer.Stop()
 
+	staleTransitionTime := metav1.NewTime(time.Now().Add(-time.Hour))
 	cases := []struct {
 		name                            string
 		objs                            []client.Object
@@ -63,6 +65,7 @@ func TestReconcile(t *testing.T) {
 		autoImportStrategy              string
 		expectedErr                     bool
 		expectedConditionReason         string
+		expectedStaleAnnotation         *bool
 		expectedClusterDeployPause      bool // whether ClusterDeployment should be paused after reconcile
 		expectedClusterDeployPauseOwner bool // whether ClusterDeployment should have the pause owner annotation
 		expectedClusterDeployUnpause    bool // whether ClusterDeployment should not have the pause annotations after reconcile (unpaused or never paused)
@@ -478,6 +481,426 @@ func TestReconcile(t *testing.T) {
 			expectedConditionReason: constants.ConditionReasonManagedClusterImported,
 		},
 		{
+			name: "with ImportOnly strategy and import success predating install completion",
+			objs: []client.Object{
+				func() *clusterv1.ManagedCluster {
+					mc := testinghelpers.NewManagedClusterBuilder("test").
+						WithImportedCondition(true).Build()
+					// the import success was recorded by a stale klusterlet agent of the
+					// previous cluster incarnation an hour ago (ACM-49455)
+					condition := meta.FindStatusCondition(
+						mc.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+					condition.LastTransitionTime = staleTransitionTime
+					return mc
+				}(),
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+						ClusterMetadata: &hivev1.ClusterMetadata{
+							AdminKubeconfigSecretRef: corev1.LocalObjectReference{
+								Name: "test",
+							},
+						},
+					},
+					Status: hivev1.ClusterDeploymentStatus{
+						// the current cluster installation completed after the import
+						// success was recorded, so the success is stale and the import
+						// must be retried on the freshly installed cluster
+						InstalledTimestamp: ptr.To(metav1.Now()),
+					},
+				},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"token":  []byte(config.BearerToken),
+						"server": []byte(config.Host),
+					},
+				},
+			},
+			// the client generation fails before applying resources (the secret has no
+			// kubeconfig): the failure condition is written so the failure is visible,
+			// and the stale import success annotation keeps the re-trigger armed
+			autoImportStrategy:      apiconstants.AutoImportStrategyImportOnly,
+			expectedErr:             true,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
+			expectedStaleAnnotation: ptr.To(true),
+		},
+		{
+			name: "with ImportOnly strategy and import success predating install completion while waiting for import secret",
+			objs: []client.Object{
+				func() *clusterv1.ManagedCluster {
+					mc := testinghelpers.NewManagedClusterBuilder("test").
+						WithImportedCondition(true).Build()
+					// the import success was recorded by a stale klusterlet agent of the
+					// previous cluster incarnation an hour ago (ACM-49455)
+					condition := meta.FindStatusCondition(
+						mc.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+					condition.LastTransitionTime = staleTransitionTime
+					return mc
+				}(),
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+						ClusterMetadata: &hivev1.ClusterMetadata{
+							AdminKubeconfigSecretRef: corev1.LocalObjectReference{
+								Name: "test",
+							},
+						},
+					},
+					Status: hivev1.ClusterDeploymentStatus{
+						// the current cluster installation completed after the import
+						// success was recorded, so the re-triggered import must stay
+						// armed while it waits for the import secret
+						InstalledTimestamp: ptr.To(metav1.Now()),
+					},
+				},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				// the import secret is not created yet, so the re-triggered import waits
+				// before applying resources; the wait condition is written and the stale
+				// import success annotation keeps the re-trigger armed
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"kubeconfig": testinghelpers.BuildKubeconfig(config),
+					},
+				},
+			},
+			autoImportStrategy:      apiconstants.AutoImportStrategyImportOnly,
+			expectedErr:             false,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
+			expectedStaleAnnotation: ptr.To(true),
+		},
+		{
+			name: "with ImportOnly strategy and stale import success annotation",
+			objs: []client.Object{
+				func() *clusterv1.ManagedCluster {
+					mc := testinghelpers.NewManagedClusterBuilder("test").
+						WithImportedCondition(true).
+						WithAnnotations(constants.AnnotationStaleImportSuccess, constants.LabelValueTrue).
+						Build()
+					// the import success condition has a fresh timestamp (e.g. it was
+					// restored by the import status controller from the ManifestWork
+					// availability of the previous cluster incarnation); the annotation
+					// must keep the re-trigger armed regardless of the timestamp
+					condition := meta.FindStatusCondition(
+						mc.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+					condition.LastTransitionTime = metav1.NewTime(time.Now())
+					return mc
+				}(),
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+						ClusterMetadata: &hivev1.ClusterMetadata{
+							AdminKubeconfigSecretRef: corev1.LocalObjectReference{
+								Name: "test",
+							},
+						},
+					},
+					Status: hivev1.ClusterDeploymentStatus{
+						// the installation completed before the fresh import success
+						// timestamp, so only the annotation re-triggers the import
+						InstalledTimestamp: ptr.To(metav1.NewTime(time.Now().Add(-time.Hour))),
+					},
+				},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"token":  []byte(config.BearerToken),
+						"server": []byte(config.Host),
+					},
+				},
+			},
+			autoImportStrategy:      apiconstants.AutoImportStrategyImportOnly,
+			expectedErr:             true,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
+			expectedStaleAnnotation: ptr.To(true),
+		},
+		{
+			name: "with ImportOnly strategy and import success after install completion",
+			objs: []client.Object{
+				func() *clusterv1.ManagedCluster {
+					mc := testinghelpers.NewManagedClusterBuilder("test").
+						WithImportedCondition(true).Build()
+					// the import succeeded after the current cluster installation completed
+					condition := meta.FindStatusCondition(
+						mc.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+					condition.LastTransitionTime = metav1.NewTime(time.Now())
+					return mc
+				}(),
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+						ClusterMetadata: &hivev1.ClusterMetadata{
+							AdminKubeconfigSecretRef: corev1.LocalObjectReference{
+								Name: "test",
+							},
+						},
+					},
+					Status: hivev1.ClusterDeploymentStatus{
+						// the cluster installation completed an hour before the import
+						// succeeded, so the import is fresh and must not be retried
+						InstalledTimestamp: ptr.To(metav1.NewTime(time.Now().Add(-time.Hour))),
+					},
+				},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"token":  []byte(config.BearerToken),
+						"server": []byte(config.Host),
+					},
+				},
+			},
+			autoImportStrategy:      apiconstants.AutoImportStrategyImportOnly,
+			expectedErr:             false,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImported,
+			expectedStaleAnnotation: ptr.To(false),
+		},
+		{
+			name: "with ImportOnly strategy and unknown install completion time",
+			objs: []client.Object{
+				func() *clusterv1.ManagedCluster {
+					mc := testinghelpers.NewManagedClusterBuilder("test").
+						WithImportedCondition(true).Build()
+					condition := meta.FindStatusCondition(
+						mc.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+					condition.LastTransitionTime = metav1.NewTime(time.Now().Add(-time.Hour))
+					return mc
+				}(),
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+						ClusterMetadata: &hivev1.ClusterMetadata{
+							AdminKubeconfigSecretRef: corev1.LocalObjectReference{
+								Name: "test",
+							},
+						},
+					},
+					// no InstalledTimestamp in status (e.g. the clusterdeployment status is
+					// not populated), the install completion time is unknown so the current
+					// skip behavior is kept
+				},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"token":  []byte(config.BearerToken),
+						"server": []byte(config.Host),
+					},
+				},
+			},
+			autoImportStrategy:      apiconstants.AutoImportStrategyImportOnly,
+			expectedErr:             false,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImported,
+		},
+		{
+			name: "with ImportOnly strategy and unknown import success time",
+			objs: []client.Object{
+				testinghelpers.NewManagedClusterBuilder("test").
+					WithImportedCondition(true).Build(),
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+						ClusterMetadata: &hivev1.ClusterMetadata{
+							AdminKubeconfigSecretRef: corev1.LocalObjectReference{
+								Name: "test",
+							},
+						},
+					},
+					Status: hivev1.ClusterDeploymentStatus{
+						InstalledTimestamp: ptr.To(metav1.Now()),
+					},
+				},
+			},
+			// the import success condition has no LastTransitionTime, so the import
+			// success time is unknown and the current skip behavior is kept
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: "test",
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"token":  []byte(config.BearerToken),
+						"server": []byte(config.Host),
+					},
+				},
+			},
+			autoImportStrategy:      apiconstants.AutoImportStrategyImportOnly,
+			expectedErr:             false,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImported,
+		},
+		{
 			name: "clusterdeployment is not installed",
 			objs: []client.Object{
 				testinghelpers.NewManagedClusterBuilder("test").Build(),
@@ -645,6 +1068,17 @@ func TestReconcile(t *testing.T) {
 				if condition != nil && condition.Reason != c.expectedConditionReason {
 					t.Errorf("name %v : expect condition reason %s, got %s, message: %s",
 						c.name, c.expectedConditionReason, condition.Reason, condition.Message)
+				}
+			}
+
+			if c.expectedStaleAnnotation != nil {
+				managedCluster := &clusterv1.ManagedCluster{}
+				err = r.client.Get(context.TODO(), types.NamespacedName{Name: "test"}, managedCluster)
+				if err != nil {
+					t.Errorf("name %v : get managed cluster error: %v", c.name, err)
+				} else if _, hasAnnotation := managedCluster.Annotations[constants.AnnotationStaleImportSuccess]; hasAnnotation != *c.expectedStaleAnnotation {
+					t.Errorf("name %v : expect stale import success annotation %t, got %t",
+						c.name, *c.expectedStaleAnnotation, hasAnnotation)
 				}
 			}
 

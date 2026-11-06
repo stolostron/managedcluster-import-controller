@@ -98,6 +98,18 @@ func (r *ReconcileImportStatus) Reconcile(ctx context.Context, request reconcile
 		)
 	}
 
+	// While the stale import success annotation is present, a re-import of the managed
+	// cluster is in progress: the klusterlet ManifestWork availability may be stale,
+	// acknowledged by the agent of the previous incarnation of the cluster before the
+	// spoke was reinstalled, and nothing resets the work status when that agent dies.
+	// Do not trust the availability until the import applies resources again and the
+	// annotation is removed, otherwise the failure or waiting condition of the current
+	// import attempt is replaced with a false success.
+	if _, staleImportSuccess := managedCluster.Annotations[constants.AnnotationStaleImportSuccess]; staleImportSuccess {
+		reqLogger.Info("The re-import of the stale import success is in progress, skip checking the klusterlet manifestworks availability")
+		return reconcile.Result{}, nil
+	}
+
 	available, err := helpers.IsManifestWorksAvailable(ctx, r.workClient, managedClusterName,
 		// only check if the klusterlet is available, check the klusterlet-crd will break the no-operator mode
 		fmt.Sprintf("%s-%s", managedClusterName, constants.KlusterletSuffix))
