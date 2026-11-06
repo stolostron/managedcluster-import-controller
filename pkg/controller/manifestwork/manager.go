@@ -30,6 +30,20 @@ import (
 
 const ControllerName = "manifestwork-controller"
 
+// manifestWorkAnnotationChanged reports whether a ManagedCluster annotation
+// change should refresh klusterlet ManifestWork update strategy.
+func manifestWorkAnnotationChanged(oldAnnotations, newAnnotations map[string]string) bool {
+	_, oldAutoImportDisabled := oldAnnotations[apiconstants.DisableAutoImportAnnotation]
+	_, newAutoImportDisabled := newAnnotations[apiconstants.DisableAutoImportAnnotation]
+	if oldAutoImportDisabled != newAutoImportDisabled {
+		return true
+	}
+
+	_, oldAllowUpdate := oldAnnotations[constants.AnnotationAllowManifestWorkUpdate]
+	_, newAllowUpdate := newAnnotations[constants.AnnotationAllowManifestWorkUpdate]
+	return oldAllowUpdate != newAllowUpdate
+}
+
 // Add creates a new manifestwork controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(ctx context.Context,
@@ -79,19 +93,9 @@ func Add(ctx context.Context,
 						return false
 					}
 
-					// Trigger reconciliation when disable-auto-import annotation is added or removed
-					// so that ManifestWorks can be updated with ReadOnly configs
-					oldAnnotations := e.ObjectOld.GetAnnotations()
-					newAnnotations := e.ObjectNew.GetAnnotations()
-					_, oldAutoImportDisabled := oldAnnotations[apiconstants.DisableAutoImportAnnotation]
-					_, newAutoImportDisabled := newAnnotations[apiconstants.DisableAutoImportAnnotation]
-
-					if oldAutoImportDisabled != newAutoImportDisabled {
-						// Annotation added or removed - reconcile to update ManifestWork configs
-						return true
-					}
-
-					return false
+					// Reconcile when disable-auto-import or the migration update window
+					// is added or removed, so ManifestWorks gain or lose ReadOnly.
+					return manifestWorkAnnotationChanged(e.ObjectOld.GetAnnotations(), e.ObjectNew.GetAnnotations())
 				},
 			}),
 		).

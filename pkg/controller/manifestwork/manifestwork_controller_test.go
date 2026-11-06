@@ -418,6 +418,60 @@ func TestReconcile(t *testing.T) {
 				}
 			},
 		},
+		{
+			name: "allow-manifestwork-update clears ReadOnly and keeps the existing manifests",
+			startObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							"import.open-cluster-management.io/disable-auto-import":       "",
+							"import.open-cluster-management.io/allow-manifestwork-update": "",
+						},
+						Finalizers: []string{constants.ManifestWorkFinalizer},
+					},
+				},
+			},
+			works: markedManifestWorks(true),
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+			},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface) {
+				assertManifestWorksUpdatedInPlace(t, workClient)
+			},
+		},
+		{
+			name: "allow-manifestwork-update with Update strategy works leaves them unchanged",
+			startObjs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: v1.ObjectMeta{
+						Name: "test",
+						Annotations: map[string]string{
+							"import.open-cluster-management.io/disable-auto-import":       "",
+							"import.open-cluster-management.io/allow-manifestwork-update": "",
+						},
+						Finalizers: []string{constants.ManifestWorkFinalizer},
+					},
+				},
+			},
+			works: markedManifestWorks(false),
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+			},
+			request: reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: "test",
+				},
+			},
+			validateFunc: func(t *testing.T, runtimeClient client.Client, workClient workclient.Interface) {
+				assertManifestWorksUpdatedInPlace(t, workClient)
+			},
+		},
 	}
 
 	for _, c := range cases {
@@ -464,3 +518,75 @@ func TestReconcile(t *testing.T) {
 	}
 }
 
+const manifestWorkTestMarker = "migration-payload-marker"
+
+func markedManifestWorks(readOnly bool) []runtime.Object {
+	cluster := &clusterv1.ManagedCluster{
+		ObjectMeta: v1.ObjectMeta{Name: "test"},
+	}
+	if readOnly {
+		cluster.Annotations = map[string]string{
+			"import.open-cluster-management.io/disable-auto-import": "",
+		}
+	}
+	works := createManifestWorks(cluster, testinghelpers.GetImportSecret("test"))
+	for _, obj := range works {
+		work := obj.(*workv1.ManifestWork)
+		if work.Annotations == nil {
+			work.Annotations = map[string]string{}
+		}
+		work.Annotations[manifestWorkTestMarker] = "keep"
+	}
+	return works
+}
+
+func assertManifestWorksUpdatedInPlace(t *testing.T, workClient workclient.Interface) {
+	t.Helper()
+	for _, name := range []string{"test-klusterlet", "test-klusterlet-crds"} {
+		work, err := workClient.WorkV1().ManifestWorks("test").Get(context.TODO(), name, v1.GetOptions{})
+		if err != nil {
+			t.Errorf("failed to get %s: %v", name, err)
+			continue
+		}
+		if len(work.Spec.ManifestConfigs) != 0 {
+			t.Errorf("%s expected no ManifestConfigs, got %d", name, len(work.Spec.ManifestConfigs))
+		}
+		if work.Annotations[manifestWorkTestMarker] != "keep" {
+			t.Errorf("%s was rebuilt from the import secret", name)
+		}
+	}
+}
+
+func TestManifestWorkAnnotationChanged(t *testing.T) {
+	disable := "import.open-cluster-management.io/disable-auto-import"
+	allow := constants.AnnotationAllowManifestWorkUpdate
+	cases := []struct {
+		name string
+		old  map[string]string
+		new  map[string]string
+		want bool
+	}{
+		{name: "unrelated", old: map[string]string{"a": "b"}, new: map[string]string{"a": "c"}, want: false},
+		{name: "disable added", old: nil, new: map[string]string{disable: ""}, want: true},
+		{name: "disable removed", old: map[string]string{disable: ""}, new: map[string]string{}, want: true},
+		{
+			name: "allow added",
+			old:  map[string]string{disable: ""},
+			new:  map[string]string{disable: "", allow: ""},
+			want: true,
+		},
+		{
+			name: "allow removed",
+			old:  map[string]string{disable: "", allow: ""},
+			new:  map[string]string{disable: ""},
+			want: true,
+		},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := manifestWorkAnnotationChanged(c.old, c.new); got != c.want {
+				t.Errorf("got %v, want %v", got, c.want)
+			}
+		})
+	}
+}
