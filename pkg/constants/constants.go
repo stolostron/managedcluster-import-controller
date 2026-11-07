@@ -22,6 +22,12 @@ const (
 	// AnnotationRemainNamespace is added to the ns by user to retain the namespace after the cluster is detached.
 	AnnotationRemainNamespace = "open-cluster-management.io/retain-namespace"
 
+	// AnnotationStaleImportSuccess is the annotation key on the ManagedCluster recording that its
+	// ManagedClusterImportSucceeded condition is stale (set by an agent of the previous incarnation
+	// of the cluster) and the import must be re-triggered. It keeps the re-trigger armed until the
+	// import status controller sees a fresh ManifestWork Available acknowledgment and reports success.
+	AnnotationStaleImportSuccess = "managedcluster-import-controller.open-cluster-management.io/stale-import-success"
+
 	// LabelAutoImportRestore is the label key of auto import secret used for backup restore case
 	LabelAutoImportRestore = "cluster.open-cluster-management.io/restore-auto-import-secret"
 )

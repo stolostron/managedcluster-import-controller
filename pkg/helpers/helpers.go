@@ -328,6 +328,19 @@ func updateManagedClusterStatus(client client.Client, managedClusterName string,
 		return false, err
 	}
 
+	// A re-import of a stale import success is in progress (the annotation is present):
+	// do not replace the condition of the current import attempt with a success. The
+	// annotation may have been set after the caller last read the managed cluster, so
+	// it is checked on this fresh copy right before the status update. Wait and failure
+	// conditions are still written, so the current import attempt stays visible.
+	if cond.Status == metav1.ConditionTrue {
+		if _, staleImportSuccess := managedCluster.Annotations[constants.AnnotationStaleImportSuccess]; staleImportSuccess {
+			klog.Infof("Skip updating the managed cluster %s condition to success, the re-import of the stale import success is in progress.",
+				managedClusterName)
+			return false, nil
+		}
+	}
+
 	oldStatus := &managedCluster.Status
 	newStatus := oldStatus.DeepCopy()
 
@@ -345,6 +358,31 @@ func updateManagedClusterStatus(client client.Client, managedClusterName string,
 	klog.Infof("Update the managed cluster %s condition %v succeeded.", managedClusterName, cond)
 
 	return true, nil
+}
+
+// ImportSuccessPredates returns true when the ManagedClusterImportSucceeded condition of the
+// managed cluster transitioned to True before the given reference time. It detects a stale
+// import success recorded by a klusterlet agent of the previous incarnation of the cluster:
+// when a managed cluster is deleted and recreated while the old agent is still running on
+// the spoke, the agent reconnects to the recreated managed cluster (its identity is scoped
+// to the cluster name only) and completes the import handshake before the spoke is
+// reinstalled. The reference time is provided by the caller and marks the beginning of the
+// current cluster incarnation, e.g. the time the hive clusterdeployment installation
+// completed, or the creation time of a new auto import secret requesting a re-import.
+// It returns false when either timestamp is unknown, to keep the previous behavior of the
+// ImportOnly auto import strategy.
+func ImportSuccessPredates(cluster *clusterv1.ManagedCluster, reference *metav1.Time) bool {
+	if reference == nil || reference.IsZero() {
+		return false
+	}
+
+	importSucceededCondition := meta.FindStatusCondition(
+		cluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+	if importSucceededCondition == nil || importSucceededCondition.LastTransitionTime.IsZero() {
+		return false
+	}
+
+	return importSucceededCondition.LastTransitionTime.Before(reference)
 }
 
 func SetImmediateImportCompleted(client client.Client, managedClusterName string) error {
@@ -418,6 +456,51 @@ func UpdateManagedClusterImportCondition(client client.Client, managedCluster *c
 		return fmt.Errorf("the condition reason %s is not supported", cond.Reason)
 	}
 
+	return nil
+}
+
+// SetStaleImportSuccessAnnotation adds the stale import success annotation to the managed
+// cluster, recording that its ManagedClusterImportSucceeded condition is stale and the import
+// must be re-triggered. It is a no-op if the annotation is already present.
+func SetStaleImportSuccessAnnotation(ctx context.Context, runtimeClient client.Client,
+	managedCluster *clusterv1.ManagedCluster) error {
+	if _, ok := managedCluster.Annotations[constants.AnnotationStaleImportSuccess]; ok {
+		return nil
+	}
+
+	patch := client.MergeFrom(managedCluster.DeepCopy())
+	if managedCluster.Annotations == nil {
+		managedCluster.Annotations = map[string]string{}
+	}
+	managedCluster.Annotations[constants.AnnotationStaleImportSuccess] = constants.LabelValueTrue
+	if err := runtimeClient.Patch(ctx, managedCluster, patch); err != nil {
+		klog.Errorf("Set the stale import success annotation on the managed cluster %s failed, error: %v",
+			managedCluster.Name, err)
+		return err
+	}
+
+	klog.Infof("Set the stale import success annotation on the managed cluster %s succeeded.", managedCluster.Name)
+	return nil
+}
+
+// RemoveStaleImportSuccessAnnotation removes the stale import success annotation from the
+// managed cluster, so the import success reported from now on is trusted again. It is a
+// no-op if the annotation is not present.
+func RemoveStaleImportSuccessAnnotation(ctx context.Context, runtimeClient client.Client,
+	managedCluster *clusterv1.ManagedCluster) error {
+	if _, ok := managedCluster.Annotations[constants.AnnotationStaleImportSuccess]; !ok {
+		return nil
+	}
+
+	patch := client.MergeFrom(managedCluster.DeepCopy())
+	delete(managedCluster.Annotations, constants.AnnotationStaleImportSuccess)
+	if err := runtimeClient.Patch(ctx, managedCluster, patch); err != nil {
+		klog.Errorf("Remove the stale import success annotation from the managed cluster %s failed, error: %v",
+			managedCluster.Name, err)
+		return err
+	}
+
+	klog.Infof("Remove the stale import success annotation from the managed cluster %s succeeded.", managedCluster.Name)
 	return nil
 }
 

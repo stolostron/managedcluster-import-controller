@@ -5,6 +5,7 @@ package clusterdeployment
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
@@ -159,13 +160,46 @@ func (r *ReconcileClusterDeployment) Reconcile(
 	}
 	reqLogger.Info("Auto import strategy is fetched", "managedCluster", managedCluster.Name, "AutoImportStrategy", autoImportStrategy)
 	importSucceeded := meta.IsStatusConditionTrue(managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+	// The stale import success annotation records an active re-trigger: it stays set while
+	// the condition is False (a failed or waiting attempt) or True (restored by the import
+	// status controller), so the re-trigger remains active and a successful retry still
+	// updates the condition until the import applies resources and the annotation is
+	// removed.
+	_, staleImportSuccess := managedCluster.Annotations[constants.AnnotationStaleImportSuccess]
+	retriggeredImport := staleImportSuccess
 	if !immediateImport && autoImportStrategy == apiconstants.AutoImportStrategyImportOnly && importSucceeded {
-		reqLogger.Info("Auto import is skipped due to the auto import strategy",
+		// A managed cluster that is deleted and recreated while the old klusterlet agent is
+		// still running on the spoke can get a stale import success condition: the old agent
+		// reconnects to the recreated managed cluster (the agent identity is scoped to the
+		// cluster name only) and completes the import handshake before the spoke is
+		// reinstalled. If the import success predates the completion of the current cluster
+		// installation, it belongs to the previous incarnation of the cluster and must not
+		// stop the new klusterlet from being bootstrapped onto the freshly installed cluster.
+		if !staleImportSuccess && !helpers.ImportSuccessPredates(managedCluster, clusterDeployment.Status.InstalledTimestamp) {
+			reqLogger.Info("Auto import is skipped due to the auto import strategy",
+				"managedCluster", managedCluster.Name,
+				"autoImportStrategy", autoImportStrategy,
+				"importSucceeded", importSucceeded,
+			)
+			return reconcile.Result{}, nil
+		}
+		retriggeredImport = true
+		if !staleImportSuccess {
+			// Persist that the current ImportSucceeded condition is stale. Without
+			// this, the import status controller can set the ImportSucceeded condition
+			// back to True from the previous incarnation's ManifestWork and refresh its
+			// LastTransitionTime, which would make timestamp-based stale detection
+			// fail and skip the re-import. Cleared by importstatus after a fresh
+			// ManifestWork Available acknowledgment.
+			if err := helpers.SetStaleImportSuccessAnnotation(ctx, r.client, managedCluster); err != nil {
+				return reconcile.Result{}, err
+			}
+		}
+		reqLogger.Info("Auto import is re-triggered since the import success predates the current cluster installation",
 			"managedCluster", managedCluster.Name,
 			"autoImportStrategy", autoImportStrategy,
 			"importSucceeded", importSucceeded,
 		)
-		return reconcile.Result{}, nil
 	}
 
 	if !clusterDeployment.Spec.Installed {
@@ -204,14 +238,31 @@ func (r *ReconcileClusterDeployment) Reconcile(
 	secretRefName := clusterDeployment.Spec.ClusterMetadata.AdminKubeconfigSecretRef.Name
 	hiveSecret, err := r.kubeClient.CoreV1().Secrets(clusterName).Get(ctx, secretRefName, metav1.GetOptions{})
 	if err != nil {
+		// Persist the failure so a re-triggered import does not keep showing the stale
+		// ImportSucceeded=True condition while the hive kubeconfig secret is missing.
+		if updateErr := helpers.UpdateManagedClusterImportCondition(
+			r.client,
+			managedCluster,
+			helpers.NewManagedClusterImportSucceededCondition(
+				metav1.ConditionFalse,
+				constants.ConditionReasonManagedClusterImportFailed,
+				fmt.Sprintf("Get hive kubeconfig secret %s/%s failed: %v", clusterName, secretRefName, err),
+			),
+			r.mcRecorder,
+		); updateErr != nil {
+			return reconcile.Result{}, updateErr
+		}
 		return reconcile.Result{}, err
 	}
 
 	result, condition, modified, iErr := r.importHelper.Import(false, managedCluster, hiveSecret)
-	// if resources are applied but NOT modified, will not update the condition, keep the original condition.
-	// This check is to prevent the current controller and import status controller from modifying the
-	// ManagedClusterImportSucceeded condition of the managed cluster in a loop
-	if !helpers.ImportingResourcesApplied(&condition) || modified {
+	// Skip the condition update when resources are already applied and unchanged, so
+	// this controller and the import status controller do not fight over
+	// ManagedClusterImportSucceeded. Re-triggered imports are an exception: always
+	// write the condition so the cluster leaves the stale True state and shows the
+	// current import progress. The stale-import-success annotation stays set until
+	// importstatus sees a fresh ManifestWork acknowledgment and reports success.
+	if !helpers.ImportingResourcesApplied(&condition) || modified || retriggeredImport {
 		if err := helpers.UpdateManagedClusterImportCondition(
 			r.client,
 			managedCluster,

@@ -232,7 +232,13 @@ func IsManifestWorksAvailable(ctx context.Context, client workclient.Interface,
 			return false, err
 		}
 
-		if !meta.IsStatusConditionTrue(work.Status.Conditions, workv1.WorkAvailable) {
+		// Require WorkAvailable for the current ManifestWork generation. A True
+		// Available condition whose ObservedGeneration lags metadata.generation is
+		// a stale acknowledgment (e.g. from a previous cluster incarnation) and must
+		// not be treated as a successful import of the current work.
+		available := meta.FindStatusCondition(work.Status.Conditions, workv1.WorkAvailable)
+		if available == nil || available.Status != metav1.ConditionTrue ||
+			available.ObservedGeneration != work.Generation {
 			return false, nil
 		}
 	}

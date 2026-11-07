@@ -106,8 +106,23 @@ func (r *ReconcileImportStatus) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, err
 	}
 	if !available {
-		reqLogger.V(5).Info("Klusterlet manifestworks are not available")
+		// While a re-import of a stale import success is in progress, keep waiting for a
+		// fresh ManifestWork acknowledgment (Available ObservedGeneration matching the
+		// current work generation). The old WorkAvailable=True condition must not report
+		// success before the new klusterlet connects.
+		if _, staleImportSuccess := managedCluster.Annotations[constants.AnnotationStaleImportSuccess]; staleImportSuccess {
+			reqLogger.Info("The re-import of the stale import success is in progress, waiting for fresh klusterlet manifestwork availability")
+		} else {
+			reqLogger.V(5).Info("Klusterlet manifestworks are not available")
+		}
 		return reconcile.Result{}, nil
+	}
+
+	// Fresh availability is confirmed: clear the stale-import-success annotation before
+	// reporting success so updateManagedClusterStatus does not block the True condition,
+	// and so later reconciles trust the import success again.
+	if err := helpers.RemoveStaleImportSuccessAnnotation(ctx, r.client, managedCluster); err != nil {
+		return reconcile.Result{}, err
 	}
 
 	if helpers.IsImmediateImport(managedCluster.Annotations) {

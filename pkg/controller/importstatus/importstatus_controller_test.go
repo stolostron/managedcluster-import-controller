@@ -263,6 +263,130 @@ func TestReconcile(t *testing.T) {
 			expectedConditionReason:          constants.ConditionReasonManagedClusterImported,
 			expectedImmediateImportCompleted: true,
 		},
+		{
+			name: "stale ManifestWork Available with lagging ObservedGeneration",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: managedClusterName,
+						Annotations: map[string]string{
+							constants.AnnotationStaleImportSuccess: constants.LabelValueTrue,
+						},
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []metav1.Condition{
+							helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+								constants.ConditionReasonManagedClusterImporting, "test"),
+						},
+					},
+				},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       "test-klusterlet-crds",
+						Namespace:  managedClusterName,
+						Generation: 2,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+					Status: workv1.ManifestWorkStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:               workv1.WorkAvailable,
+								Status:             metav1.ConditionTrue,
+								ObservedGeneration: 1,
+							},
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       "test-klusterlet",
+						Namespace:  managedClusterName,
+						Generation: 2,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+					Status: workv1.ManifestWorkStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:               workv1.WorkAvailable,
+								Status:             metav1.ConditionTrue,
+								ObservedGeneration: 1,
+							},
+						},
+					},
+				},
+			},
+			expectedErr:             false,
+			expectedConditionStatus: metav1.ConditionFalse,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImporting,
+		},
+		{
+			name: "fresh ManifestWork Available clears stale import success annotation",
+			objs: []client.Object{
+				&clusterv1.ManagedCluster{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: managedClusterName,
+						Annotations: map[string]string{
+							constants.AnnotationStaleImportSuccess: constants.LabelValueTrue,
+						},
+					},
+					Status: clusterv1.ManagedClusterStatus{
+						Conditions: []metav1.Condition{
+							helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+								constants.ConditionReasonManagedClusterImporting, "test"),
+						},
+					},
+				},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       "test-klusterlet-crds",
+						Namespace:  managedClusterName,
+						Generation: 2,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+					Status: workv1.ManifestWorkStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:               workv1.WorkAvailable,
+								Status:             metav1.ConditionTrue,
+								ObservedGeneration: 2,
+							},
+						},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:       "test-klusterlet",
+						Namespace:  managedClusterName,
+						Generation: 2,
+						Labels: map[string]string{
+							constants.KlusterletWorksLabel: "true",
+						},
+					},
+					Status: workv1.ManifestWorkStatus{
+						Conditions: []metav1.Condition{
+							{
+								Type:               workv1.WorkAvailable,
+								Status:             metav1.ConditionTrue,
+								ObservedGeneration: 2,
+							},
+						},
+					},
+				},
+			},
+			expectedErr:             false,
+			expectedConditionStatus: metav1.ConditionTrue,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImported,
+		},
 	}
 
 	for _, c := range cases {
@@ -335,6 +459,21 @@ func TestReconcile(t *testing.T) {
 				immediateImportValue := managedCluster.Annotations[apiconstants.AnnotationImmediateImport]
 				if immediateImportValue != apiconstants.AnnotationValueImmediateImportCompleted {
 					t.Errorf("Expect immediate-import completed, got %q", immediateImportValue)
+				}
+			}
+
+			if c.expectedConditionReason == constants.ConditionReasonManagedClusterImported {
+				managedCluster := &clusterv1.ManagedCluster{}
+				err = r.client.Get(ctx,
+					types.NamespacedName{
+						Name: managedClusterName,
+					},
+					managedCluster)
+				if err != nil {
+					t.Errorf("get managed cluster error: %v", err)
+				}
+				if _, hasAnnotation := managedCluster.Annotations[constants.AnnotationStaleImportSuccess]; hasAnnotation {
+					t.Errorf("expect the stale import success annotation to be cleared after success")
 				}
 			}
 		})

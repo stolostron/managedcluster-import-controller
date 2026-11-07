@@ -166,3 +166,67 @@ func withGracefulManifestWorkDeletion(clientset *workfake.Clientset) {
 		return true, work, nil
 	})
 }
+
+func TestIsManifestWorksAvailable(t *testing.T) {
+	cases := []struct {
+		name      string
+		work      *workv1.ManifestWork
+		available bool
+	}{
+		{
+			name: "available with matching observed generation",
+			work: &workv1.ManifestWork{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-klusterlet", Namespace: "test", Generation: 2},
+				Status: workv1.ManifestWorkStatus{
+					Conditions: []metav1.Condition{{
+						Type:               workv1.WorkAvailable,
+						Status:             metav1.ConditionTrue,
+						ObservedGeneration: 2,
+					}},
+				},
+			},
+			available: true,
+		},
+		{
+			name: "available but observed generation lags",
+			work: &workv1.ManifestWork{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-klusterlet", Namespace: "test", Generation: 2},
+				Status: workv1.ManifestWorkStatus{
+					Conditions: []metav1.Condition{{
+						Type:               workv1.WorkAvailable,
+						Status:             metav1.ConditionTrue,
+						ObservedGeneration: 1,
+					}},
+				},
+			},
+			available: false,
+		},
+		{
+			name: "not available",
+			work: &workv1.ManifestWork{
+				ObjectMeta: metav1.ObjectMeta{Name: "test-klusterlet", Namespace: "test", Generation: 1},
+				Status: workv1.ManifestWorkStatus{
+					Conditions: []metav1.Condition{{
+						Type:               workv1.WorkAvailable,
+						Status:             metav1.ConditionFalse,
+						ObservedGeneration: 1,
+					}},
+				},
+			},
+			available: false,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			workClient := workfake.NewSimpleClientset(c.work)
+			available, err := IsManifestWorksAvailable(context.TODO(), workClient, "test", "test-klusterlet")
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if available != c.available {
+				t.Errorf("expect available %t, got %t", c.available, available)
+			}
+		})
+	}
+}

@@ -42,6 +42,7 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/utils/diff"
+	"k8s.io/utils/ptr"
 	addonv1alpha1 "open-cluster-management.io/api/addon/v1alpha1"
 	operatorfake "open-cluster-management.io/api/client/operator/clientset/versioned/fake"
 	workfake "open-cluster-management.io/api/client/work/clientset/versioned/fake"
@@ -149,6 +150,71 @@ func TestGenerateClientFromSecret(t *testing.T) {
 			}
 			if c.expectedErr == "" && err != nil {
 				t.Errorf("unexpected error: %v", err)
+			}
+		})
+	}
+}
+
+func TestImportSuccessPredates(t *testing.T) {
+	importedCluster := func(lastTransitionTime *metav1.Time) *clusterv1.ManagedCluster {
+		mc := testinghelpers.NewManagedClusterBuilder("test").WithImportedCondition(true).Build()
+		if lastTransitionTime != nil {
+			condition := meta.FindStatusCondition(
+				mc.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+			condition.LastTransitionTime = *lastTransitionTime
+		}
+		return mc
+	}
+
+	cases := []struct {
+		name           string
+		managedCluster *clusterv1.ManagedCluster
+		reference      *metav1.Time
+		expected       bool
+	}{
+		{
+			name:           "nil reference time",
+			managedCluster: importedCluster(ptr.To(metav1.NewTime(time.Now().Add(-time.Hour)))),
+			reference:      nil,
+			expected:       false,
+		},
+		{
+			name:           "zero reference time",
+			managedCluster: importedCluster(ptr.To(metav1.NewTime(time.Now().Add(-time.Hour)))),
+			reference:      ptr.To(metav1.Time{}),
+			expected:       false,
+		},
+		{
+			name:           "no import success condition",
+			managedCluster: testinghelpers.NewManagedClusterBuilder("test").Build(),
+			reference:      ptr.To(metav1.Now()),
+			expected:       false,
+		},
+		{
+			name:           "unknown import success time",
+			managedCluster: importedCluster(nil),
+			reference:      ptr.To(metav1.Now()),
+			expected:       false,
+		},
+		{
+			name:           "import success predates reference time",
+			managedCluster: importedCluster(ptr.To(metav1.NewTime(time.Now().Add(-time.Hour)))),
+			reference:      ptr.To(metav1.Now()),
+			expected:       true,
+		},
+		{
+			name:           "import success after reference time",
+			managedCluster: importedCluster(ptr.To(metav1.NewTime(time.Now()))),
+			reference:      ptr.To(metav1.NewTime(time.Now().Add(-time.Hour))),
+			expected:       false,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			actual := ImportSuccessPredates(c.managedCluster, c.reference)
+			if actual != c.expected {
+				t.Errorf("name %v : expect %t, got %t", c.name, c.expected, actual)
 			}
 		})
 	}
@@ -351,6 +417,76 @@ func TestUpdateManagedClusterImportCondition(t *testing.T) {
 				c.validateAddonActions(t, kubeClient.Actions())
 			}
 		})
+	}
+}
+
+// TestUpdateImportConditionDuringReTrigger verifies that the status update does not
+// replace the condition of a re-triggered import with a success while the stale import
+// success annotation is present, even when the annotation was set after the caller
+// last read the managed cluster: this covers the interleaving where the import
+// controller records the stale import success and writes the failure condition after
+// the import status controller already passed its annotation check.
+func TestUpdateImportConditionDuringReTrigger(t *testing.T) {
+	managedCluster := &clusterv1.ManagedCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "test_cluster",
+			Annotations: map[string]string{
+				constants.AnnotationStaleImportSuccess: constants.LabelValueTrue,
+			},
+		},
+		Status: clusterv1.ManagedClusterStatus{
+			Conditions: []metav1.Condition{
+				{
+					Type:    constants.ConditionManagedClusterImportSucceeded,
+					Status:  metav1.ConditionFalse,
+					Reason:  constants.ConditionReasonManagedClusterImportFailed,
+					Message: "failed to import",
+				},
+			},
+		},
+	}
+
+	fakeClient := fake.NewClientBuilder().WithScheme(testscheme).
+		WithObjects(managedCluster).WithStatusSubresource(managedCluster).Build()
+	kubeClient := kubefake.NewSimpleClientset()
+	recorder := NewManagedClusterEventRecorder(context.TODO(), kubeClient)
+
+	// a success condition must not replace the failure while the annotation is present
+	err := UpdateManagedClusterImportCondition(fakeClient, managedCluster,
+		NewManagedClusterImportSucceededCondition(
+			metav1.ConditionTrue, constants.ConditionReasonManagedClusterImported, "Import succeeded"),
+		recorder)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	result := &clusterv1.ManagedCluster{}
+	if err := fakeClient.Get(context.TODO(), types.NamespacedName{Name: "test_cluster"}, result); err != nil {
+		t.Fatalf("get managed cluster error: %v", err)
+	}
+	condition := meta.FindStatusCondition(result.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+	if condition == nil || condition.Status != metav1.ConditionFalse ||
+		condition.Reason != constants.ConditionReasonManagedClusterImportFailed {
+		t.Errorf("expect the failure condition to be kept, got %+v", condition)
+	}
+
+	// wait and failure conditions are still written during the re-import
+	err = UpdateManagedClusterImportCondition(fakeClient, result,
+		NewManagedClusterImportSucceededCondition(
+			metav1.ConditionFalse, constants.ConditionReasonManagedClusterImporting, "Wait for import secret"),
+		recorder)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	result = &clusterv1.ManagedCluster{}
+	if err := fakeClient.Get(context.TODO(), types.NamespacedName{Name: "test_cluster"}, result); err != nil {
+		t.Fatalf("get managed cluster error: %v", err)
+	}
+	condition = meta.FindStatusCondition(result.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+	if condition == nil || condition.Status != metav1.ConditionFalse ||
+		condition.Reason != constants.ConditionReasonManagedClusterImporting {
+		t.Errorf("expect the wait condition to be written, got %+v", condition)
 	}
 }
 
@@ -2324,16 +2460,16 @@ func TestValidateClusterImportConfigSecret(t *testing.T) {
 
 func TestParseKubeConfigData(t *testing.T) {
 	testCases := []struct {
-		name                    string
-		kubeConfigData          []byte
-		expectedKubeAPIServer   string
-		expectedProxyURL        string
-		expectedCA              string
-		expectedCAData          []byte
-		expectedToken           string
-		expectedCtxClusterName  string
-		expectError             bool
-		expectedErrorMessage    string
+		name                   string
+		kubeConfigData         []byte
+		expectedKubeAPIServer  string
+		expectedProxyURL       string
+		expectedCA             string
+		expectedCAData         []byte
+		expectedToken          string
+		expectedCtxClusterName string
+		expectError            bool
+		expectedErrorMessage   string
 	}{
 		{
 			name: "valid kubeconfig with all fields",
