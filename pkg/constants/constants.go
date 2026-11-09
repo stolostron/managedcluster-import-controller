@@ -101,6 +101,14 @@ const (
 	// that never had a ManagedCluster, e.g. unclaimed ClusterPool stock), and therefore must
 	// be paused to stop Hive from reconciling the detached cluster.
 	HiveManagedClusterObservedAnnotation = "managedcluster-import-controller.open-cluster-management.io/hive-managedcluster-observed"
+
+	// StaleImportReferenceAnnotation records, in RFC3339, the reference time of the most recent
+	// stale-import-success request this controller has triggered an immediate import for (the
+	// ClusterDeployment install time or the auto import secret creation time). It stamps the
+	// identity of a request so a re-import is triggered once per request: the same request is
+	// not re-triggered after it completes, while a newer request (a later install or secret)
+	// still triggers a fresh re-import.
+	StaleImportReferenceAnnotation = "managedcluster-import-controller.open-cluster-management.io/stale-import-reference"
 )
 
 // NOSONAR-START

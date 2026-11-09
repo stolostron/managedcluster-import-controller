@@ -160,6 +160,19 @@ func (r *ReconcileClusterDeployment) Reconcile(
 	reqLogger.Info("Auto import strategy is fetched", "managedCluster", managedCluster.Name, "AutoImportStrategy", autoImportStrategy)
 	importSucceeded := meta.IsStatusConditionTrue(managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
 	if !immediateImport && autoImportStrategy == apiconstants.AutoImportStrategyImportOnly && importSucceeded {
+		// Detect a stale import success: the success condition became True before Hive finished
+		// installing the current cluster incarnation, so it was set by an agent left over from a
+		// previous incarnation (ACM-49455). Arm an immediate import so this reconcile re-imports
+		// instead of trusting the stale success; the immediate-import path then drives the normal
+		// import flow and self-clears once the klusterlet is available again.
+		if helpers.ImportSuccessPredates(managedCluster, clusterDeployment.Status.InstalledTimestamp) {
+			reqLogger.Info("Import success predates the cluster installation, triggering an immediate import",
+				"managedCluster", managedCluster.Name,
+			)
+			return reconcile.Result{}, helpers.TriggerImmediateImport(
+				r.client, managedCluster.Name, clusterDeployment.Status.InstalledTimestamp)
+		}
+
 		reqLogger.Info("Auto import is skipped due to the auto import strategy",
 			"managedCluster", managedCluster.Name,
 			"autoImportStrategy", autoImportStrategy,

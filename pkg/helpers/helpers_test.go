@@ -22,6 +22,7 @@ import (
 	"github.com/openshift/library-go/pkg/operator/resource/resourcemerge"
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	appsv1 "k8s.io/api/apps/v1"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -49,7 +50,9 @@ import (
 	operatorv1 "open-cluster-management.io/api/operator/v1"
 	workv1 "open-cluster-management.io/api/work/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
@@ -2193,6 +2196,474 @@ func TestSetImmediateImportCompleted(t *testing.T) {
 	}
 }
 
+func importSucceededCondition(status metav1.ConditionStatus, transitionTime metav1.Time) metav1.Condition {
+	return metav1.Condition{
+		Type:               constants.ConditionManagedClusterImportSucceeded,
+		Status:             status,
+		Reason:             constants.ConditionReasonManagedClusterImported,
+		LastTransitionTime: transitionTime,
+	}
+}
+
+func TestImportSuccessPredates(t *testing.T) {
+	base := metav1.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	before := metav1.NewTime(base.Add(-time.Hour))
+	after := metav1.NewTime(base.Add(time.Hour))
+
+	cases := []struct {
+		name       string
+		conditions []metav1.Condition
+		reference  *metav1.Time
+		expected   bool
+	}{
+		{
+			name:       "nil reference",
+			conditions: []metav1.Condition{importSucceededCondition(metav1.ConditionTrue, before)},
+			reference:  nil,
+			expected:   false,
+		},
+		{
+			name:       "zero reference",
+			conditions: []metav1.Condition{importSucceededCondition(metav1.ConditionTrue, before)},
+			reference:  &metav1.Time{},
+			expected:   false,
+		},
+		{
+			name:       "no import success condition",
+			conditions: nil,
+			reference:  &base,
+			expected:   false,
+		},
+		{
+			name:       "import success condition is false",
+			conditions: []metav1.Condition{importSucceededCondition(metav1.ConditionFalse, before)},
+			reference:  &base,
+			expected:   false,
+		},
+		{
+			name:       "import success has no transition time",
+			conditions: []metav1.Condition{importSucceededCondition(metav1.ConditionTrue, metav1.Time{})},
+			reference:  &base,
+			expected:   false,
+		},
+		{
+			name:       "import success predates the reference",
+			conditions: []metav1.Condition{importSucceededCondition(metav1.ConditionTrue, before)},
+			reference:  &base,
+			expected:   true,
+		},
+		{
+			name:       "import success postdates the reference",
+			conditions: []metav1.Condition{importSucceededCondition(metav1.ConditionTrue, after)},
+			reference:  &base,
+			expected:   false,
+		},
+		{
+			name:       "import success equals the reference",
+			conditions: []metav1.Condition{importSucceededCondition(metav1.ConditionTrue, base)},
+			reference:  &base,
+			expected:   false,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			managedCluster := &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster1"},
+				Status:     clusterv1.ManagedClusterStatus{Conditions: c.conditions},
+			}
+			if actual := ImportSuccessPredates(managedCluster, c.reference); actual != c.expected {
+				t.Errorf("expected %v, but got %v", c.expected, actual)
+			}
+		})
+	}
+}
+
+func TestClusterAgentIsFresh(t *testing.T) {
+	ref := metav1.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	before := metav1.NewTime(ref.Add(-time.Hour))
+	after := metav1.NewTime(ref.Add(time.Hour))
+
+	availableCond := func(status metav1.ConditionStatus, tt metav1.Time) metav1.Condition {
+		return metav1.Condition{
+			Type:               clusterv1.ManagedClusterConditionAvailable,
+			Status:             status,
+			LastTransitionTime: tt,
+		}
+	}
+	leaseRenewedAt := func(t metav1.Time) *coordinationv1.Lease {
+		mt := metav1.NewMicroTime(t.Time)
+		return &coordinationv1.Lease{Spec: coordinationv1.LeaseSpec{RenewTime: &mt}}
+	}
+
+	cases := []struct {
+		name       string
+		conditions []metav1.Condition
+		lease      *coordinationv1.Lease
+		expected   bool
+	}{
+		{
+			name:     "no available condition",
+			expected: false,
+		},
+		{
+			name:       "available unknown, lease frozen before reference (dead agent)",
+			conditions: []metav1.Condition{availableCond(metav1.ConditionUnknown, before)},
+			lease:      leaseRenewedAt(before),
+			expected:   false,
+		},
+		{
+			name:       "available true but transitioned before and no lease (stale, fallback)",
+			conditions: []metav1.Condition{availableCond(metav1.ConditionTrue, before)},
+			lease:      nil,
+			expected:   false,
+		},
+		{
+			name:       "available true transitioned after reference, no lease (recovery via fallback)",
+			conditions: []metav1.Condition{availableCond(metav1.ConditionTrue, after)},
+			lease:      nil,
+			expected:   true,
+		},
+		{
+			// the case CodeRabbit flagged: healthy cluster, Available never re-transitions
+			// (old LastTransitionTime), but the live agent keeps renewing the lease.
+			name:       "continuously available cluster with fresh lease completes",
+			conditions: []metav1.Condition{availableCond(metav1.ConditionTrue, before)},
+			lease:      leaseRenewedAt(after),
+			expected:   true,
+		},
+		{
+			name:       "available true but lease frozen before reference (stale agent)",
+			conditions: []metav1.Condition{availableCond(metav1.ConditionTrue, before)},
+			lease:      leaseRenewedAt(before),
+			expected:   false,
+		},
+		{
+			name:       "lease fresh but cluster not available (not yet ready)",
+			conditions: []metav1.Condition{availableCond(metav1.ConditionUnknown, before)},
+			lease:      leaseRenewedAt(after),
+			expected:   false,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			mc := &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster1"},
+				Status:     clusterv1.ManagedClusterStatus{Conditions: c.conditions},
+			}
+			if actual := ClusterAgentIsFresh(mc, c.lease, ref); actual != c.expected {
+				t.Errorf("expected %v, but got %v", c.expected, actual)
+			}
+		})
+	}
+}
+
+func TestStaleImportReference(t *testing.T) {
+	ref := metav1.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cases := []struct {
+		name        string
+		annotations map[string]string
+		expectOK    bool
+		expectTime  metav1.Time
+	}{
+		{name: "no annotation", expectOK: false},
+		{name: "empty value", annotations: map[string]string{constants.StaleImportReferenceAnnotation: ""}, expectOK: false},
+		{name: "unparseable value", annotations: map[string]string{constants.StaleImportReferenceAnnotation: "not-a-time"}, expectOK: false},
+		{
+			name:        "valid RFC3339 stamp",
+			annotations: map[string]string{constants.StaleImportReferenceAnnotation: ref.UTC().Format(time.RFC3339)},
+			expectOK:    true,
+			expectTime:  ref,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			mc := &clusterv1.ManagedCluster{ObjectMeta: metav1.ObjectMeta{Name: "cluster1", Annotations: c.annotations}}
+			got, ok := StaleImportReference(mc)
+			if ok != c.expectOK {
+				t.Fatalf("expected ok=%v, got %v", c.expectOK, ok)
+			}
+			if ok && !got.Equal(&c.expectTime) {
+				t.Errorf("expected time %v, got %v", c.expectTime, got)
+			}
+		})
+	}
+}
+
+func TestClearStaleImportReference(t *testing.T) {
+	ref := metav1.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	refStamp := ref.UTC().Format(time.RFC3339)
+	newerStamp := metav1.NewTime(ref.Add(time.Hour)).UTC().Format(time.RFC3339)
+
+	cases := []struct {
+		name           string
+		managedCluster *clusterv1.ManagedCluster
+		expected       metav1.Time
+		expectErr      bool
+		expectStamp    string // "" => annotation absent
+	}{
+		{
+			name:      "managed cluster not found",
+			expected:  ref,
+			expectErr: true,
+		},
+		{
+			name: "matching stamp is removed",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "cluster1",
+					Annotations: map[string]string{
+						constants.StaleImportReferenceAnnotation: refStamp,
+						apiconstants.AnnotationImmediateImport:   apiconstants.AnnotationValueImmediateImportCompleted,
+					},
+				},
+			},
+			expected:    ref,
+			expectStamp: "",
+		},
+		{
+			// a concurrent trigger armed a newer request; clearing the evaluated (older)
+			// reference must not delete the newer stamp
+			name: "newer stamp is preserved",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "cluster1",
+					Annotations: map[string]string{
+						constants.StaleImportReferenceAnnotation: newerStamp,
+					},
+				},
+			},
+			expected:    ref,
+			expectStamp: newerStamp,
+		},
+		{
+			name: "no stamp is a no-op",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster1"},
+			},
+			expected:    ref,
+			expectStamp: "",
+		},
+	}
+
+	s := scheme.Scheme
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			objs := []runtime.Object{}
+			if c.managedCluster != nil {
+				objs = append(objs, c.managedCluster)
+			}
+			fakeClient := fake.NewClientBuilder().WithScheme(s).WithRuntimeObjects(objs...).Build()
+
+			err := ClearStaleImportReference(fakeClient, "cluster1", c.expected)
+			if c.expectErr {
+				if err == nil {
+					t.Errorf("expected an error, but got none")
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+
+			cluster := &clusterv1.ManagedCluster{}
+			if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: "cluster1"}, cluster); err != nil {
+				t.Fatalf("failed to get managed cluster: %v", err)
+			}
+			if got := cluster.Annotations[constants.StaleImportReferenceAnnotation]; got != c.expectStamp {
+				t.Errorf("expected stamp %q, got %q", c.expectStamp, got)
+			}
+		})
+	}
+}
+
+func TestTriggerImmediateImport(t *testing.T) {
+	ref := metav1.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	refStamp := ref.UTC().Format(time.RFC3339)
+	newerRef := metav1.NewTime(ref.Add(time.Hour))
+	newerStamp := newerRef.UTC().Format(time.RFC3339)
+
+	cases := []struct {
+		name           string
+		managedCluster *clusterv1.ManagedCluster
+		reference      *metav1.Time
+		expectErr      bool
+		expectArmed    bool   // immediate-import annotation present with empty value
+		expectStamp    string // stale-import-reference annotation value (empty => absent)
+	}{
+		{
+			name:      "managed cluster not found",
+			reference: &ref,
+			expectErr: true,
+		},
+		{
+			name: "arm a new request and stamp the reference",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster1"},
+			},
+			reference:   &ref,
+			expectArmed: true,
+			expectStamp: refStamp,
+		},
+		{
+			name: "no-op for the same request already stamped (loop guard)",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "cluster1",
+					Annotations: map[string]string{
+						// a previous import for this reference already completed
+						apiconstants.AnnotationImmediateImport:   apiconstants.AnnotationValueImmediateImportCompleted,
+						constants.StaleImportReferenceAnnotation: refStamp,
+					},
+				},
+			},
+			reference:   &ref,
+			expectArmed: false,
+			expectStamp: refStamp,
+		},
+		{
+			name: "re-arm for a newer request after an earlier completed one",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "cluster1",
+					Annotations: map[string]string{
+						apiconstants.AnnotationImmediateImport:   apiconstants.AnnotationValueImmediateImportCompleted,
+						constants.StaleImportReferenceAnnotation: refStamp,
+					},
+				},
+			},
+			reference:   &newerRef,
+			expectArmed: true,
+			expectStamp: newerStamp,
+		},
+		{
+			name: "no-op for an older reference than the stamp (cross-controller guard)",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "cluster1",
+					Annotations: map[string]string{
+						// already stamped with the newer auto import secret creation time; a
+						// ClusterDeployment install time that predates it must not re-arm
+						apiconstants.AnnotationImmediateImport:   apiconstants.AnnotationValueImmediateImportCompleted,
+						constants.StaleImportReferenceAnnotation: newerStamp,
+					},
+				},
+			},
+			reference:   &ref,
+			expectArmed: false,
+			expectStamp: newerStamp,
+		},
+		{
+			name: "nil reference is a no-op",
+			managedCluster: &clusterv1.ManagedCluster{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster1"},
+			},
+			reference:   nil,
+			expectArmed: false,
+			expectStamp: "",
+		},
+	}
+
+	s := scheme.Scheme
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			clusterObjs := []runtime.Object{}
+			if c.managedCluster != nil {
+				clusterObjs = append(clusterObjs, c.managedCluster)
+			}
+			fakeClient := fake.NewClientBuilder().
+				WithScheme(s).
+				WithRuntimeObjects(clusterObjs...).
+				Build()
+
+			err := TriggerImmediateImport(fakeClient, "cluster1", c.reference)
+			if c.expectErr {
+				if err == nil {
+					t.Errorf("expected an error, but got none")
+				}
+				return
+			}
+			if err != nil {
+				t.Errorf("unexpected error: %v", err)
+			}
+
+			cluster := &clusterv1.ManagedCluster{}
+			if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: "cluster1"}, cluster); err != nil {
+				t.Fatalf("failed to get managed cluster: %v", err)
+			}
+			if armed := IsImmediateImport(cluster.Annotations); armed != c.expectArmed {
+				t.Errorf("expected armed=%v, got %v (annotations: %v)",
+					c.expectArmed, armed, cluster.Annotations)
+			}
+			if stamp := cluster.Annotations[constants.StaleImportReferenceAnnotation]; stamp != c.expectStamp {
+				t.Errorf("expected stamp %q, got %q", c.expectStamp, stamp)
+			}
+		})
+	}
+}
+
+func TestTriggerImmediateImportDoesNotOverwriteNewerStamp(t *testing.T) {
+	// A losing writer in an optimistic-lock race must re-read the newer state written by the winner
+	// and then no-op: it must neither overwrite the newer stamp nor re-arm the completed import.
+	//
+	// The conflict here is produced by the real resource-version precondition, not injected: the
+	// interceptor performs a concurrent Update (bumping the resourceVersion and writing the newer
+	// state) and then calls through to the real Patch. With optimistic locking the stale precondition
+	// makes that real Patch conflict, so the retry re-reads and no-ops. Without optimistic locking the
+	// real Patch would succeed and clobber the newer stamp, failing this test.
+	ref := metav1.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	newerStamp := metav1.NewTime(ref.Add(time.Hour)).UTC().Format(time.RFC3339)
+
+	managedCluster := &clusterv1.ManagedCluster{ObjectMeta: metav1.ObjectMeta{Name: "cluster1"}}
+
+	interleaved := false
+	fakeClient := fake.NewClientBuilder().
+		WithScheme(scheme.Scheme).
+		WithRuntimeObjects(managedCluster).
+		WithInterceptorFuncs(interceptor.Funcs{
+			Patch: func(ctx context.Context, c client.WithWatch, obj client.Object,
+				patch client.Patch, opts ...client.PatchOption) error {
+				if !interleaved {
+					interleaved = true
+					// a concurrent winner stamps a newer reference and completes its import,
+					// bumping the resourceVersion so the pending patch's precondition is stale
+					current := &clusterv1.ManagedCluster{}
+					if err := c.Get(ctx, types.NamespacedName{Name: "cluster1"}, current); err != nil {
+						return err
+					}
+					current.Annotations = map[string]string{
+						apiconstants.AnnotationImmediateImport:   apiconstants.AnnotationValueImmediateImportCompleted,
+						constants.StaleImportReferenceAnnotation: newerStamp,
+					}
+					if err := c.Update(ctx, current); err != nil {
+						return err
+					}
+				}
+				// call through to the real patch: it conflicts only because of the optimistic lock
+				return c.Patch(ctx, obj, patch, opts...)
+			},
+		}).
+		Build()
+
+	if err := TriggerImmediateImport(fakeClient, "cluster1", &ref); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	cluster := &clusterv1.ManagedCluster{}
+	if err := fakeClient.Get(context.Background(), types.NamespacedName{Name: "cluster1"}, cluster); err != nil {
+		t.Fatalf("failed to get managed cluster: %v", err)
+	}
+	if got := cluster.Annotations[constants.StaleImportReferenceAnnotation]; got != newerStamp {
+		t.Errorf("expected the newer stamp %q to survive, got %q", newerStamp, got)
+	}
+	if got := cluster.Annotations[apiconstants.AnnotationImmediateImport]; got != apiconstants.AnnotationValueImmediateImportCompleted {
+		t.Errorf("expected the completed import to stay %q, got %q",
+			apiconstants.AnnotationValueImmediateImportCompleted, got)
+	}
+}
+
 func TestIsImmediateImport(t *testing.T) {
 	cases := []struct {
 		name          string
@@ -2324,16 +2795,16 @@ func TestValidateClusterImportConfigSecret(t *testing.T) {
 
 func TestParseKubeConfigData(t *testing.T) {
 	testCases := []struct {
-		name                    string
-		kubeConfigData          []byte
-		expectedKubeAPIServer   string
-		expectedProxyURL        string
-		expectedCA              string
-		expectedCAData          []byte
-		expectedToken           string
-		expectedCtxClusterName  string
-		expectError             bool
-		expectedErrorMessage    string
+		name                   string
+		kubeConfigData         []byte
+		expectedKubeAPIServer  string
+		expectedProxyURL       string
+		expectedCA             string
+		expectedCAData         []byte
+		expectedToken          string
+		expectedCtxClusterName string
+		expectError            bool
+		expectedErrorMessage   string
 	}{
 		{
 			name: "valid kubeconfig with all fields",

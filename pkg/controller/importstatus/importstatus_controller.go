@@ -6,6 +6,7 @@ package importstatus
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -25,6 +26,12 @@ import (
 )
 
 var log = logf.Log.WithName(ControllerName)
+
+// staleImportFreshnessRequeue is how often the import-status controller re-checks a pending
+// stale-import re-import for agent freshness. The controller watches ManagedClusters and
+// ManifestWorks but not the managed-cluster lease, so a later lease renewal alone would not
+// re-trigger the gate; this bounded requeue guarantees the pending re-import converges.
+const staleImportFreshnessRequeue = 30 * time.Second
 
 // ReconcileImportStatus reconciles the klusterlet manifestworks to judge whether the cluster is imported successfully
 type ReconcileImportStatus struct {
@@ -110,9 +117,44 @@ func (r *ReconcileImportStatus) Reconcile(ctx context.Context, request reconcile
 		return reconcile.Result{}, nil
 	}
 
+	// When a stale-import-success re-import is in progress (ACM-49455), the klusterlet
+	// ManifestWork can still report Available=True from the previous agent incarnation: that
+	// condition is set by the spoke work agent and is never reset when the old agent is wiped.
+	// Trusting it would complete the re-import against a dead spoke. Require a live agent to have
+	// proven itself since the re-import request (a lease renewal at/after the request, or the
+	// managed cluster becoming available at/after it) before completing.
+	reference, reImporting := helpers.StaleImportReference(managedCluster)
+	if reImporting {
+		lease, err := r.kubeClient.CoordinationV1().Leases(managedClusterName).Get(
+			ctx, helpers.ManagedClusterLeaseName, metav1.GetOptions{})
+		if err != nil && !errors.IsNotFound(err) {
+			return reconcile.Result{}, err
+		}
+		if errors.IsNotFound(err) {
+			lease = nil
+		}
+		if !helpers.ClusterAgentIsFresh(managedCluster, lease, reference) {
+			reqLogger.Info("Re-import in progress, waiting for a live agent to prove freshness",
+				"managedCluster", managedClusterName, "staleImportReference", reference)
+			// Requeue: a subsequent lease renewal alone does not generate a watched event, so
+			// poll the freshness signal until the agent proves itself (or a watched event fires).
+			return reconcile.Result{RequeueAfter: staleImportFreshnessRequeue}, nil
+		}
+	}
+
 	if helpers.IsImmediateImport(managedCluster.Annotations) {
 		// update the ImmediateImport annotation value to `Completed`
 		if err := helpers.SetImmediateImportCompleted(r.client, managedCluster.Name); err != nil {
+			return reconcile.Result{}, err
+		}
+	}
+
+	// The re-import has genuinely completed (the cluster is available again), so clear the
+	// re-import stamp. Leaving it would make the freshness gate above block a later, unrelated
+	// availability blip from being re-affirmed as imported. Clear only the stamp this reconcile
+	// evaluated, so a newer request armed concurrently keeps its gate.
+	if reImporting {
+		if err := helpers.ClearStaleImportReference(r.client, managedCluster.Name, reference); err != nil {
 			return reconcile.Result{}, err
 		}
 	}

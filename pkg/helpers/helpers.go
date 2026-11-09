@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"text/template"
+	"time"
 
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/resource/resourceapply"
@@ -21,6 +22,7 @@ import (
 	"golang.org/x/text/cases"
 	"golang.org/x/text/language"
 	appsv1 "k8s.io/api/apps/v1"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
@@ -44,6 +46,7 @@ import (
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
 	kevents "k8s.io/client-go/tools/events"
 	certutil "k8s.io/client-go/util/cert"
+	"k8s.io/client-go/util/retry"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/clock"
 	"k8s.io/utils/ptr"
@@ -370,6 +373,42 @@ func SetImmediateImportCompleted(client client.Client, managedClusterName string
 
 	klog.Infof("Update ImmediateImport annotation of the managed cluster %s to Completed succeeded.", managedClusterName)
 	return nil
+}
+
+// ClearStaleImportReference removes the stale-import-reference stamp from the managed cluster once a
+// stale-import-success re-import has genuinely completed (the cluster became available again), so the
+// re-import freshness gate in the import-status controller no longer applies and a later, unrelated
+// availability blip is handled normally.
+//
+// expected is the stamp the caller's freshness gate evaluated. The stamp is only cleared while it
+// still equals expected: if a concurrent trigger has armed a newer request (a newer stamp) in the
+// meantime, this is a no-op so the new request's gate is preserved. The read/check/patch runs under
+// an optimistic lock with retry on conflict, matching TriggerImmediateImport. It is also a no-op
+// when the stamp is absent.
+func ClearStaleImportReference(runtimeClient client.Client, managedClusterName string, expected metav1.Time) error {
+	expectedStamp := expected.UTC().Format(time.RFC3339)
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		managedCluster := &clusterv1.ManagedCluster{}
+		if err := runtimeClient.Get(
+			context.TODO(), types.NamespacedName{Name: managedClusterName}, managedCluster); err != nil {
+			return err
+		}
+
+		if managedCluster.Annotations[constants.StaleImportReferenceAnnotation] != expectedStamp {
+			// stamp is absent or a concurrent trigger armed a newer request; leave it alone
+			return nil
+		}
+
+		patch := client.MergeFromWithOptions(
+			managedCluster.DeepCopy(), client.MergeFromWithOptimisticLock{})
+		delete(managedCluster.Annotations, constants.StaleImportReferenceAnnotation)
+		if err := runtimeClient.Patch(context.TODO(), managedCluster, patch); err != nil {
+			return err
+		}
+
+		klog.Infof("Cleared stale import reference of the managed cluster %s", managedClusterName)
+		return nil
+	})
 }
 
 // UpdateManagedClusterImportCondition update managed cluster status and record the event
@@ -1160,6 +1199,161 @@ func IsImmediateImport(annotations map[string]string) bool {
 	}
 
 	return false
+}
+
+// ImportSuccessPredates reports whether the managed cluster's ManagedClusterImportSucceeded
+// condition became True strictly before the given reference time.
+//
+// It is used to detect a stale import success: when a managed cluster is deleted and recreated
+// while the previous klusterlet agent is still running on the spoke, that old agent can
+// re-establish the import success condition before the cluster is actually reinstalled. The
+// reference time marks the start of the current cluster incarnation (the ClusterDeployment's
+// install completion for Hive clusters, or the auto import secret's creation for secret-based
+// imports), so a success that predates it cannot belong to the current incarnation.
+//
+// It returns false when the reference time is nil or zero, or when the condition is absent,
+// not True, or has no transition time. In those cases the import success cannot be proven stale,
+// so the caller keeps the existing behavior.
+func ImportSuccessPredates(managedCluster *clusterv1.ManagedCluster, reference *metav1.Time) bool {
+	if reference == nil || reference.IsZero() {
+		return false
+	}
+
+	condition := meta.FindStatusCondition(
+		managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+	if condition == nil || condition.Status != metav1.ConditionTrue || condition.LastTransitionTime.IsZero() {
+		return false
+	}
+
+	return condition.LastTransitionTime.Before(reference)
+}
+
+// StaleImportReference returns the reference time of the re-import request currently stamped on the
+// managed cluster by TriggerImmediateImport, and whether a stamp is present and parseable. The stamp
+// records the time that identifies the active stale-import-success re-import (the ClusterDeployment
+// install time or the auto import secret creation time).
+func StaleImportReference(managedCluster *clusterv1.ManagedCluster) (metav1.Time, bool) {
+	stamped := managedCluster.Annotations[constants.StaleImportReferenceAnnotation]
+	if stamped == "" {
+		return metav1.Time{}, false
+	}
+	t, err := time.Parse(time.RFC3339, stamped)
+	if err != nil {
+		return metav1.Time{}, false
+	}
+	return metav1.NewTime(t), true
+}
+
+// ManagedClusterLeaseName is the name of the lease the spoke registration agent renews in the
+// managed cluster namespace on the hub. The registration controller derives
+// ManagedClusterConditionAvailable from its renewal.
+const ManagedClusterLeaseName = "managed-cluster-lease"
+
+// ClusterAgentIsFresh reports whether a live klusterlet agent has proven itself since the given
+// reference time (the re-import request), so a stale-import-success re-import may complete.
+//
+// It requires the managed cluster to be currently available (ManagedClusterConditionAvailable is
+// True) and the current agent to have produced a liveness signal at or after the reference:
+//   - the lease is renewed at or after the reference (lease may be nil if it could not be read), or
+//   - the Available condition transitioned at or after the reference.
+//
+// The lease renewal is the primary signal because it covers both recovery cases without requiring a
+// condition transition:
+//   - a dead agent (ACM-49455): the lease stops renewing, so renewTime stays frozen before the
+//     reference and the Available condition is Unknown -> this returns false until a new agent runs;
+//   - a continuously available cluster (for example a healthy ImportOnly cluster that gets a new
+//     auto import secret): the Available condition never re-transitions, but the live agent keeps
+//     renewing the lease, so renewTime is at/after the reference -> this returns true.
+//
+// The Available condition's LastTransitionTime is kept as a fallback for when the lease is
+// unavailable (e.g. not yet created or not readable): it advances on the Unknown -> True recovery
+// transition that characterizes the dead-agent case.
+func ClusterAgentIsFresh(managedCluster *clusterv1.ManagedCluster, lease *coordinationv1.Lease,
+	reference metav1.Time) bool {
+	available := meta.FindStatusCondition(
+		managedCluster.Status.Conditions, clusterv1.ManagedClusterConditionAvailable)
+	if available == nil || available.Status != metav1.ConditionTrue {
+		return false
+	}
+
+	if lease != nil && lease.Spec.RenewTime != nil &&
+		!lease.Spec.RenewTime.Time.Before(reference.Time) {
+		return true
+	}
+
+	return !available.LastTransitionTime.Before(&reference)
+}
+
+// TriggerImmediateImport arms the import.open-cluster-management.io/immediate-import annotation
+// (with an empty value) on the named managed cluster so the next reconcile performs an import
+// regardless of the AutoImportStrategy or the current import success condition. The hub controller
+// clears the annotation (sets it to Completed) once the klusterlet becomes available again, so the
+// re-import follows the normal import path and self-cleans.
+//
+// reference is the time that identifies the current stale-import-success request (the
+// ClusterDeployment install time or the auto import secret creation time). The latest reference a
+// trigger has been armed for is stamped on the managed cluster, and the stamp only ever advances,
+// so a request is triggered exactly once:
+//
+//   - A reference at or before the stamp is a no-op. This makes repeated reconciles idempotent even
+//     when a no-op re-import leaves the import success condition's transition time unchanged and
+//     still predating the reference, and it keeps the two controllers from re-arming each other: a
+//     ClusterDeployment install time that predates an already-stamped auto import secret creation
+//     time (both controllers check staleness for the same cluster) does not re-trigger.
+//   - A reference strictly newer than the stamp (a later install or a newly created auto import
+//     secret) is armed and re-stamped, so a stale success after an earlier completed import still
+//     triggers a fresh re-import.
+func TriggerImmediateImport(runtimeClient client.Client, managedClusterName string, reference *metav1.Time) error {
+	if reference == nil || reference.IsZero() {
+		// no identifiable request to stamp; nothing to trigger
+		return nil
+	}
+	stamp := reference.UTC().Format(time.RFC3339)
+
+	triggered := false
+	// The clusterdeployment and autoimport controllers can trigger the same cluster concurrently
+	// with different references. Read, decide, and patch under an optimistic lock, retrying on
+	// conflict so a stale read cannot overwrite a newer stamp or re-arm a completed import.
+	err := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		managedCluster := &clusterv1.ManagedCluster{}
+		if err := runtimeClient.Get(
+			context.TODO(), types.NamespacedName{Name: managedClusterName}, managedCluster); err != nil {
+			return err
+		}
+
+		if stamped := managedCluster.Annotations[constants.StaleImportReferenceAnnotation]; stamped != "" {
+			if stampedTime, perr := time.Parse(time.RFC3339, stamped); perr == nil &&
+				!reference.UTC().After(stampedTime) {
+				// already triggered for this or a newer request, do not trigger it again
+				triggered = false
+				return nil
+			}
+		}
+
+		patch := client.MergeFromWithOptions(
+			managedCluster.DeepCopy(), client.MergeFromWithOptimisticLock{})
+		if managedCluster.Annotations == nil {
+			managedCluster.Annotations = map[string]string{}
+		}
+		managedCluster.Annotations[apiconstants.AnnotationImmediateImport] = ""
+		managedCluster.Annotations[constants.StaleImportReferenceAnnotation] = stamp
+
+		if err := runtimeClient.Patch(context.TODO(), managedCluster, patch); err != nil {
+			return err
+		}
+		triggered = true
+		return nil
+	})
+	if err != nil {
+		// Return the error without logging it here: the controller requeues on any non-nil error
+		// and logs it, and logging the raw client error at this point could duplicate it.
+		return err
+	}
+
+	if triggered {
+		klog.Infof("Triggered immediate import for the managed cluster %s", managedClusterName)
+	}
+	return nil
 }
 
 func ParseKubeConfigData(kubeConfigData []byte) (

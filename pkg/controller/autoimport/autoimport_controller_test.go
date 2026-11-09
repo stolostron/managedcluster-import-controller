@@ -700,3 +700,130 @@ func TestReconcile(t *testing.T) {
 		})
 	}
 }
+
+// newImportedClusterAt builds a managed cluster whose ManagedClusterImportSucceeded condition
+// became True at the given time, for exercising the stale-import-success detection.
+func newImportedClusterAt(name string, importedAt metav1.Time) *clusterv1.ManagedCluster {
+	return &clusterv1.ManagedCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Status: clusterv1.ManagedClusterStatus{
+			Conditions: []metav1.Condition{
+				{
+					Type:               constants.ConditionManagedClusterImportSucceeded,
+					Status:             metav1.ConditionTrue,
+					Reason:             constants.ConditionReasonManagedClusterImported,
+					Message:            "Managed cluster imported",
+					LastTransitionTime: importedAt,
+				},
+			},
+		},
+	}
+}
+
+func TestReconcileStaleImportSuccess(t *testing.T) {
+	secretCreatedAt := metav1.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	staleSuccess := metav1.NewTime(secretCreatedAt.Add(-time.Hour))
+	freshSuccess := metav1.NewTime(secretCreatedAt.Add(time.Hour))
+
+	autoImportSecret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:              constants.AutoImportSecretName,
+			Namespace:         "test",
+			CreationTimestamp: secretCreatedAt,
+		},
+		Data: map[string][]byte{"kubeconfig": []byte("dummy")},
+		Type: constants.AutoImportSecretKubeConfig,
+	}
+
+	currentStamp := secretCreatedAt.UTC().Format(time.RFC3339)
+	olderStamp := metav1.NewTime(secretCreatedAt.Add(-24 * time.Hour)).UTC().Format(time.RFC3339)
+
+	cases := []struct {
+		name            string
+		importedAt      metav1.Time
+		annotations     map[string]string
+		expectImmediate bool
+	}{
+		{
+			name:            "stale import success triggers an immediate import",
+			importedAt:      staleSuccess,
+			expectImmediate: true,
+		},
+		{
+			name:            "fresh import success keeps the skip",
+			importedAt:      freshSuccess,
+			expectImmediate: false,
+		},
+		{
+			name:       "completed request for this secret is not re-triggered (no-op re-import loop guard)",
+			importedAt: staleSuccess,
+			annotations: map[string]string{
+				// a previous immediate import for this exact secret already completed; the
+				// success condition is still stale because the re-import applied no changes
+				apiconstants.AnnotationImmediateImport:   apiconstants.AnnotationValueImmediateImportCompleted,
+				constants.StaleImportReferenceAnnotation: currentStamp,
+			},
+			expectImmediate: false,
+		},
+		{
+			name:       "new secret after a completed import re-triggers",
+			importedAt: staleSuccess,
+			annotations: map[string]string{
+				// the stamp is from an earlier secret, so this newer secret must re-trigger
+				apiconstants.AnnotationImmediateImport:   apiconstants.AnnotationValueImmediateImportCompleted,
+				constants.StaleImportReferenceAnnotation: olderStamp,
+			},
+			expectImmediate: true,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			managedCluster := newImportedClusterAt("test", c.importedAt)
+			managedCluster.Annotations = c.annotations
+			objs := []client.Object{managedCluster}
+			secrets := []runtime.Object{autoImportSecret}
+
+			kubeClient := kubefake.NewSimpleClientset(secrets...)
+			kubeInformerFactory := informers.NewSharedInformerFactory(kubeClient, 10*time.Minute)
+			secretInformer := kubeInformerFactory.Core().V1().Secrets().Informer()
+			for _, secret := range secrets {
+				secretInformer.GetStore().Add(secret)
+			}
+
+			workClient := workfake.NewSimpleClientset()
+			workInformerFactory := workinformers.NewSharedInformerFactory(workClient, 10*time.Minute)
+
+			ctx := context.TODO()
+			importConfigLister := testinghelpers.FakeImportControllerConfigLister(
+				"test", apiconstants.AutoImportStrategyImportOnly, "")
+			r := NewReconcileAutoImport(
+				fake.NewClientBuilder().WithScheme(testscheme).WithObjects(objs...).WithStatusSubresource(objs...).Build(),
+				kubeClient,
+				&source.InformerHolder{
+					AutoImportSecretLister: kubeInformerFactory.Core().V1().Secrets().Lister(),
+					ImportSecretLister:     kubeInformerFactory.Core().V1().Secrets().Lister(),
+					KlusterletWorkLister:   workInformerFactory.Work().V1().ManifestWorks().Lister(),
+				},
+				eventstesting.NewTestingEventRecorder(t),
+				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
+				helpers.NewImportControllerConfig("test", importConfigLister,
+					logf.Log.WithName("fake-import-controller-config")),
+			)
+
+			if _, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			updated := &clusterv1.ManagedCluster{}
+			if err := r.client.Get(ctx, types.NamespacedName{Name: "test"}, updated); err != nil {
+				t.Fatalf("get managed cluster error: %v", err)
+			}
+			armed := helpers.IsImmediateImport(updated.Annotations)
+			if armed != c.expectImmediate {
+				t.Errorf("expected immediate-import armed=%v, got %v (annotations: %v)",
+					c.expectImmediate, armed, updated.Annotations)
+			}
+		})
+	}
+}

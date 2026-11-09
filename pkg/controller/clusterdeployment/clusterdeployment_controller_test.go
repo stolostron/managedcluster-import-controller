@@ -712,3 +712,135 @@ func TestReconcile(t *testing.T) {
 		})
 	}
 }
+
+// newImportedClusterAt builds a managed cluster whose ManagedClusterImportSucceeded condition
+// became True at the given time, for exercising the stale-import-success detection.
+func newImportedClusterAt(name string, importedAt metav1.Time) *clusterv1.ManagedCluster {
+	return &clusterv1.ManagedCluster{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Status: clusterv1.ManagedClusterStatus{
+			Conditions: []metav1.Condition{
+				{
+					Type:               constants.ConditionManagedClusterImportSucceeded,
+					Status:             metav1.ConditionTrue,
+					Reason:             constants.ConditionReasonManagedClusterImported,
+					Message:            "Managed cluster imported",
+					LastTransitionTime: importedAt,
+				},
+			},
+		},
+	}
+}
+
+func TestReconcileStaleImportSuccess(t *testing.T) {
+	installedAt := metav1.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	staleSuccess := metav1.NewTime(installedAt.Add(-time.Hour))
+	freshSuccess := metav1.NewTime(installedAt.Add(time.Hour))
+
+	newClusterDeployment := func(installedTimestamp *metav1.Time) *hivev1.ClusterDeployment {
+		cd := &hivev1.ClusterDeployment{
+			ObjectMeta: metav1.ObjectMeta{Name: "test", Namespace: "test"},
+			Spec:       hivev1.ClusterDeploymentSpec{Installed: true},
+		}
+		if installedTimestamp != nil {
+			cd.Status.InstalledTimestamp = installedTimestamp
+		}
+		return cd
+	}
+
+	withAnnotations := func(mc *clusterv1.ManagedCluster, annotations map[string]string) *clusterv1.ManagedCluster {
+		mc.Annotations = annotations
+		return mc
+	}
+
+	currentStamp := installedAt.UTC().Format(time.RFC3339)
+	olderStamp := metav1.NewTime(installedAt.Add(-24 * time.Hour)).UTC().Format(time.RFC3339)
+
+	cases := []struct {
+		name            string
+		managedCluster  *clusterv1.ManagedCluster
+		clusterDeploy   *hivev1.ClusterDeployment
+		expectImmediate bool
+	}{
+		{
+			name:            "stale import success triggers an immediate import",
+			managedCluster:  newImportedClusterAt("test", staleSuccess),
+			clusterDeploy:   newClusterDeployment(&installedAt),
+			expectImmediate: true,
+		},
+		{
+			name:            "fresh import success keeps the skip",
+			managedCluster:  newImportedClusterAt("test", freshSuccess),
+			clusterDeploy:   newClusterDeployment(&installedAt),
+			expectImmediate: false,
+		},
+		{
+			name:            "unknown install timestamp keeps the skip",
+			managedCluster:  newImportedClusterAt("test", staleSuccess),
+			clusterDeploy:   newClusterDeployment(nil),
+			expectImmediate: false,
+		},
+		{
+			name: "completed request for this install is not re-triggered (no-op re-import loop guard)",
+			managedCluster: withAnnotations(newImportedClusterAt("test", staleSuccess), map[string]string{
+				// a previous immediate import for this exact install already completed; the
+				// success condition is still stale because the re-import applied no changes
+				apiconstants.AnnotationImmediateImport:   apiconstants.AnnotationValueImmediateImportCompleted,
+				constants.StaleImportReferenceAnnotation: currentStamp,
+			}),
+			clusterDeploy:   newClusterDeployment(&installedAt),
+			expectImmediate: false,
+		},
+		{
+			name: "newer install after a completed import re-triggers",
+			managedCluster: withAnnotations(newImportedClusterAt("test", staleSuccess), map[string]string{
+				apiconstants.AnnotationImmediateImport:   apiconstants.AnnotationValueImmediateImportCompleted,
+				constants.StaleImportReferenceAnnotation: olderStamp,
+			}),
+			clusterDeploy:   newClusterDeployment(&installedAt),
+			expectImmediate: true,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			objs := []client.Object{c.managedCluster, c.clusterDeploy}
+
+			kubeClient := kubefake.NewSimpleClientset()
+			kubeInformerFactory := informers.NewSharedInformerFactory(kubeClient, 10*time.Minute)
+			workClient := workfake.NewSimpleClientset()
+			workInformerFactory := workinformers.NewSharedInformerFactory(workClient, 10*time.Minute)
+
+			ctx := context.TODO()
+			importConfigLister := testinghelpers.FakeImportControllerConfigLister(
+				"test", apiconstants.AutoImportStrategyImportOnly, "")
+			r := NewReconcileClusterDeployment(
+				fake.NewClientBuilder().WithScheme(testscheme).WithObjects(objs...).WithStatusSubresource(objs...).Build(),
+				kubeClient,
+				&source.InformerHolder{
+					AutoImportSecretLister: kubeInformerFactory.Core().V1().Secrets().Lister(),
+					ImportSecretLister:     kubeInformerFactory.Core().V1().Secrets().Lister(),
+					KlusterletWorkLister:   workInformerFactory.Work().V1().ManifestWorks().Lister(),
+				},
+				eventstesting.NewTestingEventRecorder(t),
+				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
+				helpers.NewImportControllerConfig("test", importConfigLister,
+					logf.Log.WithName("fake-import-controller-config")),
+			)
+
+			if _, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: "test"}}); err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			managedCluster := &clusterv1.ManagedCluster{}
+			if err := r.client.Get(ctx, types.NamespacedName{Name: "test"}, managedCluster); err != nil {
+				t.Fatalf("get managed cluster error: %v", err)
+			}
+			armed := helpers.IsImmediateImport(managedCluster.Annotations)
+			if armed != c.expectImmediate {
+				t.Errorf("expected immediate-import armed=%v, got %v (annotations: %v)",
+					c.expectImmediate, armed, managedCluster.Annotations)
+			}
+		})
+	}
+}

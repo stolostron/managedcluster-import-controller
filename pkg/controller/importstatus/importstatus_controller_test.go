@@ -14,6 +14,7 @@ import (
 	"github.com/stolostron/managedcluster-import-controller/pkg/helpers"
 
 	apiconstants "github.com/stolostron/cluster-lifecycle-api/constants"
+	coordinationv1 "k8s.io/api/coordination/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -338,5 +339,268 @@ func TestReconcile(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestReconcileStaleImportReImportGate reproduces the ACM-49455 live finding: during a
+// stale-import-success re-import the klusterlet ManifestWork can still report Available=True from
+// the previous agent incarnation. The import-status controller must not complete the re-import on
+// that stale availability; it must wait until the managed cluster becomes available again (fresh
+// agent), then complete and clear the re-import stamp.
+func TestReconcileStaleImportReImportGate(t *testing.T) {
+	const name = "test"
+	stamp := metav1.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	staleAvailable := metav1.NewTime(stamp.Add(-10 * time.Minute)) // old agent's ack, predates re-import
+	freshAvailable := metav1.NewTime(stamp.Add(2 * time.Minute))   // new agent after re-import
+
+	// klusterlet works reporting Available=True (stale ack never resets on the hub)
+	staleWorks := func() []runtime.Object {
+		mkWork := func(suffix string) *workv1.ManifestWork {
+			return &workv1.ManifestWork{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      name + "-" + suffix,
+					Namespace: name,
+					Labels:    map[string]string{constants.KlusterletWorksLabel: "true"},
+				},
+				Status: workv1.ManifestWorkStatus{
+					Conditions: []metav1.Condition{{Type: workv1.WorkAvailable, Status: metav1.ConditionTrue}},
+				},
+			}
+		}
+		return []runtime.Object{mkWork("klusterlet-crds"), mkWork("klusterlet")}
+	}
+
+	newCluster := func(availableStatus metav1.ConditionStatus, availableTime metav1.Time) *clusterv1.ManagedCluster {
+		return &clusterv1.ManagedCluster{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name,
+				Annotations: map[string]string{
+					apiconstants.AnnotationImmediateImport:   "",
+					constants.StaleImportReferenceAnnotation: stamp.UTC().Format(time.RFC3339),
+				},
+			},
+			Status: clusterv1.ManagedClusterStatus{
+				Conditions: []metav1.Condition{
+					helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+						constants.ConditionReasonManagedClusterImporting, "test"),
+					{
+						Type:               clusterv1.ManagedClusterConditionAvailable,
+						Status:             availableStatus,
+						LastTransitionTime: availableTime,
+					},
+				},
+			},
+		}
+	}
+
+	leaseRenewedAt := func(t metav1.Time) *coordinationv1.Lease {
+		mt := metav1.NewMicroTime(t.Time)
+		return &coordinationv1.Lease{
+			ObjectMeta: metav1.ObjectMeta{Name: helpers.ManagedClusterLeaseName, Namespace: name},
+			Spec:       coordinationv1.LeaseSpec{RenewTime: &mt},
+		}
+	}
+
+	cases := []struct {
+		name               string
+		cluster            *clusterv1.ManagedCluster
+		lease              *coordinationv1.Lease
+		expectCompleted    bool // immediate-import flipped to Completed
+		expectStampPresent bool
+	}{
+		{
+			name:               "stale work available, cluster unknown, lease frozen - gate holds",
+			cluster:            newCluster(metav1.ConditionUnknown, staleAvailable),
+			lease:              leaseRenewedAt(staleAvailable),
+			expectCompleted:    false,
+			expectStampPresent: true,
+		},
+		{
+			name:               "stale work available, cluster available but lease frozen before re-import - gate holds",
+			cluster:            newCluster(metav1.ConditionTrue, staleAvailable),
+			lease:              leaseRenewedAt(staleAvailable),
+			expectCompleted:    false,
+			expectStampPresent: true,
+		},
+		{
+			name:               "cluster became available after re-import (fallback, no lease) - completes and clears stamp",
+			cluster:            newCluster(metav1.ConditionTrue, freshAvailable),
+			lease:              nil,
+			expectCompleted:    true,
+			expectStampPresent: false,
+		},
+		{
+			// CodeRabbit case: healthy ImportOnly cluster, Available never re-transitions
+			// (old LastTransitionTime) but the live agent keeps renewing the lease.
+			name:               "continuously available cluster with fresh lease - completes and clears stamp",
+			cluster:            newCluster(metav1.ConditionTrue, staleAvailable),
+			lease:              leaseRenewedAt(freshAvailable),
+			expectCompleted:    true,
+			expectStampPresent: false,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			works := staleWorks()
+			kubeObjs := []runtime.Object{}
+			if c.lease != nil {
+				kubeObjs = append(kubeObjs, c.lease)
+			}
+			kubeClient := kubefake.NewSimpleClientset(kubeObjs...)
+			workClient := workfake.NewSimpleClientset(works...)
+			workInformerFactory := workinformers.NewSharedInformerFactory(workClient, 10*time.Minute)
+			workInformer := workInformerFactory.Work().V1().ManifestWorks().Informer()
+			for _, w := range works {
+				workInformer.GetStore().Add(w)
+			}
+
+			ctx := context.TODO()
+			r := NewReconcileImportStatus(
+				fake.NewClientBuilder().WithScheme(testscheme).WithObjects(c.cluster).WithStatusSubresource(c.cluster).Build(),
+				kubeClient,
+				workClient,
+				helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
+			)
+
+			result, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Name: name}})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+
+			// When the gate holds (not completed), the controller must requeue so a later lease
+			// renewal is re-checked even without a watched ManagedCluster/ManifestWork event.
+			if !c.expectCompleted && result.RequeueAfter <= 0 {
+				t.Errorf("expected a bounded requeue while the gate holds, got %+v", result)
+			}
+
+			mc := &clusterv1.ManagedCluster{}
+			if err := r.client.Get(ctx, types.NamespacedName{Name: name}, mc); err != nil {
+				t.Fatalf("get managed cluster error: %v", err)
+			}
+
+			completed := mc.Annotations[apiconstants.AnnotationImmediateImport] == apiconstants.AnnotationValueImmediateImportCompleted
+			if completed != c.expectCompleted {
+				t.Errorf("expected immediate-import completed=%v, got %v (annotations: %v)",
+					c.expectCompleted, completed, mc.Annotations)
+			}
+
+			_, stampPresent := mc.Annotations[constants.StaleImportReferenceAnnotation]
+			if stampPresent != c.expectStampPresent {
+				t.Errorf("expected stale-import-reference present=%v, got %v", c.expectStampPresent, stampPresent)
+			}
+
+			importCond := meta.FindStatusCondition(mc.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+			if c.expectCompleted {
+				if importCond == nil || importCond.Status != metav1.ConditionTrue {
+					t.Errorf("expected ImportSucceeded=True on completion, got %+v", importCond)
+				}
+			} else {
+				// gate held: must not have been flipped to a success
+				if importCond != nil && importCond.Status == metav1.ConditionTrue {
+					t.Errorf("gate should have held, but ImportSucceeded was set True: %+v", importCond)
+				}
+			}
+		})
+	}
+}
+
+// TestReconcileStaleImportReImportLeaseRenewalConverges covers the race where the gate first sees a
+// stale lease and holds, and later only the lease is renewed (no ManagedCluster or ManifestWork
+// event). The controller must requeue so the renewal is re-checked and the re-import converges.
+func TestReconcileStaleImportReImportLeaseRenewalConverges(t *testing.T) {
+	const name = "test"
+	stamp := metav1.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	staleRenew := metav1.NewTime(stamp.Add(-5 * time.Minute))
+	freshRenew := metav1.NewTime(stamp.Add(2 * time.Minute))
+
+	mkWork := func(suffix string) *workv1.ManifestWork {
+		return &workv1.ManifestWork{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: name + "-" + suffix, Namespace: name,
+				Labels: map[string]string{constants.KlusterletWorksLabel: "true"},
+			},
+			Status: workv1.ManifestWorkStatus{
+				Conditions: []metav1.Condition{{Type: workv1.WorkAvailable, Status: metav1.ConditionTrue}},
+			},
+		}
+	}
+	works := []runtime.Object{mkWork("klusterlet-crds"), mkWork("klusterlet")}
+
+	// cluster is available (True) but from before the re-import; only the lease will prove freshness
+	cluster := &clusterv1.ManagedCluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			Annotations: map[string]string{
+				apiconstants.AnnotationImmediateImport:   "",
+				constants.StaleImportReferenceAnnotation: stamp.UTC().Format(time.RFC3339),
+			},
+		},
+		Status: clusterv1.ManagedClusterStatus{
+			Conditions: []metav1.Condition{
+				helpers.NewManagedClusterImportSucceededCondition(metav1.ConditionFalse,
+					constants.ConditionReasonManagedClusterImporting, "test"),
+				{
+					Type:               clusterv1.ManagedClusterConditionAvailable,
+					Status:             metav1.ConditionTrue,
+					LastTransitionTime: staleRenew,
+				},
+			},
+		},
+	}
+
+	staleMicro := metav1.NewMicroTime(staleRenew.Time)
+	lease := &coordinationv1.Lease{
+		ObjectMeta: metav1.ObjectMeta{Name: helpers.ManagedClusterLeaseName, Namespace: name},
+		Spec:       coordinationv1.LeaseSpec{RenewTime: &staleMicro},
+	}
+
+	ctx := context.TODO()
+	kubeClient := kubefake.NewSimpleClientset(lease)
+	workClient := workfake.NewSimpleClientset(works...)
+	r := NewReconcileImportStatus(
+		fake.NewClientBuilder().WithScheme(testscheme).WithObjects(cluster).WithStatusSubresource(cluster).Build(),
+		kubeClient,
+		workClient,
+		helpers.NewManagedClusterEventRecorder(ctx, kubeClient),
+	)
+
+	req := reconcile.Request{NamespacedName: types.NamespacedName{Name: name}}
+
+	// First reconcile: stale lease -> gate holds and requeues.
+	result, err := r.Reconcile(ctx, req)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.RequeueAfter <= 0 {
+		t.Fatalf("expected a requeue while the lease is stale, got %+v", result)
+	}
+	mc := &clusterv1.ManagedCluster{}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: name}, mc); err != nil {
+		t.Fatal(err)
+	}
+	if mc.Annotations[apiconstants.AnnotationImmediateImport] == apiconstants.AnnotationValueImmediateImportCompleted {
+		t.Fatalf("gate should have held on the stale lease, but the re-import completed")
+	}
+
+	// Only the lease is renewed (no ManagedCluster or ManifestWork change). The requeue re-runs
+	// the reconcile, which must now complete the re-import.
+	freshMicro := metav1.NewMicroTime(freshRenew.Time)
+	lease.Spec.RenewTime = &freshMicro
+	if _, err := kubeClient.CoordinationV1().Leases(name).Update(ctx, lease, metav1.UpdateOptions{}); err != nil {
+		t.Fatalf("update lease error: %v", err)
+	}
+
+	if _, err := r.Reconcile(ctx, req); err != nil {
+		t.Fatalf("unexpected error on second reconcile: %v", err)
+	}
+	if err := r.client.Get(ctx, types.NamespacedName{Name: name}, mc); err != nil {
+		t.Fatal(err)
+	}
+	if mc.Annotations[apiconstants.AnnotationImmediateImport] != apiconstants.AnnotationValueImmediateImportCompleted {
+		t.Errorf("expected re-import to complete after lease renewal, annotations: %v", mc.Annotations)
+	}
+	if _, present := mc.Annotations[constants.StaleImportReferenceAnnotation]; present {
+		t.Errorf("expected stale-import-reference cleared after completion, annotations: %v", mc.Annotations)
 	}
 }

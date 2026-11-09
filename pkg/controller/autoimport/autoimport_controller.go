@@ -102,22 +102,9 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 		reqLogger.V(5).Info("Auto import is enabled", "managedCluster", managedCluster.Name)
 	}
 
-	immediateImport := helpers.IsImmediateImport(managedCluster.Annotations)
-	autoImportStrategy, err := r.importControllerConfig.GetAutoImportStrategy()
-	if err != nil {
-		return reconcile.Result{}, err
-	}
-	reqLogger.Info("Auto import strategy is fetched", "managedCluster", managedCluster.Name, "AutoImportStrategy", autoImportStrategy)
-	importSucceeded := meta.IsStatusConditionTrue(managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
-	if !immediateImport && autoImportStrategy == apiconstants.AutoImportStrategyImportOnly && importSucceeded {
-		reqLogger.Info("Auto import is skipped due to the auto import strategy",
-			"managedCluster", managedCluster.Name,
-			"autoImportStrategy", autoImportStrategy,
-			"importSucceeded", importSucceeded,
-		)
-		return reconcile.Result{}, nil
-	}
-
+	// Fetch the auto import secret before evaluating the strategy: its creation time is the
+	// reference for detecting a stale import success below, and there is nothing to import
+	// without it.
 	autoImportSecret, err := r.informerHolder.AutoImportSecretLister.Secrets(managedClusterName).Get(constants.AutoImportSecretName)
 	if errors.IsNotFound(err) {
 		// the auto import secret could have been deleted, do nothing
@@ -126,6 +113,36 @@ func (r *ReconcileAutoImport) Reconcile(ctx context.Context, request reconcile.R
 	}
 	if err != nil {
 		return reconcile.Result{}, err
+	}
+
+	immediateImport := helpers.IsImmediateImport(managedCluster.Annotations)
+	autoImportStrategy, err := r.importControllerConfig.GetAutoImportStrategy()
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	reqLogger.Info("Auto import strategy is fetched", "managedCluster", managedCluster.Name, "AutoImportStrategy", autoImportStrategy)
+	importSucceeded := meta.IsStatusConditionTrue(managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
+	if !immediateImport && autoImportStrategy == apiconstants.AutoImportStrategyImportOnly && importSucceeded {
+		// Detect a stale import success: the success condition became True before this auto import
+		// secret was created. A newly created secret is an explicit request to import again, so a
+		// success that predates it was set by an agent left over from a previous cluster incarnation
+		// (ACM-49455). Arm an immediate import so this reconcile re-imports instead of trusting the
+		// stale success; the immediate-import path then drives the normal import flow and self-clears
+		// once the klusterlet is available again.
+		if helpers.ImportSuccessPredates(managedCluster, &autoImportSecret.CreationTimestamp) {
+			reqLogger.Info("Import success predates the auto import secret creation, triggering an immediate import",
+				"managedCluster", managedCluster.Name,
+			)
+			return reconcile.Result{}, helpers.TriggerImmediateImport(
+				r.client, managedCluster.Name, &autoImportSecret.CreationTimestamp)
+		}
+
+		reqLogger.Info("Auto import is skipped due to the auto import strategy",
+			"managedCluster", managedCluster.Name,
+			"autoImportStrategy", autoImportStrategy,
+			"importSucceeded", importSucceeded,
+		)
+		return reconcile.Result{}, nil
 	}
 
 	backupRestore := false
