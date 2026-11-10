@@ -94,6 +94,7 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", g
 
 		assertManagedClusterImportSecretCreated(managedClusterName, "other")
 		assertManagedClusterManifestWorks(managedClusterName)
+		assertManagedClusterManifestWorksReadOnly(managedClusterName)
 		assertManagedClusterImportSecretNotApplied(managedClusterName)
 
 		ginkgo.By(fmt.Sprintf("Update managed cluster %s and enable auto import", managedClusterName), func() {
@@ -103,6 +104,7 @@ var _ = ginkgo.Describe("Importing a managed cluster with auto-import-secret", g
 
 		assertManagedClusterImportSecretCreated(managedClusterName, "other")
 		assertManagedClusterImportSecretApplied(managedClusterName)
+		assertManagedClusterManifestWorksNotReadOnly(managedClusterName)
 		assertManagedClusterAvailable(managedClusterName)
 		assertManagedClusterManifestWorksAvailable(managedClusterName)
 		assertManagedClusterPriorityClass(managedClusterName)
