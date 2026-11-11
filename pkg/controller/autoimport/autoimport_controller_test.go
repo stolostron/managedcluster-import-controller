@@ -125,18 +125,95 @@ func TestReconcile(t *testing.T) {
 			expectedErr: false,
 		},
 		{
-			name: "with ImportOnly strategy",
+			// ImportOnly + imported + cluster currently Available: the live agent is syncing,
+			// so the skip holds even though an auto import secret and klusterlet works exist.
+			// The import is NOT re-run, so the condition stays ManagedClusterImported.
+			name: "with ImportOnly strategy, imported and available - skip holds",
 			objs: []client.Object{
 				testinghelpers.NewManagedClusterBuilder(managedClusterName).
 					WithImportedCondition(true).
+					WithAvailableCondition(metav1.ConditionTrue).
 					Build(),
 			},
-			works:                   []runtime.Object{},
-			secrets:                 []runtime.Object{},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: managedClusterName,
+						Labels:    map[string]string{constants.KlusterletWorksLabel: "true"},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: managedClusterName,
+						Labels:    map[string]string{constants.KlusterletWorksLabel: "true"},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret(managedClusterName),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: managedClusterName,
+					},
+					Data: map[string][]byte{
+						"kubeconfig": testinghelpers.BuildKubeconfig(config),
+					},
+					Type: constants.AutoImportSecretKubeConfig,
+				},
+			},
 			autoImportStrategy:      apiconstants.AutoImportStrategyImportOnly,
 			expectedErr:             false,
 			expectedConditionStatus: metav1.ConditionTrue,
 			expectedConditionReason: constants.ConditionReasonManagedClusterImported,
+		},
+		{
+			// ACM-49455: ImportOnly + a stale imported success but the cluster is NOT available
+			// (old klusterlet agent is gone). The skip must NOT hold; the re-import runs. Here the
+			// auto import secret points at a fake server, so the re-import attempt ends in
+			// ImportFailed - which proves the skip was bypassed and the import was actually run.
+			name: "with ImportOnly strategy, stale imported but unavailable - re-imports",
+			objs: []client.Object{
+				testinghelpers.NewManagedClusterBuilder(managedClusterName).
+					WithImportedCondition(true).
+					WithAvailableCondition(metav1.ConditionUnknown).
+					Build(),
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: managedClusterName,
+						Labels:    map[string]string{constants.KlusterletWorksLabel: "true"},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: managedClusterName,
+						Labels:    map[string]string{constants.KlusterletWorksLabel: "true"},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret(managedClusterName),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "auto-import-secret",
+						Namespace: managedClusterName,
+					},
+					Data: map[string][]byte{
+						"kubeconfig": testinghelpers.BuildKubeconfig(config),
+					},
+					Type: constants.AutoImportSecretKubeConfig,
+				},
+			},
+			autoImportStrategy:      apiconstants.AutoImportStrategyImportOnly,
+			expectedErr:             true,
+			expectedConditionStatus: metav1.ConditionFalse,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
 		},
 		{
 			name: "with ImportOnly strategy and immediate-import annotation",

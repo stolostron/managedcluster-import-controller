@@ -361,10 +361,13 @@ func TestReconcile(t *testing.T) {
 			},
 		},
 		{
-			name: "with ImportOnly strategy",
+			// ImportOnly + imported + cluster currently Available: live agent syncing, skip holds,
+			// condition stays ManagedClusterImported.
+			name: "with ImportOnly strategy, imported and available - skip holds",
 			objs: []client.Object{
 				testinghelpers.NewManagedClusterBuilder("test").
-					WithImportedCondition(true).Build(),
+					WithImportedCondition(true).
+					WithAvailableCondition(metav1.ConditionTrue).Build(),
 				&hivev1.ClusterDeployment{
 					ObjectMeta: metav1.ObjectMeta{
 						Name:      "test",
@@ -372,22 +375,103 @@ func TestReconcile(t *testing.T) {
 					},
 					Spec: hivev1.ClusterDeploymentSpec{
 						Installed: true,
+						ClusterMetadata: &hivev1.ClusterMetadata{
+							AdminKubeconfigSecretRef: corev1.LocalObjectReference{
+								Name: "test",
+							},
+						},
 					},
 				},
 			},
-			works: []runtime.Object{},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: "test",
+						Labels:    map[string]string{constants.KlusterletWorksLabel: "true"},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: "test",
+						Labels:    map[string]string{constants.KlusterletWorksLabel: "true"},
+					},
+				},
+			},
 			secrets: []runtime.Object{
 				testinghelpers.GetImportSecret("test"),
 				&corev1.Secret{
 					ObjectMeta: metav1.ObjectMeta{
-						Name:      "auto-import-secret",
+						Name:      "test",
 						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"token":  []byte(config.BearerToken),
+						"server": []byte(config.Host),
 					},
 				},
 			},
 			autoImportStrategy:      apiconstants.AutoImportStrategyImportOnly,
 			expectedErr:             false,
 			expectedConditionReason: constants.ConditionReasonManagedClusterImported,
+		},
+		{
+			// ACM-49455: ImportOnly + stale imported success but cluster NOT available (old agent
+			// gone). Skip must be bypassed and the re-import run; with a hive secret pointing at a
+			// fake spoke the attempt ends in ImportFailed, proving the import actually ran.
+			name: "with ImportOnly strategy, stale imported but unavailable - re-imports",
+			objs: []client.Object{
+				testinghelpers.NewManagedClusterBuilder("test").
+					WithImportedCondition(true).
+					WithAvailableCondition(metav1.ConditionUnknown).Build(),
+				&hivev1.ClusterDeployment{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Spec: hivev1.ClusterDeploymentSpec{
+						Installed: true,
+						ClusterMetadata: &hivev1.ClusterMetadata{
+							AdminKubeconfigSecretRef: corev1.LocalObjectReference{
+								Name: "test",
+							},
+						},
+					},
+				},
+			},
+			works: []runtime.Object{
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet-crds",
+						Namespace: "test",
+						Labels:    map[string]string{constants.KlusterletWorksLabel: "true"},
+					},
+				},
+				&workv1.ManifestWork{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test-klusterlet",
+						Namespace: "test",
+						Labels:    map[string]string{constants.KlusterletWorksLabel: "true"},
+					},
+				},
+			},
+			secrets: []runtime.Object{
+				testinghelpers.GetImportSecret("test"),
+				&corev1.Secret{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:      "test",
+						Namespace: "test",
+					},
+					Data: map[string][]byte{
+						"token":  []byte(config.BearerToken),
+						"server": []byte(config.Host),
+					},
+				},
+			},
+			autoImportStrategy:      apiconstants.AutoImportStrategyImportOnly,
+			expectedErr:             true,
+			expectedConditionReason: constants.ConditionReasonManagedClusterImportFailed,
 		},
 		{
 			name: "with ImportOnly strategy and immediate-import annotation",

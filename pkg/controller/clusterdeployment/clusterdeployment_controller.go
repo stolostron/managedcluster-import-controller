@@ -159,7 +159,16 @@ func (r *ReconcileClusterDeployment) Reconcile(
 	}
 	reqLogger.Info("Auto import strategy is fetched", "managedCluster", managedCluster.Name, "AutoImportStrategy", autoImportStrategy)
 	importSucceeded := meta.IsStatusConditionTrue(managedCluster.Status.Conditions, constants.ConditionManagedClusterImportSucceeded)
-	if !immediateImport && autoImportStrategy == apiconstants.AutoImportStrategyImportOnly && importSucceeded {
+	// The ImportOnly strategy means: once the cluster has joined and its klusterlet agent is live,
+	// the hub no longer re-applies klusterlet manifests. The skip must therefore be gated on the
+	// agent actually being live right now (cluster Available), not only on the sticky
+	// ManagedClusterImportSucceeded=True condition. A stale success left by a previous klusterlet
+	// agent incarnation (ACM-49455) has importSucceeded=True but Available=Unknown/False, so we
+	// must re-import rather than trust it.
+	clusterAvailable := meta.IsStatusConditionTrue(
+		managedCluster.Status.Conditions, clusterv1.ManagedClusterConditionAvailable)
+	if !immediateImport && autoImportStrategy == apiconstants.AutoImportStrategyImportOnly &&
+		importSucceeded && clusterAvailable {
 		reqLogger.Info("Auto import is skipped due to the auto import strategy",
 			"managedCluster", managedCluster.Name,
 			"autoImportStrategy", autoImportStrategy,

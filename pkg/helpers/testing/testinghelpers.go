@@ -17,6 +17,7 @@ import (
 
 	"github.com/stolostron/managedcluster-import-controller/pkg/constants"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/informers"
 	kubefake "k8s.io/client-go/kubernetes/fake"
@@ -322,6 +323,7 @@ type managedClusterBuilder struct {
 	name                  string
 	setImportingCondition bool
 	setImportedCondition  bool
+	availableStatus       *metav1.ConditionStatus
 	annotations           map[string]string
 }
 
@@ -339,6 +341,12 @@ func (b *managedClusterBuilder) WithImportingCondition(set bool) *managedCluster
 }
 func (b *managedClusterBuilder) WithImportedCondition(set bool) *managedClusterBuilder {
 	b.setImportedCondition = set
+	return b
+}
+
+// WithAvailableCondition sets the ManagedClusterConditionAvailable condition to the given status.
+func (b *managedClusterBuilder) WithAvailableCondition(status metav1.ConditionStatus) *managedClusterBuilder {
+	b.availableStatus = &status
 	return b
 }
 func (b *managedClusterBuilder) WithAnnotations(k, v string) *managedClusterBuilder {
@@ -372,6 +380,14 @@ func (b *managedClusterBuilder) Build() *clusterv1.ManagedCluster {
 				Message: "Managed cluster imported",
 			},
 		}
+	}
+	if b.availableStatus != nil {
+		meta.SetStatusCondition(&mc.Status.Conditions, metav1.Condition{
+			Type:    clusterv1.ManagedClusterConditionAvailable,
+			Status:  *b.availableStatus,
+			Reason:  "ManagedClusterAvailableTest",
+			Message: "set by test builder",
+		})
 	}
 	return mc
 }
