@@ -55,7 +55,7 @@ cluster_context=$(${KUBECTL} config current-context)
 ${KUBECTL} --context="${cluster_context}" -n kube-system scale --replicas=1 deployment/coredns
 
 echo "###### loading image"
-${KIND} load docker-image managedcluster-import-controller --name ${CLUSTER_NAME}
+${KIND} load docker-image "${CONTAINER_IMAGE:-managedcluster-import-controller}" --name ${CLUSTER_NAME}
 
 echo "###### prepare required crds"
 ${KUBECTL} apply -f "$REPO_DIR/test/e2e/resources/hive"
