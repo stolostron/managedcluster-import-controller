@@ -30,6 +30,40 @@ import (
 
 const ControllerName = "manifestwork-controller"
 
+// manifestWorkAnnotationChanged reports whether a ManagedCluster annotation
+// change should refresh klusterlet ManifestWork update strategy.
+func manifestWorkAnnotationChanged(oldAnnotations, newAnnotations map[string]string) bool {
+	_, oldAutoImportDisabled := oldAnnotations[apiconstants.DisableAutoImportAnnotation]
+	_, newAutoImportDisabled := newAnnotations[apiconstants.DisableAutoImportAnnotation]
+	if oldAutoImportDisabled != newAutoImportDisabled {
+		return true
+	}
+
+	_, oldAllowUpdate := oldAnnotations[constants.AnnotationAllowManifestWorkUpdate]
+	_, newAllowUpdate := newAnnotations[constants.AnnotationAllowManifestWorkUpdate]
+	return oldAllowUpdate != newAllowUpdate
+}
+
+// klusterletWorkChanged filters updates from the label-filtered klusterlet work informer.
+func klusterletWorkChanged(e event.UpdateEvent) bool {
+	newWork, okNew := e.ObjectNew.(*workv1.ManifestWork)
+	oldWork, okOld := e.ObjectOld.(*workv1.ManifestWork)
+	if !okNew || !okOld || newWork == nil || oldWork == nil {
+		return false
+	}
+
+	// Requeue once the informer sees the strategy change. The cluster annotation
+	// can change again before this cache catches up, causing a reconcile to skip
+	// a required write based on stale configs.
+	if !helpers.ManifestConfigsEqual(newWork.Spec.ManifestConfigs, oldWork.Spec.ManifestConfigs) {
+		return true
+	}
+
+	return (strings.HasSuffix(newWork.Name, constants.KlusterletCRDsSuffix) ||
+		strings.HasSuffix(newWork.Name, constants.KlusterletSuffix)) &&
+		!helpers.ManifestsEqual(newWork.Spec.Workload.Manifests, oldWork.Spec.Workload.Manifests)
+}
+
 // Add creates a new manifestwork controller and adds it to the Manager.
 // The Manager will set fields on the Controller and Start it when the Manager is Started.
 func Add(ctx context.Context,
@@ -49,22 +83,7 @@ func Add(ctx context.Context,
 					GenericFunc: func(e event.GenericEvent) bool { return false },
 					CreateFunc:  func(e event.CreateEvent) bool { return true },
 					DeleteFunc:  func(e event.DeleteEvent) bool { return true },
-					UpdateFunc: func(e event.UpdateEvent) bool {
-						workName := e.ObjectNew.GetName()
-						// for update event, only watch klusterlet manifest works
-						if !strings.HasSuffix(workName, constants.KlusterletCRDsSuffix) &&
-							!strings.HasSuffix(workName, constants.KlusterletSuffix) {
-							return false
-						}
-
-						new, okNew := e.ObjectNew.(*workv1.ManifestWork)
-						old, okOld := e.ObjectOld.(*workv1.ManifestWork)
-						if okNew && okOld {
-							return !helpers.ManifestsEqual(new.Spec.Workload.Manifests, old.Spec.Workload.Manifests)
-						}
-
-						return false
-					},
+					UpdateFunc:  klusterletWorkChanged,
 				})),
 		).
 		Watches(
@@ -79,19 +98,9 @@ func Add(ctx context.Context,
 						return false
 					}
 
-					// Trigger reconciliation when disable-auto-import annotation is added or removed
-					// so that ManifestWorks can be updated with ReadOnly configs
-					oldAnnotations := e.ObjectOld.GetAnnotations()
-					newAnnotations := e.ObjectNew.GetAnnotations()
-					_, oldAutoImportDisabled := oldAnnotations[apiconstants.DisableAutoImportAnnotation]
-					_, newAutoImportDisabled := newAnnotations[apiconstants.DisableAutoImportAnnotation]
-
-					if oldAutoImportDisabled != newAutoImportDisabled {
-						// Annotation added or removed - reconcile to update ManifestWork configs
-						return true
-					}
-
-					return false
+					// Reconcile when disable-auto-import or the migration update window
+					// is added or removed, so ManifestWorks gain or lose ReadOnly.
+					return manifestWorkAnnotationChanged(e.ObjectOld.GetAnnotations(), e.ObjectNew.GetAnnotations())
 				},
 			}),
 		).
