@@ -30,8 +30,10 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/openshift-online/ocm-sdk-go/accesstransparency"
 	"github.com/openshift-online/ocm-sdk-go/accountsmgmt"
 	"github.com/openshift-online/ocm-sdk-go/addonsmgmt"
+	"github.com/openshift-online/ocm-sdk-go/arohcp"
 	"github.com/openshift-online/ocm-sdk-go/authentication"
 	"github.com/openshift-online/ocm-sdk-go/authorizations"
 	"github.com/openshift-online/ocm-sdk-go/clustersmgmt"
@@ -56,6 +58,7 @@ const (
 	DefaultClientSecret = authentication.DefaultClientSecret
 	DefaultURL          = "https://api.openshift.com"
 	DefaultAgent        = "OCM-SDK/" + Version
+	FedRAMPURL          = "https://api.openshiftusgov.com"
 )
 
 // DefaultScopes is the ser of scopes used by default:
@@ -71,6 +74,7 @@ type ConnectionBuilder struct {
 	logger            logging.Logger
 	trustedCAs        []interface{}
 	insecure          bool
+	allowTLS12        bool
 	disableKeepAlives bool
 	tokenURL          string
 	clientID          string
@@ -85,6 +89,8 @@ type ConnectionBuilder struct {
 	retryInterval     time.Duration
 	retryJitter       float64
 	transportWrappers []func(http.RoundTripper) http.RoundTripper
+
+	includeDefaultAuthnTransportWrapper bool
 
 	// Metrics:
 	metricsSubsystem  string
@@ -132,11 +138,20 @@ func NewConnectionBuilder() *ConnectionBuilder {
 		urlTable: map[string]string{
 			"": DefaultURL,
 		},
-		retryLimit:        retry.DefaultLimit,
-		retryInterval:     retry.DefaultInterval,
-		retryJitter:       retry.DefaultJitter,
-		metricsRegisterer: prometheus.DefaultRegisterer,
+		retryLimit:                          retry.DefaultLimit,
+		retryInterval:                       retry.DefaultInterval,
+		retryJitter:                         retry.DefaultJitter,
+		metricsRegisterer:                   prometheus.DefaultRegisterer,
+		includeDefaultAuthnTransportWrapper: true,
 	}
+}
+
+// NewConnectionBuilder creates a Builder that knows how to create connections
+// without authentication
+func NewUnauthenticatedConnectionBuilder() *ConnectionBuilder {
+	connectionBuilder := NewConnectionBuilder()
+	connectionBuilder.includeDefaultAuthnTransportWrapper = false
+	return connectionBuilder
 }
 
 // Logger sets the logger that will be used by the connection. By default it uses the Go `log`
@@ -386,6 +401,18 @@ func (b *ConnectionBuilder) Insecure(flag bool) *ConnectionBuilder {
 	return b
 }
 
+// AllowTLS12 lowers the minimum accepted TLS version from 1.3 to 1.2. This is intended only for
+// compatibility with legacy middleboxes or proxies that can't negotiate TLS 1.3. It only lowers the
+// floor: TLS 1.3-capable servers still negotiate 1.3, but any connection negotiated at TLS 1.2 won't
+// have post-quantum (ML-KEM) key exchange, so it isn't recommended for a production environment.
+func (b *ConnectionBuilder) AllowTLS12(flag bool) *ConnectionBuilder {
+	if b.err != nil {
+		return b
+	}
+	b.allowTLS12 = flag
+	return b
+}
+
 // DisableKeepAlives disables HTTP keep-alives with the server. This is unrelated to similarly
 // named TCP keep-alives.
 func (b *ConnectionBuilder) DisableKeepAlives(flag bool) *ConnectionBuilder {
@@ -538,6 +565,7 @@ func (b *ConnectionBuilder) Metrics(value string) *ConnectionBuilder {
 //	scopes:
 //	- openid
 //	insecure: false
+//	allow_tls12: false
 //	trusted_cas:
 //	- /my/ca.pem
 //	- /your/ca.pem
@@ -572,6 +600,7 @@ func (b *ConnectionBuilder) Load(source interface{}) *ConnectionBuilder {
 		ClientSecret     *string           `yaml:"client_secret"`
 		Tokens           []string          `yaml:"tokens"`
 		Insecure         *bool             `yaml:"insecure"`
+		AllowTLS12       *bool             `yaml:"allow_tls12"`
 		TrustedCAs       []string          `yaml:"trusted_cas"`
 		Scopes           []string          `yaml:"scopes"`
 		Agent            *string           `yaml:"agent"`
@@ -638,6 +667,11 @@ func (b *ConnectionBuilder) Load(source interface{}) *ConnectionBuilder {
 	// Insecure:
 	if view.Insecure != nil {
 		b.Insecure(*view.Insecure)
+	}
+
+	// Allow TLS 1.2:
+	if view.AllowTLS12 != nil {
+		b.AllowTLS12(*view.AllowTLS12)
 	}
 
 	// Trusted CAs:
@@ -739,24 +773,36 @@ func (b *ConnectionBuilder) BuildContext(ctx context.Context) (connection *Conne
 		loggingWrapper = wrapper.Wrap
 	}
 
-	// Create the authentication wrapper:
-	authnWrapper, err := authentication.NewTransportWrapper().
+	// Initialize the client selector builder:
+	clientSelectorBuilder := internal.NewClientSelector().
 		Logger(b.logger).
-		TokenURL(b.tokenURL).
-		User(b.user, b.password).
-		Client(b.clientID, b.clientSecret).
-		Tokens(b.tokens...).
-		Scopes(b.scopes...).
 		TrustedCAs(b.trustedCAs...).
 		Insecure(b.insecure).
-		TransportWrapper(metricsWrapper).
-		TransportWrapper(loggingWrapper).
-		TransportWrappers(b.transportWrappers...).
-		MetricsSubsystem(b.metricsSubsystem).
-		MetricsRegisterer(b.metricsRegisterer).
-		Build(ctx)
-	if err != nil {
-		return
+		AllowTLS12(b.allowTLS12)
+
+	var authnWrapper *authentication.TransportWrapper
+	if b.includeDefaultAuthnTransportWrapper {
+		// Create the authentication wrapper:
+		authnWrapper, err = authentication.NewTransportWrapper().
+			Logger(b.logger).
+			TokenURL(b.tokenURL).
+			User(b.user, b.password).
+			Client(b.clientID, b.clientSecret).
+			Tokens(b.tokens...).
+			Scopes(b.scopes...).
+			TrustedCAs(b.trustedCAs...).
+			Insecure(b.insecure).
+			AllowTLS12(b.allowTLS12).
+			TransportWrapper(metricsWrapper).
+			TransportWrapper(loggingWrapper).
+			TransportWrappers(b.transportWrappers...).
+			MetricsSubsystem(b.metricsSubsystem).
+			MetricsRegisterer(b.metricsRegisterer).
+			Build(ctx)
+		if err != nil {
+			return
+		}
+		clientSelectorBuilder.TransportWrapper(authnWrapper.Wrap)
 	}
 
 	// Create the retry wrapper:
@@ -771,11 +817,7 @@ func (b *ConnectionBuilder) BuildContext(ctx context.Context) (connection *Conne
 	}
 
 	// Create the client selector:
-	clientSelector, err := internal.NewClientSelector().
-		Logger(b.logger).
-		TrustedCAs(b.trustedCAs...).
-		Insecure(b.insecure).
-		TransportWrapper(authnWrapper.Wrap).
+	clientSelector, err := clientSelectorBuilder.
 		TransportWrapper(metricsWrapper).
 		TransportWrapper(retryWrapper.Wrap).
 		TransportWrapper(loggingWrapper).
@@ -873,25 +915,39 @@ func (c *Connection) Logger() logging.Logger {
 }
 
 // TokenURL returns the URL that the connection is using request OpenID access tokens.
+// An empty string is returned if the connection does not use authentication.
 func (c *Connection) TokenURL() string {
+	if c.authnWrapper == nil {
+		return ""
+	}
 	return c.authnWrapper.TokenURL()
 }
 
 // Client returns OpenID client identifier and secret that the connection is using to request OpenID
 // access tokens.
+// Empty strings are returned if the connection does not use authentication.
 func (c *Connection) Client() (id, secret string) {
-	id, secret = c.authnWrapper.Client()
+	if c.authnWrapper != nil {
+		id, secret = c.authnWrapper.Client()
+	}
 	return
 }
 
 // User returns the user name and password that the is using to request OpenID access tokens.
+// Empty strings are returned if the connection does not use authentication.
 func (c *Connection) User() (user, password string) {
-	user, password = c.authnWrapper.User()
+	if c.authnWrapper != nil {
+		user, password = c.authnWrapper.User()
+	}
 	return
 }
 
 // Scopes returns the OpenID scopes that the connection is using to request OpenID access tokens.
+// An empty slice is returned if the connection does not use authentication.
 func (c *Connection) Scopes() []string {
+	if c.authnWrapper == nil {
+		return []string{}
+	}
 	return c.authnWrapper.Scopes()
 }
 
@@ -923,6 +979,11 @@ func (c *Connection) TrustedCAs() *x509.CertPool {
 // Insecure returns the flag that indicates if insecure communication with the server is enabled.
 func (c *Connection) Insecure() bool {
 	return c.clientSelector.Insecure()
+}
+
+// AllowTLS12 returns the flag that indicates if the minimum TLS version has been lowered to 1.2.
+func (c *Connection) AllowTLS12() bool {
+	return c.clientSelector.AllowTLS12()
 }
 
 // DisableKeepAlives returns the flag that indicates if HTTP keep alive is disabled.
@@ -965,6 +1026,11 @@ func (c *Connection) AlternativeURLs() map[string]string {
 	return result
 }
 
+// AccessTransparency returns the client for the access transparency service.
+func (c *Connection) AccessTransparency() *accesstransparency.Client {
+	return accesstransparency.NewClient(c, "/api/access_transparency")
+}
+
 // AccountsMgmt returns the client for the accounts management service.
 func (c *Connection) AccountsMgmt() *accountsmgmt.Client {
 	return accountsmgmt.NewClient(c, "/api/accounts_mgmt")
@@ -978,6 +1044,11 @@ func (c *Connection) AddonsMgmt() *addonsmgmt.Client {
 // ClustersMgmt returns the client for the clusters management service.
 func (c *Connection) ClustersMgmt() *clustersmgmt.Client {
 	return clustersmgmt.NewClient(c, "/api/clusters_mgmt")
+}
+
+// AroHCP returns the client for the ARO-HCP clusters management service.
+func (c *Connection) AroHCP() *arohcp.Client {
+	return arohcp.NewClient(c, "/api/aro_hcp")
 }
 
 // OSDFleetMgmt returns the client for the OSD management service.
@@ -1033,10 +1104,13 @@ func (c *Connection) Close() error {
 		return err
 	}
 
-	// Close the authentication wrapper:
-	err = c.authnWrapper.Close()
-	if err != nil {
-		return err
+	// If the default authentication wrapper is set close it
+	if c.authnWrapper != nil {
+		// Close the authentication wrapper:
+		err = c.authnWrapper.Close()
+		if err != nil {
+			return err
+		}
 	}
 
 	// Mark the connection as closed, so that further attempts to use it will fail:
