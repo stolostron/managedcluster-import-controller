@@ -48,6 +48,9 @@ const (
 	DefaultTokenURL     = "https://sso.redhat.com/auth/realms/redhat-external/protocol/openid-connect/token"
 	DefaultClientID     = "cloud-services"
 	DefaultClientSecret = ""
+
+	FedRAMPTokenURL = "https://sso.openshiftusgov.com/realms/redhat-external/protocol/openid-connect/token"
+	FedRAMPClientID = "console-dot"
 )
 
 // DefaultScopes is the ser of scopes used by default:
@@ -70,6 +73,7 @@ type TransportWrapperBuilder struct {
 	agent             string
 	trustedCAs        []interface{}
 	insecure          bool
+	allowTLS12        bool
 	transportWrappers []func(http.RoundTripper) http.RoundTripper
 
 	// Fields used for metrics:
@@ -255,6 +259,16 @@ func (b *TransportWrapperBuilder) TrustedCAs(values ...interface{}) *TransportWr
 // certificates and host names and it isn't recommended for a production environment.
 func (b *TransportWrapperBuilder) Insecure(flag bool) *TransportWrapperBuilder {
 	b.insecure = flag
+	return b
+}
+
+// AllowTLS12 lowers the minimum accepted TLS version from 1.3 to 1.2 for the HTTP client used to
+// request tokens. This is intended only for compatibility with legacy middleboxes that can't
+// negotiate TLS 1.3. It only lowers the floor: TLS 1.3-capable servers still negotiate 1.3, but any
+// connection negotiated at TLS 1.2 won't have post-quantum (ML-KEM) key exchange, so it isn't
+// recommended for a production environment.
+func (b *TransportWrapperBuilder) AllowTLS12(flag bool) *TransportWrapperBuilder {
+	b.allowTLS12 = flag
 	return b
 }
 
@@ -493,6 +507,7 @@ func (b *TransportWrapperBuilder) Build(ctx context.Context) (result *TransportW
 		Logger(b.logger).
 		TrustedCAs(b.trustedCAs...).
 		Insecure(b.insecure).
+		AllowTLS12(b.allowTLS12).
 		TransportWrappers(b.transportWrappers...).
 		Build(ctx)
 	if err != nil {
@@ -516,7 +531,7 @@ func (b *TransportWrapperBuilder) Build(ctx context.Context) (result *TransportW
 			registered, ok := err.(prometheus.AlreadyRegisteredError)
 			if ok {
 				tokenCountMetric = registered.ExistingCollector.(*prometheus.CounterVec)
-				err = nil
+				err = nil //nolint:all
 			} else {
 				return
 			}
@@ -1097,15 +1112,15 @@ func (w *TransportWrapper) debugExpiry(ctx context.Context, typ string, token *t
 func parsePullSecretAccessToken(text string) error {
 	elems := strings.Split(text, ":")
 	if len(elems) != 2 {
-		return fmt.Errorf("Unparseable pull secret token")
+		return fmt.Errorf("unparseable pull secret token")
 	}
 	_, err := uuid.Parse(elems[0])
 	if err != nil {
-		return fmt.Errorf("Unparseable pull secret token cluster ID")
+		return fmt.Errorf("unparseable pull secret token cluster ID")
 	}
 	_, err = base64.StdEncoding.DecodeString(elems[1])
 	if err != nil {
-		return fmt.Errorf("Unparseable pull secret token value")
+		return fmt.Errorf("unparseable pull secret token value")
 	}
 	return nil
 }
