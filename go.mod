@@ -8,10 +8,13 @@ require (
 	github.com/google/go-cmp v0.6.0
 	github.com/onsi/ginkgo/v2 v2.15.0
 	github.com/onsi/gomega v1.31.0
+	github.com/openshift-online/ocm-sdk-go v0.1.522
 	github.com/openshift/api v0.0.0-20240524162738-d899f8877d22 // https://github.com/openshift/api/tree/release-4.14
 	github.com/openshift/assisted-service/api v0.0.0-20230809093954-25856935f237 // https://github.com/openshift/assisted-service/tree/release-ocm-2.9/api
 	github.com/openshift/hive/apis v0.0.0-20240503201730-e11a23b88b31
+	github.com/openshift/hypershift/api v0.0.0-20241022184855-1fa7be0211e4
 	github.com/openshift/library-go v0.0.0-20230809121909-d7e7beca5bae // https://github.com/openshift/library-go/tree/release-4.14
+	github.com/sethvargo/go-password v0.2.0
 	github.com/spf13/pflag v1.0.6-0.20210604193023-d5e0c0615ace
 	github.com/stolostron/cluster-lifecycle-api v0.0.0-20240511020626-f2cac5194d99
 	go.uber.org/zap v1.26.0
@@ -26,12 +29,6 @@ require (
 	k8s.io/utils v0.0.0-20240502163921-fe8a2dddb1d0
 	open-cluster-management.io/api v0.13.1-0.20240506072237-800b00d9f0db
 	sigs.k8s.io/controller-runtime v0.17.6
-)
-
-require (
-	github.com/openshift-online/ocm-sdk-go v0.1.392
-	github.com/openshift/hypershift/api v0.0.0-20241022184855-1fa7be0211e4
-	github.com/sethvargo/go-password v0.2.0
 )
 
 require (
@@ -72,18 +69,11 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/itchyny/gojq v0.12.7 // indirect
 	github.com/itchyny/timefmt-go v0.1.3 // indirect
-	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
-	github.com/jackc/pgconn v1.14.3 // indirect
-	github.com/jackc/pgio v1.0.0 // indirect
-	github.com/jackc/pgpassfile v1.0.0 // indirect
-	github.com/jackc/pgproto3/v2 v2.3.3 // indirect
-	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
-	github.com/jackc/pgtype v1.14.0 // indirect
-	github.com/jackc/pgx/v4 v4.18.3 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.4 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/lib/pq v1.10.5 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.18 // indirect
@@ -92,6 +82,8 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
+	github.com/openshift-online/ocm-api-model/clientapi v0.0.474 // indirect
+	github.com/openshift-online/ocm-api-model/model v0.0.474 // indirect
 	github.com/openshift/assisted-service/models v0.0.0 // indirect
 	github.com/openshift/custom-resource-status v1.1.3-0.20220503160415-f2fdb4999d87 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
@@ -99,10 +91,10 @@ require (
 	github.com/prometheus/client_model v0.5.0 // indirect
 	github.com/prometheus/common v0.45.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
+	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966 // indirect
 	github.com/spf13/cobra v1.7.0 // indirect
 	go.mongodb.org/mongo-driver v1.17.7 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.59.0 // indirect
 	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e // indirect
 	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/oauth2 v0.37.0 // indirect
