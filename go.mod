@@ -6,18 +6,24 @@ go 1.26.0
 replace github.com/flightctl/flightctl/lib => github.com/xuezhaojun/flightctl/lib v0.0.0-20241125124411-7eec33f53a61
 
 require (
+	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/flightctl/flightctl/lib v0.0.0
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32
 	github.com/go-logr/logr v1.4.3
+	github.com/golang-jwt/jwt/v4 v4.5.2
 	github.com/google/go-cmp v0.7.0
 	github.com/onsi/ginkgo/v2 v2.22.0
 	github.com/onsi/gomega v1.36.0
+	github.com/openshift-online/ocm-sdk-go v0.1.522
 	github.com/openshift/api v0.0.0-20250313134101-8a7efbfb5316
 	github.com/openshift/assisted-service/api v0.0.0
 	github.com/openshift/hive/apis v0.0.0-20251118235423-715614a9f379
+	github.com/openshift/hypershift/api v0.0.0-20241022184855-1fa7be0211e4
 	github.com/openshift/library-go v0.0.0-20240207105404-126b47137408 // https://github.com/openshift/library-go/tree/release-4.14
+	github.com/sethvargo/go-password v0.2.0
 	github.com/spf13/pflag v1.0.6
 	github.com/stolostron/cluster-lifecycle-api v0.0.0-20240918064238-a5e71b599118
+	github.com/stretchr/testify v1.11.1
 	go.uber.org/zap v1.27.0
 	golang.org/x/text v0.44.0
 	k8s.io/api v0.33.13
@@ -29,17 +35,8 @@ require (
 	k8s.io/klog/v2 v2.130.1
 	k8s.io/utils v0.0.0-20241210054802-24370beab758
 	open-cluster-management.io/api v0.14.1-0.20250708065710-54efb2e2ae7b
-	sigs.k8s.io/controller-runtime v0.19.7
-)
-
-require (
-	github.com/Masterminds/sprig/v3 v3.3.0
-	github.com/golang-jwt/jwt/v4 v4.5.2
-	github.com/openshift-online/ocm-sdk-go v0.1.392
-	github.com/openshift/hypershift/api v0.0.0-20241022184855-1fa7be0211e4
-	github.com/sethvargo/go-password v0.2.0
-	github.com/stretchr/testify v1.11.1
 	sigs.k8s.io/cluster-api v1.9.11
+	sigs.k8s.io/controller-runtime v0.19.7
 	sigs.k8s.io/yaml v1.4.0
 )
 
@@ -86,18 +83,11 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/itchyny/gojq v0.12.7 // indirect
 	github.com/itchyny/timefmt-go v0.1.3 // indirect
-	github.com/jackc/chunkreader/v2 v2.0.1 // indirect
-	github.com/jackc/pgconn v1.14.3 // indirect
-	github.com/jackc/pgio v1.0.0 // indirect
-	github.com/jackc/pgpassfile v1.0.0 // indirect
-	github.com/jackc/pgproto3/v2 v2.3.3 // indirect
-	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
-	github.com/jackc/pgtype v1.14.0 // indirect
-	github.com/jackc/pgx/v4 v4.18.3 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/jinzhu/now v1.1.4 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/lib/pq v1.10.5 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/microcosm-cc/bluemonday v1.0.25 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
@@ -110,6 +100,8 @@ require (
 	github.com/oasdiff/yaml v0.1.1 // indirect
 	github.com/oasdiff/yaml3 v0.0.14 // indirect
 	github.com/oklog/ulid v1.3.1 // indirect
+	github.com/openshift-online/ocm-api-model/clientapi v0.0.474 // indirect
+	github.com/openshift-online/ocm-api-model/model v0.0.474 // indirect
 	github.com/openshift/assisted-service/models v0.0.0 // indirect
 	github.com/openshift/custom-resource-status v1.1.3-0.20220503160415-f2fdb4999d87 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
@@ -121,6 +113,7 @@ require (
 	github.com/samber/lo v1.47.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.3 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
+	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966 // indirect
 	github.com/spf13/cast v1.7.0 // indirect
 	github.com/spf13/cobra v1.8.1 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
