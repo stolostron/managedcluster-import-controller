@@ -22,6 +22,14 @@ const (
 	// AnnotationRemainNamespace is added to the ns by user to retain the namespace after the cluster is detached.
 	AnnotationRemainNamespace = "open-cluster-management.io/retain-namespace"
 
+	// AnnotationAllowManifestWorkUpdate opens a temporary window in which work-agents
+	// may update existing klusterlet ManifestWorks while disable-auto-import is set.
+	// While it is present, those works stay on the Update strategy; when it is
+	// absent, disable-auto-import marks them ReadOnly again. The controller does not
+	// expire or remove the annotation, so whoever sets it must also remove it once the
+	// migration payload is applied and confirm that ReadOnly is restored.
+	AnnotationAllowManifestWorkUpdate = "import.open-cluster-management.io/allow-manifestwork-update"
+
 	// LabelAutoImportRestore is the label key of auto import secret used for backup restore case
 	LabelAutoImportRestore = "cluster.open-cluster-management.io/restore-auto-import-secret"
 )
