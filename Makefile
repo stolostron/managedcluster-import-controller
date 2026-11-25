@@ -77,7 +77,8 @@ envtest-setup:
 test:
 	@mkdir -p $(BUILD_OUTPUT_DIR)/unit/coverage
 	go clean -cache
-	@KUBEBUILDER_ASSETS="$$($(ENVTEST_ASSETS_CMD))" \
+	@KUBEBUILDER_ASSETS=$$($(ENVTEST_ASSETS_CMD)) || exit $$?; \
+		KUBEBUILDER_ASSETS=$${KUBEBUILDER_ASSETS} \
 		go test -cover -covermode=atomic -coverprofile=$(BUILD_OUTPUT_DIR)/unit/coverage/cover.out $(GOPACKAGES)
 
 ## Builds controller binary
