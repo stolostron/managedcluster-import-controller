@@ -26,6 +26,7 @@ func TestBuildConfigMapData(t *testing.T) {
 		wantProfileType string
 		wantMinVersion  string
 		wantHasCiphers  bool
+		wantGroups      string
 	}{
 		{
 			name:            "nil profile defaults to Intermediate",
@@ -33,6 +34,7 @@ func TestBuildConfigMapData(t *testing.T) {
 			wantProfileType: "Intermediate",
 			wantMinVersion:  "VersionTLS12",
 			wantHasCiphers:  true,
+			wantGroups:      "X25519MLKEM768,X25519,secp256r1,secp384r1",
 		},
 		{
 			name: "Modern profile",
@@ -42,6 +44,7 @@ func TestBuildConfigMapData(t *testing.T) {
 			wantProfileType: "Modern",
 			wantMinVersion:  "VersionTLS13",
 			wantHasCiphers:  true, // OpenShift Modern profile lists TLS 1.3 ciphers
+			wantGroups:      "X25519MLKEM768,X25519,secp256r1,secp384r1",
 		},
 		{
 			name: "Intermediate profile",
@@ -51,6 +54,7 @@ func TestBuildConfigMapData(t *testing.T) {
 			wantProfileType: "Intermediate",
 			wantMinVersion:  "VersionTLS12",
 			wantHasCiphers:  true,
+			wantGroups:      "X25519MLKEM768,X25519,secp256r1,secp384r1",
 		},
 		{
 			name: "Old profile",
@@ -60,6 +64,7 @@ func TestBuildConfigMapData(t *testing.T) {
 			wantProfileType: "Old",
 			wantMinVersion:  "VersionTLS10",
 			wantHasCiphers:  true,
+			wantGroups:      "X25519MLKEM768,X25519,secp256r1,secp384r1",
 		},
 		{
 			name: "Custom profile",
@@ -75,6 +80,7 @@ func TestBuildConfigMapData(t *testing.T) {
 			wantProfileType: "Custom",
 			wantMinVersion:  "VersionTLS13",
 			wantHasCiphers:  false,
+			wantGroups:      "",
 		},
 		{
 			name: "Custom profile with nil custom falls back to Intermediate",
@@ -84,6 +90,7 @@ func TestBuildConfigMapData(t *testing.T) {
 			wantProfileType: "Custom",
 			wantMinVersion:  "VersionTLS12",
 			wantHasCiphers:  true,
+			wantGroups:      "X25519MLKEM768,X25519,secp256r1,secp384r1",
 		},
 	}
 
@@ -102,8 +109,70 @@ func TestBuildConfigMapData(t *testing.T) {
 				t.Errorf("hasCiphers = %v, want %v (cipherSuites=%q)",
 					hasCiphers, tt.wantHasCiphers, data["cipherSuites"])
 			}
+			if data["groups"] != tt.wantGroups {
+				t.Errorf("groups = %q, want %q", data["groups"], tt.wantGroups)
+			}
 		})
 	}
+}
+
+func TestBuildConfigMapData_Groups(t *testing.T) {
+	t.Run("custom profile groups are joined in order", func(t *testing.T) {
+		data := buildConfigMapData(&configv1.TLSSecurityProfile{
+			Type: configv1.TLSProfileCustomType,
+			Custom: &configv1.CustomTLSProfile{
+				TLSProfileSpec: configv1.TLSProfileSpec{
+					MinTLSVersion: configv1.VersionTLS12,
+					Ciphers:       []string{"ECDHE-RSA-AES128-GCM-SHA256"},
+					Groups: []configv1.TLSGroup{
+						configv1.TLSGroupSecP384r1,
+						configv1.TLSGroupX25519,
+					},
+				},
+			},
+		})
+
+		if data["groups"] != "secp384r1,X25519" {
+			t.Errorf("groups = %q, want %q", data["groups"], "secp384r1,X25519")
+		}
+	})
+
+	t.Run("custom profile without groups writes an empty value", func(t *testing.T) {
+		data := buildConfigMapData(&configv1.TLSSecurityProfile{
+			Type: configv1.TLSProfileCustomType,
+			Custom: &configv1.CustomTLSProfile{
+				TLSProfileSpec: configv1.TLSProfileSpec{
+					MinTLSVersion: configv1.VersionTLS12,
+					Ciphers:       []string{"ECDHE-RSA-AES128-GCM-SHA256"},
+				},
+			},
+		})
+
+		value, ok := data["groups"]
+		if !ok {
+			t.Error("expected groups key to always be present")
+		}
+		if value != "" {
+			t.Errorf("groups = %q, want empty", value)
+		}
+	})
+
+	t.Run("group names are IANA registered names", func(t *testing.T) {
+		// The values must be parseable by upstream consumers that match
+		// IANA TLS Supported Group names case-insensitively.
+		data := buildConfigMapData(&configv1.TLSSecurityProfile{
+			Type: configv1.TLSProfileOldType,
+		})
+
+		for _, group := range splitNonEmpty(data["groups"]) {
+			switch group {
+			case "X25519MLKEM768", "X25519", "secp256r1", "secp384r1", "secp521r1",
+				"SecP256r1MLKEM768", "SecP384r1MLKEM1024":
+			default:
+				t.Errorf("group %q is not an IANA registered TLS group name", group)
+			}
+		}
+	})
 }
 
 func TestBuildConfigMapData_CiphersAreIANA(t *testing.T) {
