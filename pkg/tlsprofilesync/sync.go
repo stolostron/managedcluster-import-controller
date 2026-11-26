@@ -43,6 +43,7 @@ const (
 	configMapKeyMinTLSVersion = "minTLSVersion"
 	configMapKeyCipherSuites  = "cipherSuites"
 	configMapKeyProfileType   = "profileType"
+	configMapKeyGroups        = "groups"
 )
 
 // Run starts the tls-profile-sync sidecar using the controller-runtime pattern.
@@ -212,6 +213,8 @@ func (r *tlsProfileSyncReconciler) syncConfigMap(
 // buildConfigMapData converts an OpenShift TLSSecurityProfile into the ConfigMap
 // data format expected by upstream OCM components. Cipher suites are converted
 // from OpenSSL format to IANA format so upstream code doesn't need OpenSSL knowledge.
+// Groups are the IANA registered names for the TLS Supported Groups registry and 
+// are passed through unchanged.
 func buildConfigMapData(profile *configv1.TLSSecurityProfile) map[string]string {
 	if profile == nil {
 		// Default to Intermediate when no profile is set
@@ -246,11 +249,16 @@ func buildConfigMapData(profile *configv1.TLSSecurityProfile) map[string]string 
 
 	minTLSVersion := string(profileSpec.MinTLSVersion)
 	cipherSuites := libgocrypto.OpenSSLToIANACipherSuites(profileSpec.Ciphers)
+	groups := make([]string, 0, len(profileSpec.Groups))
+	for _, group := range profileSpec.Groups {
+		groups = append(groups, string(group))
+	}
 
 	return map[string]string{
 		configMapKeyMinTLSVersion: minTLSVersion,
 		configMapKeyCipherSuites:  strings.Join(cipherSuites, ","),
 		configMapKeyProfileType:   profileType,
+		configMapKeyGroups:        strings.Join(groups, ","),
 	}
 }
 
